@@ -1,0 +1,24 @@
+# Dipendenze
+node_modules/
+
+# Configurazione locale e segreti (mai versionati)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+keys/
+secrets/
+
+# Test e coverage
+coverage/
+.nyc_output/
+
+# Log
+*.log
+npm-debug.log*
+
+# Sistema / editor
+.DS_Store
+.idea/
+.vscode/

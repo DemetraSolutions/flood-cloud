@@ -1,0 +1,100 @@
+# Registro dei Sottoagenti
+
+Questo progetto adotta un'architettura multi-agente per compartimentare le competenze e garantire codice sicuro, testato al 100% e coerente con l'architettura.
+
+Questo file è **l'unica fonte autoritativa** dell'elenco dei sottoagenti e delle skill. Le regole di comportamento comuni sono in `GEMINI.md` e valgono per tutti.
+
+## Struttura dei file (fonte unica, doppio ambiente)
+
+Il progetto è utilizzabile indifferentemente con **Antigravity/Gemini** e con **Claude Code**. I due ambienti leggono percorsi diversi, quindi i file degli agenti sono **duplicati fisicamente**:
+
+| Contenuto | Sorgente autoritativa (da modificare) | Duplicato Claude Code |
+|---|---|---|
+| Regole globali | `GEMINI.md` + `AGENTS.md` (root) | nessuno: `CLAUDE.md` li importa con `@GEMINI.md` / `@AGENTS.md` |
+| Regole dei sottoagenti | `.agents/rules/<nome>.md` | `.claude/agents/<nome>.md` |
+| Skill tecniche | `.agents/skills/<nome>/SKILL.md` | `.claude/skills/<nome>/SKILL.md` |
+
+**REGOLA OPERATIVA TASSATIVA.** In caso di divergenza fa fede **sempre `.agents/`**:
+1. Modifica **sempre e solo** i file sotto `.agents/` (e i file di root).
+2. Subito dopo esegui `./scripts/sync-agents.sh`, che riallinea `.claude/`.
+3. Non modificare mai direttamente `.claude/agents/` o `.claude/skills/`: la modifica andrebbe persa al primo sync.
+4. Le due copie si committano **sempre insieme**.
+
+Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check` (exit 1 se ci sono divergenze o file orfani).
+
+**Frontmatter condiviso** di `.agents/rules/`:
+- `trigger` + `globs`: usati da Antigravity; `trigger: glob` attiva la regola sui file del dominio, `model_decision` per gli agenti trasversali (`security_expert`, `legacy_analyst`).
+- `name`: identificativo del sottoagente per Claude Code.
+- `description`: usata da entrambi per decidere l'attivazione; specifica, orientata al dominio, con la formula "Usa proattivamente".
+
+**Limite:** Antigravity accetta al massimo 12.000 caratteri per file di regole: verificalo quando estendi `GEMINI.md`, `AGENTS.md` o un file in `.agents/rules/`.
+
+## Documentazione di riferimento
+| Documento | Contenuto |
+|---|---|
+| `doc/Product-Scope.md` | Scopo del prodotto e obiettivi della riscrittura |
+| `doc/Legacy-Analysis.md` | Cosa fa il progetto legacy (riferimento funzionale) |
+| `doc/Security-Model.md` | Modello di sicurezza (bozza, con decisioni aperte) |
+| `doc/API.md` | Riferimento degli endpoint (nasce con il primo endpoint) |
+
+## Sottoagenti disponibili
+
+### 1. Backend Expert (`backend_expert`)
+Server Node.js 24 + Express 5 in ESM.
+- App factory testabile, moduli di dominio a strati (route → controller → service → repository).
+- Configurazione validata all'avvio, body-parser, compression, multer, arresto ordinato.
+
+### 2. DB Expert (`db_expert`)
+MongoDB con il driver ufficiale, senza ODM.
+- Repository con contesto di tenant, indici idempotenti (univoci, TTL), `$jsonSchema`.
+- Paginazione a cursore, update atomici, transazioni dove servono.
+
+### 3. Security Expert (`security_expert`)
+Garante di `doc/Security-Model.md`; obbligatorio su ogni modifica di sicurezza.
+- Deny by default, token opachi con hash, refresh con rotazione, API key con scope, credenziali dispositivo.
+- scrypt per password e PIN, RBAC, isolamento dei tenant, validazione, upload, webhook, header, CORS, rate limit, segreti e log.
+
+### 4. Tester Expert (`tester_expert`)
+Copertura al 100% con strumenti nativi.
+- `node:test`, coverage nativa con soglie, test HTTP con `fetch` su porta effimera.
+- Integrazione con MongoDB reale usa-e-getta, test di rifiuto di sicurezza, TDD.
+
+### 5. API Expert (`api_expert`)
+Contratto REST.
+- Risorse tipizzate e versionate, nessuna query MongoDB dal client, schemi di validazione.
+- Codici HTTP, envelope ed errori, paginazione, idempotenza, `doc/API.md`.
+
+### 6. Legacy Analyst (`legacy_analyst`)
+Esperto del progetto `../cloud-commerce-platform-server` (sola lettura).
+- Analisi di un servizio `ms-*` prima della riscrittura del dominio, specifica funzionale, impatto sui client.
+- Mai segreti del legacy in output.
+
+### 7. Integrations Expert (`integrations_expert`)
+Provider esterni (Aruba, Fiskaly, Satispay, Dojo, Cerved, storage, email).
+- Adattatori isolati, `fetch` con timeout e retry, rate limit dei provider, code persistenti, webhook verificati.
+
+### 8. DevOps Expert (`devops_expert`)
+Ambiente e rilascio.
+- Dockerfile multi-stage non root, compose con MongoDB, CI con test al 100%, audit e secret scanning, segreti fuori dal repository.
+
+## Skill disponibili
+
+Guide operative attivate automaticamente in base alla `description`, in `.agents/skills/<nome>/SKILL.md`.
+
+| Skill | Quando si attiva |
+|---|---|
+| `express-module-scaffold` | Nuovo modulo di dominio o nuova route |
+| `express-error-handling` | Errori, envelope di risposta, gestore centrale |
+| `input-validation` | Validazione di body, query, params senza librerie |
+| `tenant-isolation` | Accesso a dati di tenant, RBAC, scope, test di isolamento |
+| `opaque-token-auth` | Login, sessioni, refresh, logout, middleware Bearer |
+| `api-key-management` | API key e credenziali/enrollment dei dispositivi POS |
+| `password-hashing` | Password e PIN con scrypt |
+| `secure-file-upload` | Upload con multer |
+| `webhook-verification` | Webhook in ingresso dai provider |
+| `mongodb-repository-patterns` | Repository, indici, paginazione, update atomici |
+| `mongodb-integration-tests` | Test con MongoDB reale usa-e-getta |
+| `node-test-coverage` | Test con node:test e coverage al 100% |
+| `dependency-approval` | Prima di installare o proporre un pacchetto npm |
+| `legacy-module-analysis` | Analisi di un dominio del legacy prima di riscriverlo |
+| `docs-sync-checklist` | Verifica di fine passo |
