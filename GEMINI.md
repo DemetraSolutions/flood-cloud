@@ -5,7 +5,17 @@ Tutti gli agenti e i sottoagenti che operano in questo progetto devono rispettar
 ## 0. Scopo del Progetto (Vision)
 Ogni azione, decisione architetturale o riga di codice DEVE essere consapevole dello scopo del progetto descritto in **`doc/Product-Scope.md`**: leggilo prima di iniziare qualsiasi sviluppo.
 
-**Flood Cloud** è la riscrittura completa, con un nuovo approccio, del server della piattaforma cloud commerce di Flood (progetto legacy `../cloud-commerce-platform-server`). È un server **Node.js + Express + MongoDB** che serve backoffice, punti cassa (POS) e integrazioni esterne.
+**Flood Cloud** è la riscrittura completa, con un nuovo approccio, del server della piattaforma cloud commerce di Flood (progetto legacy `../cloud-commerce-platform-server`). È un server **Node.js + Express + MongoDB** con tre superfici API: backoffice (`/v1`), server di punto vendita (`/store/v1`) e API pubbliche dei gruppi (`/public/v1`).
+
+Documentazione di progetto da conoscere prima di agire:
+| Documento | Contenuto |
+|---|---|
+| `doc/Product-Scope.md` | scopo, client, ruoli, obiettivi |
+| `doc/Architecture.md` | stack, multi-database, superfici, struttura del codice |
+| `doc/Security-Model.md` | credenziali, autorizzazione, rate limit, decisioni aperte |
+| `doc/Data-Model.md` | collection del database common |
+| `doc/API-Guidelines.md` | regole REST vincolanti |
+| `doc/Legacy-Analysis.md` | cosa faceva il legacy |
 
 **Il progetto legacy è solo un riferimento funzionale.** Si consulta per capire *cosa* faceva il sistema (`doc/Legacy-Analysis.md`), mai per copiarne il *come*:
 - non copiare codice, struttura o pattern dal legacy: ogni parte si riprogetta;
@@ -45,7 +55,7 @@ Se trovi incongruenze, parti incomplete o poco chiare nella documentazione o nel
 
 ## 7. Divieto di Modifica della Documentazione
 **Non modificare mai** i documenti esistenti in `doc/` senza una richiesta esplicita dell'utente dopo un'analisi congiunta.
-**Unica eccezione:** quando un passo aggiunge o modifica endpoint, il riferimento API **`doc/API.md`** va aggiornato nello stesso passo (skill `docs-sync-checklist`), limitandosi a riflettere ciò che è stato realizzato.
+**Uniche eccezioni:** quando un passo aggiunge o modifica endpoint o collection, il riferimento API **`doc/API.md`** e il modello dati **`doc/Data-Model.md`** vanno aggiornati nello stesso passo (skill `docs-sync-checklist`), limitandosi a riflettere ciò che è stato realizzato.
 
 ## 8. Lingua del Codice e Commenti
 Nomi di variabili, funzioni, classi, file, collection e campi in **Inglese**. Commenti, JSDoc e documentazione in **Italiano**.

@@ -20,7 +20,9 @@ Numeri: ~42k righe JS, 1081 commit, **nessun test**, Node 20 (Dockerfile su Node
 - **Un database per tenant**: `<prefix><env>_<groupId>`; database comuni `<prefix><env>_common`, `..._flite_common`, `..._queue` (coda e-fatture).
 - Il tenant si ricava da `groupId` dell'utente del JWT o dall'header `Apikey` che corrisponde a `groups.apiKey`. PSA e dealer possono forzare il tenant con `?groupId=`.
 - Lo scope per company/place **non è centralizzato**: ogni controller lo ricostruisce da filtri inviati dal client.
-- Esiste un'opzione `group.databaseHost` (host dedicato) che però il codice ignora.
+- `companies` e `places` stanno nei database dei gruppi: estrarre tutti i punti vendita (es. per un dealer) richiede di interrogare ogni database. Nel nuovo progetto passano nel common (`doc/Architecture.md` §3.2).
+- Esiste un'opzione `group.databaseHost` (host dedicato) che il codice ignora: **eliminata** nel nuovo progetto.
+- I POS dei negozi (in realtà il server di punto vendita) si autenticano con l'unica API key del gruppo, condivisa da tutti i negozi; gli amministratori con un JWT di fatto senza scadenza.
 
 ## 4. Domini funzionali (servizi `ms/`)
 | Area | Servizi legacy | Collection principali |

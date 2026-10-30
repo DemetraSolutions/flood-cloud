@@ -28,9 +28,10 @@ export class AppError extends Error {
    * @param {string} code codice stabile leggibile dai client (es. 'NOT_FOUND')
    * @param {string} message messaggio sicuro da mostrare al client
    * @param {Array<{field: string, issue: string}>} [details] dettagli di validazione
+   * @param {{ cause?: unknown }} [options] errore originale, conservato per i log
    */
-  constructor(status, code, message, details) {
-    super(message);
+  constructor(status, code, message, details, options) {
+    super(message, options);
     this.name = 'AppError';
     this.status = status;
     this.code = code;

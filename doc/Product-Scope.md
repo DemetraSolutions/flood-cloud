@@ -6,23 +6,30 @@
 Sostituisce `cloud-commerce-platform-server` (analisi in `doc/Legacy-Analysis.md`) con una riscrittura completa, non un porting.
 
 ## Chi lo usa
-- **Piattaforma e rivenditori (dealer)**: attivano e gestiscono i clienti.
-- **Esercenti**: amministratori di gruppo, società e punti vendita, tramite il backoffice.
-- **Operatori di cassa** tramite i **dispositivi POS** e kiosk.
-- **Sistemi esterni** tramite API key (integrazioni, e-commerce) e provider (fatturazione elettronica, registratore telematico, pagamenti).
+| Client | Cosa fa | Superficie |
+|---|---|---|
+| **App di backoffice** | gli amministratori gestiscono piattaforma, gruppi, anagrafiche, catalogo, report | `/v1` |
+| **Server di punto vendita** | uno per negozio, sempre connesso: centralizza casse e dispositivi locali, invia vendite e scontrini, riceve i dati del catalogo | `/store/v1` |
+| **Integrazioni del gruppo** | sistemi esterni di un singolo gruppo (es. e-commerce), con limiti e conteggio delle chiamate | `/public/v1` |
 
-## Gerarchia di dominio
-Dealer → **Group** (tenant) → **Company** (soggetto giuridico) → **Place** (punto vendita, con dispositivi, depositi, sale/tavoli). Catena centrale: **vendita → movimento di magazzino → documento fiscale**.
+Le casse, i palmari e gli altri dispositivi del negozio **non comunicano mai direttamente con il cloud**: passano sempre dal server di punto vendita.
+
+## Gerarchia e ruoli
+Platform Super Admin (`PSA`) → Dealer (`D`) → **Gruppo** (tenant, cliente del dealer) → **Azienda** (soggetto giuridico) → **Punto vendita**.
+- `PSA` vede tutto il sistema; `D` vede i gruppi che ha creato.
+- Utenti del cliente: `SA` (gruppo), `CA` (aziende), `PA` (punti vendita), `E` (dipendente, opera solo dalle casse del punto vendita e non accede al backoffice).
+
+Catena di dominio centrale: **vendita → movimento di magazzino → documento fiscale**.
 
 ## Obiettivi della riscrittura
-1. **Sicurezza rifatta da zero** secondo `doc/Security-Model.md`: deny by default, credenziali hashate e con scope, isolamento dei tenant garantito dal server.
-2. **API a risorse tipizzate e validate**, al posto del proxy MongoDB generico del legacy.
+1. **Sicurezza rifatta da zero** (`doc/Security-Model.md`): deny by default, sessioni del backoffice a scadenza con refresh, identità a chiave pubblica per ogni server di punto vendita, API pubbliche con chiavi per gruppo, rate limit e conteggio d'uso.
+2. **API REST rigorose** (`doc/API-Guidelines.md`) al posto delle chiamate `POST` che simulavano query MongoDB.
 3. **Copertura dei test al 100%**, applicata dalla suite.
-4. **Dipendenze minime**: `express`, `mongodb`, `body-parser`, `compression`, `multer`; tutto il resto con le API native di Node o su approvazione.
-5. **Sviluppo per passi**: un dominio alla volta, ciascuno completo di test e documentazione prima del successivo.
+4. **Dipendenze minime**: `express`, `mongodb`, `body-parser`, `compression`, `multer`; il resto con le API native di Node o su approvazione.
+5. **Sviluppo per passi**: un dominio alla volta, completo di test e documentazione prima del successivo.
 
-## Stack
-Node.js 24 LTS, ESM, Express 5, driver ufficiale MongoDB, `node:test`.
+## Stack e architettura
+Node.js 24 LTS, ESM, Express 5, driver ufficiale MongoDB, `node:test`. Un database common (identità e tenancy) più un database per gruppo, con nomi dipendenti dall'ambiente (`doc/Architecture.md`, `doc/Data-Model.md`).
 
 ## Fuori scopo (per ora)
 Tutto ciò che non è stato deciso in un passo approvato. La roadmap dei passi si definisce con l'utente.

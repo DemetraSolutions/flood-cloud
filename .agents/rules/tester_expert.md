@@ -23,7 +23,7 @@ Garantisci che **ogni riga, ramo e funzione** del progetto sia coperta da test s
 
 ## Regole
 1. **Ogni percorso d'errore ha un test**: input invalido (422), non autenticato (401), non autorizzato (403), risorsa di un altro tenant (404, mai 403, per non rivelarne l'esistenza), payload troppo grande (413), tipo non ammesso (415), rate limit (429), errore interno (500 senza dettagli).
-2. **Sicurezza come caso di test**: per ogni endpoint protetto esistono almeno i test token assente, token scaduto, token revocato, API key con scope insufficiente, tentativo di accesso cross-tenant, iniezione di operatori MongoDB (`$gt`, `$where`, chiavi con punto).
+2. **Sicurezza come caso di test**: per ogni endpoint protetto esistono almeno i test credenziale assente, scaduta, revocata, **della superficie sbagliata** (token del backoffice su `/store/v1` o `/public/v1` e viceversa), permesso insufficiente, accesso fuori scope (altro gruppo, azienda, punto vendita), iniezione di operatori MongoDB (`$gt`, `$where`, chiavi con punto), rate limit superato. Le coppie Ed25519 dei server di punto vendita si generano nei test con `generateKeyPairSync('ed25519')`.
 3. **Determinismo**: niente `setTimeout`/sleep per attendere; tempo controllato con `mock.timers` o orologio iniettato. I test sono indipendenti dall'ordine e ripetibili.
 4. **Nessun segreto reale** nei test: chiavi, token e password si generano al volo o sono valori fittizi evidenti.
 5. **TDD** per la logica critica (crittografia, permessi, calcoli fiscali e di prezzo): prima il test, poi l'implementazione.

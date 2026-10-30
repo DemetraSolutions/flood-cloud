@@ -1,52 +1,75 @@
 ---
 name: tenant-isolation
-description: Usa quando scrivi codice che legge o modifica dati di un tenant: contesto di autenticazione req.auth, autorizzazione RBAC per permessi, scope company/place, repository con contesto obbligatorio, 404 cross-tenant e test di isolamento.
+description: Usa quando scrivi codice che legge o modifica dati di un gruppo, azienda o punto vendita: contesto req.auth, ruoli PSA/D/SA/CA/PA, scope calcolato dal server, database del gruppo risolto dal contesto, RBAC per permessi, 404 fuori scope e test di isolamento.
 ---
 # Tenant Isolation & RBAC
 
+Riferimenti: `doc/Security-Model.md` §8, `doc/Architecture.md` §3.
+
 ## Contesto di autenticazione
-Il middleware di autenticazione produce un oggetto **congelato** (`Object.freeze`) in `req.auth`:
+Ogni middleware di autenticazione produce un oggetto **congelato** in `req.auth`:
 ```js
 /**
  * @typedef {object} AuthContext
- * @property {'user'|'device'|'apiKey'} kind tipo di credenziale verificata
- * @property {string} principalId id dell'utente, del dispositivo o della API key
- * @property {string} tenantId tenant ricavato dalla credenziale
- * @property {string} role ruolo (solo per kind 'user')
+ * @property {'user'|'storeServer'|'apiKey'} kind tipo di credenziale verificata
+ * @property {string} principalId id dell'utente, del server di punto vendita o della API key
+ * @property {string} credentialId id della sessione, del token o della chiave (audit e revoca)
+ * @property {string|null} role ruolo, solo per kind 'user' (PSA, D, SA, CA, PA)
  * @property {ReadonlySet<string>} permissions permessi effettivi 'risorsa:azione'
- * @property {{ companyIds: string[] | null, placeIds: string[] | null }} scope null = tutto il tenant
- * @property {string} credentialId id della sessione/chiave, per audit e revoca
+ * @property {Scope} scope perimetro dei dati visibili, calcolato dal server
+ */
+/**
+ * @typedef {object} Scope
+ * @property {'all'|'groups'} level 'all' solo per PSA
+ * @property {string[]} groupIds gruppi visibili (D: i propri gruppi; altri: uno)
+ * @property {string[]|null} companyIds null = tutte le aziende dei gruppi visibili
+ * @property {string[]|null} placeIds null = tutti i punti vendita delle aziende visibili
  */
 ```
-È l'**unica** fonte di tenant, ruolo, permessi e scope. Valori come `groupId`, `tenantId`, `role` nel body o nella query non vengono mai letti (e lo schema li rifiuta come campi sconosciuti).
+| Credenziale | Scope |
+|---|---|
+| PSA | `level: 'all'` |
+| D | i gruppi con `dealerId` del dealer |
+| SA | il proprio gruppo |
+| CA | il proprio gruppo, `companyIds` |
+| PA | il proprio gruppo, `placeIds` |
+| server di punto vendita | il proprio gruppo, azienda e punto vendita (fisso) |
+| API key pubblica | il proprio gruppo, restrizioni opzionali |
+Valori come `groupId`, `role`, `permissions` nel body o nella query non vengono mai letti: lo schema li rifiuta.
+
+## Gruppo di lavoro e database
+- Le risorse del gruppo stanno nel database `<prefix><env>_<groupId>`. Il gruppo su cui operare viene:
+  - dalla credenziale, se lo scope contiene un solo gruppo;
+  - dal percorso (`/v1/groups/:groupId/...`) per PSA e D, **verificato** contro lo scope (fuori scope ⇒ `404`).
+- Un helper unico (`resolveGroupDb(auth, groupId)`) valida l'id, controlla lo scope e restituisce il `Db`; i repository ricevono quel `Db` e non ne aprono altri.
 
 ## Autorizzazione
-- Una sola policy (`src/shared/security/policy.js`) mappa ruolo → permessi; le API key e i dispositivi hanno i permessi dei propri scope.
-- Il builder delle route applica `requirePermission(route.permission)`: 403 se manca.
-- Regole più fini (es. "solo il proprio place") stanno nel service, usando `auth.scope`.
+- Una sola policy (`src/shared/security/policy.js`) mappa ruolo → permessi; server di punto vendita e API key hanno i propri permessi.
+- Il builder delle route applica `requirePermission(route.permission)` ⇒ `403`.
+- Gli utenti `E` non hanno alcun permesso sul backoffice.
+- Gestione utenti: si creano e modificano solo utenti di ruolo inferiore e nel proprio scope; nessuno modifica il proprio ruolo o scope.
 
 ## Repository con contesto
 ```js
 /**
- * Restituisce un prodotto del tenant, o null se non esiste nel suo scope.
+ * Restituisce un punto vendita visibile al chiamante, o null.
  * @param {AuthContext} auth contesto verificato
- * @param {import('mongodb').ObjectId} id
+ * @param {import('mongodb').ObjectId} placeId
  */
-async function findById(auth, id) {
-  return products.findOne({ _id: id, ...tenantFilter(auth) }, { projection: PUBLIC_FIELDS });
+async function findPlaceById(auth, placeId) {
+  return places.findOne({ _id: placeId, ...scopeFilter(auth) }, { projection: PUBLIC_FIELDS });
 }
 ```
-- `tenantFilter(auth)` produce `{ tenantId }` più i vincoli di scope (`placeId: { $in: auth.scope.placeIds }` se presente).
-- Insert: `tenantId` e campi di scope impostati dal server, mai dal body.
-- Update/delete: filtro **sempre** con `tenantFilter`; `matchedCount === 0` ⇒ 404.
-- Se si adotta il database per tenant, il repository riceve il `Db` dal contesto e non può aprirne altri (decisione aperta in `doc/Security-Model.md` §10).
+- `scopeFilter(auth)` traduce lo scope in filtro (`groupId: { $in }`, `companyId: { $in }`, `_id`/`placeId: { $in }`); per `level: 'all'` non aggiunge vincoli.
+- Insert: `groupId`, `companyId`, `placeId` impostati dal server, mai dal body.
+- Update/delete: filtro **sempre** con `scopeFilter`; `matchedCount === 0` ⇒ `404`.
 
-## Accesso cross-tenant
-Solo per ruoli di piattaforma/dealer con permesso esplicito (es. `tenants:impersonate`), con tenant di destinazione verificato tra quelli consentiti e **registrato nell'audit log**. Mai tramite un parametro di query generico come il `?groupId=` del legacy.
+## Audit
+Ogni accesso di PSA o D a un gruppo è registrato nell'audit log (attore, gruppo, azione).
 
-## Test obbligatori per ogni risorsa di tenant
-- Tenant B non vede la risorsa di A in lista e nel dettaglio (404).
-- Tenant B non può modificarla né cancellarla (404, documento invariato).
-- Utente con scope su place X non vede i dati di place Y.
-- Body con `tenantId`/`groupId`/`role` ⇒ 422.
-- Permesso mancante ⇒ 403.
+## Test obbligatori per ogni risorsa
+- Gruppo B non vede, modifica o cancella le risorse di A (`404`, dati invariati).
+- D vede i propri gruppi e non quelli di un altro dealer.
+- CA e PA vedono solo le proprie aziende e i propri punti vendita.
+- Server di punto vendita limitato al proprio punto vendita.
+- Body con `groupId`/`role` ⇒ `422`; permesso mancante ⇒ `403`; utente `E` ⇒ nessun accesso al backoffice.

@@ -1,10 +1,10 @@
 ---
 name: opaque-token-auth
-description: Usa quando implementi login, sessioni, access e refresh token, logout, revoca o il middleware di autenticazione Bearer: token opachi con node:crypto, hash SHA-256 a riposo, rotazione del refresh con rilevamento del riuso.
+description: Usa quando implementi login del backoffice, sessioni, access e refresh token, logout, revoca o il middleware Bearer della superficie /v1: token opachi con node:crypto, hash SHA-256 a riposo, rotazione del refresh con rilevamento del riuso, codice TOKEN_EXPIRED.
 ---
-# Opaque Token Auth
+# Opaque Token Auth (backoffice)
 
-> Implementa questa skill solo dopo che l'utente ha confermato i token opachi (`doc/Security-Model.md` §10.1).
+Riferimenti: `doc/Security-Model.md` §4, collection `sessions` in `doc/Data-Model.md`. Decisione del 2026-10-30: **token opachi**, non JWT.
 
 ## Generazione e hash
 ```js
@@ -28,37 +28,37 @@ export function hashToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 ```
-La ricerca avviene **per hash su indice univoco**: il confronto lo fa l'indice, non serve `timingSafeEqual` sul token.
+La ricerca avviene **per hash su indice univoco**: non serve `timingSafeEqual` sul token.
 
-## Collection `sessions` (indicativa)
-`_id`, `userId`, `tenantId`, `familyId`, `accessTokenHash` (univoco), `accessExpiresAt`, `refreshTokenHash` (univoco), `refreshExpiresAt`, `refreshUsedAt`, `revokedAt`, `revokedReason`, `createdAt`, `lastUsedAt`, `ip`, `userAgent`. Indice TTL su `refreshExpiresAt`.
+## Durate (default configurabili)
+Access 15 minuti; refresh 7 giorni di inattività; famiglia di sessioni al massimo 30 giorni, poi nuovo login.
 
-## Middleware Bearer
-1. Header assente o non nel formato `Bearer fc_at_…` ⇒ 401 `UNAUTHENTICATED` (nessun dettaglio sul motivo).
-2. `findOne({ accessTokenHash })`; non trovata, scaduta, revocata ⇒ 401.
-3. Carica l'utente: inattivo o tenant sospeso ⇒ 401.
-4. Costruisce `req.auth` (skill `tenant-isolation`), aggiorna `lastUsedAt` senza bloccare la risposta più di una volta al minuto.
-5. Risposta `401` con `WWW-Authenticate: Bearer`.
+## Middleware Bearer (`/v1`)
+1. Header assente o non `Bearer fc_at_…` ⇒ `401 UNAUTHENTICATED`.
+2. `findOne({ accessTokenHash })`: inesistente o revocata ⇒ `401 UNAUTHENTICATED`; scaduta ⇒ `401 TOKEN_EXPIRED` (è il segnale per cui il client chiama il refresh).
+3. Utente `active` con ruolo ammesso al backoffice (non `E`), gruppo `active` ⇒ altrimenti `401 UNAUTHENTICATED`.
+4. Costruisce `req.auth` (skill `tenant-isolation`); `lastUsedAt` aggiornato al massimo una volta al minuto.
+5. `WWW-Authenticate: Bearer` sulle risposte `401`.
 
-## Login
-- Rate limit per IP e per identificativo prima di toccare il database.
-- Identificativo validato come stringa (mai oggetto).
-- Utente inesistente: verifica comunque un hash fittizio per tempo costante; risposta identica a password errata (`INVALID_CREDENTIALS`).
-- Successo: nuova sessione con `familyId` nuovo; risponde `{ accessToken, accessExpiresAt, refreshToken, refreshExpiresAt }` nel body (mai nei header esposti via CORS come il legacy).
+## Login (`POST /v1/auth/login`)
+- Rate limit per IP e per username **prima** di toccare le password (skill `rate-limiting-metering`).
+- Username validato come stringa; utente inesistente ⇒ verifica comunque un hash fittizio; risposta identica (`401 INVALID_CREDENTIALS`) per utente inesistente, password errata, utente `E`, utente disattivato, gruppo sospeso.
+- Successo: sessione con `familyId` nuovo e `familyExpiresAt`; risposta con `accessToken` e `accessExpiresAt`; refresh token nel cookie `HttpOnly` o nel body secondo la decisione aperta (`doc/Security-Model.md` §12). Mai nei header esposti via CORS come nel legacy.
 
-## Refresh con rotazione
-Operazione atomica:
+## Refresh con rotazione (`POST /v1/auth/refresh`)
 ```js
 const session = await sessions.findOneAndUpdate(
-  { refreshTokenHash: hashToken(refreshToken), refreshUsedAt: null, revokedAt: null, refreshExpiresAt: { $gt: now } },
+  { refreshTokenHash: hashToken(refreshToken), refreshUsedAt: null, revokedAt: null,
+    refreshExpiresAt: { $gt: now }, familyExpiresAt: { $gt: now } },
   { $set: { refreshUsedAt: now } },
 );
 ```
-- Se `null`, cerca il token **senza** i vincoli: se esiste ed era già usato ⇒ **riuso rilevato**: revoca tutte le sessioni della `familyId` e registra l'evento nell'audit log. Risposta sempre 401.
-- Se valido: crea una nuova sessione nella stessa famiglia con token nuovi e revoca la precedente.
+- Se `null`: cerca il token senza vincoli; se esiste ed era già usato ⇒ **riuso**: revoca tutta la `familyId`, evento nell'audit log. Risposta sempre `401`.
+- Se valido: nuova sessione nella stessa famiglia (stesso `familyExpiresAt`), revoca della precedente.
+- Con il cookie: verifica dell'header `Origin` contro l'allowlist.
 
 ## Revoca
-Logout (sessione corrente), logout ovunque (tutte le sessioni dell'utente), cambio password, disattivazione utente, cambio ruolo: `updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now, revokedReason } })`.
+Logout (sessione corrente), logout ovunque, cambio password, cambio ruolo o scope, utente disattivato, gruppo sospeso: `updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now, revokedReason } })` (per il gruppo: `groupId`).
 
 ## Test obbligatori
-Token assente, malformato, inesistente, scaduto, revocato; utente disattivato; refresh valido; refresh riusato (famiglia revocata); refresh scaduto; logout ovunque; nessun token nei log.
+Token assente, malformato, inesistente, scaduto (`TOKEN_EXPIRED`), revocato; utente `E`; utente disattivato; gruppo sospeso; refresh valido; refresh riusato (famiglia revocata); refresh oltre la durata massima; logout ovunque; token assenti dai log; token store o API key rifiutati su `/v1`.

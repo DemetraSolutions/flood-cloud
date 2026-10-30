@@ -32,9 +32,12 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 ## Documentazione di riferimento
 | Documento | Contenuto |
 |---|---|
-| `doc/Product-Scope.md` | Scopo del prodotto e obiettivi della riscrittura |
+| `doc/Product-Scope.md` | Scopo del prodotto, client, ruoli, obiettivi |
+| `doc/Architecture.md` | Stack, multi-database, superfici API, struttura del codice |
+| `doc/Security-Model.md` | Credenziali delle tre superfici, autorizzazione, rate limit, decisioni aperte |
+| `doc/Data-Model.md` | Collection del database common |
+| `doc/API-Guidelines.md` | Regole REST vincolanti |
 | `doc/Legacy-Analysis.md` | Cosa fa il progetto legacy (riferimento funzionale) |
-| `doc/Security-Model.md` | Modello di sicurezza (bozza, con decisioni aperte) |
 | `doc/API.md` | Riferimento degli endpoint (nasce con il primo endpoint) |
 
 ## Sottoagenti disponibili
@@ -46,13 +49,14 @@ Server Node.js 24 + Express 5 in ESM.
 
 ### 2. DB Expert (`db_expert`)
 MongoDB con il driver ufficiale, senza ODM.
-- Repository con contesto di tenant, indici idempotenti (univoci, TTL), `$jsonSchema`.
+- Database common (identità e tenancy) + un database per gruppo, nomi dipendenti dall'ambiente.
+- Repository con scope, indici idempotenti (univoci, TTL), `$jsonSchema`.
 - Paginazione a cursore, update atomici, transazioni dove servono.
 
 ### 3. Security Expert (`security_expert`)
 Garante di `doc/Security-Model.md`; obbligatorio su ogni modifica di sicurezza.
-- Deny by default, token opachi con hash, refresh con rotazione, API key con scope, credenziali dispositivo.
-- scrypt per password e PIN, RBAC, isolamento dei tenant, validazione, upload, webhook, header, CORS, rate limit, segreti e log.
+- Tre superfici: backoffice con token opachi e refresh rotante, server di punto vendita con chiavi Ed25519, API pubbliche con chiavi per gruppo.
+- scrypt, RBAC (PSA, D, SA, CA, PA, E), isolamento dei gruppi, rate limit e quote, validazione, upload, webhook, header, CORS, segreti e log.
 
 ### 4. Tester Expert (`tester_expert`)
 Copertura al 100% con strumenti nativi.
@@ -60,8 +64,8 @@ Copertura al 100% con strumenti nativi.
 - Integrazione con MongoDB reale usa-e-getta, test di rifiuto di sicurezza, TDD.
 
 ### 5. API Expert (`api_expert`)
-Contratto REST.
-- Risorse tipizzate e versionate, nessuna query MongoDB dal client, schemi di validazione.
+Contratto REST rigoroso secondo `doc/API-Guidelines.md`.
+- Risorse e metodi HTTP corretti sulle superfici `/v1`, `/store/v1`, `/public/v1`, nessuna query MongoDB dal client, schemi di validazione.
 - Codici HTTP, envelope ed errori, paginazione, idempotenza, `doc/API.md`.
 
 ### 6. Legacy Analyst (`legacy_analyst`)
@@ -86,9 +90,11 @@ Guide operative attivate automaticamente in base alla `description`, in `.agents
 | `express-module-scaffold` | Nuovo modulo di dominio o nuova route |
 | `express-error-handling` | Errori, envelope di risposta, gestore centrale |
 | `input-validation` | Validazione di body, query, params senza librerie |
-| `tenant-isolation` | Accesso a dati di tenant, RBAC, scope, test di isolamento |
-| `opaque-token-auth` | Login, sessioni, refresh, logout, middleware Bearer |
-| `api-key-management` | API key e credenziali/enrollment dei dispositivi POS |
+| `tenant-isolation` | Accesso a dati di gruppo, ruoli, scope, database del gruppo, test di isolamento |
+| `opaque-token-auth` | Login del backoffice, sessioni, refresh, logout, middleware `/v1` |
+| `store-server-auth` | Attivazione, chiavi Ed25519, token e rotazione dei server di punto vendita |
+| `public-api-keys` | API key della superficie pubblica |
+| `rate-limiting-metering` | Rate limit, quote e conteggio d'uso |
 | `password-hashing` | Password e PIN con scrypt |
 | `secure-file-upload` | Upload con multer |
 | `webhook-verification` | Webhook in ingresso dai provider |
