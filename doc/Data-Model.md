@@ -55,6 +55,13 @@ Le parti incorporate nel legacy (depositi, sale, tavoli, dispositivi) si definis
 | `activatedAt`, `revokedAt`, `createdBy`, `createdAt`, `updatedAt` | | |
 Indici: `placeId`; `groupId`; `keys.keyId` univoco.
 
+## platformSettings — impostazioni di piattaforma
+Documento unico (`_id: 'platform'`), modificabile solo da `PSA`; ogni modifica va nell'audit log.
+| Campo | Tipo | Note |
+|---|---|---|
+| `storeServerSilenceThresholdHours` | number \| null | soglia di silenzio dei server di punto vendita; `null` o assente ⇒ nessun allarme (`doc/Security-Model.md` §5.7) |
+| `updatedBy`, `updatedAt` | | |
+
 ## storeServerActivations — codici di attivazione
 `_id`, `storeServerId`, `codeHash` (univoco), `expiresAt` (TTL), `attempts`, `usedAt`, `createdBy`, `createdAt`.
 

@@ -37,7 +37,7 @@ Ogni superficie ha router, middleware di autenticazione, rate limit e documentaz
 
 ## 4. Backoffice: sessioni con token opachi
 - **Login** con username e password (`POST /v1/auth/login`), rate limit per IP e per username, risposta `INVALID_CREDENTIALS` identica in ogni caso di fallimento.
-- **Ruoli ammessi**: PSA, D, SA, CA, PA. Gli utenti `E` (employee) **non possono accedere al backoffice**: operano solo tramite il server di punto vendita (§5.6). Un login di un utente `E` riceve la stessa risposta di credenziali errate.
+- **Ruoli ammessi**: PSA, D, SA, CA, PA. Gli utenti `E` (employee) **non possono accedere al backoffice**: operano solo tramite il server di punto vendita (§5.8). Un login di un utente `E` riceve la stessa risposta di credenziali errate.
 - **Access token** opaco di 15 minuti, inviato come `Authorization: Bearer fc_at_…`.
 - **Refresh token** con **rotazione a ogni uso** e **rilevamento del riuso**: se un refresh token già usato si ripresenta, l'intera famiglia di sessioni è revocata e l'evento va nell'audit log. Scadenza per inattività 7 giorni, durata massima della famiglia 30 giorni, poi nuovo login (valori di default configurabili).
 - **Comportamento del client**: alla risposta `401` con codice `TOKEN_EXPIRED` chiama una sola volta `POST /v1/auth/refresh` e ripete la richiesta; se il refresh fallisce, torna al login. Le richieste concorrenti attendono lo stesso refresh.
@@ -56,10 +56,21 @@ Ogni negozio ha **un solo server locale** che centralizza casse e dispositivi e 
 - Rispetto a una chiave fissa con refresh token rotanti, non c'è il rischio di restare chiusi fuori quando il server si blocca a metà di una rotazione: la chiave privata resta sempre valida finché non viene revocata o sostituita.
 
 ### 5.2 Attivazione (una volta per server)
-1. Dal backoffice un amministratore con permesso `storeServers:manage` registra il server sul punto vendita e ottiene un **codice di attivazione** monouso (scadenza 15 minuti, tentativi limitati, hash a riposo).
-2. Il server di punto vendita genera localmente una coppia **Ed25519** e chiama `POST /store/v1/activation` con codice, chiave pubblica e informazioni (versione software, hostname).
-3. Il cloud consuma il codice in modo atomico, salva la chiave pubblica con un `keyId` e restituisce `storeServerId` e `keyId`.
-4. La chiave privata va salvata dal server di punto vendita in un file leggibile solo dal suo utente di servizio (o nel keystore del sistema, se disponibile).
+**Per il tecnico installatore è un solo gesto: incollare un codice.** Tutta la parte crittografica è automatica e invisibile.
+
+| Chi | Cosa fa |
+|---|---|
+| Amministratore (backoffice) | sul punto vendita sceglie "Attiva server di punto vendita" e ottiene un **codice di attivazione** (es. `FC-7K3M-Q9TX-4WBR`) |
+| Tecnico installatore | installa il software e **incolla il codice** nella schermata di configurazione. Fine. |
+| Software del server di punto vendita (automatico) | genera la coppia di chiavi Ed25519, si registra, salva la chiave privata e da quel momento si autentica da solo |
+
+Dettaglio tecnico:
+1. Il backoffice (permesso `storeServers:manage`) crea il codice: monouso, **12 caratteri** da alfabeto senza ambiguità (niente `0/O`, `1/I/L`), non sensibile a maiuscole, con trattini ignorati, così si può anche dettare al telefono. Validità di default **72 ore** (configurabile), revocabile e rigenerabile in qualsiasi momento; hash a riposo; tentativi limitati.
+2. Il software genera localmente la coppia **Ed25519** e chiama `POST /store/v1/activation` con codice, chiave pubblica e informazioni (versione software, hostname).
+3. Il cloud consuma il codice in modo atomico, salva la chiave pubblica con un `keyId` e restituisce `storeServerId` e `keyId`; il backoffice mostra il server come attivo.
+4. Il software salva la chiave privata in un file leggibile solo dal proprio utente di servizio (o nel keystore del sistema, se disponibile).
+
+**Reinstallazione o sostituzione dell'hardware**: l'amministratore genera un nuovo codice per lo stesso server di punto vendita e il tecnico lo incolla; la nuova chiave sostituisce la precedente, che viene revocata.
 
 ### 5.3 Ottenere un access token
 `POST /store/v1/token` con un'**asserzione firmata**:
@@ -69,7 +80,8 @@ Ogni negozio ha **un solo server locale** che centralizza casse e dispositivi e 
 Il cloud verifica: server attivo e chiave non revocata, firma valida (`crypto.verify`), `iat` entro ±5 minuti, `jti` mai visto (collection con indice univoco e TTL). Se tutto è valido emette un access token `fc_st_…` di 15 minuti. Il server di punto vendita lo rinnova firmando una nuova asserzione poco prima della scadenza. In caso di orologio fuori tolleranza la risposta è `401` con codice `CLOCK_SKEW` e l'ora del server, così il client può correggere: il server di punto vendita **deve** comunque essere sincronizzato via NTP.
 
 ### 5.4 Rotazione e revoca
-- **Rotazione** (consigliata ogni 90 giorni o su richiesta): il server di punto vendita genera una nuova coppia e chiama `POST /store/v1/keys` autenticato con il token corrente, includendo una firma fatta con la **nuova** chiave (prova di possesso). La vecchia chiave viene disattivata appena la nuova è registrata.
+**Principio (decisione dell'utente del 2026-10-30): nessuna credenziale di un server di punto vendita scade da sola.** Un negozio smette di comunicare solo per una revoca esplicita dal backoffice o per una reinstallazione con un nuovo codice: mai per una scadenza automatica.
+- **Rotazione** automatica, fatta dal software senza intervento umano (default ogni 90 giorni): genera una nuova coppia e chiama `POST /store/v1/keys` autenticato con il token corrente, includendo una firma fatta con la **nuova** chiave (prova di possesso). La vecchia chiave viene disattivata **solo dopo** che il cloud ha confermato la nuova e il software l'ha salvata. Se la rotazione fallisce in qualunque punto, la vecchia chiave resta valida e il software riprova più tardi: la rotazione non può mai lasciare il negozio scollegato.
 - **Revoca** dal backoffice (furto, sostituzione hardware, chiusura del negozio): chiavi e token del server sono invalidati subito. Per riattivarlo serve un nuovo codice.
 - **Monitoraggio**: ultimo contatto, IP, versione software; ogni attivazione, rotazione, revoca e fallimento di firma va nell'audit log.
 
@@ -78,10 +90,25 @@ Il cloud verifica: server attivo e chiave non revocata, firma valida (`crypto.ve
 - Ogni invio di documenti fiscali, vendite o movimenti porta un header **`Idempotency-Key`**: se la rete cade e il server ripete l'invio, il cloud restituisce l'esito già registrato senza duplicare nulla.
 - Rate limit ampio ma presente, per proteggere il cloud da un server locale malfunzionante.
 
-### 5.6 Utenti E e operatori di cassa
+### 5.6 Funzionamento offline
+Senza internet il negozio continua a lavorare: casse e dispositivi parlano solo con il server di punto vendita, che accoda le operazioni da inviare al cloud.
+- **L'autenticazione non soffre l'offline**: la chiave privata non scade. Alla riconnessione il server firma una nuova asserzione, ottiene un token e riprende, qualunque sia la durata dell'interruzione. Non esiste un refresh token che possa scadere durante l'offline.
+- **Invio della coda** alla riconnessione: ogni operazione mantiene la sua `Idempotency-Key` e i suoi istanti originali (es. data di emissione dello scontrino), così i reinvii non creano doppioni e i dati restano corretti.
+- **Orologio**: dopo lunghi periodi offline l'orologio del server potrebbe derivare; se il cloud risponde `CLOCK_SKEW`, il software si riallinea all'ora restituita e riprova.
+- **Server revocato durante l'offline** (es. furto): alla riconnessione la richiesta del token viene rifiutata e nessun dato in coda viene accettato.
+
+### 5.7 Monitoraggio della connessione
+Un negozio scollegato continua a vendere e i clienti finali potrebbero non accorgersene. Decisione dell'utente del 2026-10-30:
+- **Informazione sempre disponibile**: ogni server di punto vendita registra `lastSeenAt` a ogni richiesta autenticata; il backoffice mostra da quanto tempo ogni negozio non contatta il cloud.
+- **Allarme facoltativo, solo di piattaforma**: PSA può impostare una **soglia di silenzio** in ore nelle impostazioni di piattaforma (`platformSettings.storeServerSilenceThresholdHours`). Se è impostata, i server di punto vendita silenziosi oltre la soglia compaiono come "non sincronizzati" e sono segnalati a chi li vede nel proprio perimetro (SA, CA, PA, dealer, PSA). **Se non è impostata, non esiste alcun allarme.** Nessun valore di default.
+- **Nessuna soglia per gruppo, azienda o punto vendita** per ora. Un'eventuale soglia del singolo punto vendita che sovrascrive quella di piattaforma è un'estensione futura, da decidere.
+- Il silenzio misura la connessione, non le vendite: un negozio chiuso con il server acceso resta collegato e non genera allarmi.
+- **Avviso in negozio**: il software del server di punto vendita mostra un avviso sulle casse quando il cloud lo rifiuta perché revocato e, se la soglia di piattaforma è impostata (la riceve dal cloud a ogni contatto), quando non riesce a sincronizzare da più di quella soglia.
+
+### 5.8 Utenti E e operatori di cassa
 Gli utenti `E` lavorano sui client di cassa collegati al server di punto vendita. Verso il cloud non si autenticano: le operazioni arrivano con la credenziale del server di punto vendita e indicano l'operatore come **attributo validato** (deve appartenere a quel punto vendita). Come gli operatori si autenticano sul server locale (PIN o altro) è una decisione aperta (§12).
 
-### 5.7 Migrazione dal legacy
+### 5.9 Migrazione dal legacy
 Per un periodo limitato, `POST /store/v1/migration` accetta la vecchia API key di gruppo **insieme** all'identificativo del punto vendita e a una chiave pubblica appena generata, registra il server e restituisce la nuova identità. Al termine del periodo l'endpoint viene rimosso e le vecchie chiavi spente. *(Modalità e durata da confermare, §12.)*
 
 ## 6. API pubbliche
@@ -141,7 +168,7 @@ Credenziali dei provider solo lato server (per gruppo, cifrate); ogni proxy vers
 ## 12. Decisioni aperte
 1. Refresh token del backoffice in cookie `HttpOnly` (raccomandato) o gestito dal client nel body.
 2. Autenticazione degli operatori `E` sul server di punto vendita e sincronizzazione degli utenti verso di esso.
-3. Modalità e durata della migrazione dalle API key di gruppo (§5.7).
+3. Modalità e durata della migrazione dalle API key di gruppo (§5.9).
 4. Valori dei limiti di default e delle quote; eventuali piani diversi per gruppo.
 5. Permessi per modulo per singolo utente (`permissions.<modulo>.{r,w}` del legacy): mantenerli come restrizione aggiuntiva al ruolo o eliminarli.
 6. Conservazione dell'audit log (durata).

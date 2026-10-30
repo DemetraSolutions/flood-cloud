@@ -44,7 +44,7 @@ I nomi dei database dipendono dall'ambiente, come nel legacy, così più ambient
 | `groups`, `users`, `companies`, `places` | catalogo (prodotti, reparti, categorie…) |
 | `storeServers`, `storeServerActivations` | magazzino |
 | `sessions`, `storeServerTokens`, `storeServerNonces` | vendite e documenti fiscali |
-| `apiKeys`, `rateLimits`, `apiUsage` | clienti e fedeltà, prenotazioni… |
+| `apiKeys`, `rateLimits`, `apiUsage`, `platformSettings` | clienti e fedeltà, prenotazioni… |
 | `auditLog` | |
 
 **Decisione del 2026-10-30:** `companies` e `places` passano nel **common** (nel legacy erano nei database dei gruppi e rendevano costose le liste trasversali, es. tutti i punti vendita di un dealer). La verifica di ogni credenziale e il calcolo dello scope avvengono interamente nel common, senza aprire il database del gruppo.

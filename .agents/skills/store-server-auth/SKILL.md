@@ -7,7 +7,9 @@ description: Usa quando implementi l'autenticazione dei server di punto vendita 
 Riferimenti: `doc/Security-Model.md` §5, collection `storeServers`, `storeServerActivations`, `storeServerNonces`, `storeServerTokens` in `doc/Data-Model.md`.
 
 ## Flusso
-1. **Codice di attivazione** (backoffice, permesso `storeServers:manage`): 10 caratteri da alfabeto senza ambiguità (es. Crockford base32), `codeHash` SHA-256, scadenza 15 minuti, tentativi limitati.
+> **Il tecnico installatore incolla solo il codice di attivazione.** Generazione delle chiavi, registrazione, salvataggio della chiave privata e rinnovo dei token sono automatici nel software del server di punto vendita: nessun passaggio crittografico manuale.
+
+1. **Codice di attivazione** (backoffice, permesso `storeServers:manage`): 12 caratteri Crockford base32 (senza `0/O`, `1/I/L`) mostrati a gruppi (`FC-7K3M-Q9TX-4WBR`); in ingresso si normalizzano maiuscole e trattini prima dell'hash. `codeHash` SHA-256, validità di default 72 ore (configurabile), revocabile e rigenerabile, tentativi limitati. Un nuovo codice per un server già attivo serve a reinstallarlo: all'attivazione la nuova chiave sostituisce e revoca la precedente.
 2. **Attivazione** `POST /store/v1/activation` (route pubblica con rate limit severo): `{ code, publicKey, softwareVersion, hostname }`. Consumo atomico del codice (`findOneAndUpdate` con `usedAt: null`, non scaduto), validazione della chiave pubblica, salvataggio con `keyId` casuale, server `active`.
 3. **Token** `POST /store/v1/token` (route pubblica, autenticata dalla firma): asserzione firmata ⇒ access token `fc_st_…` da 15 minuti.
 4. **Chiamate operative** con `Authorization: Bearer fc_st_…`.
@@ -70,6 +72,9 @@ Cerca `tokenHash` in `storeServerTokens` (non scaduto, non revocato), ricarica i
 ## Rotazione e revoca
 - `POST /store/v1/keys` (token valido): `{ publicKey, proof }` dove `proof` è la firma con la **nuova** chiave di `v1.rotate.<storeServerId>.<tokenId>`; la vecchia chiave è revocata appena la nuova è registrata, i token esistenti restano validi fino a scadenza.
 - Revoca dal backoffice: `status: 'revoked'`, chiavi revocate, `storeServerTokens` revocati in blocco.
+
+## Offline
+La chiave privata non scade: dopo qualunque interruzione il server firma una nuova asserzione e ottiene un token. Le operazioni accodate offline si inviano con la loro `Idempotency-Key` e con gli istanti originali (`doc/Security-Model.md` §5.6). Server revocato durante l'offline ⇒ token rifiutato, coda non accettata.
 
 ## Idempotenza
 Le scritture della superficie store richiedono `Idempotency-Key`: collection per gruppo con chiave univoca `(storeServerId, idempotencyKey)`, hash del body e risposta salvata; stessa chiave con body diverso ⇒ `409`.
