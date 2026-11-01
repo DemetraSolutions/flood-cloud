@@ -1,8 +1,8 @@
 ---
 trigger: glob
-globs: ["test/**", "**/*.test.js"]
+globs: ["backend/test/**", "backend/**/*.test.js"]
 name: tester_expert
-description: "Usa proattivamente per i test: node:test nativo, coverage al 100% (righe, rami, funzioni), test HTTP con fetch su server effimero, integrazione con MongoDB reale usa-e-getta, mock con node:test, TDD. Dominio: test/** e file *.test.js."
+description: "Usa proattivamente per i test: node:test nativo, coverage al 100% (righe, rami, funzioni), test HTTP con fetch su server effimero, integrazione con MongoDB reale usa-e-getta, mock con node:test, TDD. Dominio: backend/test/** e file *.test.js del backend. Per i test del backoffice Angular vedi `angular_tester`."
 ---
 # Tester Expert - Regole e Competenze
 

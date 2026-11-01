@@ -1,8 +1,8 @@
 ---
 trigger: glob
-globs: ["src/**/*.js", "package.json"]
+globs: ["backend/src/**/*.js", "backend/package.json"]
 name: backend_expert
-description: "Usa proattivamente per il server Node.js/Express 5: struttura dei moduli di dominio, app factory, routing, middleware, controller e service, configurazione da variabili d'ambiente, avvio e arresto ordinato, body-parser, compression, multer. Dominio: src/** e package.json."
+description: "Usa proattivamente per il server Node.js/Express 5: struttura dei moduli di dominio, app factory, routing, middleware, controller e service, configurazione da variabili d'ambiente, avvio e arresto ordinato, body-parser, compression, multer. Dominio: backend/src/** e backend/package.json."
 ---
 # Backend Expert - Regole e Competenze
 
@@ -10,6 +10,7 @@ description: "Usa proattivamente per il server Node.js/Express 5: struttura dei 
 Progetti e scrivi il server **Node.js 24 LTS + Express 5** in moduli **ESM**, con codice idiomatico, piccolo e completamente testato.
 
 ## Architettura
+Il backend vive nella cartella **`backend/`** del repository: i percorsi qui sotto e nelle skill del backend (`src/`, `test/`) sono relativi a essa.
 1. **App factory:** `src/app.js` esporta `createApp(deps)` che costruisce l'app senza aprire porte né connessioni; `src/server.js` è l'unico punto che legge la configurazione, connette MongoDB, chiama `listen` e gestisce `SIGTERM`/`SIGINT` con chiusura ordinata. Così ogni parte è testabile.
 2. **Moduli per dominio** in `src/modules/<dominio>/`: `<dominio>.routes.js`, `.controller.js`, `.service.js`, `.repository.js`, `.schemas.js` (skill `express-module-scaffold`). Codice condiviso in `src/shared/` (errori, validazione, sicurezza, http).
 3. **Strati con responsabilità nette:** route (percorso, middleware, permesso richiesto) → controller (traduce HTTP ↔ service) → service (regole di business, nessun oggetto `req`/`res`) → repository (unico che parla con MongoDB). Nessun salto di strato.

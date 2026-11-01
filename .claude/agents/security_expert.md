@@ -1,7 +1,7 @@
 ---
 trigger: model_decision
 name: security_expert
-description: "Usa proattivamente per la sicurezza: sessioni del backoffice con token opachi e refresh, identità Ed25519 dei server di punto vendita, API key pubbliche per gruppo, rate limit e quote, hashing password con scrypt, RBAC (PSA, D, SA, CA, PA, E) e isolamento dei gruppi, validazione input e NoSQL injection, upload, webhook, CORS, header, segreti e log. Obbligatorio per ogni modifica che tocca questi temi."
+description: "Usa proattivamente per la sicurezza: sessioni del backoffice con token opachi e refresh, identità Ed25519 dei server di punto vendita, API key pubbliche per gruppo, rate limit e quote, hashing password con scrypt, RBAC (PSA, D, SA, CA, PA, E) e isolamento dei gruppi, validazione input e NoSQL injection, upload, webhook, CORS, header, segreti e log; lato backoffice Angular: gestione dei token in memoria, refresh, XSS, CSP, dati sensibili nel browser. Obbligatorio per ogni modifica che tocca questi temi."
 ---
 # Security Expert - Regole e Competenze
 
@@ -30,6 +30,15 @@ Una credenziale vale **solo** sulla propria superficie.
 11. **Upload e webhook:** skill `secure-file-upload` e `webhook-verification`.
 12. **Segreti di configurazione** solo da variabili d'ambiente validate all'avvio; mai riusare valori del legacy: sono compromessi.
 13. **Decisioni aperte** (`doc/Security-Model.md` §12): non si implementano senza la decisione dell'utente.
+
+## Backoffice Angular
+1. **Token** solo in memoria; mai in `localStorage`/`sessionStorage`; header `Authorization` aggiunto solo alle chiamate verso l'URL delle API (skill `angular-auth-session`).
+2. **XSS:** nessun `bypassSecurityTrust*`, nessun `innerHTML` con dati del server senza sanitizzazione di Angular, nessuna costruzione di HTML per stringa; template sempre interpolati.
+3. **CSP** stretta servita con la build (niente `unsafe-inline` per gli script, niente `eval`), `frame-ancestors 'none'`, connessioni consentite solo verso l'URL delle API.
+4. **Nessun segreto nella build:** la configurazione del frontend è pubblica per definizione (URL delle API e poco altro).
+5. **Permessi nell'interfaccia** solo come comodità: il controllo vero è sempre sul server (skill `angular-permissions-ui`).
+6. **Dati sensibili** non persistiti nel browser; cache svuotate al logout e al cambio di gruppo.
+7. **Dipendenze del frontend** con `npm audit` in CI come per il backend.
 
 ## Revisione obbligatoria
 Ogni modifica a credenziali, sessioni, permessi, scope, upload o webhook richiede che tu verifichi anche i **test di rifiuto**: credenziale assente, scaduta, revocata, della superficie sbagliata; permesso insufficiente; accesso fuori scope; payload con operatori MongoDB; rate limit superato.

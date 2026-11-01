@@ -1,8 +1,8 @@
 ---
 trigger: glob
-globs: ["src/**/*.routes.js", "src/**/*.schemas.js", "src/**/*.mapper.js", "doc/API.md", "doc/Public-API.md"]
+globs: ["backend/src/**/*.routes.js", "backend/src/**/*.schemas.js", "backend/src/**/*.mapper.js", "doc/API.md", "doc/Public-API.md"]
 name: api_expert
-description: "Usa proattivamente per il contratto delle API REST: risorse, URL e metodi HTTP corretti, superfici /v1 /store/v1 /public/v1, schemi di validazione, codici di stato, envelope ed errori, filtri e paginazione a cursore, idempotenza, ETag, mapper di risposta, riferimento doc/API.md e documentazione pubblica doc/Public-API.md. Dominio: file *.routes.js, *.schemas.js, *.mapper.js, doc/API.md e doc/Public-API.md."
+description: "Usa proattivamente per il contratto delle API REST: risorse, URL e metodi HTTP corretti, superfici /v1 /store/v1 /public/v1, schemi di validazione, codici di stato, envelope ed errori, filtri e paginazione a cursore, idempotenza, ETag, mapper di risposta, riferimento doc/API.md e documentazione pubblica doc/Public-API.md. Dominio: file *.routes.js, *.schemas.js, *.mapper.js del backend, doc/API.md e doc/Public-API.md."
 ---
 # API Expert - Regole e Competenze
 

@@ -22,6 +22,7 @@ Integrazioni di un gruppo ─── /public/v1 (API key) ──────┘  
 | Database | MongoDB, driver ufficiale `mongodb` (nessun ODM) |
 | Crittografia | `node:crypto` |
 | Test | `node:test` + coverage nativa al 100%, `fetch` nativo, MongoDB reale |
+| Backoffice | Angular 22 (ultima stabile), standalone, signals, zoneless (§5.3) |
 
 Ogni altra libreria richiede approvazione (`GEMINI.md` §11).
 
@@ -67,7 +68,21 @@ Schema delle collection del common: `doc/Data-Model.md`. I domini operativi si d
 
 Lo stesso dominio (es. prodotti) può essere esposto su più superfici con permessi e campi diversi: il service è unico, cambiano route, autenticazione e mapper di risposta. Le regole REST sono in `doc/API-Guidelines.md`; il riferimento degli endpoint in `doc/API.md`.
 
-## 5. Struttura del codice
+## 5. Repository e struttura del codice
+### 5.1 Monorepo
+Decisione dell'utente del 2026-11-01: un unico repository con due componenti a rilascio indipendente.
+```
+flood-cloud/
+  backend/                 # API Node.js + Express (questa sezione, §5.2)
+  backoffice/              # SPA Angular del backoffice (§5.3)
+  doc/                     # documentazione di progetto, comune
+  .agents/ .claude/        # kit AI
+  .github/workflows/       # backend.yml e backoffice.yml, ciascuno filtrato sulla propria cartella
+```
+Ogni componente ha `package.json`, lockfile, `Dockerfile` e manifest propri e viene deployato su GKE come **Deployment e Service separati**, con repliche e autoscaling indipendenti. Una modifica a una sola cartella fa partire solo la pipeline di quel componente.
+
+### 5.2 Backend
+Percorsi relativi a `backend/`:
 ```
 src/
   server.js              # unico punto con process.env, connessione DB, listen, arresto ordinato
@@ -84,6 +99,25 @@ test/
   unit/  integration/  helpers/
 ```
 Pipeline di ogni route: **autenticazione → rate limit → autorizzazione → validazione → controller → service → repository**. Il builder delle route rifiuta all'avvio una route senza autenticazione dichiarata (skill `express-module-scaffold`).
+
+### 5.3 Backoffice
+SPA **Angular 22** (decisione dell'utente del 2026-11-01) che usa la superficie `/v1`. Pattern moderni: standalone, signals, zoneless, OnPush di default, `inject()`, `httpResource`, Signal Forms, routing lazy con guard funzionali (agente `angular_expert`). Percorsi relativi a `backoffice/`:
+```
+src/
+  main.ts
+  app/
+    app.ts  app.config.ts  app.routes.ts
+    core/                # sessione e interceptor, configurazione pubblica, tipi dell'API, shell e layout, pagine di errore
+    shared/ui/           # componenti di presentazione del design system
+    features/<feature>/  # <feature>.routes.ts, pagine, componenti, accesso ai dati (httpResource/HttpClient)
+  styles/                # design token, temi, base
+  testing/               # helper e builder di dati per i test
+```
+- Il gruppo di lavoro è nell'URL (`/groups/:groupId/...`); PSA e dealer lo cambiano dal selettore del gruppo.
+- Access token solo in memoria, refresh automatico su `401 TOKEN_EXPIRED` (`doc/Security-Model.md` §4).
+- Configurazione pubblica (URL delle API) fornita all'avvio del container, nessun segreto nella build.
+- In produzione: build statica servita da un server web non root con header di sicurezza e CSP.
+- Test con Vitest e copertura al 100%.
 
 ## 6. Configurazione
 Tutta da variabili d'ambiente, lette e validate in `src/config.js` all'avvio; qualunque valore mancante o non valido blocca l'avvio con un messaggio chiaro. In locale da `.env` (caricato con `process.loadEnvFile`, nativo di Node) non versionato; in produzione da secret manager. `.env.example` elenca i nomi senza valori.

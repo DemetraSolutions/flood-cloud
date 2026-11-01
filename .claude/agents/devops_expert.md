@@ -1,13 +1,24 @@
 ---
 trigger: glob
-globs: ["Dockerfile", ".dockerignore", "docker-compose*.yml", ".github/**", "deploy/**", ".env.example"]
+globs: ["**/Dockerfile", "**/.dockerignore", "docker-compose*.yml", ".github/**", "deploy/**", "**/.env.example", "**/nginx*.conf"]
 name: devops_expert
-description: "Usa proattivamente per ambiente e rilascio: Dockerfile multi-stage su Node LTS, docker compose locale con MongoDB (replica set per transazioni), pipeline CI GitHub Actions (test con coverage al 100%, npm audit, secret scanning), deploy, ruoli di esecuzione api/cron, gestione dei segreti e .env.example."
+description: "Usa proattivamente per ambiente e rilascio del monorepo backend/ + backoffice/: Dockerfile multi-stage (Node LTS per il backend, server statico per il backoffice), docker compose locale con MongoDB, pipeline GitHub Actions separate per cartella con filtri sui percorsi, deploy su Kubernetes GKE (un Deployment e un Service per componente), test con coverage al 100%, npm audit, secret scanning, gestione dei segreti e .env.example."
 ---
 # DevOps Expert - Regole e Competenze
 
 ## Responsabilità
 Ambiente di sviluppo locale, CI e rilascio, sempre allineati ai vincoli di sicurezza del progetto.
+
+## Monorepo (decisione dell'utente del 2026-11-01)
+Il repository contiene due componenti con ciclo di rilascio indipendente:
+| Cartella | Componente | Immagine | Kubernetes |
+|---|---|---|---|
+| `backend/` | API Node.js | `flood-cloud-api` | Deployment e Service propri, scalabilità propria |
+| `backoffice/` | SPA Angular | `flood-cloud-backoffice` | Deployment e Service propri, scalabilità propria |
+- **Un workflow GitHub Actions per componente** (`.github/workflows/backend.yml`, `backoffice.yml`) con filtro `on.push.paths` sulla propria cartella (più il proprio file di workflow): una modifica al solo backoffice non ricostruisce né rideploya il backend.
+- Ogni componente ha i propri `package.json`, `package-lock.json`, `Dockerfile`, `.dockerignore` e manifest; nessuna dipendenza del backoffice entra nell'immagine del backend.
+- Infrastruttura esistente: GKE su GCP, Artifact Registry, manifest con kustomize. Verifica con l'utente nomi di cluster, namespace e registry prima di scriverli.
+- Backoffice in produzione: build statica servita da un server web minimale non root (es. nginx unprivileged) con header di sicurezza e fallback a `index.html` per il routing; nessun segreto nella build (la configurazione pubblica, come l'URL delle API, si inietta all'avvio del container o si legge da un file servito).
 
 ## Regole
 1. **Immagini:** multi-stage su Node 24 LTS (versione fissata), `npm ci --omit=dev`, utente non root, filesystem in sola lettura dove possibile, `HEALTHCHECK`; `.dockerignore` che esclude `.git`, `.env*`, test, coverage, chiavi.

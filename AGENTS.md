@@ -24,6 +24,7 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 
 **Frontmatter condiviso** di `.agents/rules/`:
 - `trigger` + `globs`: usati da Antigravity; `trigger: glob` attiva la regola sui file del dominio, `model_decision` per gli agenti trasversali (`security_expert`, `legacy_analyst`).
+- I percorsi nei `globs` partono dalla radice del repository (`backend/…`, `backoffice/…`); dentro regole e skill del backend, `src/` e `test/` sono relativi a `backend/`.
 - `name`: identificativo del sottoagente per Claude Code.
 - `description`: usata da entrambi per decidere l'attivazione; specifica, orientata al dominio, con la formula "Usa proattivamente".
 
@@ -80,8 +81,22 @@ Provider esterni (Aruba, Fiskaly, Satispay, Dojo, Cerved, storage, email).
 - Adattatori isolati, `fetch` con timeout e retry, rate limit dei provider, code persistenti, webhook verificati.
 
 ### 8. DevOps Expert (`devops_expert`)
-Ambiente e rilascio.
-- Dockerfile multi-stage non root, compose con MongoDB, CI con test al 100%, audit e secret scanning, segreti fuori dal repository.
+Ambiente e rilascio del monorepo.
+- Dockerfile multi-stage non root, compose con MongoDB, pipeline separate per `backend/` e `backoffice/` con filtri sui percorsi, deploy su GKE (Deployment e Service per componente).
+- CI con test al 100%, audit e secret scanning, segreti fuori dal repository.
+
+### 9. Angular Expert (`angular_expert`)
+Backoffice in Angular 22 (`backoffice/`).
+- Standalone, signals, zoneless e OnPush di default, `inject()` e `@Service`, `httpResource`, routing lazy con guard funzionali, Signal Forms.
+- Architettura per feature: `core/`, `shared/ui/`, `features/<feature>/`.
+
+### 10. UX/UI Expert (`ux_ui_expert`)
+Interfaccia del backoffice.
+- Design token e CSS custom properties, tema chiaro/scuro, accessibilità WCAG 2.2 AA, stati di caricamento/vuoto/errore, pattern di amministrazione.
+
+### 11. Angular Tester (`angular_tester`)
+Test del backoffice al 100%.
+- Vitest con `@angular/build:unit-test`, TestBed zoneless, `HttpTestingController`, guard e interceptor funzionali, accessibilità.
 
 ## Skill disponibili
 
@@ -105,4 +120,14 @@ Guide operative attivate automaticamente in base alla `description`, in `.agents
 | `node-test-coverage` | Test con node:test e coverage al 100% |
 | `dependency-approval` | Prima di installare o proporre un pacchetto npm |
 | `legacy-module-analysis` | Analisi di un dominio del legacy prima di riscriverlo |
+| `angular-component` | Componente del backoffice (standalone, signal input/output, host, control flow) |
+| `angular-signals-state` | Stato con signal, computed, linkedSignal, effect, resource |
+| `angular-http-data` | Letture con `httpResource`, scritture con `HttpClient`, errori del backend |
+| `angular-routing` | Route lazy, gruppo nell'URL, guard e resolver funzionali |
+| `angular-forms` | Form con Signal Forms ed errori `422` sui campi |
+| `angular-list-page` | Pagine elenco con filtri nell'URL e paginazione a cursore |
+| `angular-auth-session` | Sessione nel backoffice: token in memoria, refresh su 401, logout |
+| `angular-permissions-ui` | Interfaccia condizionata da ruoli e permessi, selettore del gruppo |
+| `angular-design-system` | Token, temi e componenti UI condivisi |
+| `angular-testing` | Test Vitest del backoffice e soglie di copertura |
 | `docs-sync-checklist` | Verifica di fine passo: JSDoc, documentazione tecnica, API, API pubbliche, modello dati |
