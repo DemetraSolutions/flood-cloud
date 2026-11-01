@@ -39,6 +39,7 @@
 | Codice | Quando | `error.code` |
 |---|---|---|
 | `400` | JSON malformato | `MALFORMED_JSON` |
+| `400` | richiesta malformata (percorso, dimensione o protocollo) | `BAD_REQUEST` |
 | `401` | credenziale assente, non valida, scaduta, revocata | `UNAUTHENTICATED`, `TOKEN_EXPIRED`, `CLOCK_SKEW` |
 | `403` | autenticato ma senza permesso | `FORBIDDEN` |
 | `404` | inesistente **o fuori scope** | `NOT_FOUND` |
@@ -50,6 +51,7 @@
 | `422` | validazione fallita (con `details` per campo) | `VALIDATION_ERROR` |
 | `429` | rate limit o quota (+ `Retry-After`) | `RATE_LIMITED`, `QUOTA_EXCEEDED` |
 | `500` | errore interno, senza dettagli | `INTERNAL_ERROR` |
+| `503` | servizio non pronto (readiness, arresto in corso) | `SERVICE_UNAVAILABLE` |
 ```json
 { "error": { "code": "VALIDATION_ERROR", "message": "Invalid request", "details": [{ "field": "price", "issue": "minimum" }] } }
 ```

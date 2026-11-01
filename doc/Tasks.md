@@ -6,7 +6,7 @@
 > - Un task si spunta solo quando il codice funziona, i test sono al 100% con typecheck verde, la documentazione è aggiornata (skill `docs-sync-checklist`) e l'utente ha confermato (`GEMINI.md` §1).
 > - Le decisioni `D-nn` (§0.4) vanno prese **prima** dei task che le citano.
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
-> - Stato al 2026-11-01: nessun codice applicativo; presenti documentazione e kit AI.
+> - Stato al 2026-11-01: fondamenta del backend realizzate (1.1, 1.2, 1.4 tranne il ping del database in 1.4.8).
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -100,7 +100,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   - i flag valgono anche per PSA e D?
 - [ ] **D-14** Cancellazione: cestino (`trash`) sempre; eliminazione definitiva solo PSA o mai finché il legacy è attivo (raccomandato: mai).
 - [ ] **D-15** Univocità di `username` e `vatNumber`: globale o per gruppo, decisa sui dati reali dopo la profilazione (1.3.6).
-- [ ] **D-16** Ambienti: esistono database `staging_*`? Valori ammessi di `APP_ENV`.
+- [x] **D-16** Valori ammessi di `APP_ENV`: `development` e `production`, come i database esistenti. Decisione dell'utente del 2026-11-01.
 - [ ] **D-17** Login: solo `username` (come `doc/Security-Model.md` §4) oppure anche email e telefono, come oggi nel legacy.
 - [ ] **D-18** Onboarding: preset per tipologia (risto, retail, beauty) e struttura minima del database di un gruppo nuovo richiesta dal legacy.
 - [ ] **D-19** Policy delle password: lunghezza minima e massima, eventuali classi di caratteri (oggi 8–16 caratteri con classi, imposta solo dal client).
@@ -142,17 +142,17 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 ## 1. Fondamenta
 
 ### 1.1 Progetto backend
-- [ ] **1.1.1** `backend/package.json`: ESM, Node 24, dipendenze approvate a versione esatta, `package-lock.json` versionato.
-- [ ] **1.1.2** `tsconfig.json` per il type stripping (sintassi cancellabile, import con estensione `.ts`, `noEmit`) e script `typecheck`.
-- [ ] **1.1.3** Script `test` con `node --test` e coverage nativa con soglie al 100% di righe, rami e funzioni.
-- [ ] **1.1.4** `.env.example` con i soli nomi delle variabili, `.env` ignorato da git.
-- [ ] **1.1.5** Pipeline `backend.yml` filtrata su `backend/**`: typecheck, test, `npm audit`, secret scanning.
+- [x] **1.1.1** `backend/package.json`: ESM, Node 24, dipendenze approvate a versione esatta, `package-lock.json` versionato.
+- [x] **1.1.2** `tsconfig.json` per il type stripping (sintassi cancellabile, import con estensione `.ts`, `noEmit`) e script `typecheck`.
+- [x] **1.1.3** Script `test` con `node --test` e coverage nativa con soglie al 100% di righe, rami e funzioni.
+- [x] **1.1.4** `.env.example` con i soli nomi delle variabili, `.env` ignorato da git.
+- [x] **1.1.5** Pipeline `backend.yml` filtrata su `backend/**`: typecheck, test, `npm audit`, secret scanning.
 
 ### 1.2 Configurazione
-- [ ] **1.2.1** `config.ts`: lettura e validazione di tutte le variabili, errore chiaro e arresto se qualcosa manca; `.env` caricato con `process.loadEnvFile` solo in locale.
-- [ ] **1.2.2** `APP_ENV` obbligatoria, in allowlist (D-16), con valori identici a quelli dei database legacy.
-- [ ] **1.2.3** Variabili `MONGODB_URI`, `DB_NAME_PREFIX` (vuoto per i database attuali), porta, `TRUST_PROXY`, origini CORS, durate di token e sessioni.
-- [ ] **1.2.4** Segreti di compatibilità legacy:
+- [x] **1.2.1** `config.ts`: lettura e validazione di tutte le variabili, errore chiaro e arresto se qualcosa manca; `.env` caricato con `process.loadEnvFile` solo in locale.
+- [x] **1.2.2** `APP_ENV` obbligatoria, in allowlist (D-16), con valori identici a quelli dei database legacy.
+- [x] **1.2.3** Variabili `MONGODB_URI`, `DB_NAME_PREFIX` (vuoto per i database attuali), porta, `TRUST_PROXY`, origini CORS, durate di token e sessioni.
+- [x] **1.2.4** Segreti di compatibilità legacy:
   - pepper delle password (D-04), necessario all'applicazione;
   - chiave di decifratura dei dati personali (D-05), solo per lo script 2.2.4 e mai nella configurazione dell'applicazione.
 
@@ -178,14 +178,14 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [ ] **1.3.7** Fixture di test in formato legacy derivate dalla profilazione, sintetiche e senza dati reali.
 
 ### 1.4 HTTP, errori e osservabilità
-- [ ] **1.4.1** `createApp(deps)` senza effetti collaterali; `server.ts` unico punto con `process.env`, connessione e `listen`.
-- [ ] **1.4.2** Envelope `{ data }`, `{ data, page }`, `{ error }`, classe `AppError` con i codici di `doc/API-Guidelines.md` §5 e gestore centrale senza stack trace.
-- [ ] **1.4.3** `400 MALFORMED_JSON`, `413`, `415`, `404`, `405` con header `Allow`; limiti di dimensione del body per route.
-- [ ] **1.4.4** Header di sicurezza (`doc/Security-Model.md` §10), niente `X-Powered-By`, CORS in allowlist solo su `/v1`.
-- [ ] **1.4.5** `X-Request-Id` e log strutturati con redazione di token, password, header `Authorization` e `X-Api-Key`, dati personali.
-- [ ] **1.4.6** Timeout delle richieste, `trust proxy` sul numero esatto di proxy, arresto ordinato su `SIGTERM`.
-- [ ] **1.4.7** Builder delle route che rifiuta all'avvio una route senza autenticazione dichiarata.
-- [ ] **1.4.8** Endpoint di liveness e readiness per GKE (readiness con ping del database), dichiarati esplicitamente anonimi.
+- [x] **1.4.1** `createApp(deps)` senza effetti collaterali; `server.ts` unico punto con `process.env`, connessione e `listen`.
+- [x] **1.4.2** Envelope `{ data }`, `{ data, page }`, `{ error }`, classe `AppError` con i codici di `doc/API-Guidelines.md` §5 e gestore centrale senza stack trace.
+- [x] **1.4.3** `400 MALFORMED_JSON`, `413`, `415`, `404`, `405` con header `Allow`; limiti di dimensione del body per route.
+- [x] **1.4.4** Header di sicurezza (`doc/Security-Model.md` §10), niente `X-Powered-By`, CORS in allowlist solo su `/v1`.
+- [x] **1.4.5** `X-Request-Id` e log strutturati con redazione di token, password, header `Authorization` e `X-Api-Key`, dati personali.
+- [x] **1.4.6** Timeout delle richieste, `trust proxy` sul numero esatto di proxy, arresto ordinato su `SIGTERM`.
+- [x] **1.4.7** Builder delle route che rifiuta all'avvio una route senza autenticazione dichiarata.
+- [ ] **1.4.8** Endpoint di liveness e readiness per GKE (readiness con ping del database), dichiarati esplicitamente anonimi. *Realizzati `/health/live` e `/health/ready` con controlli iniettabili; manca il ping del database, che arriva con 1.3.1.*
 
 ### 1.5 Validazione dell'input e liste
 - [ ] **1.5.1** Validatore per allowlist (skill `input-validation`):
@@ -255,8 +255,9 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [ ] **2.5.2** Header `RateLimit-*`, `429 RATE_LIMITED` con `Retry-After`.
 - [ ] **2.5.3** Soglie per login (per IP e per username), refresh e verifica della disponibilità dello username.
 
-### 2.6 Audit log
-- [ ] **2.6.1** Collection `auditLog` con indici `groupId + at` e `actor.id + at`, servizio di scrittura senza segreti.
+### 2.6 Registro delle attività, audit e monitor degli errori
+Decisione dell'utente del 2026-11-01: una sola collection nuova nel common per attività degli utenti, eventi di sicurezza ed errori, consultabile da un monitor del backoffice. La collection `logs` del legacy resta intatta. Gli errori si scrivono anche su stdout, così non si perdono se MongoDB non risponde.
+- [ ] **2.6.1** Collection `activityLog` (al posto di `auditLog`) con categoria `data` | `security` | `error`, gruppo, attore, azione, risorsa, esito, `requestId`; indici `groupId + at`, `actor.id + at`, `category + at`, `requestId`; servizio di scrittura senza segreti.
 - [ ] **2.6.2** Eventi:
   - login riusciti e falliti;
   - refresh e riuso rilevato;
@@ -264,7 +265,11 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   - cambi di ruolo, scope e stato;
   - accessi di PSA e D ad altri gruppi;
   - sospensioni.
-- [ ] **2.6.3** Durata di conservazione (`doc/Security-Model.md` §12.6).
+- [ ] **2.6.3** Durata di conservazione con TTL, eventualmente diversa per categoria (`doc/Security-Model.md` §12.6; il legacy teneva 90 giorni).
+- [ ] **2.6.4** Registro delle scritture (inserimenti, modifiche, cancellazioni): chi, quando, risorsa e campi cambiati con valore precedente e nuovo; dei campi sensibili (password, token, credenziali) solo il nome. Scritto dallo strato service, mai dai controller. Le letture non si registrano.
+- [ ] **2.6.5** Errori del backend nel registro, collegati a `requestId` e utente; un fallimento della scrittura non blocca la risposta e resta su stdout.
+- [ ] **2.6.6** Endpoint per ricevere gli errori JavaScript del backoffice, con validazione, limiti di dimensione e rate limit.
+- [ ] **2.6.7** Monitor nel backoffice: elenco filtrabile per gruppo, utente, categoria, periodo e `requestId`, con permesso dedicato.
 
 ### 2.7 Chiusura
 - [ ] **2.7.1** Revisione del `security_expert` sulle aree 2.1–2.6.

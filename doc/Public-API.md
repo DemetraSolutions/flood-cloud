@@ -35,13 +35,18 @@ Oltre il limite la risposta è `429` con l'header `Retry-After` (secondi da atte
 | Codice HTTP | `error.code` | Significato |
 |---|---|---|
 | `400` | `MALFORMED_JSON` | corpo della richiesta non è JSON valido |
+| `400` | `BAD_REQUEST` | richiesta malformata |
 | `401` | `UNAUTHENTICATED` | chiave assente, non valida, scaduta o revocata |
 | `403` | `FORBIDDEN` | la chiave non ha il permesso per questa operazione |
 | `404` | `NOT_FOUND` | risorsa inesistente o non accessibile con questa chiave |
-| `415` | `UNSUPPORTED_MEDIA_TYPE` | content type non supportato |
+| `405` | `METHOD_NOT_ALLOWED` | metodo non previsto per la risorsa (metodi ammessi nell'header `Allow`) |
+| `413` | `PAYLOAD_TOO_LARGE` | corpo della richiesta troppo grande |
+| `415` | `UNSUPPORTED_MEDIA_TYPE` | content type diverso da `application/json` in UTF-8, o corpo compresso |
 | `422` | `VALIDATION_ERROR` | parametri non validi (dettagli in `details`) |
 | `429` | `RATE_LIMITED` / `QUOTA_EXCEEDED` | limite al minuto o quota superati |
 | `500` | `INTERNAL_ERROR` | errore del servizio; riprova più tardi |
+
+Ogni risposta contiene l'header `X-Request-Id`: indicalo quando segnali un problema all'assistenza.
 
 ## Paginazione
 Le liste restituiscono al massimo `limit` elementi (default 50, massimo 200) e un cursore per la pagina successiva:
