@@ -1,0 +1,26 @@
+<div class="field">
+  <div class="row">
+    <input
+      class="box"
+      type="checkbox"
+      [id]="id"
+      [checked]="checked()"
+      [disabled]="disabled()"
+      [required]="required()"
+      [attr.aria-invalid]="error() ? 'true' : null"
+      [attr.aria-describedby]="describedBy()"
+      (change)="onChange($event)"
+      (blur)="blurred.emit()"
+    />
+    <label class="label" [class.required]="required()" [for]="id">{{ label() }}</label>
+  </div>
+  @if (hint()) {
+    <p class="hint" [id]="hintId">{{ hint() }}</p>
+  }
+  <div class="error" [id]="errorId" aria-live="polite">
+    @if (error()) {
+      <fc-icon name="error" />
+      <span>{{ error() }}</span>
+    }
+  </div>
+</div>

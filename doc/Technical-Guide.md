@@ -1,10 +1,12 @@
-# Documentazione Tecnica del Backend
+# Documentazione Tecnica
 
-> Documento **mantenuto a ogni passo** (`GEMINI.md` §3): descrive ciò che è **realizzato**, non ciò che è progettato. Il progetto è in `doc/Architecture.md`, `doc/Security-Model.md`, `doc/Data-Model.md`, `doc/API-Guidelines.md`.
+> Documento **mantenuto a ogni passo** (`GEMINI.md` §3): descrive ciò che è **realizzato**, non ciò che è progettato. §1–§10 riguardano il backend, §11 il backoffice. Il progetto è in `doc/Architecture.md`, `doc/Security-Model.md`, `doc/Data-Model.md`, `doc/API-Guidelines.md`.
 > Quando un passo aggiunge o cambia qualcosa, si aggiorna la sezione corrispondente; le sezioni ancora vuote restano con la nota "Nessun elemento realizzato".
 
 ## 1. Stato del progetto
 Realizzate le fondamenta del backend (`doc/Tasks.md` 1.1–1.4, 1.6): progetto TypeScript, configurazione validata, applicazione Express con envelope, errori, header di sicurezza, CORS, log strutturati, builder delle route, endpoint di salute e arresto ordinato; client MongoDB sul cluster condiviso con guardia d'ambiente, registro delle collection, indici, strumento di profilazione in sola lettura del legacy, MongoDB locale per i test. Nessuna autenticazione, nessun endpoint di dominio, nessuna scrittura su database.
+
+Realizzate anche le fondamenta del backoffice (1.7, 1.8): progetto Angular 22.2, configurazione pubblica, accesso HTTP, lingua, design system, componenti condivisi, shell e server statico di produzione (§11).
 
 ## 2. Requisiti e avvio
 - **Node.js** `>=24.20.0 <25` (TypeScript eseguito direttamente con il type stripping nativo, nessuna compilazione).
@@ -182,3 +184,71 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 |---|---|---|
 | 2026-11-01 | Fondamenta del backend (1.1, 1.2, 1.4) | progetto TypeScript, configurazione validata con segreti protetti, app Express con envelope ed errori, header di sicurezza, CORS, request id, log con redazione, builder delle route con autenticazione obbligatoria, health, arresto ordinato, pipeline CI con secret scanning |
 | 2026-11-01 | Database e infrastruttura di test (1.3, 1.4.8, 1.6) | client MongoDB, guardia d'ambiente sui nomi, registro delle collection, indici, readiness sul database, TLS obbligatorio in produzione, profilazione in sola lettura del legacy, fixture legacy sintetiche, MongoDB locale con compose, hook pre-commit gitleaks |
+| 2026-11-01 | Fondamenta del backoffice (1.7, 1.8) | progetto Angular 22.2 con test al 100%, configurazione pubblica all'avvio, accesso HTTP con errori tipizzati, lingua a runtime (solo italiano), design token con temi chiaro e scuro, componenti condivisi per form e tabelle, shell accessibile, server statico Node con CSP a nonce e Trusted Types, Dockerfile non root, CI disattivata |
+
+## 11. Backoffice
+SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Nessun login né pagina di dominio: sessione, guard e permessi arrivano con l'area 3.
+
+### 11.1 Comandi e dipendenze
+Dalla cartella `backoffice/`:
+| Comando | Effetto |
+|---|---|
+| `npm ci` | installa le dipendenze |
+| `npm start` | `ng serve` (usa `public/config.json` con `http://localhost:3000`) |
+| `npm run build` | build di produzione in `dist/backoffice/browser/` |
+| `npm test` | Vitest con `@angular/build:unit-test`, coverage con soglie al 100% di statement, rami, funzioni e righe in `angular.json` |
+| `npm run start:server` | server statico di produzione (§11.6); richiede `API_BASE_URL` |
+| `npm run test:server` / `typecheck:server` | test (`node:test`, coverage 100%) e controllo dei tipi del server statico |
+
+Dipendenze: pacchetti `@angular/*` 22.2.4 (CLI e build 22.2.5), `rxjs`, `tslib`; sviluppo TypeScript 6.0.3 (la versione richiesta da Angular), Vitest 5.0.5, `@vitest/coverage-v8`, jsdom, `prettier` (generato da `ng new`, tenuto per decisione dell'utente) e `@types/node` 24.19.2 per il server statico. Versioni esatte (`.npmrc` con `save-exact=true`). Nessuna libreria UI: tutti i componenti sono nostri.
+
+### 11.2 Struttura
+```
+src/
+  index.html                 # <fc-root ngCspNonce="__CSP_NONCE__"> (nonce sostituito dal server)
+  styles/                    # styles.css → tokens.css, themes.css, base.css
+  app/
+    app.ts app.config.ts app.routes.ts
+    core/
+      api/                   # tipi dell'envelope, ApiError, interceptor base URL ed errori
+      config/                # AppConfig e validazione di /config.json
+      startup/               # inizializzazione, stato e pagina d'errore di avvio
+      i18n/                  # I18nService, pipe t, formattazione Intl
+      theme/                 # ThemeService
+      layout/                # shell, menu, titoli e annunci di pagina
+      errors/                # ErrorHandler globale
+      storage.ts             # lettura/scrittura sicura di localStorage
+    shared/ui/               # componenti condivisi (§11.5)
+    features/                # home, pagine d'errore
+  testing/                   # helper dei test
+public/
+  config.json                # solo sviluppo locale
+  i18n/it.json               # dizionario italiano
+server/                      # server statico di produzione (§11.6)
+```
+
+### 11.3 Avvio, configurazione e HTTP
+- All'avvio (`provideAppInitializer`) si caricano in parallelo `/config.json` e il dizionario della lingua. `/config.json` contiene solo `apiBaseUrl` (URL assoluto `https:`, `http:` solo per `localhost`/`127.0.0.1`, senza credenziali, query né hash). Se uno dei due fallisce l'errore va in console e l'app mostra una pagina d'errore di avvio con "Riprova" al posto del router; i suoi testi hanno un fallback in italiano nel codice, l'unico ammesso, perché il dizionario potrebbe non esserci.
+- `provideHttpClient` con due interceptor: `api-base-url` prefissa con `apiBaseUrl` solo le richieste relative che iniziano con `/v1/` e le marca come chiamate API; `api-error` trasforma gli errori delle sole chiamate API in `ApiError` (`status`, `code`, `message`, `details`, `requestId` da `X-Request-Id`): rete assente → `NETWORK_ERROR`, corpo non conforme → `UNKNOWN_ERROR` senza esporlo. `fieldErrors()` estrae gli errori per campo dei `422`.
+- Tipi del contratto: `ApiData<T>`, `ApiPage<T>`, `ApiErrorBody`, `ApiErrorCode` (codici di `doc/API-Guidelines.md` §5).
+
+### 11.4 Lingua e tema
+- **Lingua** senza i18n di Angular: dizionari JSON annidati in `public/i18n/<lingua>.json`, scaricati a runtime e appiattiti (`COMMON.RETRY`); cambio lingua senza ricaricare. Lingue supportate: solo `it` (`SUPPORTED_LANGUAGES`). Lingua iniziale: preferenza salvata (`fc.language`), poi lingua del browser se supportata, poi `it`; `document.documentElement.lang` aggiornato. `t(key, params)` con interpolazione `{name}`; una chiave mancante appare come `⟦CHIAVE⟧` con un avviso in console. Un test verifica che ogni chiave usata esista, che tutti i dizionari abbiano le stesse chiavi, che ogni codice d'errore abbia un messaggio e che nei template non ci sia testo cablato. Date, numeri e importi (centesimi → valuta) con `Intl`.
+- **Tema** chiaro, scuro o di sistema (`ThemeService`, preferenza `fc.theme`, attributo `data-theme` su `<html>`). In `localStorage` ci sono solo queste due preferenze.
+
+### 11.5 Design system e shell
+- **Token** in OKLCH (`tokens.css`, `themes.css`): palette neutra con primario blu, token semantici di colore, spaziature, raggi, ombre, tipografia `system-ui`, durate; animazioni disattivate con `prefers-reduced-motion`. Un test converte i colori in sRGB e verifica 23 coppie in entrambi i temi (testo ≥ 4.5:1, componenti e focus ≥ 3:1; es. testo su sfondo 16.6/15.8, primario su superficie 6.2/6.9).
+- **Componenti** (`shared/ui/`, standalone, input/output a signal, elementi nativi, nessuna chiamata HTTP): `button` (varianti primary, secondary, danger, ghost; stato di caricamento), `icon-button` (etichetta obbligatoria), `icon` (17 SVG inline propri), campi `text-field`, `select`, `checkbox` (label, hint ed errore collegati con `aria-describedby`/`aria-invalid`), `data-table` (colonne dichiarative, caption, ordinamento con `aria-sort`, celle e azioni di riga con template, caricamento e stato vuoto), `cursor-paginator` (precedente/successiva e righe per pagina, nessun numero di pagina), `dialog` (su `<dialog>` nativo), `confirm-dialog`, `toast` (regione `aria-live`, massimo 5), `status-badge`, `empty-state`, `skeleton`, `error-state` (con "Riprova" e request id).
+- **Shell** (`core/layout/`): link "Salta al contenuto", header con selettori di tema e lingua, menu laterale che sotto 48rem diventa un cassetto (pulsante di chiusura, sfondo cliccabile, Esc, pagina dietro `inert`, focus restituito al pulsante Menu), annuncio del cambio pagina in una regione live, titoli di pagina tradotti. Il menu è una configurazione (`menu.ts`) filtrata da `visibleMenu(items, can, hasFeature)`; oggi i predicati lasciano tutto visibile, finché sessione e feature del gruppo non arrivano (3.5.4, 4.5.2). Voci: Home.
+- **Route** lazy dentro la shell: `''` (home), `forbidden` (403), `error` (errore generico con request id opzionale), `**` (404).
+- **Errori imprevisti**: `ErrorHandler` globale che scrive in console e mostra un toast generico.
+
+### 11.6 Server statico e container
+- **Server** (`server/`): Node 24 senza dipendenze, TypeScript con type stripping. Configurazione validata all'avvio: `API_BASE_URL` (obbligatoria, stesse regole di `apiBaseUrl`), `PORT` (default 8080), `STATIC_ROOT`.
+  - `GET /config.json` generato in memoria (`no-store`); `GET /healthz` per GKE.
+  - File statici solo con `GET`/`HEAD` (altri metodi 405 con `Allow`), risoluzione sicura dei percorsi (400 per encoding errati, null byte, backslash, segmenti `.`/`..` e segmenti oltre 255 byte; 414 oltre 2048 caratteri; 404 per symlink fuori dalla root), MIME da tabella, `ETag`/304, precompressi `.br`/`.gz` con `Vary`. Asset con hash `immutable`, il resto `no-cache`. Fallback su `index.html` per le navigazioni.
+  - Header su ogni risposta, anche sugli errori di protocollo di Node: CSP `default-src 'none'; script-src 'self'; style-src 'self' 'nonce-…'; img-src 'self' data:; font-src 'self'; connect-src 'self' <origine API>; manifest-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types angular angular#bundler`, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, COOP, CORP, `Permissions-Policy`, `X-Request-Id` generato dal server. Il nonce (16 byte casuali per richiesta) sostituisce `__CSP_NONCE__` in `index.html`, servito `no-store`; il build di produzione non inserisce stili critici inline (`inlineCritical: false`).
+  - Timeout: header 15 s, richiesta 30 s, inattività del socket 30 s, keep-alive 5 s. Log JSON di accesso (percorso senza query, troncato a 256 caratteri). Arresto ordinato su `SIGTERM` (drenaggio 5 s, uscita forzata 25 s).
+- **Container** (`backoffice/Dockerfile`, contesto `backoffice/`): build su `node:24.22.2-bookworm`, runtime `node:24.22.2-bookworm-slim` (entrambe per digest) senza npm, npx e corepack, utente 1000, solo `dist/` e `server/`, compatibile con filesystem in sola lettura, porta 8080. `.dockerignore` esclude dipendenze, build, `.env*`, chiavi e log a ogni livello.
+- **CI** (`.github/workflows/backoffice.yml`): disattivata come quella del backend (solo `workflow_dispatch`). Contenuto: `npm ci --ignore-scripts`, test Angular, test e typecheck del server, build, `npm audit --audit-level=moderate`, `npm audit signatures`.
+- **Stato dei test**: 257 test Angular e 56 del server, coverage 100%.

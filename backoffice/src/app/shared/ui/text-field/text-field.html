@@ -1,0 +1,26 @@
+<div class="field">
+  <label class="label" [class.required]="required()" [for]="id">{{ label() }}</label>
+  <input
+    class="control"
+    [id]="id"
+    [type]="type()"
+    [value]="value()"
+    [disabled]="disabled()"
+    [required]="required()"
+    [placeholder]="placeholder()"
+    [attr.autocomplete]="autocomplete()"
+    [attr.aria-invalid]="error() ? 'true' : null"
+    [attr.aria-describedby]="describedBy()"
+    (input)="onInput($event)"
+    (blur)="blurred.emit()"
+  />
+  @if (hint()) {
+    <p class="hint" [id]="hintId">{{ hint() }}</p>
+  }
+  <div class="error" [id]="errorId" aria-live="polite">
+    @if (error()) {
+      <fc-icon name="error" />
+      <span>{{ error() }}</span>
+    }
+  </div>
+</div>

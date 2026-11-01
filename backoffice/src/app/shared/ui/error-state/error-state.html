@@ -1,0 +1,14 @@
+<fc-icon name="error" />
+<div class="body">
+  <p class="title">{{ title() }}</p>
+  @if (message()) {
+    <p class="message">{{ message() }}</p>
+  }
+  @let id = requestId();
+  @if (id) {
+    <p class="request-id">{{ 'ERRORS.REQUEST_ID' | t: { requestId: id } }}</p>
+  }
+  @if (retryable()) {
+    <button fc-button variant="secondary" (click)="retry.emit()">{{ 'COMMON.RETRY' | t }}</button>
+  }
+</div>

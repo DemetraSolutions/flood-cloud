@@ -1,0 +1,21 @@
+<fc-dialog [heading]="heading()" [open]="open()" (openChange)="open.set($event)">
+  <p>{{ message() }}</p>
+  <button
+    fcDialogActions
+    fc-button
+    variant="secondary"
+    [disabled]="busy()"
+    (click)="open.set(false)"
+  >
+    {{ 'COMMON.CANCEL' | t }}
+  </button>
+  <button
+    fcDialogActions
+    fc-button
+    [variant]="danger() ? 'danger' : 'primary'"
+    [loading]="busy()"
+    (click)="confirmed.emit()"
+  >
+    {{ confirmLabel() ?? ('COMMON.CONFIRM' | t) }}
+  </button>
+</fc-dialog>

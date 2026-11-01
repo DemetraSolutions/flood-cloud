@@ -1,0 +1,137 @@
+/*
+ * Semantic color tokens for the light and dark themes, in OKLCH.
+ *
+ * The theme follows `prefers-color-scheme` unless the user chose one explicitly, in which case
+ * `<html data-theme="light|dark">` wins (see ThemeService). The dark values appear twice (media
+ * query and explicit override); the `contrast.spec.ts` test checks they are identical and that
+ * the WCAG AA contrast ratios hold (4.5:1 text, 3:1 components and focus ring) in both themes.
+ *
+ * Contrast ratios calculated by that test (light / dark):
+ *   text on bg 16.6 / 15.8, muted text on surface 7.4 / 8.1, primary text on surface 6.2 / 6.9,
+ *   text on primary button 6.2 / 7.8, text on danger button 7.2 / 7.3,
+ *   input border on surface 3.9 / 4.4, focus ring on bg 5.9 / 9.2.
+ */
+:root {
+  color-scheme: light;
+
+  --color-bg: oklch(98.5% 0.003 255);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(96% 0.005 255);
+  --color-overlay: oklch(20% 0.02 255 / 0.5);
+
+  --color-text: oklch(22% 0.01 255);
+  --color-text-muted: oklch(45% 0.015 255);
+
+  --color-border: oklch(90% 0.006 255);
+  --color-border-strong: oklch(60% 0.012 255);
+
+  --color-primary: oklch(50% 0.19 260);
+  --color-primary-hover: oklch(44% 0.19 260);
+  --color-on-primary: oklch(100% 0 0);
+  --color-primary-soft: oklch(94% 0.03 260);
+  --color-on-primary-soft: oklch(36% 0.15 260);
+
+  --color-success: oklch(45% 0.12 150);
+  --color-success-soft: oklch(95% 0.04 150);
+  --color-on-success-soft: oklch(34% 0.09 150);
+
+  --color-warning: oklch(48% 0.11 70);
+  --color-warning-soft: oklch(96% 0.05 85);
+  --color-on-warning-soft: oklch(38% 0.09 70);
+
+  --color-danger: oklch(48% 0.19 27);
+  --color-danger-hover: oklch(42% 0.19 27);
+  --color-on-danger: oklch(100% 0 0);
+  --color-danger-soft: oklch(95% 0.03 20);
+  --color-on-danger-soft: oklch(40% 0.16 27);
+
+  --color-focus: oklch(50% 0.19 260);
+
+  --shadow-sm: 0 1px 2px oklch(20% 0.02 255 / 0.12);
+  --shadow-md: 0 4px 12px oklch(20% 0.02 255 / 0.16);
+  --shadow-lg: 0 12px 32px oklch(20% 0.02 255 / 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color-bg: oklch(18% 0.01 255);
+    --color-surface: oklch(22% 0.01 255);
+    --color-surface-muted: oklch(26% 0.012 255);
+    --color-overlay: oklch(10% 0.01 255 / 0.65);
+
+    --color-text: oklch(94% 0.005 255);
+    --color-text-muted: oklch(76% 0.01 255);
+
+    --color-border: oklch(32% 0.012 255);
+    --color-border-strong: oklch(60% 0.012 255);
+
+    --color-primary: oklch(72% 0.14 260);
+    --color-primary-hover: oklch(78% 0.12 260);
+    --color-on-primary: oklch(16% 0.03 260);
+    --color-primary-soft: oklch(30% 0.06 260);
+    --color-on-primary-soft: oklch(86% 0.08 260);
+
+    --color-success: oklch(78% 0.14 150);
+    --color-success-soft: oklch(30% 0.05 150);
+    --color-on-success-soft: oklch(86% 0.1 150);
+
+    --color-warning: oklch(82% 0.12 85);
+    --color-warning-soft: oklch(32% 0.05 80);
+    --color-on-warning-soft: oklch(88% 0.1 85);
+
+    --color-danger: oklch(72% 0.16 25);
+    --color-danger-hover: oklch(78% 0.14 25);
+    --color-on-danger: oklch(16% 0.03 25);
+    --color-danger-soft: oklch(30% 0.06 25);
+    --color-on-danger-soft: oklch(86% 0.08 25);
+
+    --color-focus: oklch(78% 0.13 260);
+
+    --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
+    --shadow-md: 0 4px 12px oklch(0% 0 0 / 0.45);
+    --shadow-lg: 0 12px 32px oklch(0% 0 0 / 0.55);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: oklch(18% 0.01 255);
+  --color-surface: oklch(22% 0.01 255);
+  --color-surface-muted: oklch(26% 0.012 255);
+  --color-overlay: oklch(10% 0.01 255 / 0.65);
+
+  --color-text: oklch(94% 0.005 255);
+  --color-text-muted: oklch(76% 0.01 255);
+
+  --color-border: oklch(32% 0.012 255);
+  --color-border-strong: oklch(60% 0.012 255);
+
+  --color-primary: oklch(72% 0.14 260);
+  --color-primary-hover: oklch(78% 0.12 260);
+  --color-on-primary: oklch(16% 0.03 260);
+  --color-primary-soft: oklch(30% 0.06 260);
+  --color-on-primary-soft: oklch(86% 0.08 260);
+
+  --color-success: oklch(78% 0.14 150);
+  --color-success-soft: oklch(30% 0.05 150);
+  --color-on-success-soft: oklch(86% 0.1 150);
+
+  --color-warning: oklch(82% 0.12 85);
+  --color-warning-soft: oklch(32% 0.05 80);
+  --color-on-warning-soft: oklch(88% 0.1 85);
+
+  --color-danger: oklch(72% 0.16 25);
+  --color-danger-hover: oklch(78% 0.14 25);
+  --color-on-danger: oklch(16% 0.03 25);
+  --color-danger-soft: oklch(30% 0.06 25);
+  --color-on-danger-soft: oklch(86% 0.08 25);
+
+  --color-focus: oklch(78% 0.13 260);
+
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
+  --shadow-md: 0 4px 12px oklch(0% 0 0 / 0.45);
+  --shadow-lg: 0 12px 32px oklch(0% 0 0 / 0.55);
+}

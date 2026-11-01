@@ -1,0 +1,8 @@
+<h1>{{ title() }}</h1>
+<p>{{ message() }}</p>
+@if (requestId) {
+  <p>{{ 'ERRORS.REQUEST_ID' | t: { requestId: requestId } }}</p>
+}
+<p>
+  <a routerLink="/">{{ 'ERRORS.BACK_HOME' | t }}</a>
+</p>

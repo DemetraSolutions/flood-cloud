@@ -1,0 +1,30 @@
+<nav [attr.aria-label]="'PAGINATION.LABEL' | t">
+  <fc-select
+    class="limit"
+    [label]="'PAGINATION.PER_PAGE' | t"
+    [options]="limitOptions()"
+    [value]="'' + limit()"
+    [disabled]="loading()"
+    (valueChange)="changeLimit($event)"
+  />
+  <div class="buttons">
+    <button
+      fc-button
+      variant="secondary"
+      [disabled]="!hasPrevious() || loading()"
+      (click)="previousPage.emit()"
+    >
+      <fc-icon name="chevron-left" />
+      {{ 'PAGINATION.PREVIOUS' | t }}
+    </button>
+    <button
+      fc-button
+      variant="secondary"
+      [disabled]="nextCursor() === null || loading()"
+      (click)="goNext()"
+    >
+      {{ 'PAGINATION.NEXT' | t }}
+      <fc-icon name="chevron-right" />
+    </button>
+  </div>
+</nav>

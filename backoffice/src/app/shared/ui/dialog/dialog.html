@@ -1,0 +1,15 @@
+<dialog [attr.aria-labelledby]="headingId" (close)="onClose()">
+  <div class="panel">
+    <header>
+      <h2 [id]="headingId">{{ heading() }}</h2>
+      <button
+        fc-icon-button
+        icon="close"
+        [label]="'COMMON.CLOSE' | t"
+        (click)="open.set(false)"
+      ></button>
+    </header>
+    <div class="body"><ng-content /></div>
+    <footer><ng-content select="[fcDialogActions]" /></footer>
+  </div>
+</dialog>

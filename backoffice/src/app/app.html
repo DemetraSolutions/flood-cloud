@@ -1,0 +1,6 @@
+@if (startup.failed()) {
+  <fc-startup-error />
+} @else {
+  <router-outlet />
+  <fc-toast-region />
+}

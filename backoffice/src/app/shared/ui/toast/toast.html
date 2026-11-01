@@ -1,0 +1,8 @@
+<fc-icon [name]="icon()" />
+<p>{{ toast().message }}</p>
+<button
+  fc-icon-button
+  icon="close"
+  [label]="'COMMON.CLOSE' | t"
+  (click)="dismissed.emit()"
+></button>

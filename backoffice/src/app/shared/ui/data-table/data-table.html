@@ -1,0 +1,83 @@
+<div class="scroll" role="region" tabindex="0" [attr.aria-label]="caption()">
+  <table [attr.aria-busy]="loading() ? 'true' : null">
+    <caption class="visually-hidden">
+      {{
+        caption()
+      }}
+    </caption>
+    <thead>
+      <tr>
+        @for (column of columns(); track column.key) {
+          <th
+            scope="col"
+            [attr.data-align]="column.align ?? 'start'"
+            [attr.aria-sort]="ariaSort(column)"
+          >
+            @if (column.sortable) {
+              <button type="button" class="sort" (click)="toggleSort(column)">
+                {{ column.header }}
+                <fc-icon [name]="sortIcon(column)" />
+              </button>
+            } @else {
+              {{ column.header }}
+            }
+          </th>
+        }
+        @if (actions()) {
+          <th scope="col" class="actions">
+            <span class="visually-hidden">{{ 'COMMON.ACTIONS' | t }}</span>
+          </th>
+        }
+      </tr>
+    </thead>
+    <tbody>
+      @if (loading()) {
+        <tr>
+          <td [attr.colspan]="columnCount()"><fc-skeleton [lines]="5" /></td>
+        </tr>
+      } @else if (rows().length === 0) {
+        <tr>
+          <td [attr.colspan]="columnCount()">
+            <fc-empty-state
+              [title]="emptyTitle() ?? ('TABLE.EMPTY.TITLE' | t)"
+              [message]="emptyMessage() ?? ('TABLE.EMPTY.MESSAGE' | t)"
+            >
+              <ng-content select="[fcEmptyAction]" />
+            </fc-empty-state>
+          </td>
+        </tr>
+      } @else {
+        @for (row of rows(); track rowKey()(row)) {
+          <tr>
+            @for (column of columns(); track column.key) {
+              @if (column.key === rowHeader()) {
+                <th scope="row" [attr.data-align]="column.align ?? 'start'">
+                  <ng-container *ngTemplateOutlet="cell; context: { $implicit: row, column }" />
+                </th>
+              } @else {
+                <td [attr.data-align]="column.align ?? 'start'">
+                  <ng-container *ngTemplateOutlet="cell; context: { $implicit: row, column }" />
+                </td>
+              }
+            }
+            @let rowActions = actions();
+            @if (rowActions) {
+              <td class="actions">
+                <ng-container *ngTemplateOutlet="rowActions; context: { $implicit: row }" />
+              </td>
+            }
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+</div>
+
+<ng-template #cell let-row let-column="column">
+  @let custom = cellTemplates().get(column.key);
+  @if (custom) {
+    <ng-container *ngTemplateOutlet="custom; context: { $implicit: row }" />
+  } @else {
+    {{ column.cell?.(row) }}
+  }
+</ng-template>

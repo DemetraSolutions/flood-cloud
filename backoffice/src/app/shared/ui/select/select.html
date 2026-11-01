@@ -1,0 +1,31 @@
+<div class="field">
+  <label class="label" [class.required]="required()" [for]="id">{{ label() }}</label>
+  <select
+    class="control"
+    [id]="id"
+    [disabled]="disabled()"
+    [required]="required()"
+    [attr.aria-invalid]="error() ? 'true' : null"
+    [attr.aria-describedby]="describedBy()"
+    (change)="onChange($event)"
+    (blur)="blurred.emit()"
+  >
+    @if (placeholder() !== null) {
+      <option value="" [selected]="value() === ''">{{ placeholder() }}</option>
+    }
+    @for (option of options(); track option.value) {
+      <option [value]="option.value" [selected]="option.value === value()">
+        {{ option.label }}
+      </option>
+    }
+  </select>
+  @if (hint()) {
+    <p class="hint" [id]="hintId">{{ hint() }}</p>
+  }
+  <div class="error" [id]="errorId" aria-live="polite">
+    @if (error()) {
+      <fc-icon name="error" />
+      <span>{{ error() }}</span>
+    }
+  </div>
+</div>

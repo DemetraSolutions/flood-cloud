@@ -1,0 +1,32 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5rem;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+:host([data-tone='info']) {
+  background: var(--color-primary-soft);
+  color: var(--color-on-primary-soft);
+}
+
+:host([data-tone='success']) {
+  background: var(--color-success-soft);
+  color: var(--color-on-success-soft);
+}
+
+:host([data-tone='warning']) {
+  background: var(--color-warning-soft);
+  color: var(--color-on-warning-soft);
+}
+
+:host([data-tone='danger']) {
+  background: var(--color-danger-soft);
+  color: var(--color-on-danger-soft);
+}

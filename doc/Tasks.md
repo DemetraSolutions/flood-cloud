@@ -6,7 +6,7 @@
 > - Un task si spunta solo quando il codice funziona, i test sono al 100% con typecheck verde, la documentazione è aggiornata (skill `docs-sync-checklist`) e l'utente ha confermato (`GEMINI.md` §1).
 > - Le decisioni `D-nn` (§0.4) vanno prese **prima** dei task che le citano.
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
-> - Stato al 2026-11-01: fondamenta del backend realizzate (1.1–1.4, 1.6).
+> - Stato al 2026-11-01: area 1 (fondamenta di backend e backoffice) completata.
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -217,17 +217,17 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
 - [x] **1.6.3** Helper HTTP con `fetch` su porta effimera e builder di documenti legacy e di dominio.
 
 ### 1.7 Progetto backoffice
-- [ ] **1.7.1** `ng new` Angular 22: standalone, zoneless, OnPush di default, strict, struttura `core/`, `shared/ui/`, `features/`.
-- [ ] **1.7.2** Vitest con `@angular/build:unit-test` e soglie al 100% in `angular.json`.
-- [ ] **1.7.3** Configurazione pubblica (URL delle API) letta all'avvio del container, nessun segreto nella build.
-- [ ] **1.7.4** Accesso HTTP di base: tipi dell'envelope, mappatura degli errori del backend, `X-Request-Id`.
-- [ ] **1.7.5** Pipeline `backoffice.yml` filtrata su `backoffice/**`; Dockerfile con server statico non root, header di sicurezza e CSP.
+- [x] **1.7.1** `ng new` Angular 22: standalone, zoneless, OnPush di default, strict, struttura `core/`, `shared/ui/`, `features/`.
+- [x] **1.7.2** Vitest con `@angular/build:unit-test` e soglie al 100% in `angular.json`.
+- [x] **1.7.3** Configurazione pubblica (URL delle API) letta all'avvio del container, nessun segreto nella build.
+- [x] **1.7.4** Accesso HTTP di base: tipi dell'envelope, mappatura degli errori del backend, `X-Request-Id`.
+- [x] **1.7.5** Pipeline `backoffice.yml` filtrata su `backoffice/**`; Dockerfile con server statico non root, header di sicurezza e CSP. *Server statico Node scritto da noi, senza dipendenze (decisione dell'utente). Pipeline disattivata come quella del backend.*
 
 ### 1.8 Design system e shell del backoffice
-- [ ] **1.8.1** Design token, tema chiaro e scuro.
-- [ ] **1.8.2** Componenti condivisi: pulsante, campo, tabella, dialog, toast, badge, stati vuoto, caricamento ed errore.
-- [ ] **1.8.3** Shell: layout, menu costruito da configurazione (permessi e feature, 3.5.4 e 4.5.2), pagine 403, 404 ed errore.
-- [ ] **1.8.4** Accessibilità WCAG 2.2 AA: tastiera, focus, contrasto, annunci.
+- [x] **1.8.1** Design token, tema chiaro e scuro.
+- [x] **1.8.2** Componenti condivisi: pulsante, campo, tabella, dialog, toast, badge, stati vuoto, caricamento ed errore.
+- [x] **1.8.3** Shell: layout, menu costruito da configurazione (permessi e feature, 3.5.4 e 4.5.2), pagine 403, 404 ed errore. *Il filtro del menu c'è; i predicati di permessi e feature si collegano con 3.5.4 e 4.5.2.*
+- [x] **1.8.4** Accessibilità WCAG 2.2 AA: tastiera, focus, contrasto, annunci.
 
 ---
 

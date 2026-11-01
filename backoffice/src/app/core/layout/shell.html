@@ -1,0 +1,76 @@
+<a class="skip-link" href="/" [attr.inert]="drawerInert()" (click)="skipToContent($event)">{{
+  'LAYOUT.SKIP_TO_CONTENT' | t
+}}</a>
+
+<header [attr.inert]="drawerInert()">
+  <button
+    #toggle
+    fc-icon-button
+    class="menu-toggle"
+    icon="menu"
+    [label]="'LAYOUT.MENU' | t"
+    aria-controls="main-nav"
+    [attr.aria-expanded]="menuOpen()"
+    (click)="toggleMenu()"
+  ></button>
+  <span class="brand">{{ 'APP.NAME' | t }}</span>
+  <div class="tools">
+    <fc-theme-selector />
+    <fc-language-selector />
+  </div>
+</header>
+
+<div class="body">
+  <nav
+    id="main-nav"
+    [attr.aria-label]="'LAYOUT.MAIN_NAV' | t"
+    [class.open]="menuOpen()"
+    (click)="closeMenu()"
+  >
+    <button
+      #drawerClose
+      fc-icon-button
+      class="drawer-close"
+      icon="close"
+      [label]="'LAYOUT.CLOSE_MENU' | t"
+    ></button>
+    <ul>
+      @for (item of menu; track item.id) {
+        <li>
+          <a
+            [routerLink]="item.route"
+            routerLinkActive="active"
+            ariaCurrentWhenActive="page"
+            [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+          >
+            <fc-icon [name]="item.icon" />
+            {{ item.labelKey | t }}
+          </a>
+          @if (item.children) {
+            <ul>
+              @for (child of item.children; track child.id) {
+                <li>
+                  <a
+                    [routerLink]="child.route"
+                    routerLinkActive="active"
+                    ariaCurrentWhenActive="page"
+                  >
+                    <fc-icon [name]="child.icon" />
+                    {{ child.labelKey | t }}
+                  </a>
+                </li>
+              }
+            </ul>
+          }
+        </li>
+      }
+    </ul>
+  </nav>
+  <div class="backdrop" [class.open]="menuOpen()" aria-hidden="true" (click)="closeMenu()"></div>
+
+  <main id="main" [attr.inert]="drawerInert()" #main tabindex="-1">
+    <router-outlet />
+  </main>
+</div>
+
+<div class="visually-hidden" role="status">{{ announcer.message() }}</div>

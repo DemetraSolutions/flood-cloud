@@ -1,0 +1,22 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--control-height-compact);
+  block-size: var(--control-height-compact);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+:host(:hover:not(:disabled)) {
+  background: var(--color-surface-muted);
+}
+
+:host(:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

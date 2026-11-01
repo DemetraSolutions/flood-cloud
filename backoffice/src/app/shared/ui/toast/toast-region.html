@@ -1,0 +1,5 @@
+<section [attr.aria-label]="'TOAST.REGION' | t" aria-live="polite">
+  @for (toast of service.toasts(); track toast.id) {
+    <fc-toast [toast]="toast" (dismissed)="service.dismiss(toast.id)" />
+  }
+</section>

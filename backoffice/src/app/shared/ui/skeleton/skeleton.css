@@ -1,0 +1,19 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.line {
+  display: block;
+  block-size: 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  animation: pulse var(--duration-slow) ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}

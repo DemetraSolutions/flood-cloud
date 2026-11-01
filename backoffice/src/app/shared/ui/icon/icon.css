@@ -1,0 +1,11 @@
+:host {
+  display: inline-flex;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  flex: none;
+}
+
+svg {
+  inline-size: 100%;
+  block-size: 100%;
+}

@@ -1,0 +1,26 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-height-compact);
+}
+
+.box {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.box:disabled {
+  cursor: not-allowed;
+}
+
+.box[aria-invalid='true'] {
+  outline: 2px solid var(--color-danger);
+}
+
+.label {
+  cursor: pointer;
+}

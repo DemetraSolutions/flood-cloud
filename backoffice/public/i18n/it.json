@@ -1,0 +1,96 @@
+{
+  "APP": {
+    "NAME": "Flood Cloud"
+  },
+  "COMMON": {
+    "RETRY": "Riprova",
+    "CLOSE": "Chiudi",
+    "LOADING": "Caricamento in corso",
+    "CANCEL": "Annulla",
+    "CONFIRM": "Conferma",
+    "ACTIONS": "Azioni"
+  },
+  "PAGINATION": {
+    "LABEL": "Paginazione",
+    "PER_PAGE": "Righe per pagina",
+    "PREVIOUS": "Precedente",
+    "NEXT": "Successiva"
+  },
+  "TABLE": {
+    "EMPTY": {
+      "TITLE": "Nessun elemento",
+      "MESSAGE": "Non ci sono elementi da mostrare."
+    }
+  },
+  "TOAST": {
+    "REGION": "Notifiche"
+  },
+  "LAYOUT": {
+    "SKIP_TO_CONTENT": "Salta al contenuto",
+    "MENU": "Menu",
+    "MAIN_NAV": "Navigazione principale",
+    "CLOSE_MENU": "Chiudi il menu"
+  },
+  "MENU": {
+    "HOME": "Home"
+  },
+  "THEME": {
+    "LABEL": "Tema",
+    "SYSTEM": "Sistema",
+    "LIGHT": "Chiaro",
+    "DARK": "Scuro"
+  },
+  "LANGUAGE": {
+    "LABEL": "Lingua",
+    "NAME": {
+      "IT": "Italiano"
+    }
+  },
+  "STARTUP": {
+    "ERROR": {
+      "TITLE": "Impossibile avviare l’applicazione",
+      "MESSAGE": "Non è stato possibile caricare la configurazione. Riprova tra qualche istante."
+    }
+  },
+  "HOME": {
+    "TITLE": "Home",
+    "WELCOME": "Benvenuto nel backoffice di Flood Cloud."
+  },
+  "ERRORS": {
+    "NOT_FOUND": {
+      "TITLE": "Pagina non trovata",
+      "MESSAGE": "La pagina richiesta non esiste."
+    },
+    "FORBIDDEN": {
+      "TITLE": "Accesso negato",
+      "MESSAGE": "Non hai i permessi per accedere a questa pagina."
+    },
+    "GENERIC": {
+      "TITLE": "Si è verificato un errore",
+      "MESSAGE": "Qualcosa è andato storto. Riprova tra qualche istante."
+    },
+    "REQUEST_ID": "Codice richiesta: {requestId}",
+    "API": {
+      "MALFORMED_JSON": "La richiesta non è valida.",
+      "BAD_REQUEST": "La richiesta non è valida.",
+      "UNAUTHENTICATED": "Accesso richiesto: effettua il login.",
+      "TOKEN_EXPIRED": "La sessione è scaduta.",
+      "CLOCK_SKEW": "L’orologio del dispositivo non è allineato.",
+      "FORBIDDEN": "Non hai i permessi per questa operazione.",
+      "NOT_FOUND": "Elemento non trovato.",
+      "METHOD_NOT_ALLOWED": "Operazione non supportata.",
+      "CONFLICT": "L’operazione è in conflitto con lo stato attuale dei dati.",
+      "PRECONDITION_FAILED": "I dati sono stati modificati nel frattempo: ricarica e riprova.",
+      "PAYLOAD_TOO_LARGE": "I dati inviati sono troppo grandi.",
+      "UNSUPPORTED_MEDIA_TYPE": "Formato dei dati non supportato.",
+      "VALIDATION_ERROR": "Alcuni campi non sono validi.",
+      "RATE_LIMITED": "Troppe richieste: attendi qualche istante e riprova.",
+      "QUOTA_EXCEEDED": "Limite di utilizzo raggiunto.",
+      "INTERNAL_ERROR": "Errore interno del servizio. Riprova più tardi.",
+      "SERVICE_UNAVAILABLE": "Servizio temporaneamente non disponibile.",
+      "NETWORK_ERROR": "Impossibile contattare il servizio: controlla la connessione.",
+      "UNKNOWN_ERROR": "Si è verificato un errore imprevisto."
+    },
+    "BACK_HOME": "Torna alla home"
+  }
+}
