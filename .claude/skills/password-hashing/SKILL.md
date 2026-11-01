@@ -8,20 +8,26 @@ description: Usa quando salvi, verifichi o cambi password o PIN: scrypt di node:
 OWASP per scrypt: `N = 2^17`, `r = 8`, `p = 1`, chiave da 64 byte, salt da 16 byte. La memoria richiesta è `128 · N · r` ≈ 128 MiB, oltre il default di Node (32 MiB): imposta `maxmem` esplicito.
 
 ## Implementazione
-```js
+```ts
 import { scrypt, randomBytes, timingSafeEqual } from 'node:crypto';
+import type { ScryptOptions } from 'node:crypto';
 import { promisify } from 'node:util';
 
-const scryptAsync = promisify(scrypt);
+const scryptAsync = promisify(scrypt) as (
+  password: string | Buffer,
+  salt: Buffer,
+  keylen: number,
+  options: ScryptOptions,
+) => Promise<Buffer>;
 const PARAMS = { N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 const KEY_LENGTH = 64;
 
 /**
  * Hashes a password into the self-describing format scrypt$N$r$p$salt$hash.
- * @param {string} password plain-text password, already validated
- * @returns {Promise<string>}
+ * @param password plain-text password, already validated
+ * @returns the self-describing hash to store
  */
-export async function hashPassword(password) {
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
   const key = await scryptAsync(password.normalize('NFC'), salt, KEY_LENGTH, PARAMS);
   return ['scrypt', PARAMS.N, PARAMS.r, PARAMS.p, salt.toString('base64url'), key.toString('base64url')].join('$');
@@ -29,17 +35,17 @@ export async function hashPassword(password) {
 
 /**
  * Verifies a password against the stored hash in constant time.
- * @param {string} password
- * @param {string} stored hash in the hashPassword format
- * @returns {Promise<boolean>}
+ * @param password plain-text password to check
+ * @param stored hash in the hashPassword format
+ * @returns true when the password matches
  */
-export async function verifyPassword(password, stored) {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [alg, N, r, p, salt, hash] = stored.split('$');
-  if (alg !== 'scrypt') return false;
+  if (alg !== 'scrypt' || !N || !r || !p || !salt || !hash) return false;
   const expected = Buffer.from(hash, 'base64url');
   const actual = await scryptAsync(password.normalize('NFC'), Buffer.from(salt, 'base64url'), expected.length,
     { N: Number(N), r: Number(r), p: Number(p), maxmem: PARAMS.maxmem });
-  return timingSafeEqual(actual, expected);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 ```
 - Usa sempre la versione **asincrona**: la sincrona blocca l'event loop per centinaia di millisecondi.

@@ -7,24 +7,24 @@ description: Usa quando implementi login del backoffice, sessioni, access e refr
 Riferimenti: `doc/Security-Model.md` §4, collection `sessions` in `doc/Data-Model.md`. Decisione del 2026-10-30: **token opachi**, non JWT.
 
 ## Generazione e hash
-```js
+```ts
 import { randomBytes, createHash } from 'node:crypto';
 
 /**
  * Generates a random secret with a recognizable prefix.
- * @param {string} prefix e.g. 'fc_at_' (access) or 'fc_rt_' (refresh)
- * @returns {string} secret to hand to the client exactly once
+ * @param prefix e.g. 'fc_at_' (access) or 'fc_rt_' (refresh)
+ * @returns secret to hand to the client exactly once
  */
-export function generateToken(prefix) {
+export function generateToken(prefix: string): string {
   return prefix + randomBytes(32).toString('base64url');
 }
 
 /**
  * Hash to store and look up. SHA-256 is enough: the token carries 256 bits of entropy.
- * @param {string} token
- * @returns {string} hex-encoded hash
+ * @param token plain token received from or sent to the client
+ * @returns hex-encoded hash
  */
-export function hashToken(token) {
+export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 ```
@@ -46,12 +46,12 @@ Access 15 minuti; refresh 7 giorni di inattività; famiglia di sessioni al massi
 - Successo: sessione con `familyId` nuovo e `familyExpiresAt`; risposta con `accessToken` e `accessExpiresAt`; refresh token nel cookie `HttpOnly` o nel body secondo la decisione aperta (`doc/Security-Model.md` §12). Mai nei header esposti via CORS come nel legacy.
 
 ## Refresh con rotazione (`POST /v1/auth/refresh`)
-```js
+```ts
 const session = await sessions.findOneAndUpdate(
   { refreshTokenHash: hashToken(refreshToken), refreshUsedAt: null, revokedAt: null,
     refreshExpiresAt: { $gt: now }, familyExpiresAt: { $gt: now } },
   { $set: { refreshUsedAt: now } },
-);
+); // WithId<SessionDocument> | null (driver 6+ returns the document directly)
 ```
 - Se `null`: cerca il token senza vincoli; se esiste ed era già usato ⇒ **riuso**: revoca tutta la `familyId`, evento nell'audit log. Risposta sempre `401`.
 - Se valido: nuova sessione nella stessa famiglia (stesso `familyExpiresAt`), revoca della precedente.

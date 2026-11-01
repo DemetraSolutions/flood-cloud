@@ -5,15 +5,21 @@ description: Usa quando implementi upload di file con multer (immagini, import C
 # Secure File Upload (multer)
 
 ## Configurazione
-```js
+```ts
 import multer from 'multer';
+import type { RequestHandler } from 'express';
+
+/** Options of the single-file upload middleware. */
+export interface SingleUploadOptions {
+  fieldName: string;
+  maxBytes: number;
+}
 
 /**
  * Upload middleware for a single in-memory file, with strict limits.
- * @param {{ fieldName: string, maxBytes: number }} options
- * @returns {import('express').RequestHandler}
+ * @param options form field name and maximum file size in bytes
  */
-export function singleUpload({ fieldName, maxBytes }) {
+export function singleUpload({ fieldName, maxBytes }: SingleUploadOptions): RequestHandler {
   return multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: maxBytes, files: 1, fields: 10, fieldSize: 10 * 1024, parts: 12, headerPairs: 50 },

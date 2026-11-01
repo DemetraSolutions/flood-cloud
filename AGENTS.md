@@ -46,7 +46,7 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 ## Sottoagenti disponibili
 
 ### 1. Backend Expert (`backend_expert`)
-Server Node.js 24 + Express 5 in ESM.
+Server Node.js 24 + Express 5 in TypeScript (type stripping nativo, nessuna compilazione), ESM.
 - App factory testabile, moduli di dominio a strati (route → controller → service → repository).
 - Configurazione validata all'avvio, body-parser, compression, multer, arresto ordinato.
 
@@ -104,6 +104,7 @@ Guide operative attivate automaticamente in base alla `description`, in `.agents
 
 | Skill | Quando si attiva |
 |---|---|
+| `node-typescript` | Configurazione e regole di TypeScript nel backend (type stripping, tsconfig, sintassi cancellabile) |
 | `express-module-scaffold` | Nuovo modulo di dominio o nuova route |
 | `express-error-handling` | Errori, envelope di risposta, gestore centrale |
 | `input-validation` | Validazione di body, query, params senza librerie |

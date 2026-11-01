@@ -5,7 +5,7 @@ Tutti gli agenti e i sottoagenti che operano in questo progetto devono rispettar
 ## 0. Scopo del Progetto (Vision)
 Ogni azione, decisione architetturale o riga di codice DEVE essere consapevole dello scopo del progetto descritto in **`doc/Product-Scope.md`**: leggilo prima di iniziare qualsiasi sviluppo.
 
-**Flood Cloud** è la riscrittura completa, con un nuovo approccio, del server della piattaforma cloud commerce di Flood (progetto legacy `../cloud-commerce-platform-server`). È un server **Node.js + Express + MongoDB** con tre superfici API: backoffice (`/v1`), server di punto vendita (`/store/v1`) e API pubbliche dei gruppi (`/public/v1`).
+**Flood Cloud** è la riscrittura completa, con un nuovo approccio, del server della piattaforma cloud commerce di Flood (progetto legacy `../cloud-commerce-platform-server`). È un server **Node.js + Express + MongoDB** scritto in **TypeScript** (eseguito direttamente da Node con il type stripping nativo) con tre superfici API: backoffice (`/v1`), server di punto vendita (`/store/v1`) e API pubbliche dei gruppi (`/public/v1`).
 
 Il repository è un **monorepo** (`doc/Architecture.md` §5): `backend/` (API Node.js) e `backoffice/` (SPA Angular del backoffice), con rilascio indipendente.
 
@@ -41,19 +41,19 @@ Ogni passo crea o aggiorna **sempre** quattro livelli di documentazione. Un pass
 
 | Cosa | Dove | Lingua | Destinatari |
 |---|---|---|---|
-| **JSDoc dettagliato** di ogni modulo, funzione, classe, typedef e costante esportata: scopo, `@param` con tipo, `@returns`, `@throws`, esempi dove utili | nel codice | **Inglese** | sviluppatori |
+| **JSDoc dettagliato** di ogni modulo, funzione, classe, tipo e costante esportata: scopo, `@param`, `@returns`, `@throws`, esempi dove utili (i tipi stanno nel codice TypeScript, non tra graffe nel JSDoc) | nel codice | **Inglese** | sviluppatori |
 | **Documentazione tecnica** di tutto il backend: avvio, configurazione, moduli realizzati, flussi, database, sicurezza implementata, test | `doc/Technical-Guide.md` | Italiano | team di sviluppo |
 | **Riferimento di tutte le API** delle tre superfici | `doc/API.md` | Italiano | team di sviluppo, backoffice e server di punto vendita |
 | **Documentazione delle API pubbliche** da consegnare agli utilizzatori esterni: **solo** ciò che è pubblico (`/public/v1`, autenticazione con API key, limiti, quote, errori) | `doc/Public-API.md` | Italiano | integratori esterni |
 
 Regole:
-- I tipi JSDoc sono la documentazione dei contratti: tienili precisi e allineati al codice.
+- I tipi TypeScript sono la documentazione dei contratti: precisi, senza `any`, allineati al JSDoc.
 - `doc/Public-API.md` è un documento **pubblicabile**: non deve mai contenere superfici interne (`/v1`, `/store/v1`), dettagli implementativi, nomi di collection, struttura dei database o informazioni utili a un attaccante. Si scrive per chi integra, con esempi completi di richiesta e risposta.
 - Un endpoint pubblico va descritto in **entrambi** `doc/API.md` e `doc/Public-API.md`.
 
 ## 4. Test: Copertura Totale
 Il progetto è **interamente coperto dai test**. È un vincolo, non un obiettivo.
-- **Backend:** `node:test` nativo con la coverage nativa di Node. Soglie al **100%** di righe, rami e funzioni, applicate da `npm test`: sotto soglia la suite fallisce.
+- **Backend:** `node:test` nativo con la coverage nativa di Node su file `.test.ts`. Soglie al **100%** di righe, rami e funzioni, applicate da `npm test`: sotto soglia la suite fallisce. Il controllo dei tipi (`npm run typecheck`) deve passare insieme ai test.
 - **Backoffice:** Vitest con il builder ufficiale di Angular, soglie al **100%** di statement, rami, funzioni e righe in `angular.json` (skill `angular-testing`).
 - Ogni file di codice nasce **insieme** al suo test (TDD dove la logica lo consente). Nessun codice senza test viene considerato completo.
 - Si testano happy path, casi limite e **tutti** i percorsi d'errore, compresi i rifiuti di sicurezza (401, 403, 404 tra tenant, 413, 415, 422, 429).
@@ -89,7 +89,7 @@ Vietati i `catch {}` vuoti, le promise non attese, gli errori ignorati o convert
 
 ## 11. Dipendenze Minime
 Si installano **solo le librerie strettamente necessarie**, sempre nell'**ultima versione stabile**.
-- **Backend**, approvate oggi: `express`, `mongodb`, `body-parser`, `compression`, `multer`.
+- **Backend**, approvate oggi: `express`, `mongodb`, `body-parser`, `compression`, `multer`; solo in sviluppo `typescript` e i `@types/*` delle librerie approvate (skill `node-typescript`).
 - **Backoffice**: i pacchetti ufficiali Angular e la toolchain generata da `ng new` (CLI, `@angular/build`, TypeScript, Vitest, jsdom, `@vitest/coverage-v8`). Nessuna libreria UI, di stato, di grafici o di utilità senza approvazione.
 - Prima di qualsiasi nuova dipendenza (anche di sviluppo) **chiedi all'utente**, motivando perché le API native di Node (`node:crypto`, `node:test`, `fetch`, `node:util`…) non bastano (skill `dependency-approval`).
 - Versioni esatte nel `package.json` e `package-lock.json` sempre versionato.
@@ -104,7 +104,7 @@ Vietate le query non limitate (`find()` totale), i payload senza limite di dimen
 Conventional Commits (`feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:`). Lo sviluppo avviene sul branch `development`; non fare commit o push senza richiesta dell'utente.
 
 ## 15. Best Practice Tecnologiche
-Codice idiomatico per **Node.js 24 LTS**, moduli **ESM**, **Express 5** (gestione nativa degli errori asincroni) e **driver MongoDB ufficiale** nel backend; **Angular 22** con i soli pattern moderni (standalone, signals, zoneless, OnPush di default, Signal Forms, `httpResource`, control flow) nel backoffice, verificati sulla documentazione ufficiale della versione installata. Niente pattern ad-hoc, niente codice morto, niente astrazioni anticipate per bisogni futuri.
+Codice idiomatico per **Node.js 24 LTS** in **TypeScript** con sola sintassi cancellabile (niente `enum`, `namespace`, parameter properties; skill `node-typescript`), moduli **ESM**, **Express 5** (gestione nativa degli errori asincroni) e **driver MongoDB ufficiale** nel backend; **Angular 22** con i soli pattern moderni (standalone, signals, zoneless, OnPush di default, Signal Forms, `httpResource`, control flow) nel backoffice, verificati sulla documentazione ufficiale della versione installata. Niente pattern ad-hoc, niente codice morto, niente astrazioni anticipate per bisogni futuri.
 
 ## 16. Proposta di Nuovi Agenti o Skill
 Se un'operazione ricorrente o complessa sarebbe gestita meglio da un agente o da una skill che non esiste, **proponilo** all'utente. Ogni aggiunta va registrata in `AGENTS.md` e sincronizzata con `./scripts/sync-agents.sh`.

@@ -8,19 +8,22 @@ description: Usa quando scrivi o organizzi test con node:test, configuri la cove
 ```json
 {
   "scripts": {
-    "test": "node --test --experimental-test-coverage --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test-coverage-include=src/** \"test/**/*.test.js\"",
-    "test:unit": "node --test \"test/unit/**/*.test.js\""
+    "test": "node --test --experimental-test-coverage --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test-coverage-include=src/** \"test/**/*.test.ts\"",
+    "test:unit": "node --test \"test/unit/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
   }
 }
 ```
 - `--test-coverage-include=src/**` misura solo il codice applicativo, non i test.
+- Node 24 esegue nativamente i file di test `.ts` (type stripping, nessuna build) e la coverage è mappata sui sorgenti `.ts` (verificato).
+- `npm run typecheck` (`tsc --noEmit`) deve passare insieme a `npm test`: il type stripping non controlla i tipi.
 - Prima di cambiare i flag verifica la documentazione della versione di Node in uso (`node --help`): alcuni flag di coverage evolvono tra le versioni.
 
 ## Test unitario
-```js
+```ts
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeEmail } from '../../src/shared/validation/email.js';
+import { normalizeEmail } from '../../src/shared/validation/email.ts';
 
 describe('normalizeEmail', () => {
   it('lowercases and trims the value', () => {
@@ -28,30 +31,32 @@ describe('normalizeEmail', () => {
   });
 
   it('rejects a non-string value', () => {
-    assert.throws(() => normalizeEmail({ $gt: '' }), { code: 'VALIDATION_ERROR' });
+    assert.throws(() => normalizeEmail({ $gt: '' } as unknown as string), { code: 'VALIDATION_ERROR' });
   });
 });
 ```
 
 ## Test HTTP su porta effimera
 L'app si costruisce con una factory (`createApp(deps)`) che **non** apre connessioni né porte: il test inietta le dipendenze e avvia il server.
-```js
+```ts
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../../src/app.js';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { createApp } from '../../src/app.ts';
 
 describe('GET /health', () => {
-  let server;
-  let baseUrl;
+  let server: Server;
+  let baseUrl: string;
 
   before(async () => {
     const app = createApp({ /* test dependencies */ });
     server = app.listen(0);
-    await new Promise((resolve) => server.once('listening', resolve));
-    baseUrl = `http://127.0.0.1:${server.address().port}`;
+    await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
 
-  after(() => new Promise((resolve) => server.close(resolve)));
+  after(() => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))));
 
   it('responds 200 with the standard envelope', async () => {
     const res = await fetch(`${baseUrl}/health`);
@@ -62,7 +67,7 @@ describe('GET /health', () => {
 ```
 
 ## Mock e tempo
-```js
+```ts
 import { mock } from 'node:test';
 mock.timers.enable({ apis: ['Date'], now: new Date('2026-01-01T00:00:00Z') });
 // ... assertions on token expiry

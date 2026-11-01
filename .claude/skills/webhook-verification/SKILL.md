@@ -14,15 +14,26 @@ description: Usa quando ricevi webhook o callback da provider esterni (pagamenti
 7. Il segreto del webhook è configurazione (o per tenant, cifrato), mai nel codice. La route è `anonymous: true` solo perché la firma è la sua autenticazione.
 
 ## Pattern HMAC
-```js
+```ts
 import { createHmac, timingSafeEqual } from 'node:crypto';
+
+/** Input of the HMAC signature check. */
+export interface HmacSignatureInput {
+  rawBody: Buffer;
+  signature: string;
+  timestamp: string;
+  secret: string;
+  /** current time in epoch milliseconds */
+  now: number;
+  toleranceMs: number;
+}
 
 /**
  * Verifies a hex HMAC-SHA256 signature over `${timestamp}.${rawBody}`.
- * @param {{ rawBody: Buffer, signature: string, timestamp: string, secret: string, now: number, toleranceMs: number }} input
- * @returns {boolean}
+ * @param input raw body, signature header, timestamp header, secret and tolerance
+ * @returns true when the signature is valid and within the replay window
  */
-export function verifyHmacSignature({ rawBody, signature, timestamp, secret, now, toleranceMs }) {
+export function verifyHmacSignature({ rawBody, signature, timestamp, secret, now, toleranceMs }: HmacSignatureInput): boolean {
   const ts = Number(timestamp);
   if (!Number.isInteger(ts) || Math.abs(now - ts * 1000) > toleranceMs) return false;
   const expected = createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest();

@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["backend/src/**/*.repository.js", "backend/src/db/**", "backend/src/modules/**/indexes.js"]
+globs: ["backend/src/**/*.repository.ts", "backend/src/db/**", "backend/src/modules/**/indexes.ts"]
 name: db_expert
 description: "Usa proattivamente per MongoDB con il driver ufficiale Node.js: modellazione documenti, repository con contesto di tenant, indici (univoci, TTL, composti), validazione $jsonSchema, paginazione a cursore, transazioni, aggregazioni server-side. Dominio: repository, backend/src/db e definizioni degli indici."
 ---
@@ -20,5 +20,5 @@ Progetti il modello dati e l'accesso a MongoDB tramite il **driver ufficiale** (
 8. **Campi sensibili** (hash di password e token) esclusi per default dalle proiezioni e mai restituiti dai repository ai controller.
 9. **Transazioni** solo dove serve atomicità tra più documenti (es. vendita → magazzino → documento); richiedono replica set, quindi chiedi prima di introdurle.
 10. **Date** sempre in UTC come `Date`; identificativi `ObjectId` validati prima della conversione.
-11. **Modello multi-database** (`doc/Architecture.md` §3, `doc/Data-Model.md`): database **common** per identità, tenancy e sicurezza (`groups`, `users`, `companies`, `places`, credenziali, contatori, audit) e un **database per gruppo** per i dati operativi. Nomi `<DB_NAME_PREFIX><APP_ENV>_common` e `<DB_NAME_PREFIX><APP_ENV>_<groupId>`, costruiti solo in `src/db/names.js` e con `groupId` validato. Nessun host dedicato per gruppo.
+11. **Modello multi-database** (`doc/Architecture.md` §3, `doc/Data-Model.md`): database **common** per identità, tenancy e sicurezza (`groups`, `users`, `companies`, `places`, credenziali, contatori, audit) e un **database per gruppo** per i dati operativi. Nomi `<DB_NAME_PREFIX><APP_ENV>_common` e `<DB_NAME_PREFIX><APP_ENV>_<groupId>`, costruiti solo in `src/db/names.ts` e con `groupId` validato. Nessun host dedicato per gruppo.
 12. **Test di integrazione** con MongoDB reale (skill `mongodb-integration-tests`), compreso il test che gli indici univoci e TTL esistono e che il tenant A non vede i dati del tenant B.

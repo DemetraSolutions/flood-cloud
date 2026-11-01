@@ -13,7 +13,7 @@ Un passo sembra finito quando il codice funziona, ma non lo è finché questa li
 - [ ] **`doc/Public-API.md`**: ogni endpoint di `/public/v1` aggiunto o modificato è descritto per gli integratori esterni, con esempi completi; **nessun** riferimento a superfici interne, collection, struttura dei database o dettagli implementativi.
 - [ ] **`doc/Data-Model.md`**: ogni collection o campo aggiunto o modificato è descritto con tipi, indici e vincoli (stessa eccezione di `doc/API.md`).
 - [ ] **`.env.example`**: ogni nuova variabile d'ambiente è elencata con descrizione e senza valore reale.
-- [ ] **Test al 100%**: `npm test` nel backend e `ng test` con copertura nel backoffice passano con le soglie al 100%.
+- [ ] **Tipi e test**: `npm run typecheck` e `npm test` nel backend e `ng test` con copertura nel backoffice passano con le soglie al 100%.
 - [ ] **Kit AI**: se sono cambiati agenti o skill, `AGENTS.md` è aggiornato e `./scripts/sync-agents.sh --check` passa.
 - [ ] **Altri documenti** (`doc/Security-Model.md`, `doc/Architecture.md`, `doc/API-Guidelines.md`, `doc/Product-Scope.md`…): se il passo ha preso decisioni che li riguardano, **proponi** la modifica all'utente invece di farla.
 

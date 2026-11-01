@@ -7,31 +7,34 @@ description: Usa quando crei un nuovo modulo di dominio o una nuova route Expres
 ## Struttura
 ```
 src/modules/<domain>/
-  <domain>.routes.js       # dichiarazione delle route
-  <domain>.controller.js   # HTTP ↔ service
-  <domain>.service.js      # regole di business, nessun req/res
-  <domain>.repository.js   # unico accesso a MongoDB, con contesto di tenant
-  <domain>.schemas.js      # schemi di validazione di body/query/params
-  <domain>.mapper.js       # documento MongoDB → DTO di risposta
-  indexes.js               # indici della collection
+  <domain>.routes.ts       # dichiarazione delle route
+  <domain>.controller.ts   # HTTP ↔ service
+  <domain>.service.ts      # regole di business, nessun req/res
+  <domain>.repository.ts   # unico accesso a MongoDB, con contesto di tenant
+  <domain>.schemas.ts      # schemi di validazione di body/query/params
+  <domain>.mapper.ts       # documento MongoDB → DTO di risposta
+  indexes.ts               # indici della collection
 test/unit/modules/<domain>/...
-test/integration/modules/<domain>.test.js
+test/integration/modules/<domain>.test.ts
 ```
 Crea **solo** i file che il passo richiede: un modulo di sola lettura non ha bisogno di schemi di update.
 
 ## Route dichiarative (deny by default)
 Le route si dichiarano **per superficie** (`backoffice` → `/v1`, `store` → `/store/v1`, `public` → `/public/v1`, `doc/Architecture.md` §4). Ogni superficie ha il proprio middleware di autenticazione, quindi una credenziale vale solo sulla sua superficie.
 
-Il builder condiviso (`src/shared/http/define-routes.js`) monta nell'ordine autenticazione → rate limit → autorizzazione → validazione → handler, e **lancia un errore all'avvio** se una route non dichiara `permission`, a meno che non sia marcata `anonymous: true` con una motivazione.
-```js
-import { groupParams, listProductsQuery, productIdParams, createProductBody } from './products.schemas.js';
+Il builder condiviso (`src/shared/http/define-routes.ts`) monta nell'ordine autenticazione → rate limit → autorizzazione → validazione → handler, e **lancia un errore all'avvio** se una route non dichiara `permission`, a meno che non sia marcata `anonymous: true` con una motivazione.
+```ts
+import type { RouteDefinition } from '../../shared/http/define-routes.ts';
+import type { createProductsController } from './products.controller.ts';
+import { groupParams, listProductsQuery, productIdParams, createProductBody } from './products.schemas.ts';
 
 /**
  * Product module routes, grouped by API surface.
- * @param {ReturnType<import('./products.controller.js').createProductsController>} controller
- * @returns {Record<'backoffice'|'store'|'public', import('../../shared/http/define-routes.js').RouteDefinition[]>}
+ * @param controller products controller
  */
-export function productsRoutes(controller) {
+export function productsRoutes(
+  controller: ReturnType<typeof createProductsController>,
+): Record<'backoffice' | 'store' | 'public', RouteDefinition[]> {
   return {
     backoffice: [
       { method: 'get', path: '/groups/:groupId/products', permission: 'products:read',
@@ -53,18 +56,25 @@ export function productsRoutes(controller) {
 Le uniche route `anonymous: true` ammesse sono quelle che lo sono per natura (health, login, refresh, attivazione e token dei server di punto vendita, webhook con firma propria), sempre con rate limit e un commento che lo motiva. Percorsi e metodi seguono `doc/API-Guidelines.md`.
 
 ## Controller
-```js
+```ts
+import type { RequestHandler } from 'express';
+import type { createProductsService } from './products.service.ts';
+
+/** Dependencies of the products controller. */
+export interface ProductsControllerDeps {
+  productsService: ReturnType<typeof createProductsService>;
+}
+
 /**
  * Creates the products controller.
- * @param {{ productsService: ReturnType<import('./products.service.js').createProductsService> }} deps
+ * @param deps controller dependencies
  */
-export function createProductsController({ productsService }) {
+export function createProductsController({ productsService }: ProductsControllerDeps) {
   return {
-    /** @type {import('express').RequestHandler} */
-    async list(req, res) {
+    list: (async (req, res) => {
       const page = await productsService.list(req.auth, req.valid.query);
       res.json({ data: page.items, page: page.page });
-    },
+    }) satisfies RequestHandler,
     // ...
   };
 }

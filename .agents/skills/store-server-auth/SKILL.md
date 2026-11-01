@@ -16,17 +16,17 @@ Riferimenti: `doc/Security-Model.md` §5, collection `storeServers`, `storeServe
 
 ## Chiave pubblica
 Il client invia la chiave pubblica Ed25519 in formato SPKI DER base64. Validazione lato server:
-```js
+```ts
 import { createPublicKey } from 'node:crypto';
+import type { KeyObject } from 'node:crypto';
 
 /**
  * Parses and validates an Ed25519 public key received from a store server.
- * @param {string} spkiBase64 base64-encoded SPKI DER key
- * @returns {import('node:crypto').KeyObject}
+ * @param spkiBase64 base64-encoded SPKI DER key
  * @throws {AppError} 422 when it is not a valid Ed25519 public key
  */
-export function parseEd25519PublicKey(spkiBase64) {
-  let key;
+export function parseEd25519PublicKey(spkiBase64: string): KeyObject {
+  let key: KeyObject;
   try {
     key = createPublicKey({ key: Buffer.from(spkiBase64, 'base64'), format: 'der', type: 'spki' });
   } catch (cause) {
@@ -42,15 +42,23 @@ export function parseEd25519PublicKey(spkiBase64) {
 ## Asserzione
 Body: `{ storeServerId, keyId, iat, jti, signature }`; `aud` fisso `flood-cloud-store`.
 Stringa firmata: `v1.<aud>.<storeServerId>.<keyId>.<iat>.<jti>`.
-```js
+```ts
 import { verify } from 'node:crypto';
+import type { KeyObject } from 'node:crypto';
+
+/** Input of the assertion signature check. */
+export interface AssertionSignatureInput {
+  message: string;
+  signature: string;
+  publicKey: KeyObject;
+}
 
 /**
  * Verifies the Ed25519 signature of an assertion.
- * @param {{ message: string, signature: string, publicKey: import('node:crypto').KeyObject }} input
- * @returns {boolean}
+ * @param input signed string, base64url signature and the registered public key
+ * @returns true when the signature is valid
  */
-export function verifyAssertionSignature({ message, signature, publicKey }) {
+export function verifyAssertionSignature({ message, signature, publicKey }: AssertionSignatureInput): boolean {
   const sig = Buffer.from(signature, 'base64url');
   if (sig.length !== 64) return false;
   return verify(null, Buffer.from(message, 'utf8'), publicKey, sig);

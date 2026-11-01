@@ -18,19 +18,29 @@ description: Usa quando gestisci errori in Express 5: classe AppError con codici
 ```
 
 ## AppError
-```js
+```ts
+/** Single validation problem reported to the client. */
+export interface ErrorDetail {
+  field: string;
+  issue: string;
+}
+
 /**
  * Expected application error, translated into an HTTP response by the central handler.
  */
 export class AppError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly details: ErrorDetail[] | undefined;
+
   /**
-   * @param {number} status HTTP status code
-   * @param {string} code stable, client-readable code (e.g. 'NOT_FOUND')
-   * @param {string} message message safe to show to the client
-   * @param {Array<{field: string, issue: string}>} [details] validation details
-   * @param {{ cause?: unknown }} [options] original error, kept for logging
+   * @param status HTTP status code
+   * @param code stable, client-readable code (e.g. 'NOT_FOUND')
+   * @param message message safe to show to the client
+   * @param details validation details
+   * @param options original error, kept for logging
    */
-  constructor(status, code, message, details, options) {
+  constructor(status: number, code: string, message: string, details?: ErrorDetail[], options?: { cause?: unknown }) {
     super(message, options);
     this.name = 'AppError';
     this.status = status;
@@ -41,25 +51,27 @@ export class AppError extends Error {
 ```
 
 ## Gestore centrale
-```js
+```ts
+import type { ErrorRequestHandler } from 'express';
+
 /**
  * Final error handler: replies with the standard envelope without exposing internal details.
- * @param {(entry: object) => void} log structured logging function
- * @returns {import('express').ErrorRequestHandler}
+ * @param log structured logging function
  */
-export function errorHandler(log) {
-  return (err, req, res, next) => {
+export function errorHandler(log: (entry: Record<string, unknown>) => void): ErrorRequestHandler {
+  return (err: unknown, req, res, next) => {
     if (res.headersSent) return next(err);
     if (err instanceof AppError) {
       return res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details } });
     }
-    if (err.type === 'entity.too.large') {
+    const type = typeof err === 'object' && err !== null && 'type' in err ? err.type : undefined;
+    if (type === 'entity.too.large') {
       return res.status(413).json({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' } });
     }
-    if (err.type === 'entity.parse.failed') {
+    if (type === 'entity.parse.failed') {
       return res.status(400).json({ error: { code: 'MALFORMED_JSON', message: 'Malformed JSON' } });
     }
-    log({ level: 'error', requestId: req.id, err });
+    log({ level: 'error', requestId: (req as { id?: string }).id, err });
     return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal error' } });
   };
 }

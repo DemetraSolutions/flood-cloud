@@ -15,6 +15,10 @@ Il progetto installa **solo le librerie strettamente necessarie** (`GEMINI.md` ย
 | `compression` | compressione delle risposte |
 | `multer` | upload multipart |
 
+Backend, solo sviluppo (decisione del 2026-11-01, TypeScript): `typescript` e i `@types/*` delle librerie approvate (`@types/node`, `@types/express`, `@types/body-parser`, `@types/compression`, `@types/multer`).
+
+Backoffice: pacchetti ufficiali Angular e toolchain generata da `ng new` (`GEMINI.md` ยง11).
+
 Qualsiasi altro pacchetto richiede l'approvazione esplicita dell'utente. Quando viene approvato, aggiungilo a questa tabella.
 
 ## Prima di proporre una dipendenza

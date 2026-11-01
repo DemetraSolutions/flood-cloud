@@ -17,7 +17,7 @@ Nessuna libreria di validazione è approvata: si usa un validatore interno picco
 8. **Errori:** `AppError(422, 'VALIDATION_ERROR', 'Invalid request', [{ field, issue }])` con tutti i problemi trovati, senza riecheggiare i valori inviati.
 
 ## Forma di uno schema
-```js
+```ts
 /** Request body schema for product creation. */
 export const createProductBody = {
   type: 'object',
@@ -29,7 +29,7 @@ export const createProductBody = {
   },
   required: ['name', 'price'],
   additionalProperties: false,
-};
+} as const;
 ```
 Mantieni il formato vicino a JSON Schema: è leggibile, documentabile in `doc/API.md` e riusabile come `$jsonSchema` lato MongoDB dove ha senso.
 

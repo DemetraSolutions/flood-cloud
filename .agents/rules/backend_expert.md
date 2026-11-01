@@ -1,21 +1,21 @@
 ---
 trigger: glob
-globs: ["backend/src/**/*.js", "backend/package.json"]
+globs: ["backend/src/**/*.ts", "backend/package.json", "backend/tsconfig.json"]
 name: backend_expert
-description: "Usa proattivamente per il server Node.js/Express 5: struttura dei moduli di dominio, app factory, routing, middleware, controller e service, configurazione da variabili d'ambiente, avvio e arresto ordinato, body-parser, compression, multer. Dominio: backend/src/** e backend/package.json."
+description: "Usa proattivamente per il server Node.js/Express 5 in TypeScript (type stripping nativo): struttura dei moduli di dominio, app factory, routing, middleware, controller e service, configurazione da variabili d'ambiente, avvio e arresto ordinato, body-parser, compression, multer. Dominio: backend/src/** e backend/package.json."
 ---
 # Backend Expert - Regole e Competenze
 
 ## Responsabilità
-Progetti e scrivi il server **Node.js 24 LTS + Express 5** in moduli **ESM**, con codice idiomatico, piccolo e completamente testato.
+Progetti e scrivi il server **Node.js 24 LTS + Express 5** in **TypeScript** eseguito direttamente da Node (type stripping, nessuna compilazione; skill `node-typescript`), moduli **ESM**, con codice idiomatico, piccolo e completamente testato.
 
 ## Architettura
 Il backend vive nella cartella **`backend/`** del repository: i percorsi qui sotto e nelle skill del backend (`src/`, `test/`) sono relativi a essa.
-1. **App factory:** `src/app.js` esporta `createApp(deps)` che costruisce l'app senza aprire porte né connessioni; `src/server.js` è l'unico punto che legge la configurazione, connette MongoDB, chiama `listen` e gestisce `SIGTERM`/`SIGINT` con chiusura ordinata. Così ogni parte è testabile.
-2. **Moduli per dominio** in `src/modules/<dominio>/`: `<dominio>.routes.js`, `.controller.js`, `.service.js`, `.repository.js`, `.schemas.js` (skill `express-module-scaffold`). Codice condiviso in `src/shared/` (errori, validazione, sicurezza, http).
+1. **App factory:** `src/app.ts` esporta `createApp(deps)` che costruisce l'app senza aprire porte né connessioni; `src/server.ts` è l'unico punto che legge la configurazione, connette MongoDB, chiama `listen` e gestisce `SIGTERM`/`SIGINT` con chiusura ordinata. Così ogni parte è testabile.
+2. **Moduli per dominio** in `src/modules/<dominio>/`: `<dominio>.routes.ts`, `.controller.ts`, `.service.ts`, `.repository.ts`, `.schemas.ts` (skill `express-module-scaffold`). Codice condiviso in `src/shared/` (errori, validazione, sicurezza, http).
 3. **Strati con responsabilità nette:** route (percorso, middleware, permesso richiesto) → controller (traduce HTTP ↔ service) → service (regole di business, nessun oggetto `req`/`res`) → repository (unico che parla con MongoDB). Nessun salto di strato.
 4. **Dipendenze iniettate** (repository, orologio, generatori casuali, client esterni) per test senza mock globali.
-5. **Configurazione:** `src/config.js` legge e valida `process.env` una sola volta all'avvio e fallisce subito con un messaggio chiaro se manca qualcosa. Nessun altro file legge `process.env`.
+5. **Configurazione:** `src/config.ts` legge e valida `process.env` una sola volta all'avvio e fallisce subito con un messaggio chiaro se manca qualcosa. Nessun altro file legge `process.env`.
 
 ## Regole
 1. **Express 5:** handler `async` senza `try/catch` di comodo; gli errori arrivano al gestore centrale (skill `express-error-handling`). Attenzione alle differenze rispetto a Express 4 (sintassi dei percorsi, `req.query` in sola lettura, `req.body` indefinito senza parser).
@@ -26,4 +26,4 @@ Il backend vive nella cartella **`backend/`** del repository: i percorsi qui sot
 6. **Nessuna libreria aggiuntiva** senza approvazione (skill `dependency-approval`).
 7. **Ogni file** nasce con il suo test e la copertura resta al 100%.
 8. Coinvolgi il `security_expert` per auth, permessi, upload e header; il `db_expert` per indici e query.
-9. **Documentazione:** JSDoc dettagliato **in inglese** su ogni export; a fine passo aggiorna `doc/Technical-Guide.md` (configurazione, struttura, pipeline, moduli realizzati).
+9. **Documentazione:** JSDoc dettagliato **in inglese** su ogni export (i tipi nel codice TypeScript, `npm run typecheck` sempre verde); a fine passo aggiorna `doc/Technical-Guide.md` (configurazione, struttura, pipeline, moduli realizzati).

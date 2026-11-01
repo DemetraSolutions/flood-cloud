@@ -18,10 +18,11 @@ Integrazioni di un gruppo ─── /public/v1 (API key) ──────┘  
 | Componente | Scelta |
 |---|---|
 | Runtime | Node.js 24 LTS, moduli ESM |
+| Linguaggio | **TypeScript** eseguito direttamente da Node (type stripping nativo, nessuna compilazione); `tsc --noEmit` per il controllo dei tipi in CI (decisione dell'utente del 2026-11-01) |
 | HTTP | Express 5, `body-parser`, `compression`, `multer` |
 | Database | MongoDB, driver ufficiale `mongodb` (nessun ODM) |
 | Crittografia | `node:crypto` |
-| Test | `node:test` + coverage nativa al 100%, `fetch` nativo, MongoDB reale |
+| Test | `node:test` + coverage nativa al 100% su file `.ts`, `fetch` nativo, MongoDB reale |
 | Backoffice | Angular 22 (ultima stabile), standalone, signals, zoneless (§5.3) |
 
 Ogni altra libreria richiede approvazione (`GEMINI.md` §11).
@@ -36,7 +37,7 @@ I nomi dei database dipendono dall'ambiente, come nel legacy, così più ambient
 
 - `APP_ENV` è **obbligatoria** e senza default (il legacy ripiegava su `development`: un errore di configurazione poteva scrivere nel database sbagliato). I valori devono coincidere con quelli dei database esistenti.
 - `DB_NAME_PREFIX` è opzionale (nel legacy `DB_COLLECTION_PREFIX`).
-- Il nome si costruisce in **un solo punto** del codice (`src/db/names.js`): il legacy lo ripeteva in circa 300 punti.
+- Il nome si costruisce in **un solo punto** del codice (`backend/src/db/names.ts`): il legacy lo ripeteva in circa 300 punti.
 - `groupId` si valida come `ObjectId` prima di comporre il nome: nessun nome di database deriva da input non validato.
 
 ### 3.2 Cosa sta dove
@@ -85,9 +86,9 @@ Ogni componente ha `package.json`, lockfile, `Dockerfile` e manifest propri e vi
 Percorsi relativi a `backend/`:
 ```
 src/
-  server.js              # unico punto con process.env, connessione DB, listen, arresto ordinato
-  app.js                 # createApp(deps): app Express senza effetti collaterali
-  config.js              # lettura e validazione della configurazione
+  server.ts              # unico punto con process.env, connessione DB, listen, arresto ordinato
+  app.ts                 # createApp(deps): app Express senza effetti collaterali
+  config.ts              # lettura e validazione della configurazione
   db/                    # client, nomi dei database, creazione indici
   shared/
     http/                # definizione route, envelope, errori, header, CORS, timeout
@@ -120,7 +121,7 @@ src/
 - Test con Vitest e copertura al 100%.
 
 ## 6. Configurazione
-Tutta da variabili d'ambiente, lette e validate in `src/config.js` all'avvio; qualunque valore mancante o non valido blocca l'avvio con un messaggio chiaro. In locale da `.env` (caricato con `process.loadEnvFile`, nativo di Node) non versionato; in produzione da secret manager. `.env.example` elenca i nomi senza valori.
+Tutta da variabili d'ambiente, lette e validate in `backend/src/config.ts` all'avvio; qualunque valore mancante o non valido blocca l'avvio con un messaggio chiaro. In locale da `.env` (caricato con `process.loadEnvFile`, nativo di Node) non versionato; in produzione da secret manager. `.env.example` elenca i nomi senza valori.
 
 ## 7. Ruoli di esecuzione
 La stessa applicazione può girare come **api** o come **worker** (job pianificati: code di invio ai provider, pulizie), scelto da configurazione; i job girano su una sola istanza. Si introducono quando un passo li richiede.

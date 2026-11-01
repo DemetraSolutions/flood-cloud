@@ -7,15 +7,39 @@ description: Usa quando implementi rate limit (login, refresh, attivazione, toke
 Riferimenti: `doc/Security-Model.md` §7, collection `rateLimits` e `apiUsage` in `doc/Data-Model.md`. Nessuna libreria: contatori in MongoDB, condivisi tra più istanze del server.
 
 ## Finestra fissa con contatore atomico
-```js
+```ts
+import type { Collection } from 'mongodb';
+
+/** Counter document of a rate limit window. */
+interface RateLimitDocument {
+  _id: string;
+  count: number;
+  expiresAt: Date;
+}
+
+/** Input of a rate limit hit. */
+export interface HitInput {
+  /** '<surface>:<subject>' (e.g. 'login:ip:203.0.113.7', 'public:key:<apiKeyId>') */
+  key: string;
+  limit: number;
+  windowMs: number;
+  /** current time in epoch milliseconds */
+  now: number;
+}
+
+/** Outcome of a rate limit hit. */
+export interface HitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+}
+
 /**
  * Increments the counter of the current window and tells whether the request is allowed.
- * @param {import('mongodb').Collection} rateLimits collection in the common database
- * @param {{ key: string, limit: number, windowMs: number, now: number }} input
- *   key = '<surface>:<subject>' (e.g. 'login:ip:203.0.113.7', 'public:key:<apiKeyId>')
- * @returns {Promise<{ allowed: boolean, remaining: number, resetAt: number }>}
+ * @param rateLimits collection in the common database
+ * @param input key, limit, window length and current time
  */
-export async function hit(rateLimits, { key, limit, windowMs, now }) {
+export async function hit(rateLimits: Collection<RateLimitDocument>, { key, limit, windowMs, now }: HitInput): Promise<HitResult> {
   const windowStart = Math.floor(now / windowMs) * windowMs;
   const resetAt = windowStart + windowMs;
   const doc = await rateLimits.findOneAndUpdate(
@@ -23,6 +47,7 @@ export async function hit(rateLimits, { key, limit, windowMs, now }) {
     { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date(resetAt + windowMs) } },
     { upsert: true, returnDocument: 'after' },
   );
+  if (!doc) throw new Error('Rate limit upsert returned no document');
   return { allowed: doc.count <= limit, remaining: Math.max(0, limit - doc.count), resetAt };
 }
 ```

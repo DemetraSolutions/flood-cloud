@@ -29,7 +29,7 @@ Catena di dominio centrale: **vendita → movimento di magazzino → documento f
 5. **Sviluppo per passi**: un dominio alla volta, completo di test e documentazione prima del successivo.
 
 ## Stack e architettura
-Node.js 24 LTS, ESM, Express 5, driver ufficiale MongoDB, `node:test`. Un database common (identità e tenancy) più un database per gruppo, con nomi dipendenti dall'ambiente (`doc/Architecture.md`, `doc/Data-Model.md`).
+Backend in TypeScript su Node.js 24 LTS (type stripping nativo), ESM, Express 5, driver ufficiale MongoDB, `node:test`; backoffice in Angular 22. Un database common (identità e tenancy) più un database per gruppo, con nomi dipendenti dall'ambiente (`doc/Architecture.md`, `doc/Data-Model.md`).
 
 ## Fuori scopo (per ora)
 Tutto ciò che non è stato deciso in un passo approvato. La roadmap dei passi si definisce con l'utente.

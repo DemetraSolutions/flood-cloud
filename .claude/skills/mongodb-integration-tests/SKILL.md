@@ -12,17 +12,24 @@ description: Usa quando scrivi test di integrazione che toccano MongoDB reale: d
 5. Nessuna dipendenza dall'ordine dei test: ogni `describe` prepara i propri dati.
 
 ## Pattern
-```js
+```ts
 import { before, after } from 'node:test';
 import { randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
+import type { Db } from 'mongodb';
+
+/** Disposable database handle for a test file. */
+export interface TestDatabase {
+  client: MongoClient;
+  db: Db;
+  drop: () => Promise<void>;
+}
 
 /**
  * Opens a disposable database for a test file.
- * @returns {Promise<{ client: MongoClient, db: import('mongodb').Db, drop: () => Promise<void> }>}
  * @throws {Error} when FLOOD_CLOUD_TEST_MONGO_URI is not set
  */
-export async function openTestDatabase() {
+export async function openTestDatabase(): Promise<TestDatabase> {
   const uri = process.env.FLOOD_CLOUD_TEST_MONGO_URI;
   if (!uri) {
     throw new Error('FLOOD_CLOUD_TEST_MONGO_URI is not set: integration tests require MongoDB.');
@@ -42,8 +49,8 @@ export async function openTestDatabase() {
 ```
 
 ## Uso
-```js
-let ctx;
+```ts
+let ctx: TestDatabase;
 before(async () => { ctx = await openTestDatabase(); await ensureIndexes(ctx.db); });
 after(async () => { await ctx.drop(); });
 ```

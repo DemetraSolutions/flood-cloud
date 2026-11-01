@@ -5,17 +5,19 @@ description: Usa quando scrivi un repository MongoDB con il driver ufficiale: co
 # MongoDB Repository Patterns
 
 ## Connessione
-- Un solo `MongoClient` per processo, creato in `src/server.js` e iniettato; mai connessioni per richiesta.
+- Un solo `MongoClient` per processo, creato in `src/server.ts` e iniettato; mai connessioni per richiesta.
 - `serverSelectionTimeoutMS` e `maxPoolSize` da configurazione; `client.close()` all'arresto.
 - L'URI arriva dalla configurazione validata: mai loggarlo (contiene credenziali).
 
 ## Indici idempotenti
-```js
+```ts
+import type { Db } from 'mongodb';
+
 /**
  * Creates the sessions collection indexes; safe to call on every startup.
- * @param {import('mongodb').Db} db
+ * @param db common database
  */
-export async function ensureSessionIndexes(db) {
+export async function ensureSessionIndexes(db: Db): Promise<void> {
   await db.collection('sessions').createIndexes([
     { key: { accessTokenHash: 1 }, name: 'accessTokenHash_unique', unique: true },
     { key: { refreshTokenHash: 1 }, name: 'refreshTokenHash_unique', unique: true },
@@ -26,21 +28,35 @@ export async function ensureSessionIndexes(db) {
 ```
 
 ## Paginazione a cursore
-```js
+```ts
+import type { Collection, Document, Filter, ObjectId } from 'mongodb';
+
+/** Page request: maximum size and optional cursor (id of the last item seen). */
+export interface PageRequest {
+  limit: number;
+  after?: ObjectId;
+}
+
+/** One page of results with the cursor of the next one. */
+export interface Page {
+  items: Document[];
+  next: string | null;
+}
+
 /**
  * Lists scoped documents ordered by _id, one page at a time.
- * @param {import('mongodb').Collection} collection
- * @param {object} filter filter already including scopeFilter(auth)
- * @param {{ limit: number, after?: import('mongodb').ObjectId }} page
- * @returns {Promise<{ items: object[], next: string|null }>}
+ * @param collection collection to read
+ * @param filter filter already including scopeFilter(auth)
+ * @param page page size and cursor
  */
-async function listPage(collection, filter, { limit, after }) {
-  const query = after ? { ...filter, _id: { $gt: after } } : filter;
+async function listPage(collection: Collection, filter: Filter<Document>, { limit, after }: PageRequest): Promise<Page> {
+  const query: Filter<Document> = after ? { ...filter, _id: { $gt: after } } : filter;
   const docs = await collection.find(query, { projection: PUBLIC_FIELDS })
     .sort({ _id: 1 }).limit(limit + 1).toArray();
   const hasMore = docs.length > limit;
   const items = hasMore ? docs.slice(0, limit) : docs;
-  return { items, next: hasMore ? items.at(-1)._id.toHexString() : null };
+  const last = items.at(-1);
+  return { items, next: hasMore && last ? (last._id as ObjectId).toHexString() : null };
 }
 ```
 Il cursore restituito al client è opaco (es. base64url) e si rivalida all'ingresso.
