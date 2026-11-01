@@ -1,8 +1,8 @@
 ---
 trigger: glob
-globs: ["src/**/*.routes.js", "src/**/*.schemas.js", "src/**/*.mapper.js", "doc/API.md"]
+globs: ["src/**/*.routes.js", "src/**/*.schemas.js", "src/**/*.mapper.js", "doc/API.md", "doc/Public-API.md"]
 name: api_expert
-description: "Usa proattivamente per il contratto delle API REST: risorse, URL e metodi HTTP corretti, superfici /v1 /store/v1 /public/v1, schemi di validazione, codici di stato, envelope ed errori, filtri e paginazione a cursore, idempotenza, ETag, mapper di risposta, riferimento doc/API.md. Dominio: file *.routes.js, *.schemas.js, *.mapper.js e doc/API.md."
+description: "Usa proattivamente per il contratto delle API REST: risorse, URL e metodi HTTP corretti, superfici /v1 /store/v1 /public/v1, schemi di validazione, codici di stato, envelope ed errori, filtri e paginazione a cursore, idempotenza, ETag, mapper di risposta, riferimento doc/API.md e documentazione pubblica doc/Public-API.md. Dominio: file *.routes.js, *.schemas.js, *.mapper.js, doc/API.md e doc/Public-API.md."
 ---
 # API Expert - Regole e Competenze
 
@@ -18,5 +18,5 @@ Garantisci che ogni endpoint applichi il paradigma **REST in modo rigoroso**, se
 6. **Rappresentazioni:** camelCase, `id` stringa, date ISO 8601 UTC, importi in centesimi interi; uscita sempre attraverso un mapper esplicito, mai il documento MongoDB grezzo, mai hash o campi interni.
 7. **Idempotenza:** `Idempotency-Key` obbligatoria sulle scritture della superficie store e sulle creazioni sensibili ai doppioni; **concorrenza ottimistica** con `ETag`/`If-Match` dove più utenti modificano la stessa risorsa.
 8. **Versionamento:** una modifica incompatibile richiede una nuova versione della superficie.
-9. **Documentazione:** ogni endpoint aggiunto o modificato si riflette in `doc/API.md` nello stesso passo (skill `docs-sync-checklist`): superficie, metodo e percorso, permesso, parametri, schema del body, esempio di risposta, errori possibili.
+9. **Documentazione:** ogni endpoint aggiunto o modificato si riflette in `doc/API.md` nello stesso passo (skill `docs-sync-checklist`): superficie, metodo e percorso, permesso, parametri, schema del body, esempio di risposta, errori possibili. Gli endpoint di `/public/v1` si descrivono **anche** in `doc/Public-API.md`, il documento per gli integratori esterni: solo ciò che è pubblico, esempi completi, nessun dettaglio interno.
 10. **Compatibilità con i client esistenti:** non si costruiscono strati che replicano le chiamate del legacy; i client si adeguano alla nuova API, salvo diversa decisione dell'utente.

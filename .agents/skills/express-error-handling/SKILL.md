@@ -20,15 +20,15 @@ description: Usa quando gestisci errori in Express 5: classe AppError con codici
 ## AppError
 ```js
 /**
- * Errore applicativo previsto, tradotto dal gestore centrale in una risposta HTTP.
+ * Expected application error, translated into an HTTP response by the central handler.
  */
 export class AppError extends Error {
   /**
-   * @param {number} status codice HTTP
-   * @param {string} code codice stabile leggibile dai client (es. 'NOT_FOUND')
-   * @param {string} message messaggio sicuro da mostrare al client
-   * @param {Array<{field: string, issue: string}>} [details] dettagli di validazione
-   * @param {{ cause?: unknown }} [options] errore originale, conservato per i log
+   * @param {number} status HTTP status code
+   * @param {string} code stable, client-readable code (e.g. 'NOT_FOUND')
+   * @param {string} message message safe to show to the client
+   * @param {Array<{field: string, issue: string}>} [details] validation details
+   * @param {{ cause?: unknown }} [options] original error, kept for logging
    */
   constructor(status, code, message, details, options) {
     super(message, options);
@@ -43,8 +43,8 @@ export class AppError extends Error {
 ## Gestore centrale
 ```js
 /**
- * Gestore d'errori finale: risponde con l'envelope standard senza esporre dettagli interni.
- * @param {(entry: object) => void} log funzione di log strutturato
+ * Final error handler: replies with the standard envelope without exposing internal details.
+ * @param {(entry: object) => void} log structured logging function
  * @returns {import('express').ErrorRequestHandler}
  */
 export function errorHandler(log) {

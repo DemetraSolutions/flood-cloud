@@ -23,11 +23,11 @@ import assert from 'node:assert/strict';
 import { normalizeEmail } from '../../src/shared/validation/email.js';
 
 describe('normalizeEmail', () => {
-  it('converte in minuscolo e rimuove gli spazi', () => {
+  it('lowercases and trims the value', () => {
     assert.equal(normalizeEmail('  Mario@Example.COM '), 'mario@example.com');
   });
 
-  it('rifiuta un valore non stringa', () => {
+  it('rejects a non-string value', () => {
     assert.throws(() => normalizeEmail({ $gt: '' }), { code: 'VALIDATION_ERROR' });
   });
 });
@@ -45,7 +45,7 @@ describe('GET /health', () => {
   let baseUrl;
 
   before(async () => {
-    const app = createApp({ /* dipendenze di test */ });
+    const app = createApp({ /* test dependencies */ });
     server = app.listen(0);
     await new Promise((resolve) => server.once('listening', resolve));
     baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -53,7 +53,7 @@ describe('GET /health', () => {
 
   after(() => new Promise((resolve) => server.close(resolve)));
 
-  it('risponde 200 con envelope standard', async () => {
+  it('responds 200 with the standard envelope', async () => {
     const res = await fetch(`${baseUrl}/health`);
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { data: { status: 'ok' } });
@@ -65,7 +65,7 @@ describe('GET /health', () => {
 ```js
 import { mock } from 'node:test';
 mock.timers.enable({ apis: ['Date'], now: new Date('2026-01-01T00:00:00Z') });
-// ... asserzioni sulla scadenza di un token
+// ... assertions on token expiry
 mock.timers.reset();
 ```
 Preferisci l'**iniezione** di un orologio (`clock.now()`) nei servizi: rende i test più semplici dei mock globali.

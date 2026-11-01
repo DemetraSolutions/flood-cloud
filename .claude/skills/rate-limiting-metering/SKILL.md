@@ -9,10 +9,10 @@ Riferimenti: `doc/Security-Model.md` §7, collection `rateLimits` e `apiUsage` i
 ## Finestra fissa con contatore atomico
 ```js
 /**
- * Incrementa il contatore della finestra corrente e dice se la richiesta è ammessa.
- * @param {import('mongodb').Collection} rateLimits collection del database common
+ * Increments the counter of the current window and tells whether the request is allowed.
+ * @param {import('mongodb').Collection} rateLimits collection in the common database
  * @param {{ key: string, limit: number, windowMs: number, now: number }} input
- *   key = '<superficie>:<soggetto>' (es. 'login:ip:203.0.113.7', 'public:key:<apiKeyId>')
+ *   key = '<surface>:<subject>' (e.g. 'login:ip:203.0.113.7', 'public:key:<apiKeyId>')
  * @returns {Promise<{ allowed: boolean, remaining: number, resetAt: number }>}
  */
 export async function hit(rateLimits, { key, limit, windowMs, now }) {

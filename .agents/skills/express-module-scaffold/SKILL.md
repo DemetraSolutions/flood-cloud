@@ -27,7 +27,7 @@ Il builder condiviso (`src/shared/http/define-routes.js`) monta nell'ordine aute
 import { groupParams, listProductsQuery, productIdParams, createProductBody } from './products.schemas.js';
 
 /**
- * Route del modulo prodotti, per superficie.
+ * Product module routes, grouped by API surface.
  * @param {ReturnType<import('./products.controller.js').createProductsController>} controller
  * @returns {Record<'backoffice'|'store'|'public', import('../../shared/http/define-routes.js').RouteDefinition[]>}
  */
@@ -55,7 +55,7 @@ Le uniche route `anonymous: true` ammesse sono quelle che lo sono per natura (he
 ## Controller
 ```js
 /**
- * Crea il controller prodotti.
+ * Creates the products controller.
  * @param {{ productsService: ReturnType<import('./products.service.js').createProductsService> }} deps
  */
 export function createProductsController({ productsService }) {

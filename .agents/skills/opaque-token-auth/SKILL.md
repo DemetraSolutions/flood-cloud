@@ -11,18 +11,18 @@ Riferimenti: `doc/Security-Model.md` §4, collection `sessions` in `doc/Data-Mod
 import { randomBytes, createHash } from 'node:crypto';
 
 /**
- * Genera un segreto casuale con prefisso riconoscibile.
- * @param {string} prefix es. 'fc_at_' (access) o 'fc_rt_' (refresh)
- * @returns {string} segreto da consegnare al client una sola volta
+ * Generates a random secret with a recognizable prefix.
+ * @param {string} prefix e.g. 'fc_at_' (access) or 'fc_rt_' (refresh)
+ * @returns {string} secret to hand to the client exactly once
  */
 export function generateToken(prefix) {
   return prefix + randomBytes(32).toString('base64url');
 }
 
 /**
- * Hash da salvare e su cui cercare. SHA-256 basta: il token ha 256 bit di entropia.
+ * Hash to store and look up. SHA-256 is enough: the token carries 256 bits of entropy.
  * @param {string} token
- * @returns {string} hash esadecimale
+ * @returns {string} hex-encoded hash
  */
 export function hashToken(token) {
   return createHash('sha256').update(token).digest('hex');

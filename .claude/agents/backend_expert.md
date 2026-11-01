@@ -25,3 +25,4 @@ Progetti e scrivi il server **Node.js 24 LTS + Express 5** in moduli **ESM**, co
 6. **Nessuna libreria aggiuntiva** senza approvazione (skill `dependency-approval`).
 7. **Ogni file** nasce con il suo test e la copertura resta al 100%.
 8. Coinvolgi il `security_expert` per auth, permessi, upload e header; il `db_expert` per indici e query.
+9. **Documentazione:** JSDoc dettagliato **in inglese** su ogni export; a fine passo aggiorna `doc/Technical-Guide.md` (configurazione, struttura, pipeline, moduli realizzati).

@@ -38,7 +38,9 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 | `doc/Data-Model.md` | Collection del database common |
 | `doc/API-Guidelines.md` | Regole REST vincolanti |
 | `doc/Legacy-Analysis.md` | Cosa fa il progetto legacy (riferimento funzionale) |
-| `doc/API.md` | Riferimento degli endpoint (nasce con il primo endpoint) |
+| `doc/Technical-Guide.md` | Documentazione tecnica del backend realizzato (mantenuta a ogni passo) |
+| `doc/API.md` | Riferimento di tutte le API delle tre superfici (mantenuto a ogni passo) |
+| `doc/Public-API.md` | Documentazione delle API pubbliche per gli integratori esterni (mantenuta a ogni passo) |
 
 ## Sottoagenti disponibili
 
@@ -66,7 +68,7 @@ Copertura al 100% con strumenti nativi.
 ### 5. API Expert (`api_expert`)
 Contratto REST rigoroso secondo `doc/API-Guidelines.md`.
 - Risorse e metodi HTTP corretti sulle superfici `/v1`, `/store/v1`, `/public/v1`, nessuna query MongoDB dal client, schemi di validazione.
-- Codici HTTP, envelope ed errori, paginazione, idempotenza, `doc/API.md`.
+- Codici HTTP, envelope ed errori, paginazione, idempotenza, `doc/API.md` e `doc/Public-API.md`.
 
 ### 6. Legacy Analyst (`legacy_analyst`)
 Esperto del progetto `../cloud-commerce-platform-server` (sola lettura).
@@ -103,4 +105,4 @@ Guide operative attivate automaticamente in base alla `description`, in `.agents
 | `node-test-coverage` | Test con node:test e coverage al 100% |
 | `dependency-approval` | Prima di installare o proporre un pacchetto npm |
 | `legacy-module-analysis` | Analisi di un dominio del legacy prima di riscriverlo |
-| `docs-sync-checklist` | Verifica di fine passo |
+| `docs-sync-checklist` | Verifica di fine passo: JSDoc, documentazione tecnica, API, API pubbliche, modello dati |

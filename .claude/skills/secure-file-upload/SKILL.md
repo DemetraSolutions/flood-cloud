@@ -9,8 +9,9 @@ description: Usa quando implementi upload di file con multer (immagini, import C
 import multer from 'multer';
 
 /**
- * Middleware di upload per un singolo file in memoria, con limiti stretti.
+ * Upload middleware for a single in-memory file, with strict limits.
  * @param {{ fieldName: string, maxBytes: number }} options
+ * @returns {import('express').RequestHandler}
  */
 export function singleUpload({ fieldName, maxBytes }) {
   return multer({

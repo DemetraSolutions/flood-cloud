@@ -11,19 +11,19 @@ Ogni middleware di autenticazione produce un oggetto **congelato** in `req.auth`
 ```js
 /**
  * @typedef {object} AuthContext
- * @property {'user'|'storeServer'|'apiKey'} kind tipo di credenziale verificata
- * @property {string} principalId id dell'utente, del server di punto vendita o della API key
- * @property {string} credentialId id della sessione, del token o della chiave (audit e revoca)
- * @property {string|null} role ruolo, solo per kind 'user' (PSA, D, SA, CA, PA)
- * @property {ReadonlySet<string>} permissions permessi effettivi 'risorsa:azione'
- * @property {Scope} scope perimetro dei dati visibili, calcolato dal server
+ * @property {'user'|'storeServer'|'apiKey'} kind type of the verified credential
+ * @property {string} principalId id of the user, store server or API key
+ * @property {string} credentialId id of the session, token or key (audit and revocation)
+ * @property {string|null} role role, only for kind 'user' (PSA, D, SA, CA, PA)
+ * @property {ReadonlySet<string>} permissions effective 'resource:action' permissions
+ * @property {Scope} scope visible data perimeter, computed by the server
  */
 /**
  * @typedef {object} Scope
- * @property {'all'|'groups'} level 'all' solo per PSA
- * @property {string[]} groupIds gruppi visibili (D: i propri gruppi; altri: uno)
- * @property {string[]|null} companyIds null = tutte le aziende dei gruppi visibili
- * @property {string[]|null} placeIds null = tutti i punti vendita delle aziende visibili
+ * @property {'all'|'groups'} level 'all' only for PSA
+ * @property {string[]} groupIds visible groups (D: own groups; others: exactly one)
+ * @property {string[]|null} companyIds null = every company of the visible groups
+ * @property {string[]|null} placeIds null = every place of the visible companies
  */
 ```
 | Credenziale | Scope |
@@ -52,9 +52,10 @@ Valori come `groupId`, `role`, `permissions` nel body o nella query non vengono 
 ## Repository con contesto
 ```js
 /**
- * Restituisce un punto vendita visibile al chiamante, o null.
- * @param {AuthContext} auth contesto verificato
+ * Returns a place visible to the caller, or null.
+ * @param {AuthContext} auth verified context
  * @param {import('mongodb').ObjectId} placeId
+ * @returns {Promise<object|null>}
  */
 async function findPlaceById(auth, placeId) {
   return places.findOne({ _id: placeId, ...scopeFilter(auth) }, { projection: PUBLIC_FIELDS });

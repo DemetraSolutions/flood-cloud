@@ -18,14 +18,14 @@ import { randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 
 /**
- * Apre un database usa-e-getta per un file di test.
+ * Opens a disposable database for a test file.
  * @returns {Promise<{ client: MongoClient, db: import('mongodb').Db, drop: () => Promise<void> }>}
- * @throws {Error} se FLOOD_CLOUD_TEST_MONGO_URI non è impostata
+ * @throws {Error} when FLOOD_CLOUD_TEST_MONGO_URI is not set
  */
 export async function openTestDatabase() {
   const uri = process.env.FLOOD_CLOUD_TEST_MONGO_URI;
   if (!uri) {
-    throw new Error('FLOOD_CLOUD_TEST_MONGO_URI non impostata: i test di integrazione richiedono MongoDB.');
+    throw new Error('FLOOD_CLOUD_TEST_MONGO_URI is not set: integration tests require MongoDB.');
   }
   const client = new MongoClient(uri);
   await client.connect();

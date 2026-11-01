@@ -12,7 +12,7 @@ description: Usa quando scrivi un repository MongoDB con il driver ufficiale: co
 ## Indici idempotenti
 ```js
 /**
- * Crea gli indici della collection sessions; sicuro da richiamare a ogni avvio.
+ * Creates the sessions collection indexes; safe to call on every startup.
  * @param {import('mongodb').Db} db
  */
 export async function ensureSessionIndexes(db) {
@@ -28,9 +28,11 @@ export async function ensureSessionIndexes(db) {
 ## Paginazione a cursore
 ```js
 /**
- * Elenca i documenti del tenant in ordine di _id, a pagine.
- * @param {object} filter filtro già comprensivo di tenantFilter(auth)
+ * Lists scoped documents ordered by _id, one page at a time.
+ * @param {import('mongodb').Collection} collection
+ * @param {object} filter filter already including scopeFilter(auth)
  * @param {{ limit: number, after?: import('mongodb').ObjectId }} page
+ * @returns {Promise<{ items: object[], next: string|null }>}
  */
 async function listPage(collection, filter, { limit, after }) {
   const query = after ? { ...filter, _id: { $gt: after } } : filter;

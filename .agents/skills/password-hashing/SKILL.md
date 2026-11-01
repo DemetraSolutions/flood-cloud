@@ -17,8 +17,8 @@ const PARAMS = { N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 const KEY_LENGTH = 64;
 
 /**
- * Calcola l'hash di una password nel formato autodescrittivo scrypt$N$r$p$salt$hash.
- * @param {string} password password in chiaro già validata
+ * Hashes a password into the self-describing format scrypt$N$r$p$salt$hash.
+ * @param {string} password plain-text password, already validated
  * @returns {Promise<string>}
  */
 export async function hashPassword(password) {
@@ -28,9 +28,9 @@ export async function hashPassword(password) {
 }
 
 /**
- * Verifica una password contro l'hash salvato, a tempo costante.
+ * Verifies a password against the stored hash in constant time.
  * @param {string} password
- * @param {string} stored hash nel formato di hashPassword
+ * @param {string} stored hash in the hashPassword format
  * @returns {Promise<boolean>}
  */
 export async function verifyPassword(password, stored) {

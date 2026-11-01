@@ -20,10 +20,10 @@ Il client invia la chiave pubblica Ed25519 in formato SPKI DER base64. Validazio
 import { createPublicKey } from 'node:crypto';
 
 /**
- * Converte e valida una chiave pubblica Ed25519 ricevuta dal server di punto vendita.
- * @param {string} spkiBase64 chiave in formato SPKI DER codificata base64
+ * Parses and validates an Ed25519 public key received from a store server.
+ * @param {string} spkiBase64 base64-encoded SPKI DER key
  * @returns {import('node:crypto').KeyObject}
- * @throws {AppError} 422 se non è una chiave pubblica Ed25519 valida
+ * @throws {AppError} 422 when it is not a valid Ed25519 public key
  */
 export function parseEd25519PublicKey(spkiBase64) {
   let key;
@@ -46,7 +46,7 @@ Stringa firmata: `v1.<aud>.<storeServerId>.<keyId>.<iat>.<jti>`.
 import { verify } from 'node:crypto';
 
 /**
- * Verifica la firma Ed25519 di un'asserzione.
+ * Verifies the Ed25519 signature of an assertion.
  * @param {{ message: string, signature: string, publicKey: import('node:crypto').KeyObject }} input
  * @returns {boolean}
  */

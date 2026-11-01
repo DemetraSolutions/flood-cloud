@@ -1,17 +1,19 @@
 ---
 name: docs-sync-checklist
-description: Usa al termine di ogni passo per verificare gli aggiornamenti obbligatori: riferimento API, .env.example, registro di agenti e skill, sincronizzazione .agents → .claude, copertura dei test.
+description: Usa al termine di ogni passo per verificare gli aggiornamenti obbligatori: JSDoc in inglese, documentazione tecnica, riferimento API, documentazione delle API pubbliche, modello dati, .env.example, registro di agenti e skill, copertura dei test.
 ---
 # Docs Sync Checklist
 
 Un passo sembra finito quando il codice funziona, ma non lo è finché questa lista non è verificata.
 
 ## Checklist
-- [ ] **`doc/API.md`**: ogni endpoint aggiunto o modificato è descritto (metodo, percorso, autenticazione, permesso, parametri, risposta, errori). È l'unico documento in `doc/` che si aggiorna senza richiesta esplicita (`GEMINI.md` §7), e solo per riflettere ciò che è stato realizzato.
+- [ ] **JSDoc in inglese** dettagliato su ogni modulo, funzione, classe, typedef e costante esportata nuovi o modificati; commenti nel codice in inglese.
+- [ ] **`doc/Technical-Guide.md`**: aggiornate le sezioni toccate dal passo (configurazione, struttura, pipeline, moduli, database, sicurezza, test) e aggiunta una riga al registro dei passi.
+- [ ] **`doc/API.md`**: ogni endpoint aggiunto o modificato è descritto (metodo, percorso, autenticazione, permesso, parametri, risposta, errori). Si aggiorna senza richiesta esplicita (`GEMINI.md` §7), solo per riflettere ciò che è stato realizzato.
+- [ ] **`doc/Public-API.md`**: ogni endpoint di `/public/v1` aggiunto o modificato è descritto per gli integratori esterni, con esempi completi; **nessun** riferimento a superfici interne, collection, struttura dei database o dettagli implementativi.
 - [ ] **`doc/Data-Model.md`**: ogni collection o campo aggiunto o modificato è descritto con tipi, indici e vincoli (stessa eccezione di `doc/API.md`).
 - [ ] **`.env.example`**: ogni nuova variabile d'ambiente è elencata con descrizione e senza valore reale.
 - [ ] **`npm test`** passa con le soglie al 100%.
-- [ ] **JSDoc** presente e coerente su ogni export nuovo o modificato.
 - [ ] **Kit AI**: se sono cambiati agenti o skill, `AGENTS.md` è aggiornato e `./scripts/sync-agents.sh --check` passa.
 - [ ] **Altri documenti** (`doc/Security-Model.md`, `doc/Architecture.md`, `doc/API-Guidelines.md`, `doc/Product-Scope.md`…): se il passo ha preso decisioni che li riguardano, **proponi** la modifica all'utente invece di farla.
 

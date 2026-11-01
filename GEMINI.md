@@ -16,6 +16,9 @@ Documentazione di progetto da conoscere prima di agire:
 | `doc/Data-Model.md` | collection del database common |
 | `doc/API-Guidelines.md` | regole REST vincolanti |
 | `doc/Legacy-Analysis.md` | cosa faceva il legacy |
+| `doc/Technical-Guide.md` | documentazione tecnica del backend realizzato (mantenuta a ogni passo) |
+| `doc/API.md` | riferimento di tutte le API (mantenuto a ogni passo) |
+| `doc/Public-API.md` | documentazione delle API pubbliche per gli integratori esterni (mantenuta a ogni passo) |
 
 **Il progetto legacy è solo un riferimento funzionale.** Si consulta per capire *cosa* faceva il sistema (`doc/Legacy-Analysis.md`), mai per copiarne il *come*:
 - non copiare codice, struttura o pattern dal legacy: ogni parte si riprogetta;
@@ -31,8 +34,20 @@ Il progetto cresce **un passo alla volta**, deciso con l'utente.
 ## 2. Rispetto della Documentazione
 Leggi **sempre** la documentazione di riferimento in `doc/` prima di agire su un componente. Nessuna azione deve contraddire la documentazione ufficiale.
 
-## 3. Documentazione del Codice In-line
-Ogni modulo, funzione, classe e costante esportata ha un commento **JSDoc** accurato e aggiornato: scopo, `@param` con tipo, `@returns`, `@throws`. I tipi JSDoc sono la documentazione dei contratti: tienili precisi.
+## 3. Documentazione Obbligatoria
+Ogni passo crea o aggiorna **sempre** quattro livelli di documentazione. Un passo senza documentazione aggiornata non è completo.
+
+| Cosa | Dove | Lingua | Destinatari |
+|---|---|---|---|
+| **JSDoc dettagliato** di ogni modulo, funzione, classe, typedef e costante esportata: scopo, `@param` con tipo, `@returns`, `@throws`, esempi dove utili | nel codice | **Inglese** | sviluppatori |
+| **Documentazione tecnica** di tutto il backend: avvio, configurazione, moduli realizzati, flussi, database, sicurezza implementata, test | `doc/Technical-Guide.md` | Italiano | team di sviluppo |
+| **Riferimento di tutte le API** delle tre superfici | `doc/API.md` | Italiano | team di sviluppo, backoffice e server di punto vendita |
+| **Documentazione delle API pubbliche** da consegnare agli utilizzatori esterni: **solo** ciò che è pubblico (`/public/v1`, autenticazione con API key, limiti, quote, errori) | `doc/Public-API.md` | Italiano | integratori esterni |
+
+Regole:
+- I tipi JSDoc sono la documentazione dei contratti: tienili precisi e allineati al codice.
+- `doc/Public-API.md` è un documento **pubblicabile**: non deve mai contenere superfici interne (`/v1`, `/store/v1`), dettagli implementativi, nomi di collection, struttura dei database o informazioni utili a un attaccante. Si scrive per chi integra, con esempi completi di richiesta e risposta.
+- Un endpoint pubblico va descritto in **entrambi** `doc/API.md` e `doc/Public-API.md`.
 
 ## 4. Test: Copertura Totale
 Il progetto è **interamente coperto dai test**. È un vincolo, non un obiettivo.
@@ -55,10 +70,10 @@ Se trovi incongruenze, parti incomplete o poco chiare nella documentazione o nel
 
 ## 7. Divieto di Modifica della Documentazione
 **Non modificare mai** i documenti esistenti in `doc/` senza una richiesta esplicita dell'utente dopo un'analisi congiunta.
-**Uniche eccezioni:** quando un passo aggiunge o modifica endpoint o collection, il riferimento API **`doc/API.md`** e il modello dati **`doc/Data-Model.md`** vanno aggiornati nello stesso passo (skill `docs-sync-checklist`), limitandosi a riflettere ciò che è stato realizzato.
+**Uniche eccezioni:** i documenti mantenuti a ogni passo — **`doc/Technical-Guide.md`**, **`doc/API.md`**, **`doc/Public-API.md`** (§3) e **`doc/Data-Model.md`** — si aggiornano nello stesso passo (skill `docs-sync-checklist`), limitandosi a riflettere ciò che è stato realizzato.
 
 ## 8. Lingua del Codice e Commenti
-Nomi di variabili, funzioni, classi, file, collection e campi in **Inglese**. Commenti, JSDoc e documentazione in **Italiano**.
+Nomi di variabili, funzioni, classi, file, collection e campi in **Inglese**. **JSDoc e commenti nel codice in Inglese.** Documentazione in `doc/` e kit AI in **Italiano**.
 
 ## 9. Gestione degli Errori (No Silent Failures)
 Vietati i `catch {}` vuoti, le promise non attese, gli errori ignorati o convertiti in `null` per "proseguire". Ogni errore si intercetta, si gestisce o si propaga al gestore centrale di Express, che risponde con l'envelope standard **senza** stack trace, messaggi interni o dettagli del database (skill `express-error-handling`).

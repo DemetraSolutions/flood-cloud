@@ -93,5 +93,5 @@ La stessa applicazione può girare come **api** o come **worker** (job pianifica
 
 ## 8. Qualità
 - Copertura dei test al **100%** (righe, rami, funzioni), applicata da `npm test`.
-- JSDoc in italiano su ogni export; codice in inglese.
+- Codice, JSDoc e commenti in inglese; documentazione in `doc/` in italiano (`doc/Technical-Guide.md`, `doc/API.md`, `doc/Public-API.md` mantenuti a ogni passo).
 - Nessun errore silenziato; risposte d'errore con envelope standard e senza dettagli interni.

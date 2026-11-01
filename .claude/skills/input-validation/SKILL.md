@@ -18,12 +18,12 @@ Nessuna libreria di validazione è approvata: si usa un validatore interno picco
 
 ## Forma di uno schema
 ```js
-/** Schema del body di creazione prodotto. */
+/** Request body schema for product creation. */
 export const createProductBody = {
   type: 'object',
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 200 },
-    price: { type: 'integer', minimum: 0, maximum: 100_000_000 }, // centesimi
+    price: { type: 'integer', minimum: 0, maximum: 100_000_000 }, // cents
     placeIds: { type: 'array', items: { type: 'objectId' }, maxItems: 500 },
     status: { type: 'string', enum: ['active', 'archived'] },
   },
