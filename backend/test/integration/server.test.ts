@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { connect, createServer } from 'node:net';
 import { loadDotEnv, run, SHUTDOWN_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS } from '../../src/server.ts';
 import type { ProcessLike, RunningServer } from '../../src/server.ts';
-import { freePort, validEnv } from '../helpers/app.ts';
+import { freePort } from '../helpers/app.ts';
+import { mongoEnv } from '../helpers/mongo.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -29,13 +30,14 @@ function errnoError(code: string): Error {
 
 async function started(extra: Record<string, string> = {}) {
   const port = await freePort();
-  const fake = fakeProcess(validEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0', ...extra }));
+  const fake = fakeProcess(mongoEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0', ...extra }));
   const running = (await run(fake.proc)) as RunningServer;
   assert.ok(running);
   return { ...fake, running, port };
 }
 
 async function closed(running: RunningServer): Promise<void> {
+  await running.client.close();
   if (running.server.listening) {
     await new Promise<void>((resolve) => {
       running.server.close(() => resolve());
@@ -99,11 +101,11 @@ describe('run', () => {
 
   it('tolerates a missing .env and propagates other .env errors', async () => {
     const port = await freePort();
-    const missing = fakeProcess(validEnv({ PORT: String(port) }), () => { throw errnoError('ENOENT'); });
+    const missing = fakeProcess(mongoEnv({ PORT: String(port) }), () => { throw errnoError('ENOENT'); });
     const running = await run(missing.proc);
     assert.ok(running);
     await closed(running);
-    const broken = fakeProcess(validEnv(), () => { throw errnoError('EACCES'); });
+    const broken = fakeProcess(mongoEnv(), () => { throw errnoError('EACCES'); });
     await assert.rejects(run(broken.proc), /EACCES/);
   });
 
@@ -112,7 +114,7 @@ describe('run', () => {
     await new Promise<void>((resolve) => blocker.listen(0, () => resolve()));
     const busy = (blocker.address() as { port: number }).port;
     try {
-      const fake = fakeProcess(validEnv({ PORT: String(busy) }));
+      const fake = fakeProcess(mongoEnv({ PORT: String(busy) }));
       assert.equal(await run(fake.proc), undefined);
       assert.deepEqual(fake.exits, [1]);
       assert.match(fake.out.join(''), /server failed to start/);
@@ -213,6 +215,140 @@ describe('run', () => {
       assert.match(raw, /"code":"BAD_REQUEST"/);
     } finally {
       await closed(running);
+    }
+  });
+});
+
+describe('run: database lifecycle', () => {
+  const URI_IN_ERROR = 'mongodb://user:hunter2@db.invalid:27017';
+
+  /** A client double: only the methods `run` uses. */
+  function fakeClient(options: { connect?: Error; close?: Error } = {}) {
+    let closes = 0;
+    const client = {
+      connect: async () => {
+        if (options.connect !== undefined) throw options.connect;
+      },
+      close: async () => {
+        closes += 1;
+        if (options.close !== undefined) throw options.close;
+      },
+      db: () => ({ command: async () => ({ ok: 1 }) }),
+    };
+    return { client: client as never, closes: () => closes };
+  }
+
+  const noIndexes = async (): Promise<void> => undefined;
+
+  it('exits 1 without leaking the URI when the connection fails, closing the client', async () => {
+    const fake = fakeProcess(mongoEnv());
+    const { client, closes } = fakeClient({ connect: new Error(`cannot reach ${URI_IN_ERROR}`) });
+    const result = await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes });
+    assert.equal(result, undefined);
+    assert.deepEqual(fake.exits, [1]);
+    assert.equal(closes(), 1);
+    const log = fake.out.join('');
+    assert.match(log, /database startup failed/);
+    assert.ok(!log.includes('hunter2') && !log.includes('db.invalid'));
+  });
+
+  it('exits 1 without any host in the output when the connection string cannot be parsed', async () => {
+    const fake = fakeProcess(mongoEnv({ MONGODB_URI: 'mongodb://secret-host.invalid:99999/' }));
+    assert.equal(await run(fake.proc), undefined);
+    assert.deepEqual(fake.exits, [1]);
+    const output = fake.out.join('') + fake.err.join('');
+    assert.match(output, /database startup failed/);
+    assert.ok(!output.includes('secret-host') && !output.includes('99999'));
+  });
+
+  it('refuses to start in production when a .env file exists', async () => {
+    const fake = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true' }));
+    let created = false;
+    const result = await run(fake.proc, {
+      createClient: () => {
+        created = true;
+        throw new Error('must not be reached');
+      },
+      ensureIndexes: noIndexes,
+      dotEnvExists: () => true,
+    });
+    assert.equal(result, undefined);
+    assert.deepEqual(fake.exits, [1]);
+    assert.equal(created, false);
+    assert.match(fake.err.join(''), /\.env file exists/);
+  });
+
+  it('starts in production when no .env file exists', async () => {
+    const port = await freePort();
+    const fake = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }));
+    const { client } = fakeClient();
+    const running = (await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes, dotEnvExists: () => false })) as RunningServer;
+    assert.ok(running);
+    await closed(running);
+  });
+
+  it('logs the type of a non-Error startup failure', async () => {
+    const fake = fakeProcess(mongoEnv());
+    const { client } = fakeClient();
+    const failing = async (): Promise<void> => Promise.reject('plain string');
+    assert.equal(await run(fake.proc, { createClient: () => client, ensureIndexes: failing }), undefined);
+    assert.match(fake.out.join(''), /"errorName":"string"/);
+  });
+
+  it('exits 1 when creating the indexes fails', async () => {
+    const fake = fakeProcess(mongoEnv());
+    const { client, closes } = fakeClient();
+    const failing = async (): Promise<void> => Promise.reject(new Error('index build failed'));
+    assert.equal(await run(fake.proc, { createClient: () => client, ensureIndexes: failing }), undefined);
+    assert.deepEqual(fake.exits, [1]);
+    assert.equal(closes(), 1);
+  });
+
+  it('really fails to connect to an unreachable server within the selection timeout', async () => {
+    const port = await freePort();
+    const fake = fakeProcess(
+      mongoEnv({ MONGODB_URI: `mongodb://127.0.0.1:${port}/?directConnection=true`, MONGODB_SERVER_SELECTION_TIMEOUT_MS: '1000' }),
+    );
+    assert.equal(await run(fake.proc), undefined);
+    assert.deepEqual(fake.exits, [1]);
+    assert.match(fake.out.join(''), /database startup failed/);
+  });
+
+  it('closes the client when the port cannot be bound', async () => {
+    const blocker = createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, () => resolve()));
+    const busy = (blocker.address() as { port: number }).port;
+    try {
+      const fake = fakeProcess(mongoEnv({ PORT: String(busy) }));
+      const { client, closes } = fakeClient();
+      assert.equal(await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes }), undefined);
+      assert.equal(closes(), 1);
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
+  });
+
+  it('closes the client on shutdown, and exits 1 if closing it fails', async () => {
+    const port = await freePort();
+    const fake = fakeProcess(mongoEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }));
+    const { client, closes } = fakeClient({ close: new Error('close failed') });
+    const running = (await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes })) as RunningServer;
+    (fake.listeners.get('SIGTERM') as Listener)();
+    await new Promise<void>((resolve) => running.server.once('close', () => resolve()));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(closes(), 1);
+    assert.deepEqual(fake.exits, [1]);
+    const log = fake.out.join('');
+    assert.match(log, /closing the database client failed/);
+    assert.match(log, /shutdown failed/);
+  });
+
+  it('readiness pings the real database', async () => {
+    const up = await started();
+    try {
+      assert.equal((await fetch(`http://127.0.0.1:${up.port}/health/ready`)).status, 200);
+    } finally {
+      await closed(up.running);
     }
   });
 });

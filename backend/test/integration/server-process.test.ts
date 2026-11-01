@@ -1,11 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { freePort, validEnv } from '../helpers/app.ts';
+import { freePort } from '../helpers/app.ts';
+import { mongoEnv } from '../helpers/mongo.ts';
 
 const SERVER = fileURLToPath(new URL('../../src/server.ts', import.meta.url));
 
@@ -19,10 +20,13 @@ interface Outcome {
  * Runs `node src/server.ts` as a real process in an empty directory (so no `.env`
  * is found). `NODE_V8_COVERAGE` is inherited so the child counts towards coverage.
  */
-function spawnServer(env: Record<string, string | undefined>, onStdout?: (text: string, child: ReturnType<typeof spawn>) => void) {
+function spawnServer(env: Record<string, string | undefined>, onStdout?: (text: string, child: ReturnType<typeof spawn>) => void, dotEnv?: string) {
   return mkdtemp(join(tmpdir(), 'flood-server-')).then(
-    (cwd) =>
-      new Promise<Outcome>((resolve, reject) => {
+    async (cwd) => {
+      if (dotEnv !== undefined) {
+        await writeFile(join(cwd, '.env'), dotEnv);
+      }
+      return new Promise<Outcome>((resolve, reject) => {
         const child = spawn(process.execPath, [SERVER], {
           cwd,
           env: { ...(process.env.NODE_V8_COVERAGE ? { NODE_V8_COVERAGE: process.env.NODE_V8_COVERAGE } : {}), ...env } as NodeJS.ProcessEnv,
@@ -38,7 +42,8 @@ function spawnServer(env: Record<string, string | undefined>, onStdout?: (text: 
         child.on('close', (code) => {
           rm(cwd, { recursive: true, force: true }).then(() => resolve({ code, stdout, stderr }), reject);
         });
-      }),
+      });
+    },
   );
 }
 
@@ -47,7 +52,7 @@ describe('node src/server.ts', () => {
     const port = await freePort();
     let probed = false;
     const outcome = await spawnServer(
-      validEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }) as Record<string, string>,
+      mongoEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }) as Record<string, string>,
       (stdout, child) => {
         if (!probed && stdout.includes('server started')) {
           probed = true;
@@ -74,5 +79,14 @@ describe('node src/server.ts', () => {
     assert.match(outcome.stderr, /APP_ENV/);
     assert.match(outcome.stderr, /MONGODB_URI/);
     assert.ok(!outcome.stderr.includes('child-secret-value'));
+  });
+
+  it('refuses to start in production when a .env file exists in the working directory', async () => {
+    const dotEnv = Object.entries(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true&directConnection=true' }))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n');
+    const outcome = await spawnServer({}, undefined, dotEnv);
+    assert.equal(outcome.code, 1);
+    assert.match(outcome.stderr, /\.env file exists/);
   });
 });

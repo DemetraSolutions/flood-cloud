@@ -12,7 +12,7 @@ import type { Logger } from '../../src/shared/logging/logger.ts';
 export function validEnv(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return {
     APP_ENV: 'development',
-    MONGODB_URI: 'mongodb://localhost:27017',
+    MONGODB_URI: 'mongodb://127.0.0.1:1/?directConnection=true',
     LEGACY_PASSWORD_PEPPER: randomBytes(16).toString('hex'),
     ...overrides,
   };

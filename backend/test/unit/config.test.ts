@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ConfigError, loadConfig } from '../../src/config.ts';
+import { ConfigError, loadConfig, loadDatabaseConfig } from '../../src/config.ts';
 import { validEnv } from '../helpers/app.ts';
 
 function issuesOf(env: Record<string, string | undefined>): Array<{ variable: string; reason: string }> {
@@ -23,8 +23,10 @@ describe('loadConfig', () => {
     const config = loadConfig(env);
     assert.equal(config.appEnv, 'development');
     assert.equal(config.port, 3000);
-    assert.equal(config.mongodbUri.reveal(), 'mongodb://localhost:27017');
+    assert.equal(config.mongodbUri.reveal(), 'mongodb://127.0.0.1:1/?directConnection=true');
     assert.equal(config.dbNamePrefix, '');
+    assert.equal(config.mongodbServerSelectionTimeoutMs, 5000);
+    assert.equal(config.mongodbMaxPoolSize, 20);
     assert.equal(config.trustProxy, 0);
     assert.deepEqual(config.corsAllowedOrigins, []);
     assert.equal(config.accessTokenTtlSeconds, 900);
@@ -89,7 +91,7 @@ describe('loadConfig', () => {
       assert.equal(error.name, 'ConfigError');
       assert.deepEqual(
         error.issues.map((issue) => issue.variable),
-        ['APP_ENV', 'PORT', 'MONGODB_URI', 'TRUST_PROXY', 'LEGACY_PASSWORD_PEPPER'],
+        ['APP_ENV', 'MONGODB_URI', 'PORT', 'TRUST_PROXY', 'LEGACY_PASSWORD_PEPPER'],
       );
       assert.ok(!error.message.includes('secret-value'));
       assert.match(error.message, /APP_ENV: must be one of: development, production/);
@@ -105,11 +107,68 @@ describe('loadConfig', () => {
   });
 
   it('validates PORT', () => {
-    for (const value of ['0', '65536', '1e3', '0x10', ' 80', '+80', '-1', '', '8.5', '9'.repeat(30)]) {
+    for (const value of ['0', '65536', '1e3', '0x10', ' 80', '+80', '-1', '8.5', '9'.repeat(30)]) {
       assert.match(reasonFor(validEnv({ PORT: value }), 'PORT') ?? '', /between 1 and 65535/, value);
     }
     assert.equal(loadConfig(validEnv({ PORT: '65535' })).port, 65535);
     assert.equal(loadConfig(validEnv({ PORT: '1' })).port, 1);
+  });
+
+  it('validates the MongoDB timeout and pool size', () => {
+    const config = loadConfig(validEnv({ MONGODB_SERVER_SELECTION_TIMEOUT_MS: '1000', MONGODB_MAX_POOL_SIZE: '500' }));
+    assert.equal(config.mongodbServerSelectionTimeoutMs, 1000);
+    assert.equal(config.mongodbMaxPoolSize, 500);
+    for (const bad of ['999', '60001', 'abc']) {
+      assert.match(reasonFor(validEnv({ MONGODB_SERVER_SELECTION_TIMEOUT_MS: bad }), 'MONGODB_SERVER_SELECTION_TIMEOUT_MS') ?? '', /between 1000 and 60000/);
+    }
+    for (const bad of ['0', '501', '1.5']) {
+      assert.match(reasonFor(validEnv({ MONGODB_MAX_POOL_SIZE: bad }), 'MONGODB_MAX_POOL_SIZE') ?? '', /between 1 and 500/);
+    }
+  });
+
+  it('requires TLS for MONGODB_URI in production only, without echoing the URI', () => {
+    const production = (uri: string) => validEnv({ APP_ENV: 'production', MONGODB_URI: uri });
+    for (const ok of [
+      'mongodb+srv://user:pw@cluster.example.net/?retryWrites=true',
+      'mongodb://user:pw@a.example.net:27017,b.example.net:27017/?tls=true&replicaSet=rs0',
+      'mongodb://host/?replicaSet=rs0&tls=true',
+      'mongodb://host/?SSL=TRUE',
+      'mongodb+srv://user:pw@cluster.example.net/?tls=true&TlsInsecure=false',
+    ]) {
+      assert.doesNotThrow(() => loadConfig(production(ok)), ok);
+    }
+    for (const bad of [
+      'mongodb://user:pw-secret@host.example.net:27017',
+      'mongodb://host/?tls=false',
+      'mongodb://host/?replicaSet=rs0',
+      'mongodb://host/?tls=true2=1&other=tls',
+      'mongodb+srv://user:pw-secret@cluster.example.net/?tls=false',
+      'mongodb+srv://user:pw-secret@cluster.example.net/?SSL=false',
+      'mongodb://host/?tls=true&ssl=false',
+    ]) {
+      const issues = issuesOf(production(bad));
+      assert.match(issues.find((issue) => issue.variable === 'MONGODB_URI')?.reason ?? '', /must use TLS in production/, bad);
+      assert.ok(!JSON.stringify(issues).includes('pw-secret'));
+    }
+    assert.doesNotThrow(() => loadConfig(validEnv({ MONGODB_URI: 'mongodb://host/?tls=false' })));
+  });
+
+  it('refuses options that weaken TLS in production, whatever the case of the name', () => {
+    for (const option of [
+      'tlsInsecure',
+      'TLSALLOWINVALIDCERTIFICATES',
+      'tlsAllowInvalidHostnames',
+      'tlsDisableOCSPEndpointCheck',
+      'tlsDisableCertificateRevocationCheck',
+    ]) {
+      for (const base of ['mongodb+srv://u:pw-secret@c.example.net/', 'mongodb://u:pw-secret@h.example.net/?tls=true&']) {
+        const env = validEnv({ APP_ENV: 'production', MONGODB_URI: `${base}${base.includes('?') ? '' : '?'}${option}=TRUE` });
+        const issues = issuesOf(env);
+        assert.match(issues.find((issue) => issue.variable === 'MONGODB_URI')?.reason ?? '', /weaken certificate/, option);
+        assert.ok(!JSON.stringify(issues).includes('pw-secret'));
+      }
+    }
+    assert.doesNotThrow(() => loadConfig(validEnv({ MONGODB_URI: 'mongodb://h/?tlsInsecure=true' })));
   });
 
   it('validates MONGODB_URI scheme', () => {
@@ -118,8 +177,8 @@ describe('loadConfig', () => {
 
   it('validates DB_NAME_PREFIX', () => {
     assert.ok(reasonFor(validEnv({ DB_NAME_PREFIX: 'bad prefix' }), 'DB_NAME_PREFIX'));
-    assert.ok(reasonFor(validEnv({ DB_NAME_PREFIX: 'a'.repeat(33) }), 'DB_NAME_PREFIX'));
-    assert.equal(loadConfig(validEnv({ DB_NAME_PREFIX: 'a'.repeat(32) })).dbNamePrefix, 'a'.repeat(32));
+    assert.ok(reasonFor(validEnv({ DB_NAME_PREFIX: 'a'.repeat(28) }), 'DB_NAME_PREFIX'));
+    assert.equal(loadConfig(validEnv({ DB_NAME_PREFIX: 'a'.repeat(27) })).dbNamePrefix, 'a'.repeat(27));
   });
 
   it('validates TRUST_PROXY and TTLs', () => {
@@ -184,5 +243,58 @@ describe('loadConfig', () => {
       const config = loadConfig(validEnv({ CORS_ALLOWED_ORIGINS: 'http://localhost:4200,http://127.0.0.1:4200' }));
       assert.deepEqual(config.corsAllowedOrigins, ['http://localhost:4200', 'http://127.0.0.1:4200']);
     });
+  });
+});
+
+describe('empty values', () => {
+  it('treat an optional variable as unset, as copied from .env.example', () => {
+    const optional = [
+      'PORT',
+      'MONGODB_SERVER_SELECTION_TIMEOUT_MS',
+      'MONGODB_MAX_POOL_SIZE',
+      'DB_NAME_PREFIX',
+      'TRUST_PROXY',
+      'CORS_ALLOWED_ORIGINS',
+      'ACCESS_TOKEN_TTL_SECONDS',
+      'REFRESH_IDLE_TTL_SECONDS',
+      'SESSION_MAX_TTL_SECONDS',
+      'SHUTDOWN_DRAIN_MS',
+      'REQUEST_TIMEOUT_MS',
+    ];
+    const emptied = loadConfig(validEnv(Object.fromEntries(optional.map((name) => [name, '']))));
+    assert.deepEqual(JSON.parse(JSON.stringify(emptied)), JSON.parse(JSON.stringify(loadConfig(validEnv()))));
+    assert.equal(emptied.port, 3000);
+  });
+
+  it('stay an error for the required variables', () => {
+    assert.ok(reasonFor(validEnv({ APP_ENV: '' }), 'APP_ENV'));
+    assert.ok(reasonFor(validEnv({ MONGODB_URI: '' }), 'MONGODB_URI'));
+    assert.ok(reasonFor(validEnv({ LEGACY_PASSWORD_PEPPER: '' }), 'LEGACY_PASSWORD_PEPPER'));
+  });
+});
+
+describe('loadDatabaseConfig', () => {
+  it('validates only the database variables, without the secrets it does not use', () => {
+    const config = loadDatabaseConfig({ APP_ENV: 'development', MONGODB_URI: 'mongodb://127.0.0.1:1/?directConnection=true', DB_NAME_PREFIX: 'p_' });
+    assert.deepEqual(Object.keys(config).sort(), ['appEnv', 'dbNamePrefix', 'mongodbMaxPoolSize', 'mongodbServerSelectionTimeoutMs', 'mongodbUri']);
+    assert.equal(config.dbNamePrefix, 'p_');
+    assert.equal(config.mongodbMaxPoolSize, 20);
+  });
+
+  it('applies the same rules as loadConfig, TLS in production included', () => {
+    const issues = (env: Record<string, string | undefined>) => {
+      try {
+        loadDatabaseConfig(env);
+      } catch (error) {
+        return (error as ConfigError).issues.map((issue) => issue.variable);
+      }
+      return [];
+    };
+    assert.deepEqual(issues({}), ['APP_ENV', 'MONGODB_URI']);
+    assert.deepEqual(issues({ APP_ENV: 'production', MONGODB_URI: 'mongodb://host/' }), ['MONGODB_URI']);
+    assert.deepEqual(issues({ APP_ENV: 'development', MONGODB_URI: 'mongodb://h/', DB_NAME_PREFIX: 'bad prefix', MONGODB_MAX_POOL_SIZE: '0' }), [
+      'MONGODB_MAX_POOL_SIZE',
+      'DB_NAME_PREFIX',
+    ]);
   });
 });

@@ -1,0 +1,25 @@
+# gitleaks configuration: default rules plus the secrets specific to this project.
+# Read automatically by gitleaks from the repository root (pre-commit hook and CI).
+[extend]
+useDefault = true
+
+[[rules]]
+id = "mongodb-uri-with-credentials"
+description = "MongoDB connection string with user and password"
+regex = '''mongodb(?:\+srv)?://[^:/?#\s@"']+:[^@/?#\s"']+@[^\s"']+'''
+keywords = ["mongodb://", "mongodb+srv://"]
+# Fake URIs in tests and examples must use a placeholder host: host, h, localhost, 127.0.0.1
+# or a reserved domain (.example, .example.<tld>, .invalid, .test).
+[[rules.allowlists]]
+regexTarget = "match"
+regexes = ['''@(?:host|h|localhost|127\.0\.0\.1|[^/?#\s@]*\.(?:example(?:\.[a-z]+)?|invalid|test))(?:[:/?,]|$)''']
+
+[[rules]]
+id = "flood-cloud-issued-secret"
+description = "Secret issued by Flood Cloud (access, refresh, store or public API token)"
+regex = '''\bfc_(?:at|rt|st|pk)_[A-Za-z0-9_-]{43}\b'''
+keywords = ["fc_at_", "fc_rt_", "fc_st_", "fc_pk_"]
+# Documentation placeholders made only of "x".
+[[rules.allowlists]]
+regexTarget = "match"
+regexes = ['''fc_(?:at|rt|st|pk)_x{43}''']

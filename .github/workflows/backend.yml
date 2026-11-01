@@ -1,14 +1,12 @@
 name: backend
 
+# Disabled for now (user decision of 2026-11-01): runs only when started by hand.
+# To enable, restore the triggers below.
+#   push:
+#     paths: ["backend/**", ".github/workflows/backend.yml"]
+#   pull_request:
+#     paths: ["backend/**", ".github/workflows/backend.yml"]
 on:
-  push:
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend.yml"
-  pull_request:
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend.yml"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +24,9 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    env:
+      # Local throw-away MongoDB started below: no credentials, loopback only.
+      FLOOD_CLOUD_TEST_MONGO_URI: mongodb://127.0.0.1:27027/?directConnection=true
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,6 +42,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      - name: Start MongoDB (single-node replica set, same major as Atlas)
+        run: docker compose -f compose.yaml up -d --wait
+        env:
+          FLOOD_CLOUD_MONGO_IMAGE: mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142
 
       - name: Typecheck
         run: npm run typecheck

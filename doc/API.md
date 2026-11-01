@@ -23,7 +23,7 @@ Fuori dalle superfici API, per le sonde di GKE.
 ### GET /health/ready
 - **Autenticazione e permesso:** anonimo (sonda di readiness dell'orchestratore)
 - **Risposta:** `200` `{ "data": { "status": "ok" } }` se il servizio può ricevere traffico
-- **Errori:** `503 SERVICE_UNAVAILABLE` durante l'arresto o se un controllo di prontezza fallisce, senza dettagli
+- **Errori:** `503 SERVICE_UNAVAILABLE` durante l'arresto o se un controllo di prontezza fallisce (database non raggiungibile entro 2 s), senza dettagli
   ```json
   { "error": { "code": "SERVICE_UNAVAILABLE", "message": "Service unavailable" } }
   ```

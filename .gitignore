@@ -5,10 +5,14 @@ node_modules/
 .env
 .env.*
 !.env.example
+!.env.test.example
 *.pem
 *.key
 keys/
 secrets/
+
+# Report di profilazione del legacy (possono derivare da dati reali)
+backend/reports/
 
 # Test e coverage
 coverage/

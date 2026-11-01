@@ -6,7 +6,7 @@
 > - Un task si spunta solo quando il codice funziona, i test sono al 100% con typecheck verde, la documentazione è aggiornata (skill `docs-sync-checklist`) e l'utente ha confermato (`GEMINI.md` §1).
 > - Le decisioni `D-nn` (§0.4) vanno prese **prima** dei task che le citano.
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
-> - Stato al 2026-11-01: fondamenta del backend realizzate (1.1, 1.2, 1.4 tranne il ping del database in 1.4.8).
+> - Stato al 2026-11-01: fondamenta del backend realizzate (1.1–1.4, 1.6).
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -112,6 +112,21 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   - **login di un utente:** il refresh scade dopo 7 giorni di inattività o 30 di durata massima, quindi il negozio resta bloccato dopo un lungo offline; la password resta salvata sul server del negozio; gli utenti `E` non sono ammessi;
   - **credenziale di dispositivo per punto vendita**, accettata dalle stesse route con scope fisso sul punto vendita.
 
+### 0.4.1 Esiti della profilazione (1.3.6, 2026-11-01)
+Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'utente, di `production_*` (MongoDB 8.0.34). Dati aggregati, senza valori. Servono a prendere le decisioni aperte, non le sostituiscono.
+- **Volumi in produzione:** 8711 utenti, 1267 gruppi, 1268 database di gruppo (1 gruppo senza database, 2 database senza gruppo), 1362 aziende, 1655 punti vendita. `development` contiene solo 9 utenti e 3 gruppi: non è rappresentativo.
+- **D-04:** tutte le 8711 password sono HMAC-SHA512 (128 hex): nessuna in chiaro.
+- **D-05:** nessun dato personale cifrato col formato legacy: la migrazione 2.2.4 non serve. Email presenti solo in 650 utenti, telefoni in 1471.
+- **PIN:** in chiaro; 4039 numerici di 4–8 cifre, 2415 in altri formati, 2257 assenti.
+- **D-07:** ruoli in uso SA 3940, E 2513, PA 2058, CA 194, D 5, PSA 1. Nessun utente `API`, `X` o `L`.
+- **D-08:** E quasi sempre con `placesId` (2350) e a volte `placeId` (799); PA con `placeId` (2047) e a volte `placesId` (301); 8 CA senza `companyId`; SA con `companyId` (141), `placeId` (54) o `placesId` (91) residui. Riferimenti orfani: `companyId` 2, `placeId` 10, `placesId` 6.
+- **D-09:** 3 gruppi con `dealerId` che non è un utente `D`; 2 gruppi con `dealerId` null e 3 senza.
+- **D-13:** `groups.type` quasi sempre null (924) o vuoto (63), `basic` 280; `groups.plan` advanced 496, basic 174, enterprice 7, null 137. `places.plan` anche `professional`, `desk-secondary`, `tgm-secondary`. Tipi di dispositivo: desk, handheld, selfordering, room-handheld, palmare (56, valore storico), external-display, kiosk, waiting-list, tgm, ordering.
+- **D-15:** `userName` univoco in modo esatto (indice `userName_1` unique), ma 110 valori duplicati ignorando le maiuscole (239 utenti, 225 non nel cestino). `companies.code`: 143 valori condivisi tra gruppi diversi, 13 duplicati nello stesso gruppo (11 gruppi).
+- **D-17:** email duplicate (124 valori, 571 utenti) e telefoni duplicati (260 valori, 1256 utenti): il login con email o telefono sarebbe ambiguo.
+- **Coerenza:** `groupId` di aziende e punti vendita sempre uguale al database; `places.companyId` senza orfani. `tokens[]` con 213 elementi nel formato stringa vecchio.
+- **Indici esistenti:** solo `_id_` ovunque, più `userName_1` (unique) su `users`.
+
 ### 0.5 Documentazione da aggiornare (richiede la richiesta esplicita dell'utente, `GEMINI.md` §7)
 - [ ] **0.5.1** `doc/Legacy-Analysis.md`, correzioni:
   - i ruoli `X` e `L` non esistono, esiste `API`;
@@ -146,7 +161,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **1.1.2** `tsconfig.json` per il type stripping (sintassi cancellabile, import con estensione `.ts`, `noEmit`) e script `typecheck`.
 - [x] **1.1.3** Script `test` con `node --test` e coverage nativa con soglie al 100% di righe, rami e funzioni.
 - [x] **1.1.4** `.env.example` con i soli nomi delle variabili, `.env` ignorato da git.
-- [x] **1.1.5** Pipeline `backend.yml` filtrata su `backend/**`: typecheck, test, `npm audit`, secret scanning.
+- [x] **1.1.5** Pipeline `backend.yml` filtrata su `backend/**`: typecheck, test, `npm audit`, secret scanning. *Disattivata per decisione dell'utente del 2026-11-01 (solo avvio manuale); il secret scanning locale è garantito dall'hook pre-commit gitleaks.*
 
 ### 1.2 Configurazione
 - [x] **1.2.1** `config.ts`: lettura e validazione di tutte le variabili, errore chiaro e arresto se qualcosa manca; `.env` caricato con `process.loadEnvFile` solo in locale.
@@ -159,15 +174,15 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   In locale stanno nel `.env`, in produzione nel secret manager. Mai loggati, mai valori in `.env.example`.
 
 ### 1.3 Database sul cluster condiviso
-- [ ] **1.3.1** Un solo `MongoClient` per processo, con `retryWrites`, `w: majority`, timeout e chiusura ordinata.
-- [ ] **1.3.2** `db/names.ts`: unico punto di costruzione dei nomi dei database; `groupId` validato come ObjectId.
-- [ ] **1.3.3** Guardia d'ambiente: rifiuto di qualunque database che non corrisponda a `^<prefix><APP_ENV>_(common|[0-9a-f]{24})$`. Protegge `production_*` quando si lavora con `APP_ENV=development`.
-- [ ] **1.3.4** Registro della proprietà delle collection, verificato da test:
+- [x] **1.3.1** Un solo `MongoClient` per processo, con `retryWrites`, `w: majority`, timeout e chiusura ordinata.
+- [x] **1.3.2** `db/names.ts`: unico punto di costruzione dei nomi dei database; `groupId` validato come ObjectId.
+- [x] **1.3.3** Guardia d'ambiente: rifiuto di qualunque database che non corrisponda a `^<prefix><APP_ENV>_(common|[0-9a-f]{24})$`. Protegge `production_*` quando si lavora con `APP_ENV=development`.
+- [x] **1.3.4** Registro della proprietà delle collection, verificato da test:
   - collection nuove;
   - collection legacy in sola lettura;
   - collection legacy scrivibili, con l'elenco dei campi posseduti.
-- [ ] **1.3.5** Creazione idempotente degli indici solo sulle collection nuove; sulle collection condivise solo indici non univoci approvati.
-- [ ] **1.3.6** Script di profilazione **in sola lettura** dei database `development_*` (`users`, `groups`, `companies`, `places`, `countries`):
+- [x] **1.3.5** Creazione idempotente degli indici solo sulle collection nuove; sulle collection condivise solo indici non univoci approvati.
+- [x] **1.3.6** Script di profilazione **in sola lettura** dei database `development_*` (`users`, `groups`, `companies`, `places`, `countries`):
   - conteggi, campi presenti e loro tipi, valori degli enum (ruoli, piani, flag);
   - duplicati di `userName` ed `email`;
   - dati personali cifrati e in chiaro;
@@ -175,7 +190,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   - indici esistenti (`getIndexes()`).
 
   L'output non contiene dati personali.
-- [ ] **1.3.7** Fixture di test in formato legacy derivate dalla profilazione, sintetiche e senza dati reali.
+- [x] **1.3.7** Fixture di test in formato legacy derivate dalla profilazione, sintetiche e senza dati reali.
 
 ### 1.4 HTTP, errori e osservabilità
 - [x] **1.4.1** `createApp(deps)` senza effetti collaterali; `server.ts` unico punto con `process.env`, connessione e `listen`.
@@ -185,7 +200,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **1.4.5** `X-Request-Id` e log strutturati con redazione di token, password, header `Authorization` e `X-Api-Key`, dati personali.
 - [x] **1.4.6** Timeout delle richieste, `trust proxy` sul numero esatto di proxy, arresto ordinato su `SIGTERM`.
 - [x] **1.4.7** Builder delle route che rifiuta all'avvio una route senza autenticazione dichiarata.
-- [ ] **1.4.8** Endpoint di liveness e readiness per GKE (readiness con ping del database), dichiarati esplicitamente anonimi. *Realizzati `/health/live` e `/health/ready` con controlli iniettabili; manca il ping del database, che arriva con 1.3.1.*
+- [x] **1.4.8** Endpoint di liveness e readiness per GKE (readiness con ping del database), dichiarati esplicitamente anonimi. Readiness con `ping` sul database common.
 
 ### 1.5 Validazione dell'input e liste
 - [ ] **1.5.1** Validatore per allowlist (skill `input-validation`):
@@ -197,9 +212,9 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [ ] **1.5.4** Supporto a `ETag` e `If-None-Match` (`304`) per le liste compatte usate come cache dal backoffice.
 
 ### 1.6 Infrastruttura di test del backend
-- [ ] **1.6.1** MongoDB locale usa e getta (docker compose, replica set a un nodo per le transazioni), database `test_<casuale>` con pulizia.
-- [ ] **1.6.2** Guardia della suite: rifiuta URI non locali e database con prefisso d'ambiente reale (`development_`, `production_`…).
-- [ ] **1.6.3** Helper HTTP con `fetch` su porta effimera e builder di documenti legacy e di dominio.
+- [x] **1.6.1** MongoDB locale usa e getta (docker compose, replica set a un nodo per le transazioni), database `test_<casuale>` con pulizia.
+- [x] **1.6.2** Guardia della suite: rifiuta URI non locali e database con prefisso d'ambiente reale (`development_`, `production_`…).
+- [x] **1.6.3** Helper HTTP con `fetch` su porta effimera e builder di documenti legacy e di dominio.
 
 ### 1.7 Progetto backoffice
 - [ ] **1.7.1** `ng new` Angular 22: standalone, zoneless, OnPush di default, strict, struttura `core/`, `shared/ui/`, `features/`.

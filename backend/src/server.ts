@@ -1,9 +1,16 @@
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { MongoClient } from 'mongodb';
 import { createApp } from './app.ts';
 import { loadConfig } from './config.ts';
 import type { Config } from './config.ts';
+import { createMongoClient } from './db/client.ts';
+import { createDatabases } from './db/databases.ts';
+import type { Databases } from './db/databases.ts';
+import { ensureIndexes } from './db/indexes.ts';
+import { createPingCheck } from './db/ping.ts';
 import { handleClientError } from './shared/http/client-error.ts';
 import { createLogger } from './shared/logging/logger.ts';
 
@@ -23,9 +30,21 @@ export interface ProcessLike {
   on(event: 'SIGTERM' | 'SIGINT' | 'uncaughtException' | 'unhandledRejection', listener: (...args: unknown[]) => void): unknown;
 }
 
+/** Collaborators of {@link run} that tests can replace. */
+export interface RunDeps {
+  /** Creates the process-wide MongoDB client. */
+  readonly createClient: (config: Config) => MongoClient;
+  /** Creates the startup indexes. */
+  readonly ensureIndexes: typeof ensureIndexes;
+  /** Tells whether a `.env` file exists in the working directory (the real check by default). */
+  readonly dotEnvExists?: () => boolean;
+}
+
 /** Handle of a running server. */
 export interface RunningServer {
   readonly server: Server;
+  /** The process-wide MongoDB client (closed by the shutdown). */
+  readonly client: MongoClient;
   /** Starts the graceful shutdown (idempotent). */
   shutdown(signal: string): void;
 }
@@ -52,10 +71,14 @@ export function loadDotEnv(proc: Pick<ProcessLike, 'loadEnvFile'>): void {
  * exits with code 1.
  *
  * @param proc The Node `process` (or a test double).
+ * @param deps Replaceable collaborators; the real ones by default.
  * @returns The running server, or `undefined` if startup failed (exit already requested).
  * @throws {Error} If `.env` exists but cannot be read.
  */
-export async function run(proc: ProcessLike): Promise<RunningServer | undefined> {
+export async function run(
+  proc: ProcessLike,
+  deps: RunDeps = { createClient: createMongoClient, ensureIndexes },
+): Promise<RunningServer | undefined> {
   loadDotEnv(proc);
 
   let config: Config;
@@ -67,12 +90,47 @@ export async function run(proc: ProcessLike): Promise<RunningServer | undefined>
     return undefined;
   }
 
+  if (config.appEnv === 'production' && (deps.dotEnvExists ?? (() => existsSync('.env')))()) {
+    proc.stderr.write('A .env file exists in the working directory: in production secrets come from the secret manager, remove it\n');
+    proc.exit(1);
+    return undefined;
+  }
+
   const logger = createLogger({ write: (line) => proc.stdout.write(`${line}\n`) });
+
+  const closeClient = async (toClose: MongoClient): Promise<boolean> => {
+    try {
+      await toClose.close();
+      return true;
+    } catch (error) {
+      logger.error('closing the database client failed', { error });
+      return false;
+    }
+  };
+  // One client for the whole process. Errors are logged by name only: they could echo the URI.
+  // Building the client is inside the guard too: a connection string the driver cannot parse throws here.
+  let client: MongoClient | undefined;
+  let databases: Databases;
+  try {
+    client = deps.createClient(config);
+    databases = createDatabases(client, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
+    await client.connect();
+    await deps.ensureIndexes(databases);
+  } catch (error) {
+    logger.error('database startup failed', { errorName: error instanceof Error ? error.name : typeof error });
+    if (client !== undefined) {
+      await closeClient(client);
+    }
+    proc.exit(1);
+    return undefined;
+  }
+  const openClient = client;
+
   let shuttingDown = false;
   const app = createApp({
     config,
     logger,
-    readiness: { isShuttingDown: () => shuttingDown, checks: [] },
+    readiness: { isShuttingDown: () => shuttingDown, checks: [createPingCheck(databases)] },
   });
 
   const server = createServer(app);
@@ -91,6 +149,7 @@ export async function run(proc: ProcessLike): Promise<RunningServer | undefined>
     });
   } catch (error) {
     logger.error('server failed to start', { error });
+    await closeClient(openClient);
     proc.exit(1);
     return undefined;
   }
@@ -111,14 +170,16 @@ export async function run(proc: ProcessLike): Promise<RunningServer | undefined>
     forced.unref();
     setTimeout(() => {
       server.close((error) => {
-        clearTimeout(forced);
-        if (error === undefined) {
-          logger.info('shutdown completed');
-          proc.exit(0);
-        } else {
-          logger.error('shutdown failed', { error });
-          proc.exit(1);
-        }
+        void closeClient(openClient).then((clientClosed) => {
+          clearTimeout(forced);
+          if (error === undefined && clientClosed) {
+            logger.info('shutdown completed');
+            proc.exit(0);
+          } else {
+            logger.error('shutdown failed', error === undefined ? {} : { error });
+            proc.exit(1);
+          }
+        });
       });
       server.closeIdleConnections();
     }, config.shutdownDrainMs);
@@ -135,7 +196,7 @@ export async function run(proc: ProcessLike): Promise<RunningServer | undefined>
     proc.exit(1);
   });
 
-  return { server, shutdown };
+  return { server, client: openClient, shutdown };
 }
 
 if (import.meta.main) {
