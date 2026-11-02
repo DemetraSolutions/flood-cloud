@@ -1,3 +1,5 @@
+import { ACTIVITY_LOG_INDEXES, ACTIVITY_LOG_VALIDATOR } from './activity-log-schema.ts';
+
 /** Who owns a collection and may therefore shape its documents and indexes. */
 export type Ownership = 'new' | 'legacy-read' | 'legacy-write';
 
@@ -21,6 +23,8 @@ export interface CollectionSpec {
   readonly ownedFields?: readonly string[];
   /** Indexes to create at startup. */
   readonly indexes?: readonly IndexSpec[];
+  /** `$jsonSchema` applied at startup (strict, errors on violation); allowed only on `new` collections. */
+  readonly validator?: Readonly<Record<string, unknown>>;
 }
 
 /** The two kinds of database. */
@@ -38,6 +42,8 @@ export const COLLECTIONS = {
     users: { ownership: 'legacy-read' },
     groups: { ownership: 'legacy-read' },
     countries: { ownership: 'legacy-read' },
+    rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
+    activityLog: { ownership: 'new', indexes: ACTIVITY_LOG_INDEXES, validator: ACTIVITY_LOG_VALIDATOR },
   },
   group: {
     companies: { ownership: 'legacy-read' },
@@ -51,6 +57,7 @@ export const COLLECTIONS = {
  * - `legacy-write` needs a non-empty `ownedFields`; the other kinds must not declare it.
  * - Legacy collections cannot have unique or TTL indexes.
  * - Every index has a non-empty explicit name.
+ * - Only `new` collections can have a validator.
  *
  * @param registry Registry to validate (the real one by default).
  * @throws {Error} Listing every violation, as `<database>.<collection>: <reason>`.
@@ -67,6 +74,9 @@ export function validateRegistry(registry: CollectionRegistry = COLLECTIONS): vo
         }
       } else if (owned !== undefined) {
         problems.push(`${where}: ownedFields is allowed only on legacy-write`);
+      }
+      if (spec.validator !== undefined && spec.ownership !== 'new') {
+        problems.push(`${where}: a validator is allowed only on new collections`);
       }
       for (const index of spec.indexes ?? []) {
         if (index.name.trim() === '') {

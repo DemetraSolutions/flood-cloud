@@ -8,6 +8,8 @@ declare global {
       requestId: string;
       /** Valid `X-Request-Id` sent by the client, logged but never echoed. */
       clientRequestId?: string;
+      /** Pattern of the matched route, mount point included (`/v1/groups/:groupId`); never the concrete path. */
+      routePattern?: string;
       /** Verified principal, set by the authentication middleware of the surface. */
       auth?: AuthPrincipal;
       /** Verified group of the path, set by `requireGroupAccess`. */

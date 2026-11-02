@@ -7,6 +7,7 @@ import { sendData, sendPage } from '../../src/shared/http/envelope.ts';
 import { AppError } from '../../src/shared/http/errors.ts';
 import { defineRoute } from '../../src/shared/http/routes.ts';
 import { SECURITY_HEADERS } from '../../src/shared/http/security-headers.ts';
+import { testIpLimit } from '../helpers/activity.ts';
 import { startApp } from '../helpers/app.ts';
 import type { TestServer } from '../helpers/app.ts';
 
@@ -14,40 +15,40 @@ const auth = { kind: 'anonymous', reason: 'test route' } as const;
 const ORIGIN = 'https://backoffice.example.com';
 
 const testRoutes = [
-  defineRoute({ method: 'GET', path: '/items', auth, handler: (_req, res) => sendData(res, [1]) }),
-  defineRoute({ method: 'GET', path: '/page', auth, handler: (_req, res) => sendPage(res, [1, 2], { limit: 2, next: 'abc' }) }),
+  defineRoute({ method: 'GET', path: '/items', auth, rateLimit: testIpLimit, handler: (_req, res) => sendData(res, [1]) }),
+  defineRoute({ method: 'GET', path: '/page', auth, rateLimit: testIpLimit, handler: (_req, res) => sendPage(res, [1, 2], { limit: 2, next: 'abc' }) }),
   defineRoute({
     method: 'POST',
     path: '/items',
-    auth,
+    auth, rateLimit: testIpLimit,
     handler: (req, res) => sendData(res, { echo: req.body as unknown }, 201),
   }),
-  defineRoute({ method: 'POST', path: '/small', auth, bodyLimit: '10b', handler: (_req, res) => sendData(res, {}, 201) }),
-  defineRoute({ method: 'PUT', path: '/items', auth, handler: (_req, res) => sendData(res, {}) }),
-  defineRoute({ method: 'DELETE', path: '/items', auth, handler: (_req, res) => void res.status(204).end() }),
-  defineRoute({ method: 'GET', path: '/boom', auth, handler: () => { throw new Error('secret internal detail'); } }),
-  defineRoute({ method: 'GET', path: '/async-boom', auth, handler: async () => { throw new Error('async secret detail'); } }),
-  defineRoute({ method: 'GET', path: '/things/:id', auth, handler: (req, res) => sendData(res, { id: req.params['id'] }) }),
+  defineRoute({ method: 'POST', path: '/small', auth, rateLimit: testIpLimit, bodyLimit: '10b', handler: (_req, res) => sendData(res, {}, 201) }),
+  defineRoute({ method: 'PUT', path: '/items', auth, rateLimit: testIpLimit, handler: (_req, res) => sendData(res, {}) }),
+  defineRoute({ method: 'DELETE', path: '/items', auth, rateLimit: testIpLimit, handler: (_req, res) => void res.status(204).end() }),
+  defineRoute({ method: 'GET', path: '/boom', auth, rateLimit: testIpLimit, handler: () => { throw new Error('secret internal detail'); } }),
+  defineRoute({ method: 'GET', path: '/async-boom', auth, rateLimit: testIpLimit, handler: async () => { throw new Error('async secret detail'); } }),
+  defineRoute({ method: 'GET', path: '/things/:id', auth, rateLimit: testIpLimit, handler: (req, res) => sendData(res, { id: req.params['id'] }) }),
   defineRoute({
     method: 'GET',
     path: '/bad-header',
-    auth,
+    auth, rateLimit: testIpLimit,
     handler: () => {
       throw new AppError('RATE_LIMITED', { headers: { 'Retry-After': '1\n2' } });
     },
   }),
-  defineRoute({ method: 'GET', path: '/slow', auth, handler: async (_req, res) => { await new Promise((r) => setTimeout(r, 300)); sendData(res, {}); } }),
-  defineRoute({ method: 'GET', path: '/app-error', auth, handler: () => { throw new AppError('CONFLICT', { message: 'Duplicate' }); } }),
+  defineRoute({ method: 'GET', path: '/slow', auth, rateLimit: testIpLimit, handler: async (_req, res) => { await new Promise((r) => setTimeout(r, 300)); sendData(res, {}); } }),
+  defineRoute({ method: 'GET', path: '/app-error', auth, rateLimit: testIpLimit, handler: () => { throw new AppError('CONFLICT', { message: 'Duplicate' }); } }),
   defineRoute({
     method: 'GET',
     path: '/big',
-    auth,
+    auth, rateLimit: testIpLimit,
     handler: (_req, res) => sendData(res, 'x'.repeat(3000)),
   }),
   defineRoute({
     method: 'GET',
     path: '/late-failure',
-    auth,
+    auth, rateLimit: testIpLimit,
     handler: async (_req, res) => {
       res.write('partial');
       await new Promise((resolve) => setImmediate(resolve));

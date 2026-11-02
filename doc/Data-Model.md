@@ -78,13 +78,27 @@ Documento unico (`_id: 'platform'`), modificabile solo da `PSA`; ogni modifica v
 `_id`, `groupId`, `name`, `keyHash` (univoco), `displayPrefix`, `permissions` (string[]), `companyIds`/`placeIds` (restrizione opzionale), `rateLimitPerMinute`, `monthlyQuota` (opzionale), `expiresAt`, `revokedAt`, `lastUsedAt`, `createdBy`, `createdAt`.
 
 ## rateLimits — contatori a finestra fissa
-`_id` = `<superficie>:<soggetto>:<inizioFinestra>`, `count`, `expiresAt` (TTL).
+`_id` = `<bucket>:<SHA-256 hex della chiave>:<inizio finestra in secondi>` (username e IP mai in chiaro), `count`, `expiresAt` (fine finestra + 60 s). Indice TTL `expiresAt_1`. Realizzata (passo 2C).
 
 ## apiUsage — conteggio d'uso delle API pubbliche
 `groupId`, `apiKeyId`, `day` (YYYY-MM-DD), `route`, `count`, `errorCount`. Indice univoco `apiKeyId + day + route`.
 
-## auditLog — eventi di sicurezza
-`at`, `actor` (`{ kind, id }`), `groupId`, `action`, `target`, `ip`, `outcome`, `metadata` (senza segreti). Indici: `groupId + at`, `actor.id + at`; durata di conservazione da decidere (`doc/Security-Model.md` §12).
+## activityLog — registro delle attività (sostituisce `auditLog`)
+Realizzata (passo 2C, decisione dell'utente del 2026-11-01): un'unica collection per scritture sui dati, eventi di sicurezza ed errori. La collection `logs` del legacy resta intatta.
+| Campo | Tipo | Note |
+|---|---|---|
+| `at` | Date | |
+| `category` | `data` \| `security` \| `error` | |
+| `action` | string | da catalogo, es. `user.updated`, `group.crossAccess`, `request.failed` |
+| `outcome` | `success` \| `failure` \| `denied` | |
+| `actor` | `{ kind: 'user' \| 'anonymous' \| 'system', id?, role? }` | `id` obbligatorio per `user` |
+| `groupId` | ObjectId | facoltativo |
+| `resource` | `{ type, id? }` | facoltativo |
+| `changes` | `{ field, before?, after?, redacted?, truncated? }[]` | solo `data`; segreti oscurati |
+| `requestId`, `ip` | string | |
+| `metadata` | oggetto | chiavi ammesse per azione, massimo 20 valori scalari |
+| `expiresAt` | Date | TTL: 365 giorni per `data` e `security`, 90 per `error` |
+Validazione `$jsonSchema`. Indici: `groupId_1_at_-1`, `actor.id_1_at_-1`, `category_1_at_-1`, `requestId_1`, TTL `expiresAt_1`.
 
 ## Domande aperte
 1. `groups.dealerId`: nel legacy riferisce l'`_id` dell'utente `D` o un'anagrafica dealer separata? Un dealer può avere più utenti?

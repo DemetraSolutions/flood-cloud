@@ -2,6 +2,7 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ObjectId } from 'mongodb';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
+import { memoryActivityLog } from '../helpers/activity.ts';
 import { startApp } from '../helpers/app.ts';
 import type { TestServer } from '../helpers/app.ts';
 import { TEST_USER_HEADER, assertIsolation, isolationCases, isolationGroupAccess, isolationProbeRoute, seedIsolationCluster, testAuthenticator } from '../helpers/isolation.ts';
@@ -12,16 +13,17 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 let ctx: TestDatabases;
 let cluster: IsolationCluster;
 let app: TestServer;
-const crossGroup: Array<{ role: string; userId: string; groupId: string; granted: boolean }> = [];
+const activity = memoryActivityLog();
+let clock = Date.now();
 
 before(async () => {
   ctx = await openTestDatabases();
   cluster = await seedIsolationCluster(ctx.databases);
   app = await startApp({
     routes: { v1: [isolationProbeRoute(ctx.databases)] },
-    groupAccess: isolationGroupAccess(ctx.databases, ({ principal, groupId, granted }) => {
-      crossGroup.push({ role: principal.role, userId: principal.userId.toHexString(), groupId: groupId.toHexString(), granted });
-    }),
+    activityLog: activity,
+    now: () => clock,
+    groupAccess: isolationGroupAccess(ctx.databases),
     authenticate: { v1: testAuthenticator(ctx.databases) },
   });
 });
@@ -105,16 +107,20 @@ describe('isolation model (real MongoDB)', () => {
   });
 
   it('reports every PSA and D access to a group, and nothing else', async () => {
-    crossGroup.length = 0;
+    activity.entries.length = 0;
+    clock += 16 * 60 * 1000; // past the 15 minutes in which a repeated access is recorded once
     const [a1, a2, , b2] = cluster.groups as [IsolationCluster['groups'][number], IsolationCluster['groups'][number], IsolationCluster['groups'][number], IsolationCluster['groups'][number]];
     await as(cluster.psa, b2.groupId.toHexString(), b2.ownPlaceId);
     await as(cluster.dealerA, a2.groupId.toHexString(), a2.ownPlaceId);
     await as(cluster.dealerA, b2.groupId.toHexString(), b2.ownPlaceId); // 404: outside the perimeter, not an access
     await as(a1.sa, a1.groupId.toHexString(), a1.ownPlaceId);
     await as(a1.ca, a1.groupId.toHexString(), a1.ownPlaceId);
-    assert.deepEqual(crossGroup, [
-      { role: 'PSA', userId: cluster.psa.toHexString(), groupId: b2.groupId.toHexString(), granted: true },
-      { role: 'D', userId: cluster.dealerA.toHexString(), groupId: a2.groupId.toHexString(), granted: true },
-    ]);
+    assert.deepEqual(
+      activity.entries.map(({ category, action, outcome, actor, groupId }) => ({ category, action, outcome, role: actor.role, userId: actor.id?.toHexString(), groupId: groupId?.toHexString() })),
+      [
+        { category: 'security', action: 'group.crossAccess', outcome: 'success', role: 'PSA', userId: cluster.psa.toHexString(), groupId: b2.groupId.toHexString() },
+        { category: 'security', action: 'group.crossAccess', outcome: 'success', role: 'D', userId: cluster.dealerA.toHexString(), groupId: a2.groupId.toHexString() },
+      ],
+    );
   });
 });

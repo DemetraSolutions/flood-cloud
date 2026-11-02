@@ -44,6 +44,22 @@ export interface Config {
   readonly legacyPasswordPepper: Secret;
   /** Whether the legacy system still runs, so password changes also write the legacy hash (`LEGACY_PASSWORD_COEXISTENCE`). */
   readonly legacyPasswordCoexistence: boolean;
+  /** Requests per minute allowed to a login username (`RATE_LIMIT_LOGIN_PER_USERNAME`). */
+  readonly rateLimitLoginPerUsername: number;
+  /** Requests per minute allowed to a login IP address (`RATE_LIMIT_LOGIN_PER_IP`). */
+  readonly rateLimitLoginPerIp: number;
+  /** Requests per minute allowed to a refresh IP address (`RATE_LIMIT_REFRESH_PER_IP`). */
+  readonly rateLimitRefreshPerIp: number;
+  /** Username availability checks per minute allowed to a user (`RATE_LIMIT_USERNAME_CHECK_PER_USER`). */
+  readonly rateLimitUsernameCheckPerUser: number;
+  /** Requests per minute allowed to a user on the `/v1` API (`RATE_LIMIT_API_PER_USER`). */
+  readonly rateLimitApiPerUser: number;
+  /** Failed authentications per minute allowed to a client IP on `/v1` (`RATE_LIMIT_UNAUTHENTICATED_PER_IP`). */
+  readonly rateLimitUnauthenticatedPerIp: number;
+  /** Days the `data` and `security` activity log entries are kept (`ACTIVITY_LOG_RETENTION_DAYS`). */
+  readonly activityLogRetentionDays: number;
+  /** Days the `error` activity log entries are kept (`ACTIVITY_LOG_ERROR_RETENTION_DAYS`). */
+  readonly activityLogErrorRetentionDays: number;
 }
 
 /**
@@ -301,6 +317,15 @@ export function loadConfig(env: Env): Config {
 
   const shutdownDrainMs = readInteger(env, issues, 'SHUTDOWN_DRAIN_MS', 5000, 0, 20000);
 
+  const rateLimitLoginPerUsername = readInteger(env, issues, 'RATE_LIMIT_LOGIN_PER_USERNAME', 5, 1, 100000);
+  const rateLimitLoginPerIp = readInteger(env, issues, 'RATE_LIMIT_LOGIN_PER_IP', 15, 1, 100000);
+  const rateLimitRefreshPerIp = readInteger(env, issues, 'RATE_LIMIT_REFRESH_PER_IP', 30, 1, 100000);
+  const rateLimitUsernameCheckPerUser = readInteger(env, issues, 'RATE_LIMIT_USERNAME_CHECK_PER_USER', 15, 1, 100000);
+  const rateLimitApiPerUser = readInteger(env, issues, 'RATE_LIMIT_API_PER_USER', 300, 1, 100000);
+  const rateLimitUnauthenticatedPerIp = readInteger(env, issues, 'RATE_LIMIT_UNAUTHENTICATED_PER_IP', 300, 1, 100000);
+  const activityLogRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_RETENTION_DAYS', 365, 1, 3650);
+  const activityLogErrorRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_ERROR_RETENTION_DAYS', 90, 1, 3650);
+
   const pepperRaw = env['LEGACY_PASSWORD_PEPPER'];
   let legacyPasswordPepper: Secret | undefined;
   if (pepperRaw === undefined) {
@@ -334,7 +359,15 @@ export function loadConfig(env: Env): Config {
     requestTimeoutMs === undefined ||
     shutdownDrainMs === undefined ||
     legacyPasswordPepper === undefined ||
-    legacyPasswordCoexistence === undefined
+    legacyPasswordCoexistence === undefined ||
+    rateLimitLoginPerUsername === undefined ||
+    rateLimitLoginPerIp === undefined ||
+    rateLimitRefreshPerIp === undefined ||
+    rateLimitUsernameCheckPerUser === undefined ||
+    rateLimitApiPerUser === undefined ||
+    rateLimitUnauthenticatedPerIp === undefined ||
+    activityLogRetentionDays === undefined ||
+    activityLogErrorRetentionDays === undefined
   ) {
     throw new ConfigError(issues);
   }
@@ -351,5 +384,13 @@ export function loadConfig(env: Env): Config {
     requestTimeoutMs,
     legacyPasswordPepper,
     legacyPasswordCoexistence,
+    rateLimitLoginPerUsername,
+    rateLimitLoginPerIp,
+    rateLimitRefreshPerIp,
+    rateLimitUsernameCheckPerUser,
+    rateLimitApiPerUser,
+    rateLimitUnauthenticatedPerIp,
+    activityLogRetentionDays,
+    activityLogErrorRetentionDays,
   });
 }

@@ -3,6 +3,8 @@ import type { RequestHandler, Router } from 'express';
 import { isPermission } from '../security/rbac/permissions.ts';
 import type { Permission } from '../security/rbac/permissions.ts';
 import { requirePermission } from '../security/rbac/require-permission.ts';
+import { guardAuthentication, rateLimit } from '../security/rate-limit/rate-limit.ts';
+import type { RateLimitMount, RateLimitRule } from '../security/rate-limit/rate-limit.ts';
 import { reportCrossGroupAccess, requireGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { AppError } from './errors.ts';
@@ -46,6 +48,17 @@ export interface RouteDefinition {
   readonly auth: RouteAuth;
   /** JSON body size limit (body-parser syntax, for example `'1mb'`); defaults to {@link DEFAULT_BODY_LIMIT}. */
   readonly bodyLimit?: string | number;
+  /**
+   * Extra rate limit rules (`createRateLimitRules`). `user` routes always get the per-user API rule
+   * as well, without declaring it; an anonymous route must declare at least one rule that runs before
+   * the body parser (a rule without `needsBody`), unless it is exempt.
+   */
+  readonly rateLimit?: readonly RateLimitRule[];
+  /**
+   * Exempts an anonymous route from the rate limit requirement. Accepted only by a router mounted with
+   * `allowRateLimitExempt` (the health probes of the orchestrator); a `user` route can never be exempt.
+   */
+  readonly rateLimitExempt?: { readonly reason: string };
   readonly handler: RequestHandler;
 }
 
@@ -105,6 +118,9 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
       if (options.authenticate === undefined) {
         problems.push(`${label}: user route needs an authenticate middleware`);
       }
+      if (options.rateLimit === undefined) {
+        problems.push(`${label}: user route needs the rateLimit dependencies`);
+      }
       const hasGroupParam = /:groupId(?![A-Za-z0-9_])/.test(String(route.path));
       if (hasGroupParam !== (auth.group === true)) {
         problems.push(`${label}: the path has :groupId exactly when the auth declares group: true`);
@@ -116,6 +132,31 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     }
     if ((auth?.kind === 'anonymous' || auth?.kind === 'user') && !allowed.includes(auth.kind)) {
       problems.push(`${label}: auth kind "${auth.kind}" is not allowed on this surface`);
+    }
+    if (route.rateLimit !== undefined) {
+      const rules: unknown = route.rateLimit;
+      if (
+        !Array.isArray(rules) ||
+        !rules.every((rule: Partial<RateLimitRule> | null) => typeof rule?.bucket === 'string' && rule.bucket !== '' && typeof rule.key === 'function')
+      ) {
+        problems.push(`${label}: rateLimit must be a list of rules with a bucket and a key function`);
+      } else if (options.rateLimit === undefined && rules.length > 0) {
+        problems.push(`${label}: rate limit rules need the rateLimit dependencies`);
+      }
+    }
+    if (auth?.kind === 'anonymous') {
+      const exempt = route.rateLimitExempt as { reason?: unknown } | undefined;
+      if (exempt !== undefined) {
+        if (options.allowRateLimitExempt !== true) {
+          problems.push(`${label}: rateLimitExempt is not allowed on this surface`);
+        } else if (typeof exempt.reason !== 'string' || exempt.reason.trim() === '') {
+          problems.push(`${label}: rateLimitExempt needs a non-empty reason`);
+        }
+      } else if (!(Array.isArray(route.rateLimit) && route.rateLimit.some((rule: Partial<RateLimitRule> | null) => rule?.needsBody !== true))) {
+        problems.push(`${label}: anonymous route must declare a rate limit rule that runs before the body parser`);
+      }
+    } else if (route.rateLimitExempt !== undefined) {
+      problems.push(`${label}: only anonymous routes can be exempt from the rate limit`);
     }
     for (const [, name] of String(route.path).matchAll(/\/groups\/:([^/]+)/g)) {
       if (name !== 'groupId') {
@@ -156,6 +197,10 @@ export interface MountOptions {
   readonly authenticate?: RequestHandler;
   /** Group existence lookup and audit callback, needed by routes declaring `group: true`. */
   readonly groupAccess?: GroupAccessDeps;
+  /** Limiter, exceeded callback and the per-user API rule applied to every `user` route; required by `user` routes and by routes declaring rules. */
+  readonly rateLimit?: RateLimitMount;
+  /** Lets anonymous routes declare `rateLimitExempt`; only the health router sets it. */
+  readonly allowRateLimitExempt?: boolean;
   /** Auth kinds this surface accepts; only anonymous routes by default, so `user` must be allowed explicitly (the backoffice does). */
   readonly allowedAuth?: ReadonlyArray<RouteAuth['kind']>;
 }
@@ -165,19 +210,23 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
 /**
  * Mounts validated routes on a router. For every path it registers the declared
  * methods plus a catch-all answering 405 with the `Allow` header. `GET` implies `HEAD`.
- * The chain of a `user` route is: `authenticate`, the group check (when `group: true`),
- * `requirePermission` (which reports PSA and D group requests with their outcome), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser, then the handler.
+ * The chain of a `user` route is: `authenticate` (guarded by the per-IP limit on failed authentications), the rate limit (the per-user API rule, then the
+ * declared rules), the group check (when `group: true`), `requirePermission` (which reports PSA and D
+ * group requests with their outcome), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser,
+ * then the declared rules that read the body (`needsBody`), then the handler. An anonymous route runs
+ * its declared rules, the guard and parser, the body rules, the handler. `/health` declares none.
  *
  * @param router Target router.
  * @param routes Route declarations.
- * @param options The `authenticate` middleware, needed by `user` routes.
+ * @param options The `authenticate` middleware and the rate limit dependencies, needed by `user` routes.
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
- * empty reason, unknown permission, `user` route without `authenticate`, inconsistent `group`,
+ * empty reason, unknown permission, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
+ * malformed rate limit rules, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
  * auth kind not allowed on the surface, disallowed method,
  * bad path, duplicate method and path).
  */
 export function mountRoutes(router: Router, routes: readonly RouteDefinition[], options: MountOptions = {}): void {
-  const { authenticate, groupAccess } = options;
+  const { authenticate, groupAccess, rateLimit: rateLimitOptions } = options;
   const problems = validateRoutes(routes, options);
   if (problems.length > 0) {
     throw new Error(`Invalid route definitions:\n${problems.map((problem) => `  - ${problem}`).join('\n')}`);
@@ -190,14 +239,28 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
     group.methods.add(route.method);
     groups.set(key, group);
 
-    const middleware: RequestHandler[] = [];
+    const middleware: RequestHandler[] = [
+      (req, res, next) => {
+        // Express forgets `baseUrl` once the router is left, so the error reporting reads this instead.
+        res.locals.routePattern = `${req.baseUrl}${route.path}`;
+        next();
+      },
+    ];
+    const declared = route.rateLimit ?? [];
+    const limits = (rules: readonly RateLimitRule[]): RequestHandler[] => rules.map((rule) => rateLimit(rule, rateLimitOptions!));
+    const beforeBody = limits(declared.filter((rule) => rule.needsBody !== true));
+    const afterBody = limits(declared.filter((rule) => rule.needsBody === true));
     if (route.auth.kind === 'user') {
       const grouped = route.auth.group === true;
       middleware.push(
-        authenticate!,
+        guardAuthentication(authenticate!, rateLimitOptions!),
+        ...limits([rateLimitOptions!.apiRule]),
+        ...beforeBody,
         ...(grouped ? [requireGroupAccess(groupAccess!.groups)] : []),
         requirePermission(route.auth.permission, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
       );
+    } else {
+      middleware.push(...beforeBody);
     }
     if (BODY_METHODS.has(route.method)) {
       middleware.push(
@@ -205,7 +268,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         express.json({ limit: route.bodyLimit ?? DEFAULT_BODY_LIMIT, strict: true, inflate: false, type: 'application/json' }),
       );
     }
-    middleware.push(route.handler);
+    middleware.push(...afterBody, route.handler);
     switch (route.method) {
       case 'GET':
         router.get(route.path, ...middleware);

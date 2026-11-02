@@ -9,8 +9,8 @@ import type { RouteDefinition } from '../../src/shared/http/routes.ts';
 import { createDealerGroupsRepository } from '../../src/shared/security/scope/dealer-groups.repository.ts';
 import { createCompanyPlacesRepository } from '../../src/shared/security/scope/company-places.repository.ts';
 import { groupDatabaseFor } from '../../src/shared/security/scope/group-access.ts';
-import type { CrossGroupAccessHandler, GroupAccessDeps } from '../../src/shared/security/scope/group-access.ts';
 import { createGroupsRepository } from '../../src/shared/security/scope/groups.repository.ts';
+import type { GroupsRepository } from '../../src/shared/security/scope/groups.repository.ts';
 import { placesScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
 import { fixtureId, legacyUser, seedLegacyCluster } from './legacy-fixtures.ts';
 import { principalFromLegacyUser } from './principal.ts';
@@ -172,13 +172,12 @@ export function testAuthenticator(databases: Databases): RequestHandler {
 }
 
 /**
- * Group lookup and audit callback for the app under test.
+ * Group lookup for the app under test (the app itself audits PSA and D accesses).
  *
  * @param databases Accessor over a throw-away prefix.
- * @param onCrossGroupAccess Receives every PSA and D request to a group, with its outcome.
  */
-export function isolationGroupAccess(databases: Databases, onCrossGroupAccess: CrossGroupAccessHandler): GroupAccessDeps {
-  return { groups: createGroupsRepository(databases), onCrossGroupAccess };
+export function isolationGroupAccess(databases: Databases): { readonly groups: GroupsRepository } {
+  return { groups: createGroupsRepository(databases) };
 }
 
 /**

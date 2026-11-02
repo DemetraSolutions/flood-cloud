@@ -17,19 +17,14 @@ export interface Logger {
   error(msg: string, fields?: Readonly<Record<string, unknown>>): void;
 }
 
-/** Normalized (lower case, alphanumerics only) field names that are always redacted. */
-export const REDACTED_KEYS: ReadonlySet<string> = new Set([
-  'pin',
-  'name',
-  'email',
-  'telephone',
-  'phone',
-  'surname',
-  'firstname',
-  'lastname',
-  'fiscalcode',
-  'mongodburi',
-]);
+/** Normalized (lower case, alphanumerics only) names of secret fields, redacted exactly. */
+const SECRET_KEYS: ReadonlySet<string> = new Set(['pin', 'mongodburi']);
+
+/** Normalized (lower case, alphanumerics only) names of personal data fields. */
+const PERSONAL_DATA_KEYS: ReadonlySet<string> = new Set(['name', 'email', 'telephone', 'phone', 'surname', 'firstname', 'lastname', 'fiscalcode']);
+
+/** Normalized field names that are always redacted in log lines: secrets and personal data. */
+export const REDACTED_KEYS: ReadonlySet<string> = new Set([...SECRET_KEYS, ...PERSONAL_DATA_KEYS]);
 
 /** Substrings of a normalized field name that make it sensitive. */
 export const REDACTED_KEY_PARTS: readonly string[] = [
@@ -65,9 +60,36 @@ function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function isSensitiveKey(key: string): boolean {
+/**
+ * Tells whether a field name holds a secret (password, PIN, token, key, cookie, signature, connection
+ * string...). Secrets are hidden everywhere: in log lines and in the activity log.
+ *
+ * @param key A field name.
+ * @returns True if its value must never be written anywhere.
+ */
+export function isSecretKey(key: string): boolean {
   const normalized = normalizeKey(key);
-  return REDACTED_KEYS.has(normalized) || REDACTED_KEY_PARTS.some((part) => normalized.includes(part));
+  return SECRET_KEYS.has(normalized) || REDACTED_KEY_PARTS.some((part) => normalized.includes(part));
+}
+
+/**
+ * Tells whether a field name holds personal data (name, email, phone, fiscal code...). Hidden in log
+ * lines on stdout, but kept in the activity log, whose access is controlled and whose purpose is to
+ * show what changed.
+ *
+ * @param key A field name.
+ */
+export function isPersonalDataKey(key: string): boolean {
+  return PERSONAL_DATA_KEYS.has(normalizeKey(key));
+}
+
+/**
+ * Tells whether a field name must be redacted in log lines: a secret or personal data.
+ *
+ * @param key A field name.
+ */
+export function isSensitiveKey(key: string): boolean {
+  return isSecretKey(key) || isPersonalDataKey(key);
 }
 
 function redactString(value: string): string {

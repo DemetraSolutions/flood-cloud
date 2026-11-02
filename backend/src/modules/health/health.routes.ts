@@ -37,7 +37,7 @@ async function runWithTimeout(check: () => Promise<void>, timeoutMs: number): Pr
  * @param readiness Shutdown flag and dependency checks.
  * @param logger Logger for readiness failures.
  * @param checkTimeoutMs Per-check timeout, {@link READINESS_CHECK_TIMEOUT_MS} by default.
- * @returns Route declarations, both explicitly anonymous.
+ * @returns Route declarations, both explicitly anonymous and explicitly exempt from the rate limit.
  */
 export function createHealthRoutes(
   readiness: Readiness,
@@ -49,6 +49,7 @@ export function createHealthRoutes(
       method: 'GET',
       path: '/live',
       auth: { kind: 'anonymous', reason: 'liveness probe called by the orchestrator' },
+      rateLimitExempt: { reason: 'probed by the orchestrator many times a minute; a limit could make it restart a healthy pod' },
       handler: (_req, res) => {
         sendData(res, { status: 'ok' });
       },
@@ -57,6 +58,7 @@ export function createHealthRoutes(
       method: 'GET',
       path: '/ready',
       auth: { kind: 'anonymous', reason: 'readiness probe called by the orchestrator' },
+      rateLimitExempt: { reason: 'probed by the load balancer and the orchestrator; a limit could take a healthy pod out of service' },
       handler: async (_req, res) => {
         if (readiness.isShuttingDown()) {
           logger.warn('not ready: shutting down');

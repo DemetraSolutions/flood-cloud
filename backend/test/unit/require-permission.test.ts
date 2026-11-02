@@ -8,6 +8,7 @@ import { errorHandler } from '../../src/shared/http/error-handler.ts';
 import { defineRoute, mountRoutes } from '../../src/shared/http/routes.ts';
 import { requirePermission } from '../../src/shared/security/rbac/require-permission.ts';
 import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts';
+import { memoryRateLimitMount, testIpLimit, recordingErrorReporter } from '../helpers/activity.ts';
 import { memoryLogger } from '../helpers/app.ts';
 import { principalOf } from '../helpers/principal.ts';
 
@@ -45,12 +46,12 @@ before(async () => {
         auth: { kind: 'user', permission: 'places:create' },
         handler: (req, res) => void res.status(201).json({ data: req.body as unknown }),
       }),
-      defineRoute({ method: 'GET', path: '/open', auth: { kind: 'anonymous', reason: 'test' }, handler: (_req, res) => void res.json({ data: 'open' }) }),
+      defineRoute({ method: 'GET', path: '/open', auth: { kind: 'anonymous', reason: 'test' }, rateLimit: testIpLimit, handler: (_req, res) => void res.json({ data: 'open' }) }),
     ],
-    { authenticate, allowedAuth: ['anonymous', 'user'] },
+    { authenticate, allowedAuth: ['anonymous', 'user'], rateLimit: memoryRateLimitMount() },
   );
   app.use('/v1', router);
-  app.use(errorHandler(memoryLogger().logger));
+  app.use(errorHandler(memoryLogger().logger, recordingErrorReporter().reporter));
   server = app.listen(0);
   await new Promise<void>((resolve) => server.once('listening', () => resolve()));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

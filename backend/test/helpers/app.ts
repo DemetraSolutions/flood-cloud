@@ -5,6 +5,7 @@ import { createApp } from '../../src/app.ts';
 import type { AppDeps } from '../../src/app.ts';
 import { loadConfig } from '../../src/config.ts';
 import type { Config } from '../../src/config.ts';
+import { memoryActivityLog, memoryRateLimiter } from './activity.ts';
 import { createLogger } from '../../src/shared/logging/logger.ts';
 import type { Logger } from '../../src/shared/logging/logger.ts';
 
@@ -54,6 +55,8 @@ export async function startApp(
   const app = createApp({
     config: testConfig(env),
     logger,
+    activityLog: memoryActivityLog(),
+    rateLimiter: memoryRateLimiter(),
     readiness: { isShuttingDown: () => false, checks: [] },
     ...overrides,
   });

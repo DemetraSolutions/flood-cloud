@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from 'express';
 import type { Logger } from '../logging/logger.ts';
 import { AppError, DEFAULT_MESSAGES } from './errors.ts';
+import type { ErrorActivityReporter } from './error-activity.ts';
 import type { ErrorCode } from './errors.ts';
 
 /** Maps the `type` of body-parser errors to API error codes. */
@@ -57,10 +58,13 @@ function classify(error: unknown): Classification {
  * fails (for example an invalid header in an `AppError`), the failure is logged and
  * a hand-written 500 JSON is sent, so Express never renders its own error page.
  *
+ * Errors that become a `500` are also reported to the activity log (see {@link ErrorActivityReporter}).
+ *
  * @param logger Logger receiving unexpected errors.
+ * @param errorActivity Reporter writing the `error` entries of the activity log.
  * @returns Express error-handling middleware.
  */
-export function errorHandler(logger: Logger): ErrorRequestHandler {
+export function errorHandler(logger: Logger, errorActivity: ErrorActivityReporter): ErrorRequestHandler {
   return (error: unknown, req, res, _next) => {
     const requestId = res.locals.requestId;
     try {
@@ -69,6 +73,9 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
         logger.debug('request aborted by the client', { requestId });
         req.socket.destroy();
         return;
+      }
+      if (outcome.kind === 'unexpected' || outcome.error.status >= 500) {
+        errorActivity.report(error, req, res);
       }
       if (res.headersSent) {
         logger.error('error after response started', { requestId, error });

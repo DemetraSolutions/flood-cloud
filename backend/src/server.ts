@@ -11,6 +11,8 @@ import { createDatabases } from './db/databases.ts';
 import type { Databases } from './db/databases.ts';
 import { ensureIndexes } from './db/indexes.ts';
 import { createPingCheck } from './db/ping.ts';
+import { createActivityLog } from './shared/activity-log/activity-log.ts';
+import { createRateLimiter } from './shared/security/rate-limit/rate-limiter.ts';
 import { handleClientError } from './shared/http/client-error.ts';
 import { warmUpPasswordVerifier } from './shared/security/password-verifier.ts';
 import { createLogger } from './shared/logging/logger.ts';
@@ -98,6 +100,9 @@ export async function run(
   }
 
   const logger = createLogger({ write: (line) => proc.stdout.write(`${line}\n`) });
+  if (config.appEnv === 'production' && config.trustProxy === 0) {
+    logger.warn('TRUST_PROXY is 0 in production: behind a load balancer every client would share its address, and the per-IP rate limits would count them together');
+  }
 
   const closeClient = async (toClose: MongoClient): Promise<boolean> => {
     try {
@@ -132,6 +137,13 @@ export async function run(
   const app = createApp({
     config,
     logger,
+    activityLog: createActivityLog({
+      databases,
+      logger,
+      retentionDays: config.activityLogRetentionDays,
+      errorRetentionDays: config.activityLogErrorRetentionDays,
+    }),
+    rateLimiter: createRateLimiter(databases),
     readiness: { isShuttingDown: () => shuttingDown, checks: [createPingCheck(databases)] },
   });
 

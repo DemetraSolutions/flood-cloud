@@ -1,0 +1,108 @@
+import { ROLES } from '../security/rbac/permissions.ts';
+import type { Role } from '../security/rbac/permissions.ts';
+
+/** Categories of the activity log: business writes, security events and server errors. */
+export const ACTIVITY_CATEGORIES = Object.freeze(['data', 'security', 'error'] as const);
+
+/** A category of the activity log. */
+export type ActivityCategory = (typeof ACTIVITY_CATEGORIES)[number];
+
+/** Outcomes of an activity. */
+export const ACTIVITY_OUTCOMES = Object.freeze(['success', 'failure', 'denied'] as const);
+
+/** The outcome of an activity: it happened, it failed, it was refused. */
+export type ActivityOutcome = (typeof ACTIVITY_OUTCOMES)[number];
+
+/** Kinds of actor. */
+export const ACTOR_KINDS = Object.freeze(['user', 'anonymous', 'system'] as const);
+
+/** The kind of the party that performed an activity. */
+export type ActorKind = (typeof ACTOR_KINDS)[number];
+
+/** Security actions (`doc/Security-Model.md` section 10). */
+export const SECURITY_ACTIONS = Object.freeze([
+  'auth.loginSucceeded',
+  'auth.loginFailed',
+  'auth.refreshed',
+  'auth.refreshReuseDetected',
+  'session.revoked',
+  'user.roleChanged',
+  'user.scopeChanged',
+  'user.statusChanged',
+  'user.permissionsChanged',
+  'group.crossAccess',
+  'group.suspended',
+  'group.reactivated',
+  'group.trashed',
+  'group.restored',
+  'rateLimit.exceeded',
+] as const);
+
+/** Resources whose writes are logged. */
+export const DATA_RESOURCES = Object.freeze(['user', 'group', 'company', 'place'] as const);
+
+/** Verbs of a data action. */
+export const DATA_VERBS = Object.freeze(['created', 'updated', 'trashed', 'restored', 'deleted'] as const);
+
+/** A data action: `<resource>.<verb>`, for example `user.created`. */
+export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}`;
+
+/** Error actions. */
+export const ERROR_ACTIONS = Object.freeze(['request.failed'] as const);
+
+/** Every action the log accepts. */
+export type ActivityAction = (typeof SECURITY_ACTIONS)[number] | DataAction | (typeof ERROR_ACTIONS)[number];
+
+const DATA_ACTIONS: readonly DataAction[] = DATA_RESOURCES.flatMap((resource) => DATA_VERBS.map((verb) => `${resource}.${verb}` as DataAction));
+
+const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], readonly string[]>> = {
+  'auth.loginSucceeded': [],
+  'auth.loginFailed': ['reason'],
+  'auth.refreshed': [],
+  'auth.refreshReuseDetected': [],
+  'session.revoked': ['reason'],
+  'user.roleChanged': ['from', 'to'],
+  'user.scopeChanged': [],
+  'user.statusChanged': ['from', 'to'],
+  'user.permissionsChanged': [],
+  'group.crossAccess': [],
+  'group.suspended': [],
+  'group.reactivated': [],
+  'group.trashed': [],
+  'group.restored': [],
+  'rateLimit.exceeded': ['bucket'],
+};
+
+const DATA_METADATA: readonly string[] = ['changesTotal', 'changesTruncated'];
+
+/** Definition of one action: its categories and the metadata keys it may carry (anything else is rejected). */
+export interface ActionDefinition {
+  readonly categories: readonly ActivityCategory[];
+  readonly metadataKeys: readonly string[];
+}
+
+/**
+ * The catalog: action to definition. `group.trashed` and `group.restored` are both a security
+ * event and a data write, so they accept both categories.
+ */
+export const ACTION_CATALOG: ReadonlyMap<string, ActionDefinition> = (() => {
+  const catalog = new Map<string, ActionDefinition>();
+  for (const action of SECURITY_ACTIONS) {
+    catalog.set(action, { categories: ['security'], metadataKeys: SECURITY_METADATA[action] });
+  }
+  for (const action of DATA_ACTIONS) {
+    const security = catalog.get(action);
+    catalog.set(action, {
+      categories: security === undefined ? ['data'] : ['security', 'data'],
+      metadataKeys: [...(security?.metadataKeys ?? []), ...DATA_METADATA],
+    });
+  }
+  catalog.set('request.failed', { categories: ['error'], metadataKeys: ['method', 'route', 'errorName', 'errorCode'] });
+  return catalog;
+})();
+
+/** Every action name, for the database validator. */
+export const ACTIVITY_ACTION_NAMES: readonly string[] = Object.freeze([...ACTION_CATALOG.keys()]);
+
+/** Roles an actor may have. */
+export const ACTOR_ROLES: readonly Role[] = ROLES;

@@ -284,7 +284,20 @@ describe('run: database lifecycle', () => {
     const { client } = fakeClient();
     const running = (await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes, dotEnvExists: () => false })) as RunningServer;
     assert.ok(running);
+    assert.match(fake.out.join(''), /"level":"warn","msg":"TRUST_PROXY is 0 in production/);
     await closed(running);
+  });
+
+  it('does not warn about TRUST_PROXY when it is set in production, nor in development', async () => {
+    for (const extra of [{ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', TRUST_PROXY: '1' }, {}]) {
+      const port = await freePort();
+      const fake = fakeProcess(mongoEnv({ ...extra, PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }));
+      const { client } = fakeClient();
+      const running = (await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes, dotEnvExists: () => false })) as RunningServer;
+      assert.ok(running);
+      assert.ok(!fake.out.join('').includes('TRUST_PROXY is 0'));
+      await closed(running);
+    }
   });
 
   it('logs the type of a non-Error startup failure', async () => {

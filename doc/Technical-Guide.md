@@ -6,7 +6,7 @@
 ## 1. Stato del progetto
 Realizzate le fondamenta del backend (`doc/Tasks.md` 1.1–1.4, 1.6): progetto TypeScript, configurazione validata, applicazione Express con envelope, errori, header di sicurezza, CORS, log strutturati, builder delle route, endpoint di salute e arresto ordinato; client MongoDB sul cluster condiviso con guardia d'ambiente, registro delle collection, indici, strumento di profilazione in sola lettura del legacy, MongoDB locale per i test. Nessuna autenticazione, nessun endpoint di dominio, nessuna scrittura su database.
 
-Realizzate le primitive crittografiche e la compatibilità con le password legacy (2.1, 2.2.1–2.2.3), RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4), come sola logica senza endpoint (§8).
+Realizzate le primitive crittografiche e la compatibilità con le password legacy (2.1, 2.2.1–2.2.3), RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4), rate limit e registro delle attività (2.5, 2.6.1–2.6.5), come sola logica senza endpoint (§8).
 
 Realizzate anche le fondamenta del backoffice (1.7, 1.8): progetto Angular 22.2, configurazione pubblica, accesso HTTP, lingua, design system, componenti condivisi, shell e server statico di produzione (§11).
 
@@ -43,6 +43,14 @@ Lettura e validazione in `src/config.ts` (`loadConfig`, funzione pura). Tutti i 
 | `SESSION_MAX_TTL_SECONDS` | no | intero > 0, ≥ `REFRESH_IDLE_TTL_SECONDS` | `2592000` |
 | `REQUEST_TIMEOUT_MS` | no | intero 1000–300000 | `30000` |
 | `SHUTDOWN_DRAIN_MS` | no | intero 0–20000, attesa tra il segnale di arresto e la chiusura del server | `5000` |
+| `RATE_LIMIT_LOGIN_PER_USERNAME` | no | intero 1–100000, tentativi di login al minuto per username | `5` |
+| `RATE_LIMIT_LOGIN_PER_IP` | no | intero 1–100000, tentativi di login al minuto per IP | `15` |
+| `RATE_LIMIT_REFRESH_PER_IP` | no | intero 1–100000, refresh al minuto per IP | `30` |
+| `RATE_LIMIT_USERNAME_CHECK_PER_USER` | no | intero 1–100000, verifiche di disponibilità dello username al minuto per utente | `15` |
+| `RATE_LIMIT_API_PER_USER` | no | intero 1–100000, richieste `/v1` al minuto per utente autenticato | `300` |
+| `RATE_LIMIT_UNAUTHENTICATED_PER_IP` | no | intero 1–100000, autenticazioni fallite su `/v1` al minuto per IP | `300` |
+| `ACTIVITY_LOG_RETENTION_DAYS` | no | intero 1–3650, conservazione delle voci `data` e `security` | `365` |
+| `ACTIVITY_LOG_ERROR_RETENTION_DAYS` | no | intero 1–3650, conservazione delle voci `error` | `90` |
 | `LEGACY_PASSWORD_PEPPER` | sì, segreto | non vuoto, senza spazi iniziali o finali (D-04) | — |
 | `LEGACY_PASSWORD_COEXISTENCE` | no | `true` \| `false`: al cambio password si scrive anche l'hash legacy. Da spegnere solo al passaggio definitivo, e solo una volta (§8) | `true` |
 
@@ -76,9 +84,14 @@ src/
       compression.ts           # compression con soglia
       access-log.ts            # log di accesso
       client-error.ts          # risposte agli errori di protocollo di Node (clientError)
+      error-activity.ts        # errori 5xx nel registro delle attività
       express-locals.d.ts      # tipi di res.locals
     logging/logger.ts          # logger JSON con redazione
+    activity-log/              # registro delle attività: catalogo, servizio, cambi prima/dopo, accessi trasversali
     security/
+      rate-limit/              # contatori, middleware e regole di rate limit
+      username.ts              # normalizzazione dello username
+      client-ip.ts             # chiave IP per i limiti (IPv4, IPv6 /64)
       secret.ts                # Secret
       secrets.ts               # segreti fc_at_/fc_rt_/fc_pk_: generazione, parse, hash
       compare.ts               # confronto a tempo costante
@@ -156,10 +169,11 @@ Endpoint di salute per GKE, fuori dalle superfici API, dichiarati anonimi nel bu
 | Database | Collection | Proprietà |
 |---|---|---|
 | common | `users`, `groups`, `countries` | legacy, sola lettura |
+| common | `rateLimits`, `activityLog` | nuove (indici e, per `activityLog`, validazione `$jsonSchema`) |
 | gruppo | `companies`, `places` | legacy, sola lettura |
 Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `legacy-write` (con elenco obbligatorio dei campi posseduti). Sulle collection legacy sono vietati indici univoci e TTL. Un test vieta in `src/` nomi di collection non letterali o non registrati.
 
-**Indici** (`db/indexes.ts`): `ensureIndexes` crea all'avvio, in modo idempotente e con nomi espliciti, gli indici del registro sul database common; rifiuta un registro non valido o indici dichiarati su collection dei gruppi. Oggi il registro non dichiara indici: nessun indice creato.
+**Indici** (`db/indexes.ts`): `ensureIndexes` crea all'avvio, in modo idempotente e con nomi espliciti, gli indici del registro sul database common; rifiuta un registro non valido o indici dichiarati su collection dei gruppi. Crea anche le collection nuove con il loro validatore (`createCollection`, oppure `collMod` se esistono già: all'utente del database serve il privilegio `collMod`); il validatore è vietato sulle collection legacy. Indici creati: `rateLimits` TTL su `expiresAt`; `activityLog` `groupId+at`, `actor.id+at`, `category+at`, `requestId`, TTL su `expiresAt`. Prima del primo rilascio va verificato che nel common legacy non esistano già `rateLimits` o `activityLog`.
 
 **Profilazione del legacy** (`tools/profile-legacy/`, Tasks 1.3.6):
 - uso: `npm run profile:legacy -- [--env development|production] [--out <file>]`. Senza `--env` vale `development`; `--env` deve coincidere con `APP_ENV` (per la produzione, senza toccare `.env`: `APP_ENV=production npm run profile:legacy -- --env production`). La produzione è ammessa per decisione dell'utente del 2026-11-01, sempre in sola lettura. Legge solo la configurazione del database (`loadDatabaseConfig`), non i segreti dell'applicazione;
@@ -202,6 +216,10 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
   - Ogni fallimento costa uno scrypt (anche quando decide l'hash legacy o manca ogni hash) e un utente inesistente si verifica con `verifyDummyPassword`, il cui hash fittizio è precalcolato all'avvio: i tempi di risposta non rivelano se un utente esiste.
 - **Cambio password** (`password-change.ts`): policy, poi scrypt più, se `LEGACY_PASSWORD_COEXISTENCE=true`, l'hash legacy e la sua impronta.
 - **Limiti da applicare al login** (area 3): password e username da 1 a 1024 unità UTF-16 e body del login di pochi KB, validati prima di ogni hash; rate limit e concorrenza di scrypt limitata (un hash occupa un thread del pool di libuv).
+- **Rate limit** (`security/rate-limit/`): finestra fissa di 1 minuto con contatori in `rateLimits` (`_id` = `<bucket>:<SHA-256 della chiave>:<inizio finestra>`, un solo `findOneAndUpdate` atomico, TTL a fine finestra più 60 s): username e IP mai in chiaro. Header `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`; oltre soglia `429 RATE_LIMITED` con `Retry-After`; se il database non risponde la richiesta fallisce (fallire chiusi). Regole: login per username (normalizzato con NFKC, trim e minuscole, conteggiato dopo il parser) e per IP, refresh per IP, verifica dello username per utente, `/v1` per utente autenticato (sempre presente sulle route `user`, dopo l'autenticazione e prima di gruppo e permesso), autenticazioni fallite per IP (controllate prima di `authenticate`, consumate solo sui 401, così un ufficio dietro lo stesso IP non viene bloccato dalle richieste valide). Ogni route anonima deve dichiarare una regola che giri prima del parser; solo `/health` ne è esente con un motivo dichiarato. Chiave IP: IPv4 mappati ricondotti a IPv4, IPv6 per prefisso /64. In produzione con `TRUST_PROXY=0` l'avvio segnala che tutti i client avrebbero l'IP del load balancer. Rischio accettato: 5 tentativi al minuto per username permettono a un terzo di bloccare il login di un utente specifico.
+- **Registro delle attività** (`shared/activity-log/`, collection `activityLog`): una voce ha `at`, `category` (`data`, `security`, `error`), `action` da catalogo, `outcome` (`success`, `failure`, `denied`), `actor` (`user` con id e ruolo, `anonymous`, `system`), `groupId`, `resource`, `changes`, `requestId`, `ip` (in chiaro, legittimo interesse alla sicurezza), `metadata` (chiavi ammesse per azione, massimo 20 valori scalari), `expiresAt` (TTL: 365 giorni per `data` e `security`, 90 per `error`). Validazione per allowlist nel servizio e `$jsonSchema` nel database. Le scritture non fanno mai fallire una richiesta: una voce malformata o un errore del database finiscono redatti su stdout.
+  - **Cambi prima/dopo** (`computeChanges`, `recordDataChange` per lo strato service): percorsi fino a profondità 4, array e sottoalberi più profondi confrontati per intero, massimo 200 cambi per voce, stringhe troncate a 1000 caratteri. I segreti sono oscurati per chiave a ogni livello (password, PIN, token, chiavi, credenziali, firme…) e per prefisso (`integrations`, `settings.integrations`, `fattura_elettronica`, `settings.email`, anche sul campo stesso). Nome, email e telefono restano in chiaro (decisione dell'utente del 2026-11-02); su stdout invece sono redatti.
+  - **Eventi collegati oggi:** accessi trasversali di PSA e dealer a un gruppo (`group.crossAccess`, con esito, al massimo una voce ogni 15 minuti per attore, gruppo ed esito per processo); primo superamento di un rate limit in una finestra (`rateLimit.exceeded`, senza la chiave); errori 5xx (`request.failed`, con metodo, pattern della route, nome e codice dell'errore, mai messaggio, stack o percorso concreto; al massimo 100 voci al minuto per processo, il resto solo su stdout). Gli eventi di login, sessioni, utenti e gruppi li emetteranno le aree 3 e 4.
 - **Compressione**: attiva sopra 1 KB. Le route future che restituiscono credenziali dovranno escluderla (rischio BREACH).
 
 ## 9. Test
@@ -212,7 +230,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 - `test/integration/`: database reale (guardia, transazione tra common e gruppo, indici, readiness), profilazione e sua CLI (compreso un test che verifica l'assenza nel report di valori sentinella, chiavi di P.IVA, codici fiscali, hex e username), pipeline HTTP completa con `fetch` su porta effimera (`test/helpers/app.ts` monta l'app con route di prova e un logger in memoria), endpoint di salute, `run()` del server con processo simulato, avvio reale di `node src/server.ts` come processo figlio (avvio, `SIGTERM`, configurazione errata).
 - Oltre a `FLOOD_CLOUD_TEST_MONGO_URI` nessuna variabile richiesta: i test costruiscono la configurazione con valori fittizi.
 - **Isolamento** (`test/helpers/isolation.ts`): cluster legacy con due dealer e due gruppi ciascuno e casi standard (altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita, E, gruppo sospeso, cestinato o inesistente) da riusare per ogni endpoint.
-- Stato: 571 test, coverage 100%.
+- Stato: 666 test, coverage 100%.
 
 **CI** (`.github/workflows/backend.yml`): **disattivata** per decisione dell'utente del 2026-11-01, parte solo a mano (`workflow_dispatch`); i trigger su `push` e `pull_request` sono commentati nel file. Contenuto: MongoDB `mongo:8.0.34` col compose, Node 24.22.2, `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, `npm audit --audit-level=moderate`, `npm audit signatures`; job separato di secret scanning con gitleaks 8.30.1 (binario verificato con sha256) su tutta la storia del repository. Permessi `contents: read`, action pinnate per SHA.
 
@@ -224,6 +242,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 | 2026-11-01 | Fondamenta del backoffice (1.7, 1.8) | progetto Angular 22.2 con test al 100%, configurazione pubblica all'avvio, accesso HTTP con errori tipizzati, lingua a runtime (solo italiano), design token con temi chiaro e scuro, componenti condivisi per form e tabelle, shell accessibile, server statico Node con CSP a nonce e Trusted Types, Dockerfile non root, CI disattivata |
 | 2026-11-02 | Primitive crittografiche e password legacy (2.1, 2.2.1–2.2.3) | segreti con hash a riposo, confronto a tempo costante, scrypt con limiti contro record manomessi, policy D-19, verifica dell'hash legacy con coesistenza e impronta, cambio password, tempi uniformi contro l'enumerazione degli utenti |
 | 2026-11-02 | RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4) | catalogo dei permessi e tetti per ruolo, matrice per utente con default, route con permesso e gruppo dichiarativi, scope calcolato dal server con filtri sulle collection legacy, gruppo nel percorso con 404 fuori perimetro, anti-escalation con regola dei pari, modello di test di isolamento |
+| 2026-11-02 | Rate limit e registro delle attività (2.5, 2.6.1–2.6.5) | contatori atomici con chiavi hashate e TTL, regole per login, refresh, username, utente e autenticazioni fallite, collection activityLog con validazione e conservazione per categoria, cambi prima/dopo con segreti oscurati, accessi trasversali ed errori 5xx registrati |
 
 ## 11. Backoffice
 SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Nessun login né pagina di dominio: sessione, guard e permessi arrivano con l'area 3.

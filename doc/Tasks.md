@@ -263,29 +263,29 @@ Passi decisi dall'utente il 2026-11-02: **2A** = 2.1 e 2.2; **2B** = 2.3 e 2.4; 
 - [x] **2.4.5** Modello di test di isolamento riusabile per ogni endpoint: altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita.
 
 ### 2.5 Rate limit
-- [ ] **2.5.1** Collection `rateLimits` con contatori a finestra fissa, `$inc` atomico con upsert e TTL.
-- [ ] **2.5.2** Header `RateLimit-*`, `429 RATE_LIMITED` con `Retry-After`.
-- [ ] **2.5.3** Soglie per login (per IP e per username), refresh e verifica della disponibilità dello username.
+- [x] **2.5.1** Collection `rateLimits` con contatori a finestra fissa, `$inc` atomico con upsert e TTL.
+- [x] **2.5.2** Header `RateLimit-*`, `429 RATE_LIMITED` con `Retry-After`.
+- [x] **2.5.3** Soglie (decisione dell'utente del 2026-11-02, configurabili): login 5 per username e 15 per IP, refresh 30 per IP, verifica dello username 15 per utente, `/v1` 300 per utente, autenticazioni fallite 300 per IP (conteggiate solo sui 401).
 
 ### 2.6 Registro delle attività, audit e monitor degli errori
 Decisione dell'utente del 2026-11-01: una sola collection nuova nel common per attività degli utenti, eventi di sicurezza ed errori, consultabile da un monitor del backoffice. La collection `logs` del legacy resta intatta. Gli errori si scrivono anche su stdout, così non si perdono se MongoDB non risponde.
-- [ ] **2.6.1** Collection `activityLog` (al posto di `auditLog`) con categoria `data` | `security` | `error`, gruppo, attore, azione, risorsa, esito, `requestId`; indici `groupId + at`, `actor.id + at`, `category + at`, `requestId`; servizio di scrittura senza segreti.
-- [ ] **2.6.2** Eventi:
+- [x] **2.6.1** Collection `activityLog` (al posto di `auditLog`) con categoria `data` | `security` | `error`, gruppo, attore, azione, risorsa, esito, `requestId`; indici `groupId + at`, `actor.id + at`, `category + at`, `requestId`; servizio di scrittura senza segreti.
+- [x] **2.6.2** *(catalogo e servizio pronti; collegati oggi accessi trasversali di PSA e D e superamenti dei rate limit; login, sessioni, utenti e gruppi si collegano nelle aree 3 e 4)* Eventi:
   - login riusciti e falliti;
   - refresh e riuso rilevato;
   - revoche;
   - cambi di ruolo, scope e stato;
   - accessi di PSA e D ad altri gruppi;
   - sospensioni.
-- [ ] **2.6.3** Durata di conservazione con TTL, eventualmente diversa per categoria (`doc/Security-Model.md` §12.6; il legacy teneva 90 giorni).
-- [ ] **2.6.4** Registro delle scritture (inserimenti, modifiche, cancellazioni): chi, quando, risorsa e campi cambiati con valore precedente e nuovo; dei campi sensibili (password, token, credenziali) solo il nome. Scritto dallo strato service, mai dai controller. Le letture non si registrano.
-- [ ] **2.6.5** Errori del backend nel registro, collegati a `requestId` e utente; un fallimento della scrittura non blocca la risposta e resta su stdout.
+- [x] **2.6.3** Durata di conservazione con TTL (decisione dell'utente del 2026-11-02): `data` e `security` 365 giorni, `error` 90, configurabili. IP in chiaro (legittimo interesse alla sicurezza, da riportare nell'informativa privacy).
+- [x] **2.6.4** *(funzioni pronte per lo strato service; usate dai domini delle aree 3+)* Registro delle scritture (inserimenti, modifiche, cancellazioni): chi, quando, risorsa e campi cambiati con valore precedente e nuovo; dei campi sensibili (password, token, credenziali) solo il nome; nome, email e telefono in chiaro (decisione dell'utente del 2026-11-02). Scritto dallo strato service, mai dai controller. Le letture non si registrano.
+- [x] **2.6.5** Errori del backend nel registro, collegati a `requestId` e utente; un fallimento della scrittura non blocca la risposta e resta su stdout.
 - [ ] **2.6.6** Endpoint per ricevere gli errori JavaScript del backoffice, con validazione, limiti di dimensione e rate limit.
 - [ ] **2.6.7** Monitor nel backoffice: elenco filtrabile per gruppo, utente, categoria, periodo e `requestId`, con permesso dedicato.
 
 ### 2.7 Chiusura
-- [ ] **2.7.1** Revisione del `security_expert` sulle aree 2.1–2.6.
-- [ ] **2.7.2** `doc/Technical-Guide.md` §8 e `doc/Data-Model.md` aggiornati; conferma dell'utente.
+- [x] **2.7.1** Revisione del `security_expert` sulle aree 2.1–2.6 *(fatta a ogni passo 2A, 2B, 2C; 2.6.6–2.6.7 la avranno dopo l'area 3)*.
+- [x] **2.7.2** `doc/Technical-Guide.md` §8 e `doc/Data-Model.md` aggiornati; conferma dell'utente.
 
 ---
 

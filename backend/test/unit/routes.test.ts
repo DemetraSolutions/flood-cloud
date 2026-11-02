@@ -1,19 +1,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
+import { memoryRateLimitMount, testIpLimit } from '../helpers/activity.ts';
 import { defineRoute, mountRoutes } from '../../src/shared/http/routes.ts';
 import type { RouteDefinition } from '../../src/shared/http/routes.ts';
 
 const handler = (): void => undefined;
+const withLimit = { rateLimit: memoryRateLimitMount() };
 const auth = { kind: 'anonymous', reason: 'public test route' } as const;
 
 function route(overrides: Record<string, unknown> = {}): RouteDefinition {
-  return defineRoute({ method: 'GET', path: '/things', auth, handler, ...overrides } as RouteDefinition);
+  return defineRoute({ method: 'GET', path: '/things', auth, handler, rateLimit: testIpLimit, ...overrides } as RouteDefinition);
 }
 
 function mountError(routes: RouteDefinition[]): string {
   try {
-    mountRoutes(express.Router(), routes);
+    mountRoutes(express.Router(), routes, withLimit);
   } catch (error) {
     return (error as Error).message;
   }
@@ -26,6 +28,7 @@ describe('mountRoutes validation', () => {
     mountRoutes(
       router,
       (['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const).map((method) => route({ method, path: '/ok' })),
+      withLimit,
     );
     assert.ok(router.stack.length > 0);
   });
@@ -57,7 +60,7 @@ describe('mountRoutes validation', () => {
 
   it('rejects duplicate method and path but allows the same path with another method', () => {
     assert.match(mountError([route(), route()]), /GET \/things: duplicate route/);
-    mountRoutes(express.Router(), [route(), route({ method: 'POST' })]);
+    mountRoutes(express.Router(), [route(), route({ method: 'POST' })], withLimit);
   });
 
   it('reports every problem at once', () => {
@@ -71,14 +74,14 @@ describe('mountRoutes validation', () => {
       assert.match(mountError([route(), route({ path: other })]), /duplicate route/);
     }
     assert.match(mountError([route({ path: '/a/:id' }), route({ path: '/a/:name' })]), /duplicate route/);
-    mountRoutes(express.Router(), [route({ path: '/' }), route({ path: '/a/:id' }), route({ path: '/a/:id/b' })]);
+    mountRoutes(express.Router(), [route({ path: '/' }), route({ path: '/a/:id' }), route({ path: '/a/:id/b' })], withLimit);
   });
 });
 
 describe('mountRoutes with user routes', () => {
   const authenticate = (): void => undefined;
   const groupAccess = { groups: { findAvailability: async () => null }, onCrossGroupAccess: () => undefined };
-  const options = { authenticate, allowedAuth: ['anonymous', 'user'] } as const;
+  const options = { authenticate, allowedAuth: ['anonymous', 'user'], rateLimit: memoryRateLimitMount() } as const;
   const userRoute = (overrides: Record<string, unknown> = {}): RouteDefinition =>
     route({ auth: { kind: 'user', permission: 'places:read' }, ...overrides });
   const mountMessage = (routes: RouteDefinition[], mountOptions: Parameters<typeof mountRoutes>[2]): string => {
@@ -97,14 +100,14 @@ describe('mountRoutes with user routes', () => {
   it('fails at startup when a user route has no authenticate middleware (deny by default)', () => {
     assert.match(mountMessage([userRoute()], { allowedAuth: ['user'] }), /GET \/things: user route needs an authenticate middleware/);
     // Anonymous routes alone do not need it.
-    mountRoutes(express.Router(), [route()]);
+    mountRoutes(express.Router(), [route()], withLimit);
   });
 
   it('fails at startup on a surface that does not allow user routes (the default)', () => {
     assert.match(mountError([userRoute()]), /auth kind "user" is not allowed on this surface/);
     assert.match(mountMessage([userRoute()], { authenticate }), /auth kind "user" is not allowed on this surface/);
     assert.match(mountMessage([route()], { allowedAuth: ['user'] }), /auth kind "anonymous" is not allowed on this surface/);
-    mountRoutes(express.Router(), [route()], { allowedAuth: ['anonymous'] });
+    mountRoutes(express.Router(), [route()], { allowedAuth: ['anonymous'], ...withLimit });
   });
 
   it('rejects a permission outside the catalog', () => {
@@ -124,7 +127,7 @@ describe('mountRoutes with user routes', () => {
     // Any other name after /groups/ is refused, on every kind of route.
     assert.match(mountMessage([userRoute({ path: '/groups/:id/places' })], both), /must be named :groupId, not :id/);
     assert.match(mountMessage([route({ path: '/groups/:groupIds' })], both), /must be named :groupId, not :groupIds/);
-    mountRoutes(express.Router(), [route({ path: '/groups' }), route({ path: '/groups/list' })]);
+    mountRoutes(express.Router(), [route({ path: '/groups' }), route({ path: '/groups/list' })], withLimit);
     // A different parameter name elsewhere does not count.
     mountRoutes(express.Router(), [userRoute({ path: '/g/:groupIds/places' })], both);
     assert.match(mountMessage([userRoute({ path: '/g/:groupIds/places', auth: grouped })], both), /exactly when/);
@@ -133,5 +136,39 @@ describe('mountRoutes with user routes', () => {
   it('requires the group access dependencies for a group route', () => {
     const grouped = { kind: 'user', permission: 'places:read', group: true };
     assert.match(mountMessage([userRoute({ path: '/g/:groupId', auth: grouped })], options), /needs the groupAccess dependencies/);
+  });
+});
+
+describe('mountRoutes: rate limit requirement of anonymous routes', () => {
+  const needsBodyRule = { bucket: 'login:username', limit: 5, needsBody: true, key: () => 'k' };
+  const exempt = { reason: 'probe' };
+  const message = (routeOverrides: Record<string, unknown>, options: Parameters<typeof mountRoutes>[2] = withLimit): string => {
+    try {
+      mountRoutes(express.Router(), [route(routeOverrides)], options);
+    } catch (error) {
+      return (error as Error).message;
+    }
+    return assert.fail('expected mountRoutes to throw');
+  };
+
+  it('rejects an anonymous route with no rule, or only rules that run after the body parser', () => {
+    assert.match(message({ rateLimit: undefined }), /anonymous route must declare a rate limit rule that runs before the body parser/);
+    assert.match(message({ rateLimit: [] }), /must declare a rate limit rule/);
+    assert.match(message({ method: 'POST', rateLimit: [needsBodyRule] }), /must declare a rate limit rule/);
+    mountRoutes(express.Router(), [route({ method: 'POST', rateLimit: [needsBodyRule, ...testIpLimit] })], withLimit);
+  });
+
+  it('accepts an explicit exemption only where the router allows it, with a reason', () => {
+    const allowed = { allowRateLimitExempt: true };
+    mountRoutes(express.Router(), [route({ rateLimit: undefined, rateLimitExempt: exempt })], allowed);
+    assert.match(message({ rateLimit: undefined, rateLimitExempt: exempt }, {}), /rateLimitExempt is not allowed on this surface/);
+    for (const reason of ['', '  ', undefined]) {
+      assert.match(message({ rateLimit: undefined, rateLimitExempt: { reason } }, allowed), /rateLimitExempt needs a non-empty reason/);
+    }
+  });
+
+  it('never exempts a user route', () => {
+    const user = { auth: { kind: 'user', permission: 'places:read' }, rateLimitExempt: exempt };
+    assert.match(message(user, { authenticate: () => undefined, allowedAuth: ['user'], allowRateLimitExempt: true, ...withLimit }), /only anonymous routes can be exempt from the rate limit/);
   });
 });

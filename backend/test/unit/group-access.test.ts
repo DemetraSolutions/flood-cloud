@@ -11,6 +11,7 @@ import type { GroupAccess } from '../../src/shared/security/scope/group-access.t
 import type { GroupAvailability } from '../../src/shared/security/scope/groups.repository.ts';
 import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
+import { memoryRateLimitMount, recordingErrorReporter } from '../helpers/activity.ts';
 import { memoryLogger } from '../helpers/app.ts';
 import { principalOf } from '../helpers/principal.ts';
 
@@ -116,7 +117,7 @@ describe('requireGroupAccess and reportCrossGroupAccess', () => {
     app.get('/groups/:groupId', requireGroupAccess(groups), requirePermission('places:read', report), (_req, res) => {
       res.json({ groupId: hex(res.locals.groupAccess!.groupId) });
     });
-    app.use(errorHandler(memoryLogger().logger));
+    app.use(errorHandler(memoryLogger().logger, recordingErrorReporter().reporter));
     server = app.listen(0);
     await new Promise<void>((resolve) => server.once('listening', () => resolve()));
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

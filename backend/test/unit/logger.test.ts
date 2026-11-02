@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createLogger, redact } from '../../src/shared/logging/logger.ts';
+import { createLogger, isPersonalDataKey, isSecretKey, isSensitiveKey, redact } from '../../src/shared/logging/logger.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
 import { memoryLogger } from '../helpers/app.ts';
 
@@ -189,5 +189,22 @@ describe('logger', () => {
       ok: 1,
     };
     assert.deepEqual(plain(redact(hostile)), { boom: '[Unreadable]', ok: 1 });
+  });
+});
+
+describe('key classification', () => {
+  it('splits secrets from personal data; stdout redacts both', () => {
+    for (const key of ['password', 'Pin', 'x-api-key', 'set-cookie', 'mongodbUri', 'smtpPassword', 'accessToken', 'privateKey']) {
+      assert.equal(isSecretKey(key), true, key);
+      assert.equal(isPersonalDataKey(key), false, key);
+      assert.equal(isSensitiveKey(key), true, key);
+    }
+    for (const key of ['name', 'email', 'telephone', 'phone', 'surname', 'firstName', 'last_name', 'fiscalCode']) {
+      assert.equal(isSecretKey(key), false, key);
+      assert.equal(isPersonalDataKey(key), true, key);
+      assert.equal(isSensitiveKey(key), true, key);
+    }
+    assert.equal(isSensitiveKey('status'), false);
+    assert.deepEqual(JSON.parse(JSON.stringify(redact({ email: 'a@x.it', name: 'n', password: 'p', ok: 1 }))), { email: '[REDACTED]', name: '[REDACTED]', password: '[REDACTED]', ok: 1 });
   });
 });

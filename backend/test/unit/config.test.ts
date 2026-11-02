@@ -47,6 +47,43 @@ describe('loadConfig', () => {
     }
   });
 
+  it('applies, reads and validates the rate limit and activity log settings', () => {
+    const config = loadConfig(validEnv());
+    assert.deepEqual(
+      [config.rateLimitLoginPerUsername, config.rateLimitLoginPerIp, config.rateLimitRefreshPerIp, config.rateLimitUsernameCheckPerUser, config.rateLimitApiPerUser],
+      [5, 15, 30, 15, 300],
+    );
+    assert.equal(config.rateLimitUnauthenticatedPerIp, 300);
+    assert.deepEqual([config.activityLogRetentionDays, config.activityLogErrorRetentionDays], [365, 90]);
+    const custom = loadConfig(
+      validEnv({
+        RATE_LIMIT_LOGIN_PER_USERNAME: '1',
+        RATE_LIMIT_REFRESH_PER_IP: '3',
+        RATE_LIMIT_USERNAME_CHECK_PER_USER: '4',
+        RATE_LIMIT_API_PER_USER: '100000',
+        RATE_LIMIT_UNAUTHENTICATED_PER_IP: '100000',
+        ACTIVITY_LOG_RETENTION_DAYS: '3650',
+        ACTIVITY_LOG_ERROR_RETENTION_DAYS: '7',
+        RATE_LIMIT_LOGIN_PER_IP: '',
+      }),
+    );
+    assert.deepEqual([custom.rateLimitLoginPerUsername, custom.rateLimitLoginPerIp, custom.rateLimitRefreshPerIp, custom.rateLimitUsernameCheckPerUser, custom.rateLimitApiPerUser], [1, 15, 3, 4, 100000]);
+    assert.equal(custom.rateLimitUnauthenticatedPerIp, 100000);
+    assert.deepEqual([custom.activityLogRetentionDays, custom.activityLogErrorRetentionDays], [3650, 7]);
+    for (const [variable, bad] of [
+      ['RATE_LIMIT_LOGIN_PER_USERNAME', '0'],
+      ['RATE_LIMIT_LOGIN_PER_IP', '100001'],
+      ['RATE_LIMIT_REFRESH_PER_IP', 'x'],
+      ['RATE_LIMIT_USERNAME_CHECK_PER_USER', '-1'],
+      ['RATE_LIMIT_API_PER_USER', '1.5'],
+      ['RATE_LIMIT_UNAUTHENTICATED_PER_IP', '0'],
+      ['ACTIVITY_LOG_RETENTION_DAYS', '3651'],
+      ['ACTIVITY_LOG_ERROR_RETENTION_DAYS', '0'],
+    ] as const) {
+      assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/);
+    }
+  });
+
   it('reads every explicit value', () => {
     const config = loadConfig(
       validEnv({

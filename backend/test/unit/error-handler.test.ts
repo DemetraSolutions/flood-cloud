@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { errorHandler } from '../../src/shared/http/error-handler.ts';
 import { AppError } from '../../src/shared/http/errors.ts';
+import { recordingErrorReporter } from '../helpers/activity.ts';
 import { memoryLogger } from '../helpers/app.ts';
 
 interface Captured {
@@ -11,8 +12,9 @@ interface Captured {
   destroyed: boolean;
 }
 
-function invoke(error: unknown, headersSent = false): { captured: Captured; events: Array<Record<string, unknown>> } {
+function invoke(error: unknown, headersSent = false): { captured: Captured; events: Array<Record<string, unknown>>; reported: unknown[] } {
   const { logger, events } = memoryLogger();
+  const { reporter, reported } = recordingErrorReporter();
   const captured: Captured = { headers: {}, destroyed: false };
   const res = {
     locals: { requestId: 'req-12345678' },
@@ -30,8 +32,8 @@ function invoke(error: unknown, headersSent = false): { captured: Captured; even
     },
   };
   const req = { socket: { destroy: () => (captured.destroyed = true) } };
-  errorHandler(logger)(error, req as never, res as never, () => undefined);
-  return { captured, events };
+  errorHandler(logger, reporter)(error, req as never, res as never, () => undefined);
+  return { captured, events, reported };
 }
 
 describe('errorHandler', () => {
@@ -131,7 +133,7 @@ describe('errorHandler', () => {
         written.status = code;
       },
     };
-    errorHandler(logger)(new AppError('RATE_LIMITED', { headers: { 'Retry-After': '1\n2' } }), {} as never, res as never, () => undefined);
+    errorHandler(logger, recordingErrorReporter().reporter)(new AppError('RATE_LIMITED', { headers: { 'Retry-After': '1\n2' } }), {} as never, res as never, () => undefined);
     assert.equal(written.status, 500);
     assert.equal(written.headers['Content-Type'], 'application/json; charset=utf-8');
     assert.deepEqual(JSON.parse(written.body ?? ''), { error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
@@ -144,7 +146,28 @@ describe('errorHandler', () => {
     const res = { locals: {}, headersSent: false };
     Object.defineProperty(res, 'headersSent', { get: (() => { let n = 0; return () => n++ > 0; })() });
     const req = { socket: { destroy: () => (destroyed = true) } };
-    errorHandler(logger)(new AppError('NOT_FOUND'), req as never, Object.assign(res, { set() { throw new Error('x'); } }) as never, () => undefined);
+    errorHandler(logger, recordingErrorReporter().reporter)(new AppError('NOT_FOUND'), req as never, Object.assign(res, { set() { throw new Error('x'); } }) as never, () => undefined);
     assert.equal(destroyed, true);
+  });
+
+  it('reports to the activity log only what becomes a 500 (including after the response started)', () => {
+    const boom = new Error('boom');
+    assert.deepEqual(invoke(boom).reported, [boom]);
+    assert.equal(invoke(new AppError('INTERNAL_ERROR')).reported.length, 1);
+    assert.equal(invoke(new AppError('SERVICE_UNAVAILABLE')).reported.length, 1);
+    assert.equal(invoke(Object.assign(new Error('teapot'), { status: 418, expose: true })).reported.length, 1);
+    assert.equal(invoke(boom, true).reported.length, 1);
+    for (const quiet of [
+      new AppError('NOT_FOUND'),
+      new AppError('VALIDATION_ERROR'),
+      new AppError('RATE_LIMITED'),
+      Object.assign(new Error('x'), { type: 'entity.too.large' }),
+      Object.assign(new Error('x'), { status: 400, expose: true }),
+      new URIError('bad'),
+      Object.assign(new Error('x'), { type: 'request.aborted' }),
+    ]) {
+      assert.equal(invoke(quiet).reported.length, 0);
+    }
+    assert.equal(invoke(new AppError('NOT_FOUND'), true).reported.length, 0);
   });
 });

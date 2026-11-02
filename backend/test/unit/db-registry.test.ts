@@ -19,14 +19,19 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 }
 
 describe('collection registry', () => {
-  it('registers the shared legacy collections as read-only', () => {
-    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['countries', 'groups', 'users']);
+  it('registers the shared legacy collections as read-only and the two new ones with their indexes and validator', () => {
+    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityLog', 'countries', 'groups', 'rateLimits', 'users']);
     assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'places']);
-    for (const spec of [...Object.values(COLLECTIONS.common), ...Object.values(COLLECTIONS.group)]) {
-      assert.equal(spec.ownership, 'legacy-read');
+    for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
+      assert.equal(spec.ownership, name === 'activityLog' || name === 'rateLimits' ? 'new' : 'legacy-read', name);
     }
+    assert.deepEqual(
+      COLLECTIONS.common.activityLog.indexes.map((index) => index.name),
+      ['groupId_1_at_-1', 'actor.id_1_at_-1', 'category_1_at_-1', 'requestId_1', 'expiresAt_1'],
+    );
+    assert.deepEqual(COLLECTIONS.common.rateLimits.indexes, [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }]);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['companies', 'countries', 'groups', 'places', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityLog', 'companies', 'countries', 'groups', 'places', 'rateLimits', 'users']);
   });
 
   it('accepts valid new, legacy-read and legacy-write entries', () => {
@@ -56,13 +61,17 @@ describe('collection registry', () => {
         e: { ownership: 'legacy-read', indexes: [{ name: 'u', key: { x: 1 }, unique: true }] },
         f: { ownership: 'legacy-write', ownedFields: ['x'], indexes: [{ name: 't', key: { x: 1 }, expireAfterSeconds: 10 }] },
         g: { ownership: 'new', indexes: [{ name: ' ', key: { x: 1 } }] },
+        h: { ownership: 'legacy-read', validator: { bsonType: 'object' } },
+        i: { ownership: 'legacy-write', ownedFields: ['x'], validator: { bsonType: 'object' } },
+        j: { ownership: 'new', validator: { bsonType: 'object' } },
       },
       group: {},
     };
     assert.throws(() => validateRegistry(bad), (error: Error) => {
-      for (const where of ['common.a', 'common.b', 'common.c', 'common.d', 'common.e', 'common.f', 'common.g']) {
+      for (const where of ['common.a', 'common.b', 'common.c', 'common.d', 'common.e', 'common.f', 'common.g', 'common.h', 'common.i']) {
         assert.ok(error.message.includes(where), where);
       }
+      assert.ok(!error.message.includes('common.j'));
       return true;
     });
   });
