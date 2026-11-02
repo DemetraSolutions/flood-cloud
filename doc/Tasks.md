@@ -80,18 +80,13 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   - al cambio password scrive anche l'hash legacy finché il legacy è attivo;
   - a ogni login riuscito calcola anche l'hash scrypt, che servirà al passaggio definitivo.
 - [x] **D-05** Dati personali (`email`, `telephone`, `name`, `surname`) in chiaro. Se la profilazione trova valori ancora cifrati con il formato legacy, si decifrano e si riscrivono in chiaro con una migrazione una tantum (2.2.4). Decisione dell'utente del 2026-11-01.
-- [ ] **D-06** Permessi per utente (`permissions.<modulo>.{r,w}` e `permissions.status`, `doc/Security-Model.md` §12.5). *Raccomandato in transizione:* permessi effettivi = permessi del ruolo ∩ matrice dell'utente. `permissions.apps.cash.*` resta del dominio cassa: conservato, mai esposto su `/v1`.
-- [ ] **D-07** Ruoli:
-  - `X` e `L` non esistono (correggere `doc/Legacy-Analysis.md`);
-  - ruolo `API`: eliminarlo, perché lo sostituiscono le API key pubbliche (raccomandato);
-  - utenti `E`: niente accesso al backoffice (`doc/Security-Model.md` §4). Oggi vedono il Calendario: confermare.
-- [ ] **D-08** Scope multipli. Il legacy ha un solo `companyId` per CA e `placeId` (singolo) più `placesId[]`. *Raccomandato:* modello con array; finché il legacy è attivo CA limitato a una azienda e PA scritto come `placeId` = primo elemento, `placesId` = tutti.
+- [x] **D-06** Permessi per singolo utente: ogni utente conserva la matrice `permissions.<modulo>.{r,w}` e `permissions.status` del legacy; i permessi effettivi sono quelli dell'utente limitati dal tetto del ruolo (un utente non ottiene mai permessi oltre il proprio ruolo). `permissions.apps.cash.*` resta del dominio cassa: conservato, mai esposto su `/v1`. Decisione dell'utente del 2026-11-02.
+- [x] **D-07** Ruoli: PSA, D, SA, CA, PA, E. Il ruolo `API` si elimina (nessun utente lo usa, §0.4.1): lo sostituiscono le API key pubbliche. `X` e `L` non esistono (correggere `doc/Legacy-Analysis.md`, 0.5.1). Utenti `E` senza accesso al backoffice (`doc/Security-Model.md` §4). Decisione dell'utente del 2026-11-02.
+- [x] **D-08** Scope multipli: nel modello di dominio liste `companyIds[]` (CA) e `placeIds[]` (PA, E), anche con un solo elemento. Lettura dal legacy: `companyId` → `companyIds`; unione di `placeId` e `placesId` → `placeIds`. Finché il legacy è attivo, a ogni scrittura il nuovo backend allinea i campi legacy: `companyId` = prima azienda, `placeId` = primo punto vendita, `placesId` = tutti. Decisione dell'utente del 2026-11-02.
 - [ ] **D-09** Dealer. Oggi il dealer è un utente `D` e `groups.dealerId` è l'`_id` di quell'utente: questo chiude la domanda 1 di `doc/Data-Model.md`. Serve un'anagrafica dealer con più utenti?
-- [ ] **D-10** PSA e D nei moduli operativi di un gruppo. *Raccomandato:* contesto di gruppo nell'URL con audit (`doc/Security-Model.md` §8.2), al posto del multi-account del legacy.
-- [ ] **D-11** Sessioni legacy. *Raccomandato:*
-  - il nuovo backend non accetta i JWT legacy;
-  - disattivazione dell'utente, cambio password e cambio di ruolo svuotano anche `users.tokens[]`, così il legacy disconnette subito.
-- [ ] **D-12** Trasporto del refresh token: cookie `HttpOnly` (raccomandato) o body (`doc/Security-Model.md` §12.1).
+- [x] **D-10** PSA e D nei moduli operativi di un gruppo: gruppo nel percorso (`/v1/groups/:groupId/...`), verificato contro lo scope (PSA tutti, D solo i propri gruppi, gli altri ruoli solo il proprio); ogni accesso di PSA e D a un gruppo va nel registro delle attività (2.6); nel backoffice selettore del gruppo con il gruppo nell'URL; nessuna impersonazione. Decisione dell'utente del 2026-11-02.
+- [x] **D-11** Sessioni legacy: il nuovo backend non accetta i JWT del legacy. Disattivazione dell'utente, cambio password e cambio di ruolo o scope fatti dal nuovo backend svuotano anche `users.tokens[]`, così il legacy disconnette subito. Decisione dell'utente del 2026-11-02.
+- [x] **D-12** Refresh token del backoffice nel **body** della risposta (niente cookie), conservato dal backoffice in `sessionStorage` (sopravvive al ricaricamento, per singola scheda); access token solo in memoria. Mitigazioni: CSP stretta con Trusted Types, rotazione a ogni uso con rilevamento del riuso. Riportata in `doc/Security-Model.md` §4 e §12.1. Decisione dell'utente del 2026-11-02.
 - [ ] **D-13** Feature flag del gruppo:
   - conferma dell'elenco (4.1);
   - `delivery` e `customersApp`, oggi nascosti: si vendono ancora?

@@ -41,7 +41,7 @@ Ogni superficie ha router, middleware di autenticazione, rate limit e documentaz
 - **Access token** opaco di 15 minuti, inviato come `Authorization: Bearer fc_at_…`.
 - **Refresh token** con **rotazione a ogni uso** e **rilevamento del riuso**: se un refresh token già usato si ripresenta, l'intera famiglia di sessioni è revocata e l'evento va nell'audit log. Scadenza per inattività 7 giorni, durata massima della famiglia 30 giorni, poi nuovo login (valori di default configurabili).
 - **Comportamento del client**: alla risposta `401` con codice `TOKEN_EXPIRED` chiama una sola volta `POST /v1/auth/refresh` e ripete la richiesta; se il refresh fallisce, torna al login. Le richieste concorrenti attendono lo stesso refresh.
-- **Conservazione lato client** (raccomandata): access token solo in memoria; refresh token in cookie `HttpOnly; Secure; SameSite=Strict; Path=/v1/auth`, con verifica dell'header `Origin` su refresh e logout. Così un eventuale XSS nel backoffice non può leggere il refresh token. *(da confermare con chi sviluppa il backoffice, §12)*
+- **Conservazione lato client** (decisione dell'utente del 2026-11-02, D-12): nessun cookie. Login e refresh restituiscono access e refresh token nel body; il backoffice tiene l'access token solo in memoria e il refresh token in `sessionStorage` (sopravvive al ricaricamento della pagina, vale per la singola scheda, sparisce chiudendola). Un eventuale XSS potrebbe leggere il refresh token: le mitigazioni sono la CSP stretta con Trusted Types del backoffice, la rotazione a ogni uso con rilevamento del riuso (che revoca l'intera famiglia) e le scadenze per inattività e massima.
 - **Revoca immediata**: logout, logout da tutti i dispositivi, cambio password, cambio ruolo o scope, disattivazione dell'utente o del gruppo revocano le sessioni. Con i token opachi l'effetto è immediato.
 - **Sessioni visibili**: l'utente vede e revoca le proprie sessioni (dispositivo, IP, ultimo uso).
 
@@ -166,7 +166,7 @@ Endpoint REST a risorse (`doc/API-Guidelines.md`); **nessuna query, filtro, upda
 Credenziali dei provider solo lato server (per gruppo, cifrate); ogni proxy verso un provider è autenticato e autorizzato; webhook in ingresso con verifica della firma, anti-replay e idempotenza (skill `webhook-verification`).
 
 ## 12. Decisioni aperte
-1. Refresh token del backoffice in cookie `HttpOnly` (raccomandato) o gestito dal client nel body.
+1. ~~Refresh token del backoffice in cookie `HttpOnly` o nel body.~~ Decisa il 2026-11-02 (D-12): body, conservato in `sessionStorage` (§4).
 2. Autenticazione degli operatori `E` sul server di punto vendita e sincronizzazione degli utenti verso di esso.
 3. Modalità e durata della migrazione dalle API key di gruppo (§5.9).
 4. Valori dei limiti di default e delle quote; eventuali piani diversi per gruppo.
