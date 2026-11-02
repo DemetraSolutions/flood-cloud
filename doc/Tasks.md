@@ -98,7 +98,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **D-16** Valori ammessi di `APP_ENV`: `development` e `production`, come i database esistenti. Decisione dell'utente del 2026-11-01.
 - [ ] **D-17** Login: solo `username` (come `doc/Security-Model.md` §4) oppure anche email e telefono, come oggi nel legacy.
 - [ ] **D-18** Onboarding: preset per tipologia (risto, retail, beauty) e struttura minima del database di un gruppo nuovo richiesta dal legacy.
-- [ ] **D-19** Policy delle password: lunghezza minima e massima, eventuali classi di caratteri (oggi 8–16 caratteri con classi, imposta solo dal client).
+- [x] **D-19** Policy delle password nuove o cambiate: da 12 a 128 code point dopo NFC, nessuna regola sulle classi, diversa dallo username, nessun carattere Unicode non valido. Le password legacy esistenti restano valide. Decisione dell'utente del 2026-11-02.
 - [x] **D-20** Forma della copia nel common: **documento intero** del database del gruppo, con `groupId` impostato dal nome del database. Proposta dell'utente del 2026-11-01. Il nuovo backend traduce i nomi legacy nel modello di dominio (§0.2, tabelle 6.1 e 7.1).
 - [ ] **D-21** Cancellazione definitiva nel legacy (`deleteMany` dal cestino): la copia nel common si rimuove (raccomandato: la copia resta uno specchio esatto) oppure si marca come cancellata. Collegata a D-14.
 - [x] **D-22** Il server di punto vendita è un'applicazione separata, fuori dallo scope: questo progetto comprende solo il backend cloud e il backoffice. Decisione dell'utente del 2026-11-01.
@@ -228,19 +228,21 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
 
 ## 2. Sicurezza trasversale
 
+Passi decisi dall'utente il 2026-11-02: **2A** = 2.1 e 2.2; **2B** = 2.3 e 2.4; **2C** = 2.5 e 2.6.1–2.6.5; 2.6.6–2.6.7 dopo l'area 3 (richiedono il login).
+
 ### 2.1 Primitive crittografiche (`node:crypto`)
-- [ ] **2.1.1** Generazione dei segreti: prefisso più 32 byte casuali in base64url (`fc_at_`, `fc_rt_`, …), hash SHA-256 a riposo, ricerca per indice univoco.
-- [ ] **2.1.2** Confronto a tempo costante (`timingSafeEqual`) per ogni segreto.
-- [ ] **2.1.3** scrypt: hash, verifica e necessità di rehash nel formato `scrypt$N$r$p$salt$hash`; policy delle password (D-19).
+- [x] **2.1.1** Generazione dei segreti: prefisso più 32 byte casuali in base64url (`fc_at_`, `fc_rt_`, `fc_pk_`; nessun `fc_st_`, D-23), hash SHA-256 a riposo, ricerca per indice univoco.
+- [x] **2.1.2** Confronto a tempo costante (`timingSafeEqual`) per ogni segreto.
+- [x] **2.1.3** scrypt: hash, verifica e necessità di rehash nel formato `scrypt$N$r$p$salt$hash`; policy delle password (D-19).
 
 ### 2.2 Compatibilità con le credenziali legacy (D-04, D-05)
-- [ ] **2.2.1** Verifica dell'hash legacy delle password (HMAC-SHA512 con pepper) a tempo costante.
-- [ ] **2.2.2** Al login riuscito, hash scrypt in `userCredentials` insieme all'impronta (SHA-256) dell'hash legacy da cui deriva. Ai login successivi:
+- [x] **2.2.1** Verifica dell'hash legacy delle password (HMAC-SHA512 con pepper) a tempo costante.
+- [x] **2.2.2** *(logica di verifica realizzata; la scrittura in `userCredentials` arriva con 3.1.4 e 3.2)* Al login riuscito, hash scrypt in `userCredentials` insieme all'impronta (SHA-256) dell'hash legacy da cui deriva. Ai login successivi:
   - se l'impronta coincide con l'hash legacy attuale, si verifica con scrypt;
   - se non coincide, la password è stata cambiata dal legacy: si verifica l'hash legacy e si ricalcola scrypt.
-- [ ] **2.2.3** Cambio password: scrittura di scrypt più hash legacy finché il flag di coesistenza è attivo; flag da spegnere al passaggio definitivo.
-- [ ] **2.2.4** Migrazione una tantum dei dati personali cifrati (D-05). Se la profilazione (1.3.6) trova valori nel formato `<hex>$<ivhex>`, uno script li decifra e li riscrive in chiaro con `$set`. Prevede una modalità di prova e un report; un valore non decifrabile si segnala, senza sovrascriverlo.
-- [ ] **2.2.5** Verifica con il `legacy_analyst` che il legacy non cifri più i dati personali in scrittura; se lo fa ancora, la cifratura va disattivata nel legacy prima della migrazione 2.2.4.
+- [x] **2.2.3** Cambio password: scrittura di scrypt più hash legacy finché il flag di coesistenza è attivo; flag da spegnere al passaggio definitivo.
+- [x] **2.2.4** *Non necessario: la profilazione (§0.4.1) non ha trovato dati personali cifrati.* Migrazione una tantum dei dati personali cifrati (D-05). Se la profilazione (1.3.6) trova valori nel formato `<hex>$<ivhex>`, uno script li decifra e li riscrive in chiaro con `$set`. Prevede una modalità di prova e un report; un valore non decifrabile si segnala, senza sovrascriverlo.
+- [x] **2.2.5** *Non necessario: l'analisi del legacy del 2026-11-01 conferma che nessuna scrittura attiva cifra i dati personali.* Verifica con il `legacy_analyst` che il legacy non cifri più i dati personali in scrittura; se lo fa ancora, la cifratura va disattivata nel legacy prima della migrazione 2.2.4.
 
 ### 2.3 RBAC
 - [ ] **2.3.1** Catalogo dei permessi `risorsa:azione` dei domini core: `users`, `groups`, `companies`, `places`, `sessions`, `auditLog`.
@@ -329,13 +331,15 @@ Task:
 ### 3.2 Login e sessioni (backend)
 - [ ] **3.2.1** `POST /v1/auth/login` con username e password (D-17) e risposta `INVALID_CREDENTIALS` identica per ogni fallimento. Rifiuta, con la stessa risposta:
   - utente disattivato o cestinato;
-  - ruolo `E` o `API`;
+  - ruolo `E` (il ruolo `API` non esiste più, D-07);
   - gruppo sospeso o cestinato.
+
+  Limiti validati prima di ogni hash (revisione del passo 2A): `username` e `password` da 1 a 1024 unità UTF-16, body del login di pochi KB; oltre i limiti la stessa risposta di credenziali errate. Per gli utenti inesistenti `verifyDummyPassword`.
 - [ ] **3.2.2** Blocco progressivo con `failedLogins` e `lockedUntil` in `userCredentials`.
 - [ ] **3.2.3** Collection `sessions` con indici univoci sugli hash e TTL sulla scadenza del refresh.
 - [ ] **3.2.4** Access token di 15 minuti; refresh con rotazione a ogni uso e rilevamento del riuso (revoca della famiglia e audit); scadenza per inattività e durata massima della famiglia.
 - [ ] **3.2.5** `POST /v1/auth/refresh` e `POST /v1/auth/logout`; logout da tutti i dispositivi.
-- [ ] **3.2.6** Trasporto del refresh token secondo D-12 (cookie `HttpOnly; Secure; SameSite=Strict; Path=/v1/auth` con verifica dell'`Origin`).
+- [ ] **3.2.6** Trasporto del refresh token secondo D-12: nel body di login e refresh, nessun cookie; il backoffice lo conserva in `sessionStorage`. Compressione disattivata sulle risposte che contengono token.
 - [ ] **3.2.7** Middleware Bearer di `/v1`:
   - distingue `TOKEN_EXPIRED` da `UNAUTHENTICATED`;
   - a ogni richiesta ricontrolla lo stato di utente e gruppo, con proiezione minima: disattivato ⇒ `401` immediato, come nel legacy.

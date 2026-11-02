@@ -35,6 +35,16 @@ describe('loadConfig', () => {
     assert.equal(config.requestTimeoutMs, 30000);
     assert.equal(config.shutdownDrainMs, 5000);
     assert.equal(config.legacyPasswordPepper.reveal(), env['LEGACY_PASSWORD_PEPPER']);
+    assert.equal(config.legacyPasswordCoexistence, true);
+  });
+
+  it('validates LEGACY_PASSWORD_COEXISTENCE', () => {
+    assert.equal(loadConfig(validEnv({ LEGACY_PASSWORD_COEXISTENCE: 'false' })).legacyPasswordCoexistence, false);
+    assert.equal(loadConfig(validEnv({ LEGACY_PASSWORD_COEXISTENCE: 'true' })).legacyPasswordCoexistence, true);
+    assert.equal(loadConfig(validEnv({ LEGACY_PASSWORD_COEXISTENCE: '' })).legacyPasswordCoexistence, true);
+    for (const value of ['TRUE', '1', 'yes']) {
+      assert.equal(reasonFor(validEnv({ LEGACY_PASSWORD_COEXISTENCE: value }), 'LEGACY_PASSWORD_COEXISTENCE'), 'must be true or false');
+    }
   });
 
   it('reads every explicit value', () => {

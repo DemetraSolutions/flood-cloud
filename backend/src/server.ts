@@ -12,6 +12,7 @@ import type { Databases } from './db/databases.ts';
 import { ensureIndexes } from './db/indexes.ts';
 import { createPingCheck } from './db/ping.ts';
 import { handleClientError } from './shared/http/client-error.ts';
+import { warmUpPasswordVerifier } from './shared/security/password-verifier.ts';
 import { createLogger } from './shared/logging/logger.ts';
 
 /** Time granted to in-flight requests during shutdown before the forced exit. */
@@ -116,6 +117,7 @@ export async function run(
     databases = createDatabases(client, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
     await client.connect();
     await deps.ensureIndexes(databases);
+    await warmUpPasswordVerifier();
   } catch (error) {
     logger.error('database startup failed', { errorName: error instanceof Error ? error.name : typeof error });
     if (client !== undefined) {

@@ -6,6 +6,8 @@
 ## 1. Stato del progetto
 Realizzate le fondamenta del backend (`doc/Tasks.md` 1.1–1.4, 1.6): progetto TypeScript, configurazione validata, applicazione Express con envelope, errori, header di sicurezza, CORS, log strutturati, builder delle route, endpoint di salute e arresto ordinato; client MongoDB sul cluster condiviso con guardia d'ambiente, registro delle collection, indici, strumento di profilazione in sola lettura del legacy, MongoDB locale per i test. Nessuna autenticazione, nessun endpoint di dominio, nessuna scrittura su database.
 
+Realizzate le primitive crittografiche e la compatibilità con le password legacy (2.1, 2.2.1–2.2.3), come sola logica senza endpoint (§8).
+
 Realizzate anche le fondamenta del backoffice (1.7, 1.8): progetto Angular 22.2, configurazione pubblica, accesso HTTP, lingua, design system, componenti condivisi, shell e server statico di produzione (§11).
 
 ## 2. Requisiti e avvio
@@ -42,6 +44,7 @@ Lettura e validazione in `src/config.ts` (`loadConfig`, funzione pura). Tutti i 
 | `REQUEST_TIMEOUT_MS` | no | intero 1000–300000 | `30000` |
 | `SHUTDOWN_DRAIN_MS` | no | intero 0–20000, attesa tra il segnale di arresto e la chiusura del server | `5000` |
 | `LEGACY_PASSWORD_PEPPER` | sì, segreto | non vuoto, senza spazi iniziali o finali (D-04) | — |
+| `LEGACY_PASSWORD_COEXISTENCE` | no | `true` \| `false`: al cambio password si scrive anche l'hash legacy. Da spegnere solo al passaggio definitivo, e solo una volta (§8) | `true` |
 
 I segreti sono avvolti nella classe `Secret` (`src/shared/security/secret.ts`): il valore si legge solo con `reveal()`; `toString`, `toJSON` e `util.inspect` restituiscono `[REDACTED]`. La chiave di decifratura dei dati personali legacy (D-05) non fa parte della configurazione dell'applicazione. `.env.example` elenca gli stessi nomi, senza valori.
 
@@ -75,7 +78,15 @@ src/
       client-error.ts          # risposte agli errori di protocollo di Node (clientError)
       express-locals.d.ts      # tipi di res.locals
     logging/logger.ts          # logger JSON con redazione
-    security/secret.ts         # Secret
+    security/
+      secret.ts                # Secret
+      secrets.ts               # segreti fc_at_/fc_rt_/fc_pk_: generazione, parse, hash
+      compare.ts               # confronto a tempo costante
+      scrypt.ts                # hash e verifica scrypt, rehash, verifica fittizia
+      password-policy.ts       # policy delle password nuove (D-19)
+      legacy-password.ts       # hash HMAC-SHA512 del legacy e sua impronta
+      password-verifier.ts     # verifica con coesistenza legacy/scrypt
+      password-change.ts       # dati da scrivere al cambio password
 test/
   unit/  integration/  helpers/   # helpers: app.ts (HTTP), mongo.ts (database usa e getta), legacy-fixtures.ts
 compose.yaml                      # MongoDB locale per sviluppo e test
@@ -166,6 +177,18 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
   - errori MongoDB (`Mongo*`) ridotti a `{ name, code, codeName }`;
   - profondità massima 10 (`[Truncated]`), getter che falliscono (`[Unreadable]`), cicli, chiave `__proto__` conservata come campo.
 - **Database**: guardia d'ambiente sui nomi dei database, TLS obbligatorio in produzione, nessuna scrittura (§7).
+- **Segreti emessi dal server** (`secrets.ts`): prefisso (`fc_at_` access, `fc_rt_` refresh, `fc_pk_` API key pubblica) più 32 byte casuali in base64url; a riposo solo SHA-256 in hex. Nessun prefisso per la superficie store (D-23). Ogni confronto di segreti usa `safeEqual` (SHA-256 dei due valori e `timingSafeEqual`).
+- **scrypt** (`scrypt.ts`): `N=2^16`, `r=8`, `p=2`, salt 16 byte, chiave 32 byte, formato `scrypt$N$r$p$salt$hash` (base64url); circa 250 ms per hash su un portatile. Le password si normalizzano in NFC. Un record con parametri diversi dai correnti va riscritto (`needsRehash`). I record malformati o fuori limite (N non potenza di 2, `N·r·p` > 2^22, memoria > 128 MiB, parametri rifiutati da OpenSSL) danno `false` senza eccezioni, sempre dopo uno scrypt fittizio.
+- **Policy delle password nuove** (D-19, `password-policy.ts`): da 12 a 128 code point dopo NFC, nessuna regola sulle classi, diversa dallo username (confronto senza maiuscole e spazi), nessun carattere Unicode non valido (`invalidCharacters`). Le password legacy esistenti restano valide al login anche fuori policy.
+- **Password legacy** (D-04, `legacy-password.ts`): HMAC-SHA512 con chiave `LEGACY_PASSWORD_PEPPER`, password senza normalizzazione (deve coincidere byte per byte con il legacy), hex minuscolo di 128 caratteri. L'impronta di un hash legacy è il suo SHA-256.
+- **Verifica con coesistenza** (`password-verifier.ts`, solo logica: la persistenza arriva con `userCredentials` in area 3):
+  - nessuna credenziale nuova: decide l'hash legacy; se è giusta si produce lo scrypt con l'impronta dell'hash legacy da salvare;
+  - credenziale con impronta uguale a quella dell'hash legacy attuale, o hash legacy assente: decide scrypt (con eventuale rehash);
+  - impronta diversa: la password è stata cambiata dal legacy, decide l'hash legacy e si ricalcola scrypt;
+  - impronta nulla (cambio password con coesistenza spenta): decide solo scrypt, il vecchio hash legacy non vale più. Per questo la coesistenza si spegne una sola volta, al passaggio definitivo: riaccendendola, i cambi password fatti dal legacy verrebbero ignorati per chi ha impronta nulla.
+  - Ogni fallimento costa uno scrypt (anche quando decide l'hash legacy o manca ogni hash) e un utente inesistente si verifica con `verifyDummyPassword`, il cui hash fittizio è precalcolato all'avvio: i tempi di risposta non rivelano se un utente esiste.
+- **Cambio password** (`password-change.ts`): policy, poi scrypt più, se `LEGACY_PASSWORD_COEXISTENCE=true`, l'hash legacy e la sua impronta.
+- **Limiti da applicare al login** (area 3): password e username da 1 a 1024 unità UTF-16 e body del login di pochi KB, validati prima di ogni hash; rate limit e concorrenza di scrypt limitata (un hash occupa un thread del pool di libuv).
 - **Compressione**: attiva sopra 1 KB. Le route future che restituiscono credenziali dovranno escluderla (rischio BREACH).
 
 ## 9. Test
@@ -175,7 +198,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 - `test/unit/`: configurazione, `Secret`, logger, errori, gestore errori, middleware, builder delle route, health, errori di protocollo, nomi e registro dei database, client, guardia dei test, anti-bypass, analisi della profilazione.
 - `test/integration/`: database reale (guardia, transazione tra common e gruppo, indici, readiness), profilazione e sua CLI (compreso un test che verifica l'assenza nel report di valori sentinella, chiavi di P.IVA, codici fiscali, hex e username), pipeline HTTP completa con `fetch` su porta effimera (`test/helpers/app.ts` monta l'app con route di prova e un logger in memoria), endpoint di salute, `run()` del server con processo simulato, avvio reale di `node src/server.ts` come processo figlio (avvio, `SIGTERM`, configurazione errata).
 - Oltre a `FLOOD_CLOUD_TEST_MONGO_URI` nessuna variabile richiesta: i test costruiscono la configurazione con valori fittizi.
-- Stato: 236 test, coverage 100%.
+- Stato: 277 test, coverage 100%.
 
 **CI** (`.github/workflows/backend.yml`): **disattivata** per decisione dell'utente del 2026-11-01, parte solo a mano (`workflow_dispatch`); i trigger su `push` e `pull_request` sono commentati nel file. Contenuto: MongoDB `mongo:8.0.34` col compose, Node 24.22.2, `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, `npm audit --audit-level=moderate`, `npm audit signatures`; job separato di secret scanning con gitleaks 8.30.1 (binario verificato con sha256) su tutta la storia del repository. Permessi `contents: read`, action pinnate per SHA.
 
@@ -185,6 +208,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 | 2026-11-01 | Fondamenta del backend (1.1, 1.2, 1.4) | progetto TypeScript, configurazione validata con segreti protetti, app Express con envelope ed errori, header di sicurezza, CORS, request id, log con redazione, builder delle route con autenticazione obbligatoria, health, arresto ordinato, pipeline CI con secret scanning |
 | 2026-11-01 | Database e infrastruttura di test (1.3, 1.4.8, 1.6) | client MongoDB, guardia d'ambiente sui nomi, registro delle collection, indici, readiness sul database, TLS obbligatorio in produzione, profilazione in sola lettura del legacy, fixture legacy sintetiche, MongoDB locale con compose, hook pre-commit gitleaks |
 | 2026-11-01 | Fondamenta del backoffice (1.7, 1.8) | progetto Angular 22.2 con test al 100%, configurazione pubblica all'avvio, accesso HTTP con errori tipizzati, lingua a runtime (solo italiano), design token con temi chiaro e scuro, componenti condivisi per form e tabelle, shell accessibile, server statico Node con CSP a nonce e Trusted Types, Dockerfile non root, CI disattivata |
+| 2026-11-02 | Primitive crittografiche e password legacy (2.1, 2.2.1–2.2.3) | segreti con hash a riposo, confronto a tempo costante, scrypt con limiti contro record manomessi, policy D-19, verifica dell'hash legacy con coesistenza e impronta, cambio password, tempi uniformi contro l'enumerazione degli utenti |
 
 ## 11. Backoffice
 SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Nessun login né pagina di dominio: sessione, guard e permessi arrivano con l'area 3.

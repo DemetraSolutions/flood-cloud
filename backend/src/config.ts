@@ -42,6 +42,8 @@ export interface Config {
   readonly requestTimeoutMs: number;
   /** Pepper of the legacy password hashes (`LEGACY_PASSWORD_PEPPER`), a secret. */
   readonly legacyPasswordPepper: Secret;
+  /** Whether the legacy system still runs, so password changes also write the legacy hash (`LEGACY_PASSWORD_COEXISTENCE`). */
+  readonly legacyPasswordCoexistence: boolean;
 }
 
 /**
@@ -312,6 +314,15 @@ export function loadConfig(env: Env): Config {
     legacyPasswordPepper = new Secret(pepperRaw);
   }
 
+  const coexistenceRaw = optionalVariable(env, 'LEGACY_PASSWORD_COEXISTENCE');
+  let legacyPasswordCoexistence: boolean | undefined = true;
+  if (coexistenceRaw === 'true' || coexistenceRaw === 'false') {
+    legacyPasswordCoexistence = coexistenceRaw === 'true';
+  } else if (coexistenceRaw !== undefined) {
+    legacyPasswordCoexistence = undefined;
+    issues.push({ variable: 'LEGACY_PASSWORD_COEXISTENCE', reason: 'must be true or false' });
+  }
+
   if (
     issues.length > 0 ||
     database === undefined ||
@@ -322,7 +333,8 @@ export function loadConfig(env: Env): Config {
     sessionMaxTtlSeconds === undefined ||
     requestTimeoutMs === undefined ||
     shutdownDrainMs === undefined ||
-    legacyPasswordPepper === undefined
+    legacyPasswordPepper === undefined ||
+    legacyPasswordCoexistence === undefined
   ) {
     throw new ConfigError(issues);
   }
@@ -338,5 +350,6 @@ export function loadConfig(env: Env): Config {
     shutdownDrainMs,
     requestTimeoutMs,
     legacyPasswordPepper,
+    legacyPasswordCoexistence,
   });
 }
