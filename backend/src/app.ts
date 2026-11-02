@@ -1,5 +1,5 @@
 import express from 'express';
-import type { Express } from 'express';
+import type { Express, RequestHandler } from 'express';
 import type { Config } from './config.ts';
 import { createHealthRoutes } from './modules/health/health.routes.ts';
 import type { Readiness } from './modules/health/health.routes.ts';
@@ -9,6 +9,7 @@ import { cors } from './shared/http/cors.ts';
 import { errorHandler } from './shared/http/error-handler.ts';
 import { AppError } from './shared/http/errors.ts';
 import { requestId } from './shared/http/request-id.ts';
+import type { GroupAccessDeps } from './shared/security/scope/group-access.ts';
 import { mountRoutes } from './shared/http/routes.ts';
 import type { RouteDefinition } from './shared/http/routes.ts';
 import { securityHeaders } from './shared/http/security-headers.ts';
@@ -29,6 +30,16 @@ export interface AppDeps {
     /** Public surface, mounted on `/public/v1` without CORS. */
     readonly public?: readonly RouteDefinition[];
   };
+  /**
+   * Authentication middleware of each surface; it sets `res.locals.auth` or fails. A surface that
+   * declares `user` routes without one cannot start (deny by default).
+   */
+  readonly authenticate?: {
+    /** Backoffice sessions on `/v1`. */
+    readonly v1?: RequestHandler;
+  };
+  /** Group lookup and audit callback for the `/v1` routes declaring `group: true`. */
+  readonly groupAccess?: GroupAccessDeps;
 }
 
 /**
@@ -59,7 +70,11 @@ export function createApp(deps: AppDeps): Express {
   app.use('/health', health);
 
   const v1 = express.Router();
-  mountRoutes(v1, deps.routes?.v1 ?? []);
+  mountRoutes(v1, deps.routes?.v1 ?? [], {
+    allowedAuth: ['anonymous', 'user'],
+    ...(deps.authenticate?.v1 === undefined ? {} : { authenticate: deps.authenticate.v1 }),
+    ...(deps.groupAccess === undefined ? {} : { groupAccess: deps.groupAccess }),
+  });
   app.use('/v1', cors(config.corsAllowedOrigins), v1);
 
   const publicApi = express.Router();

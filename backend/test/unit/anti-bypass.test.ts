@@ -50,6 +50,22 @@ describe('database access cannot be bypassed outside src/db', () => {
     assert.deepEqual(callers.sort(), ['server.ts', 'tools/profile-legacy/main.ts']);
   });
 
+  it('opens a group database only from the verified group access, the stored-user company lookup and the tools', async () => {
+    const allowed = new Set(['shared/security/scope/group-access.ts', 'shared/security/scope/company-places.repository.ts']);
+    const callers: string[] = [];
+    for (const file of await filesUnder(SRC)) {
+      const path = relative(SRC, file).split('\\').join('/');
+      if (path.startsWith('db/')) {
+        continue;
+      }
+      if (/\.group\(/.test(await readFile(file, 'utf8'))) {
+        callers.push(path);
+        assert.ok(allowed.has(path) || path.startsWith('tools/'), `${path} must not open a group database`);
+      }
+    }
+    assert.ok(callers.includes('shared/security/scope/group-access.ts') && callers.includes('shared/security/scope/company-places.repository.ts'));
+  });
+
   it('recognizes the allowed entry points', () => {
     assert.equal(mayCreateDatabases(join(SRC, 'server.ts')), true);
     assert.equal(mayCreateDatabases(join(SRC, 'tools', 'x', 'main.ts')), true);

@@ -1,5 +1,10 @@
 import express from 'express';
 import type { RequestHandler, Router } from 'express';
+import { isPermission } from '../security/rbac/permissions.ts';
+import type { Permission } from '../security/rbac/permissions.ts';
+import { requirePermission } from '../security/rbac/require-permission.ts';
+import { reportCrossGroupAccess, requireGroupAccess } from '../security/scope/group-access.ts';
+import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { AppError } from './errors.ts';
 
 /** HTTP methods a route may declare. */
@@ -10,7 +15,7 @@ export type RouteMethod = (typeof ROUTE_METHODS)[number];
 
 /**
  * Authentication declared by a route. No route is anonymous by omission: it must
- * say so explicitly and give the reason. Further kinds arrive with the auth steps.
+ * say so explicitly and give the reason.
  */
 export interface AnonymousAuth {
   readonly kind: 'anonymous';
@@ -18,8 +23,20 @@ export interface AnonymousAuth {
   readonly reason: string;
 }
 
+/** A route reserved to authenticated backoffice users holding a permission. */
+export interface UserAuth {
+  readonly kind: 'user';
+  /** Permission of the catalog the caller must hold. */
+  readonly permission: Permission;
+  /**
+   * The path has a `:groupId` parameter: the group is verified against the caller's scope and the
+   * group's state before the permission check. Must be `true` exactly when the path contains `:groupId`.
+   */
+  readonly group?: boolean;
+}
+
 /** Authentication requirement of a route. */
-export type RouteAuth = AnonymousAuth;
+export type RouteAuth = AnonymousAuth | UserAuth;
 
 /** Declarative description of a route. */
 export interface RouteDefinition {
@@ -62,9 +79,10 @@ function normalizePath(path: string): string {
  *
  * @returns One message per problem; empty when all routes are valid.
  */
-function validateRoutes(routes: readonly RouteDefinition[]): string[] {
+function validateRoutes(routes: readonly RouteDefinition[], options: MountOptions): string[] {
   const problems: string[] = [];
   const seen = new Set<string>();
+  const allowed: readonly string[] = options.allowedAuth ?? DEFAULT_ALLOWED_AUTH;
   for (const route of routes) {
     const label = `${String(route.method)} ${String(route.path)}`;
     if (!(ROUTE_METHODS as readonly unknown[]).includes(route.method)) {
@@ -73,13 +91,36 @@ function validateRoutes(routes: readonly RouteDefinition[]): string[] {
     if (typeof route.path !== 'string' || !route.path.startsWith('/')) {
       problems.push(`${label}: path must be a string starting with "/"`);
     }
-    const auth = route.auth as { kind?: unknown; reason?: unknown } | undefined;
+    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; group?: unknown } | undefined;
     if (auth === undefined || auth === null) {
       problems.push(`${label}: missing auth declaration`);
-    } else if (auth.kind !== 'anonymous') {
+    } else if (auth.kind === 'anonymous') {
+      if (typeof auth.reason !== 'string' || auth.reason.trim() === '') {
+        problems.push(`${label}: anonymous route needs a non-empty reason`);
+      }
+    } else if (auth.kind === 'user') {
+      if (!isPermission(auth.permission)) {
+        problems.push(`${label}: unknown permission`);
+      }
+      if (options.authenticate === undefined) {
+        problems.push(`${label}: user route needs an authenticate middleware`);
+      }
+      const hasGroupParam = /:groupId(?![A-Za-z0-9_])/.test(String(route.path));
+      if (hasGroupParam !== (auth.group === true)) {
+        problems.push(`${label}: the path has :groupId exactly when the auth declares group: true`);
+      } else if (auth.group === true && options.groupAccess === undefined) {
+        problems.push(`${label}: group route needs the groupAccess dependencies`);
+      }
+    } else {
       problems.push(`${label}: unknown auth kind`);
-    } else if (typeof auth.reason !== 'string' || auth.reason.trim() === '') {
-      problems.push(`${label}: anonymous route needs a non-empty reason`);
+    }
+    if ((auth?.kind === 'anonymous' || auth?.kind === 'user') && !allowed.includes(auth.kind)) {
+      problems.push(`${label}: auth kind "${auth.kind}" is not allowed on this surface`);
+    }
+    for (const [, name] of String(route.path).matchAll(/\/groups\/:([^/]+)/g)) {
+      if (name !== 'groupId') {
+        problems.push(`${label}: the group parameter must be named :groupId, not :${String(name)}`);
+      }
     }
     const key = `${String(route.method)} ${normalizePath(String(route.path))}`;
     if (seen.has(key)) {
@@ -106,18 +147,38 @@ const requireJsonContentType: RequestHandler = (req, _res, next) => {
   next();
 };
 
+/** Options of {@link mountRoutes}. */
+export interface MountOptions {
+  /**
+   * Authentication middleware of the surface: it must set `res.locals.auth` or fail. Required as
+   * soon as one route has `user` auth; without it mounting fails (deny by default).
+   */
+  readonly authenticate?: RequestHandler;
+  /** Group existence lookup and audit callback, needed by routes declaring `group: true`. */
+  readonly groupAccess?: GroupAccessDeps;
+  /** Auth kinds this surface accepts; only anonymous routes by default, so `user` must be allowed explicitly (the backoffice does). */
+  readonly allowedAuth?: ReadonlyArray<RouteAuth['kind']>;
+}
+
+const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
+
 /**
  * Mounts validated routes on a router. For every path it registers the declared
- * methods (with a per-route JSON parser and a 415 guard on POST/PUT/PATCH) plus a
- * catch-all answering 405 with the `Allow` header. `GET` implies `HEAD`.
+ * methods plus a catch-all answering 405 with the `Allow` header. `GET` implies `HEAD`.
+ * The chain of a `user` route is: `authenticate`, the group check (when `group: true`),
+ * `requirePermission` (which reports PSA and D group requests with their outcome), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser, then the handler.
  *
  * @param router Target router.
  * @param routes Route declarations.
+ * @param options The `authenticate` middleware, needed by `user` routes.
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
- * empty reason, disallowed method, bad path, duplicate method and path).
+ * empty reason, unknown permission, `user` route without `authenticate`, inconsistent `group`,
+ * auth kind not allowed on the surface, disallowed method,
+ * bad path, duplicate method and path).
  */
-export function mountRoutes(router: Router, routes: readonly RouteDefinition[]): void {
-  const problems = validateRoutes(routes);
+export function mountRoutes(router: Router, routes: readonly RouteDefinition[], options: MountOptions = {}): void {
+  const { authenticate, groupAccess } = options;
+  const problems = validateRoutes(routes, options);
   if (problems.length > 0) {
     throw new Error(`Invalid route definitions:\n${problems.map((problem) => `  - ${problem}`).join('\n')}`);
   }
@@ -130,6 +191,14 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[]):
     groups.set(key, group);
 
     const middleware: RequestHandler[] = [];
+    if (route.auth.kind === 'user') {
+      const grouped = route.auth.group === true;
+      middleware.push(
+        authenticate!,
+        ...(grouped ? [requireGroupAccess(groupAccess!.groups)] : []),
+        requirePermission(route.auth.permission, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
+      );
+    }
     if (BODY_METHODS.has(route.method)) {
       middleware.push(
         requireJsonContentType,

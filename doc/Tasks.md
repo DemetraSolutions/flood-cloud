@@ -245,22 +245,22 @@ Passi decisi dall'utente il 2026-11-02: **2A** = 2.1 e 2.2; **2B** = 2.3 e 2.4; 
 - [x] **2.2.5** *Non necessario: l'analisi del legacy del 2026-11-01 conferma che nessuna scrittura attiva cifra i dati personali.* Verifica con il `legacy_analyst` che il legacy non cifri più i dati personali in scrittura; se lo fa ancora, la cifratura va disattivata nel legacy prima della migrazione 2.2.4.
 
 ### 2.3 RBAC
-- [ ] **2.3.1** Catalogo dei permessi `risorsa:azione` dei domini core: `users`, `groups`, `companies`, `places`, `sessions`, `auditLog`.
-- [ ] **2.3.2** Policy centralizzata ruolo → permessi; ogni route dichiara il permesso richiesto; test della matrice completa ruolo × permesso.
-- [ ] **2.3.3** Restrizioni per utente (D-06): mappatura delle chiavi legacy `permissions.<modulo>.{r,w}` e calcolo dei permessi effettivi.
-- [ ] **2.3.4** Requisito di feature del gruppo dichiarabile sulla route (4.2.2): una route di un modulo spento risponde `403`.
+- [x] **2.3.1** Catalogo dei permessi `risorsa:azione` dei domini core: `users`, `groups`, `companies`, `places`, `sessions`, `auditLog`.
+- [x] **2.3.2** Policy centralizzata ruolo → permessi; ogni route dichiara il permesso richiesto; test della matrice completa ruolo × permesso.
+- [x] **2.3.3** Restrizioni per utente (D-06): mappatura delle chiavi legacy `permissions.<modulo>.{r,w}` e calcolo dei permessi effettivi.
+- [ ] **2.3.4** *(rinviato all'area 4: dipende dai feature flag, D-13)* Requisito di feature del gruppo dichiarabile sulla route (4.2.2): una route di un modulo spento risponde `403`.
 
 ### 2.4 Scope e isolamento dei tenant
-- [ ] **2.4.1** Calcolo dello scope alla verifica della credenziale:
+- [x] **2.4.1** Calcolo dello scope alla verifica della credenziale:
   - PSA: tutto;
   - D: i gruppi con il proprio `dealerId`;
   - SA: il proprio gruppo;
   - CA: le proprie aziende;
   - PA: i propri punti vendita.
-- [ ] **2.4.2** Contesto `req.auth` tipizzato; helper dei repository che applicano lo scope a ogni query; database del gruppo risolto dal contesto.
-- [ ] **2.4.3** `groupId` nel percorso verificato contro lo scope, `404` fuori scope; audit degli accessi di PSA e D a un gruppo.
-- [ ] **2.4.4** Regola anti-escalation: si gestiscono solo utenti di ruolo inferiore (PSA > D > SA > CA > PA > E) e dentro il proprio scope; nessuno modifica il proprio ruolo o scope.
-- [ ] **2.4.5** Modello di test di isolamento riusabile per ogni endpoint: altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita.
+- [x] **2.4.2** Contesto `req.auth` tipizzato; helper dei repository che applicano lo scope a ogni query; database del gruppo risolto dal contesto.
+- [x] **2.4.3** `groupId` nel percorso verificato contro lo scope, `404` fuori scope (anche per gruppo inesistente); gruppi sospesi o cestinati raggiungibili solo dal PSA (decisione dell'utente del 2026-11-02); audit degli accessi di PSA e D a un gruppo: segnale pronto, scrittura nel registro con il passo 2C.
+- [x] **2.4.4** Regola anti-escalation (decisione dell'utente del 2026-11-02): ruoli gestibili PSA → tutti; D → SA, CA, PA, E; SA → SA, CA, PA, E; CA → CA, PA, E; PA → PA, E (pari ammessi), sempre dentro il proprio scope; nessuno modifica il proprio ruolo, scope, permessi o stato; nessuno concede permessi che non ha; cambiare la matrice altrui richiede `permissions.status`; chi non ce l'ha crea utenti con i permessi di default del ruolo. Tetti per ruolo approvati: tabella in `doc/Technical-Guide.md` §8.
+- [x] **2.4.5** Modello di test di isolamento riusabile per ogni endpoint: altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita.
 
 ### 2.5 Rate limit
 - [ ] **2.5.1** Collection `rateLimits` con contatori a finestra fissa, `$inc` atomico con upsert e TTL.
@@ -323,7 +323,7 @@ Modello di dominio ↔ documento legacy `<env>_common.users` (D-03):
 Task:
 - [ ] **3.1.1** Tipi `User` (dominio) e `LegacyUserDocument` (tutti i campi facoltativi, tipi reali dalla profilazione).
 - [ ] **3.1.2** Mapper legacy → dominio con raccolta delle anomalie (ruolo sconosciuto, scope incoerente, dati non decifrabili).
-- [ ] **3.1.3** Mapper dominio → aggiornamento legacy: solo `$set` dei campi posseduti, conversione di stato, cestino e scope (D-08).
+- [ ] **3.1.3** Mapper dominio → aggiornamento legacy: solo `$set` dei campi posseduti, conversione di stato, cestino e scope (D-08). Matrice dei permessi scritta solo con `$set` puntuali di `permissions.<modulo>.r|w` e `permissions.status` (moduli in allowlist), conservando `apps.cash.*`; `/v1` rifiuta con `422` le modifiche ad `apps` (revisione del passo 2B).
 - [ ] **3.1.4** Collection `userCredentials` con `$jsonSchema` e indici.
 - [ ] **3.1.5** Mapper di risposta `/v1` con allowlist esplicita dei campi.
 - [ ] **3.1.6** Indici su `users` verificati con `getIndexes()`; aggiunta dei soli indici non univoci approvati (`groupId + role`, `dealerId`).
@@ -363,7 +363,7 @@ URL definitivi da concordare con `api_expert`: utenti di un gruppo sotto `/v1/gr
   - paginazione a cursore e ordinamenti in allowlist.
 - [ ] **3.4.2** Dettaglio di un utente nello scope (`404` fuori scope).
 - [ ] **3.4.3** Creazione:
-  - ruolo inferiore a quello di chi crea e scope dentro il suo;
+  - ruolo gestibile da chi crea (pari ammessi, 2.4.4) e scope dentro il suo;
   - scope obbligatorio per ruolo (D-08);
   - username univoco (`409`, D-15);
   - password iniziale secondo la policy (D-19);
@@ -453,8 +453,8 @@ Task:
   - feature e integrazioni abilitate: PSA e D;
   - `demo`: PSA;
   - lingue e impostazioni statistiche.
-- [ ] **4.4.4** Sospensione e riattivazione: revoca di tutte le sessioni del gruppo, `status` legacy aggiornato (il legacy lo legge a ogni richiesta), audit.
-- [ ] **4.4.5** Cestino e ripristino (D-14).
+- [ ] **4.4.4** Sospensione e riattivazione (solo PSA, decisione del 2026-11-02): revoca di tutte le sessioni del gruppo, `status` legacy aggiornato (il legacy lo legge a ogni richiesta), audit.
+- [ ] **4.4.5** Cestino e ripristino, solo PSA (decisione del 2026-11-02, D-14). `groups:update` di D e SA non può toccare `status` né `trash` (allowlist dei campi).
 - [ ] **4.4.6** Elenco dei dealer (utenti D) per il filtro di PSA.
 - [ ] **4.4.7** Test di isolamento: un D non vede né modifica gruppi di un altro dealer (nel legacy poteva farlo con `?groupId=`).
 
