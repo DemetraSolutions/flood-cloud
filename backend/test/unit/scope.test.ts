@@ -104,7 +104,7 @@ describe('buildPrincipal', () => {
     assert.deepEqual(anomalies, []);
     assert.equal(principal.scope.kind, 'companies');
     assert.equal(principal.canManagePermissions, true);
-    assert.deepEqual([...principal.permissions].sort(), ['places:read', 'sessions:read', 'sessions:revoke']);
+    assert.deepEqual([...principal.permissions].sort(), ['places:read', 'profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
     assert.ok(Object.isFrozen(principal) && Object.isFrozen(principal.companyIds) && Object.isFrozen(principal.placeIds));
     assert.throws(() => (principal.permissions as Set<string>).add('groups:trash'), TypeError);
     assert.equal(principal.matrix.status, true);

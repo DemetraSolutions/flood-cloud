@@ -1,4 +1,7 @@
+import { CORE_MODULES } from '../shared/security/rbac/permission-matrix.ts';
 import { ACTIVITY_LOG_INDEXES, ACTIVITY_LOG_VALIDATOR } from './activity-log-schema.ts';
+import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
+import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
 
 /** Who owns a collection and may therefore shape its documents and indexes. */
 export type Ownership = 'new' | 'legacy-read' | 'legacy-write';
@@ -34,16 +37,56 @@ export type DatabaseKind = 'common' | 'group';
 export type CollectionRegistry = Readonly<Record<DatabaseKind, Readonly<Record<string, CollectionSpec>>>>;
 
 /**
+ * Fields of the shared legacy `users` documents this backend may write (`$set`/`$unset` only):
+ * profile, status, scope, `permissions.<core module>.r|w`, `permissions.status` and, for the
+ * legacy coexistence, `password`, `tokens` and `userName`. Everything else (`pin`, `avatar`,
+ * `permissions.apps`, `servicesId`, `shiftTime`…) belongs to the legacy.
+ */
+export const USERS_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'name',
+  'surname',
+  'email',
+  'telephone',
+  'settings.language',
+  'settings.hiddenInStats',
+  'status',
+  'trash',
+  'role',
+  'groupId',
+  'dealerId',
+  'companyId',
+  'placeId',
+  'placesId',
+  ...Object.keys(CORE_MODULES).flatMap((module) => [`permissions.${module}.r`, `permissions.${module}.w`]),
+  'permissions.status',
+  'password',
+  'tokens',
+  'userName',
+  'insertDate',
+  'updateDate',
+]);
+
+/**
  * Ownership registry of every collection the backend touches (`doc/Tasks.md` 0.1 and 0.2).
  * A new collection must be registered here before any code can use it.
  */
 export const COLLECTIONS = {
   common: {
-    users: { ownership: 'legacy-read' },
+    users: {
+      ownership: 'legacy-write',
+      ownedFields: USERS_OWNED_FIELDS,
+      // Non-unique only (approved in doc/Tasks.md 3.1.6); the unique `userName_1` is the legacy's.
+      indexes: [
+        { name: 'groupId_1_role_1', key: { groupId: 1, role: 1 } },
+        { name: 'dealerId_1', key: { dealerId: 1 } },
+      ],
+    },
     groups: { ownership: 'legacy-read' },
     countries: { ownership: 'legacy-read' },
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
     activityLog: { ownership: 'new', indexes: ACTIVITY_LOG_INDEXES, validator: ACTIVITY_LOG_VALIDATOR },
+    userCredentials: { ownership: 'new', validator: USER_CREDENTIALS_VALIDATOR },
+    sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
   },
   group: {
     companies: { ownership: 'legacy-read' },

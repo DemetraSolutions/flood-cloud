@@ -7,7 +7,7 @@ import type { Permission } from '../../src/shared/security/rbac/permissions.ts';
 import { ROLE_CEILING } from '../../src/shared/security/rbac/policy.ts';
 
 const sorted = (set: ReadOnlySet<Permission>): Permission[] => [...set].sort();
-const SESSIONS: Permission[] = ['sessions:read', 'sessions:revoke'];
+const SESSIONS: Permission[] = ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke'];
 
 describe('effectivePermissions (D-06)', () => {
   it('maps r to read and w to every write action, plus own sessions', () => {
@@ -51,6 +51,14 @@ describe('effectivePermissions (D-06)', () => {
     assert.deepEqual(sorted(effectivePermissions('PA', everything).permissions), ['activityLog:read', 'places:read', 'places:update', 'users:create', 'users:read', 'users:trash', 'users:update', ...SESSIONS].sort());
     assert.equal(effectivePermissions('SA', everything).permissions.has('groups:trash'), false);
     assert.equal(effectivePermissions('CA', everything).permissions.has('companies:create'), false);
+  });
+
+  it('grants users:delete with users write only where the role ceiling allows it (D-14)', () => {
+    const write = { users: { r: true, w: true } };
+    for (const role of ROLES) {
+      assert.equal(effectivePermissions(role, write).permissions.has('users:delete'), ['PSA', 'D', 'SA'].includes(role), role);
+      assert.equal(effectivePermissions(role, { users: { r: true, w: false } }).permissions.has('users:delete'), false, role);
+    }
   });
 
   it('gives nothing to E, not even sessions or permission management', () => {
@@ -98,7 +106,7 @@ describe('effectivePermissions (D-06)', () => {
     const result = effectivePermissions('PSA', matrix);
     assert.equal(calls, 0);
     assert.equal(result.canManagePermissions, false);
-    assert.deepEqual(sorted(result.permissions), ['sessions:read', 'sessions:revoke', 'users:create', 'users:trash', 'users:update']);
+    assert.deepEqual(sorted(result.permissions), ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke', 'users:create', 'users:delete', 'users:trash', 'users:update']);
   });
 
   it('returns a read-only set', () => {
@@ -114,5 +122,18 @@ describe('effectivePermissions (D-06)', () => {
     const result = effectivePermissions('PSA', inherited);
     assert.equal(result.canManagePermissions, false);
     assert.equal(result.permissions.has(PERMISSIONS.GROUPS_READ), false);
+  });
+});
+
+describe('always granted permissions', () => {
+  it('names exactly the own session and profile permissions, and a prefix is not enough', async () => {
+    const { ALWAYS_GRANTED_PERMISSIONS, isAlwaysGranted } = await import('../../src/shared/security/rbac/effective-permissions.ts');
+    assert.deepEqual([...ALWAYS_GRANTED_PERMISSIONS].sort(), ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
+    for (const permission of ALWAYS_GRANTED_PERMISSIONS) {
+      assert.equal(isAlwaysGranted(permission), true);
+    }
+    for (const other of ['sessions:purge', 'profile:delete', 'users:read', 'sessions:', '']) {
+      assert.equal(isAlwaysGranted(other), false, other);
+    }
   });
 });

@@ -41,6 +41,7 @@
 | `400` | JSON malformato | `MALFORMED_JSON` |
 | `400` | richiesta malformata (percorso, dimensione o protocollo) | `BAD_REQUEST` |
 | `401` | credenziale assente, non valida, scaduta, revocata | `UNAUTHENTICATED`, `TOKEN_EXPIRED`, `CLOCK_SKEW` |
+| `401` | credenziali di login errate o account non ammesso (risposta identica per ogni caso) | `INVALID_CREDENTIALS` |
 | `403` | autenticato ma senza permesso | `FORBIDDEN` |
 | `404` | inesistente **o fuori scope** | `NOT_FOUND` |
 | `405` | metodo non supportato sulla risorsa (+ `Allow`) | `METHOD_NOT_ALLOWED` |
@@ -55,6 +56,8 @@
 ```json
 { "error": { "code": "VALIDATION_ERROR", "message": "Invalid request", "details": [{ "field": "price", "issue": "minimum" }] } }
 ```
+
+`issue` possibili nei `details` dei `422`: `required`, `type`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `enum`, `unknown`, `forbiddenKey`, `format`, `tooDeep`, `tooMany`, `incorrect`.
 
 ## 6. Idempotenza e concorrenza
 - **`Idempotency-Key`** (UUID) obbligatoria sulle scritture della superficie store e sulle creazioni sensibili ai doppioni (vendite, documenti, pagamenti): stessa chiave e stesso body ⇒ stessa risposta; stessa chiave e body diverso ⇒ `409`.

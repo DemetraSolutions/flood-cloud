@@ -35,9 +35,12 @@ export const PERMISSIONS = Object.freeze({
   USERS_CREATE: 'users:create',
   USERS_UPDATE: 'users:update',
   USERS_TRASH: 'users:trash',
+  USERS_DELETE: 'users:delete',
   ACTIVITY_LOG_READ: 'activityLog:read',
   SESSIONS_READ: 'sessions:read',
   SESSIONS_REVOKE: 'sessions:revoke',
+  PROFILE_READ: 'profile:read',
+  PROFILE_UPDATE: 'profile:update',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

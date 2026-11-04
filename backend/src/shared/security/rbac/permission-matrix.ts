@@ -27,7 +27,7 @@ export interface CoreModule {
 /** Core modules of the legacy matrix and what they map to. Other modules are kept as data only. */
 export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze({
   groups: { read: [P.GROUPS_READ], write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH] },
-  users: { read: [P.USERS_READ], write: [P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH] },
+  users: { read: [P.USERS_READ], write: [P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH, P.USERS_DELETE] },
   companies: { read: [P.COMPANIES_READ], write: [P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH] },
   places: { read: [P.PLACES_READ], write: [P.PLACES_CREATE, P.PLACES_UPDATE, P.PLACES_TRASH] },
   logs: { read: [P.ACTIVITY_LOG_READ], write: [] },

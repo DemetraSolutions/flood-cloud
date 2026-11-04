@@ -226,8 +226,8 @@ describe('checkUserChange: permissions and matrix', () => {
   });
 
   it('does not compare the sessions of the user himself', () => {
-    const noSessions = actorWithout('SA', ['sessions:read', 'sessions:revoke']);
-    const after: UserChangeView = { ...defaultView('PA'), permissions: new Set<Permission>(['sessions:read', 'sessions:revoke', 'users:read']) };
+    const noSessions = actorWithout('SA', ['sessions:read', 'sessions:revoke', 'profile:read', 'profile:update']);
+    const after: UserChangeView = { ...defaultView('PA'), permissions: new Set<Permission>(['sessions:read', 'sessions:revoke', 'profile:read', 'profile:update', 'users:read']) };
     assert.deepEqual(checkUserChange(noSessions, null, after), []);
   });
 
@@ -324,7 +324,7 @@ describe('checkUserChange on views produced by effectivePermissions', () => {
   it('a legacy matrix full of garbage produces a view that grants nothing', () => {
     const garbage = realView('PA', { status: 'yes', users: 'rw', places: [true], logs: null });
     assert.equal(garbage.matrix.status, false);
-    assert.deepEqual([...garbage.permissions].sort(), ['sessions:read', 'sessions:revoke']);
+    assert.deepEqual([...garbage.permissions].sort(), ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
     assert.deepEqual(checkUserChange(actors.SA, null, garbage), []);
   });
 });

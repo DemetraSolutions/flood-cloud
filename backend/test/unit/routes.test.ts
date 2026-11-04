@@ -172,3 +172,12 @@ describe('mountRoutes: rate limit requirement of anonymous routes', () => {
     assert.match(message(user, { authenticate: () => undefined, allowedAuth: ['user'], allowRateLimitExempt: true, ...withLimit }), /only anonymous routes can be exempt from the rate limit/);
   });
 });
+
+describe('mountRoutes: middleware and compress options', () => {
+  it('rejects a middleware that is not a list of functions and a compress other than false', () => {
+    assert.match(mountError([route({ middleware: 'validate' })]), /middleware must be a list of functions/);
+    assert.match(mountError([route({ middleware: [handler, 'x'] })]), /middleware must be a list of functions/);
+    assert.match(mountError([route({ compress: true })]), /compress can only be false/);
+    mountRoutes(express.Router(), [route({ middleware: [handler], compress: false })], withLimit);
+  });
+});

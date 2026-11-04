@@ -59,6 +59,16 @@ export interface RouteDefinition {
    * `allowRateLimitExempt` (the health probes of the orchestrator); a `user` route can never be exempt.
    */
   readonly rateLimitExempt?: { readonly reason: string };
+  /**
+   * Middleware run just before the handler, after the body parser and the rules that read the body;
+   * the validation of body, query and params goes here (`validateBody`, `validateParams`…).
+   */
+  readonly middleware?: readonly RequestHandler[];
+  /**
+   * `false` for a route whose response carries credentials (access or refresh tokens): the response
+   * is never compressed, which would expose the secrets to BREACH-style attacks (D-12).
+   */
+  readonly compress?: false;
   readonly handler: RequestHandler;
 }
 
@@ -132,6 +142,14 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     }
     if ((auth?.kind === 'anonymous' || auth?.kind === 'user') && !allowed.includes(auth.kind)) {
       problems.push(`${label}: auth kind "${auth.kind}" is not allowed on this surface`);
+    }
+    const extra: unknown = route.middleware;
+    if (extra !== undefined && !(Array.isArray(extra) && extra.every((item: unknown) => typeof item === 'function'))) {
+      problems.push(`${label}: middleware must be a list of functions`);
+    }
+    const compress: unknown = route.compress;
+    if (compress !== undefined && compress !== false) {
+      problems.push(`${label}: compress can only be false`);
     }
     if (route.rateLimit !== undefined) {
       const rules: unknown = route.rateLimit;
@@ -213,7 +231,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * The chain of a `user` route is: `authenticate` (guarded by the per-IP limit on failed authentications), the rate limit (the per-user API rule, then the
  * declared rules), the group check (when `group: true`), `requirePermission` (which reports PSA and D
  * group requests with their outcome), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser,
- * then the declared rules that read the body (`needsBody`), then the handler. An anonymous route runs
+ * then the declared rules that read the body (`needsBody`), then the route `middleware` (validation), then the handler. An anonymous route runs
  * its declared rules, the guard and parser, the body rules, the handler. `/health` declares none.
  *
  * @param router Target router.
@@ -221,7 +239,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * @param options The `authenticate` middleware and the rate limit dependencies, needed by `user` routes.
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
  * empty reason, unknown permission, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
- * malformed rate limit rules, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
+ * malformed rate limit rules, malformed `middleware` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
  * auth kind not allowed on the surface, disallowed method,
  * bad path, duplicate method and path).
  */
@@ -243,6 +261,9 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
       (req, res, next) => {
         // Express forgets `baseUrl` once the router is left, so the error reporting reads this instead.
         res.locals.routePattern = `${req.baseUrl}${route.path}`;
+        if (route.compress === false) {
+          res.locals.noCompression = true;
+        }
         next();
       },
     ];
@@ -268,7 +289,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         express.json({ limit: route.bodyLimit ?? DEFAULT_BODY_LIMIT, strict: true, inflate: false, type: 'application/json' }),
       );
     }
-    middleware.push(...afterBody, route.handler);
+    middleware.push(...afterBody, ...(route.middleware ?? []), route.handler);
     switch (route.method) {
       case 'GET':
         router.get(route.path, ...middleware);

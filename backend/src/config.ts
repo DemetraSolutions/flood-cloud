@@ -36,6 +36,8 @@ export interface Config {
   readonly refreshIdleTtlSeconds: number;
   /** Absolute lifetime of a session in seconds (`SESSION_MAX_TTL_SECONDS`). */
   readonly sessionMaxTtlSeconds: number;
+  /** Seconds after a refresh during which a retry of the old token is tolerated as a network race (`REFRESH_REUSE_GRACE_SECONDS`). */
+  readonly refreshReuseGraceSeconds: number;
   /** Pause between the shutdown signal and the closing of the server (`SHUTDOWN_DRAIN_MS`). */
   readonly shutdownDrainMs: number;
   /** Request timeout in milliseconds (`REQUEST_TIMEOUT_MS`). */
@@ -302,6 +304,7 @@ export function loadConfig(env: Env): Config {
   const accessTokenTtlSeconds = readInteger(env, issues, 'ACCESS_TOKEN_TTL_SECONDS', 900, 1, Number.MAX_SAFE_INTEGER);
   const refreshIdleTtlSeconds = readInteger(env, issues, 'REFRESH_IDLE_TTL_SECONDS', 604800, 1, Number.MAX_SAFE_INTEGER);
   const sessionMaxTtlSeconds = readInteger(env, issues, 'SESSION_MAX_TTL_SECONDS', 2592000, 1, Number.MAX_SAFE_INTEGER);
+  const refreshReuseGraceSeconds = readInteger(env, issues, 'REFRESH_REUSE_GRACE_SECONDS', 30, 0, 300);
   if (
     refreshIdleTtlSeconds !== undefined &&
     sessionMaxTtlSeconds !== undefined &&
@@ -356,6 +359,7 @@ export function loadConfig(env: Env): Config {
     accessTokenTtlSeconds === undefined ||
     refreshIdleTtlSeconds === undefined ||
     sessionMaxTtlSeconds === undefined ||
+    refreshReuseGraceSeconds === undefined ||
     requestTimeoutMs === undefined ||
     shutdownDrainMs === undefined ||
     legacyPasswordPepper === undefined ||
@@ -380,6 +384,7 @@ export function loadConfig(env: Env): Config {
     accessTokenTtlSeconds,
     refreshIdleTtlSeconds,
     sessionMaxTtlSeconds,
+    refreshReuseGraceSeconds,
     shutdownDrainMs,
     requestTimeoutMs,
     legacyPasswordPepper,

@@ -1,4 +1,6 @@
 import type { GroupAccess } from '../security/scope/group-access.ts';
+import type { ValidatedInput } from '../validation/middleware.ts';
+import type { ObjectId } from 'mongodb';
 import type { AuthPrincipal } from '../security/scope/principal.ts';
 
 declare global {
@@ -12,6 +14,12 @@ declare global {
       routePattern?: string;
       /** Verified principal, set by the authentication middleware of the surface. */
       auth?: AuthPrincipal;
+      /** Id of the session whose access token authenticated the request, set by the Bearer middleware. */
+      sessionId?: ObjectId;
+      /** Set by the route builder for routes that return credentials: the response must not be compressed (BREACH). */
+      noCompression?: true;
+      /** Validated body, query and params, set by `validateBody`, `validateQuery` and `validateParams`. */
+      input?: ValidatedInput;
       /** Verified group of the path, set by `requireGroupAccess`. */
       groupAccess?: GroupAccess;
     }

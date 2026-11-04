@@ -14,8 +14,8 @@ export interface EffectivePermissions {
   readonly canManagePermissions: boolean;
 }
 
-/** Permissions every user holds on his own account, within the role ceiling (no legacy module). */
-const OWN_SESSION_PERMISSIONS: readonly Permission[] = [P.SESSIONS_READ, P.SESSIONS_REVOKE];
+/** Permissions every user holds on his own account (sessions and profile), within the role ceiling (no legacy module). */
+export const ALWAYS_GRANTED_PERMISSIONS: readonly Permission[] = [P.SESSIONS_READ, P.SESSIONS_REVOKE, P.PROFILE_READ, P.PROFILE_UPDATE];
 
 /**
  * Computes what a user may do (D-06) from an already normalized matrix: the ceiling of the role
@@ -48,7 +48,7 @@ export function effectivePermissionsOf(role: Role, matrix: PermissionMatrix): Ef
       grant(module.write);
     }
   }
-  grant(OWN_SESSION_PERMISSIONS);
+  grant(ALWAYS_GRANTED_PERMISSIONS);
   return { permissions: frozenSet(granted), canManagePermissions: role !== 'E' && matrix.status };
 }
 
@@ -63,4 +63,15 @@ export function effectivePermissionsOf(role: Role, matrix: PermissionMatrix): Ef
  */
 export function effectivePermissions(role: Role, legacyPermissions: unknown): EffectivePermissions {
   return effectivePermissionsOf(role, normalizeMatrix(legacyPermissions));
+}
+
+/**
+ * Tells whether a permission is one of the exact {@link ALWAYS_GRANTED_PERMISSIONS}: those never come
+ * from the legacy matrix, so user changes do not compare them. A permission that merely shares a
+ * prefix with them is not one.
+ *
+ * @param permission Any permission string.
+ */
+export function isAlwaysGranted(permission: string): boolean {
+  return (ALWAYS_GRANTED_PERMISSIONS as readonly string[]).includes(permission);
 }

@@ -1,30 +1,41 @@
 import { safeEqual } from './compare.ts';
 import { legacyHashFingerprint, verifyLegacyPassword } from './legacy-password.ts';
-import { hashPassword, needsRehash, verifyDummyPassword, verifyPassword, warmUpDummyHash } from './scrypt.ts';
+import { needsRehash, verifyDummyPassword, verifyPassword, warmUpDummyHash } from './scrypt.ts';
 import type { Secret } from './secret.ts';
 
 /** The scrypt credentials of a user, as far as verification is concerned. */
 export interface StoredCredentials {
-  /** scrypt hash in the format of {@link hashPassword}. */
+  /** scrypt hash in the format of `hashPassword`. */
   readonly passwordHash: string;
   /** Fingerprint of the legacy hash current when the scrypt hash was made, or `null`. */
   readonly legacyHashFingerprint: string | null;
 }
 
-/** Values to persist after a successful verification; never contains the password. */
-export interface CredentialsUpdate {
-  readonly passwordHash: string;
+/**
+ * A scrypt hash the caller should compute and store once it has decided the login is allowed. The
+ * hash itself is not computed here, so a refused login (disabled account, retired role, suspended
+ * group) costs one scrypt in total.
+ */
+export interface RehashRequest {
+  /** Fingerprint of the legacy hash to store with the new scrypt hash, or `null`. */
   readonly legacyHashFingerprint: string | null;
 }
 
 /** Outcome of {@link verifyUserPassword}. */
 export type VerifyResult =
   | { readonly ok: false }
-  | { readonly ok: true; readonly credentialsUpdate: CredentialsUpdate | null };
+  | {
+      readonly ok: true;
+      /** The scrypt hash to compute and store (`hashPassword(password)` with this fingerprint), or `null`. */
+      readonly rehash: RehashRequest | null;
+      /** Whether a scrypt ran during the verification; if not, a refusing caller must run {@link verifyDummyPassword} to keep the cost uniform. */
+      readonly usedScrypt: boolean;
+    };
 
 /**
  * Verifies a login password while the legacy system coexists (decision D-04). Pure: it decides, it
- * does not persist; the caller writes `credentialsUpdate` when it is not `null`.
+ * does not persist and it does not compute the new scrypt hash; when `rehash` is not `null` the
+ * caller computes it with `hashPassword` and writes it, after its own checks have passed.
  *
  * 1. Credentials exist and scrypt is authoritative: their fingerprint is `null` (the legacy hash is
  *    ignored, since a null fingerprint only exists when coexistence is off), or the legacy hash is
@@ -33,11 +44,11 @@ export type VerifyResult =
  *    parameters are outdated, keeping the stored fingerprint.
  * 2. Credentials exist with a fingerprint that differs from the current legacy hash (the legacy
  *    changed the password), or there are no credentials: verify with the legacy hash; on success,
- *    return a fresh scrypt hash and the fingerprint of the current legacy hash.
+ *    request a scrypt hash with the fingerprint of the current legacy hash.
  * 3. No usable hash: failure.
  *
  * @param input The password, the legacy hash (or `null`), the stored credentials (or `null`) and the pepper.
- * @returns Failure, or success with the optional update to persist.
+ * @returns Failure, or success with the optional rehash request.
  */
 export async function verifyUserPassword(input: {
   readonly password: string;
@@ -52,16 +63,7 @@ export async function verifyUserPassword(input: {
     if (!(await verifyPassword(password, credentials.passwordHash))) {
       return { ok: false };
     }
-    if (!needsRehash(credentials.passwordHash)) {
-      return { ok: true, credentialsUpdate: null };
-    }
-    return {
-      ok: true,
-      credentialsUpdate: {
-        passwordHash: await hashPassword(password),
-        legacyHashFingerprint: credentials.legacyHashFingerprint,
-      },
-    };
+    return { ok: true, rehash: needsRehash(credentials.passwordHash) ? { legacyHashFingerprint: credentials.legacyHashFingerprint } : null, usedScrypt: true };
   }
 
   if (legacyHash === null || !verifyLegacyPassword(password, legacyHash, pepper)) {
@@ -69,10 +71,7 @@ export async function verifyUserPassword(input: {
     await verifyDummyPassword(password);
     return { ok: false };
   }
-  return {
-    ok: true,
-    credentialsUpdate: { passwordHash: await hashPassword(password), legacyHashFingerprint: currentFingerprint },
-  };
+  return { ok: true, rehash: { legacyHashFingerprint: currentFingerprint }, usedScrypt: false };
 }
 
 /**

@@ -29,9 +29,12 @@ const EXPECTED: Record<Permission, Role[]> = {
   'users:create': FROM_PA,
   'users:update': FROM_PA,
   'users:trash': FROM_PA,
+  'users:delete': FROM_SA,
   'activityLog:read': FROM_PA,
   'sessions:read': FROM_PA,
   'sessions:revoke': FROM_PA,
+  'profile:read': FROM_PA,
+  'profile:update': FROM_PA,
 };
 
 describe('permission catalog', () => {

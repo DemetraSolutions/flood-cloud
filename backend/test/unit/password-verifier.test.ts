@@ -4,7 +4,7 @@ import crypto, { randomBytes, scryptSync } from 'node:crypto';
 import { legacyHashFingerprint, legacyPasswordHash } from '../../src/shared/security/legacy-password.ts';
 import { verifyDummyPassword, verifyUserPassword, warmUpPasswordVerifier } from '../../src/shared/security/password-verifier.ts';
 import { buildPasswordChange } from '../../src/shared/security/password-change.ts';
-import { hashPassword, needsRehash, verifyPassword } from '../../src/shared/security/scrypt.ts';
+import { hashPassword } from '../../src/shared/security/scrypt.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
 
 const pepper = new Secret('verifier-test-pepper');
@@ -29,7 +29,7 @@ describe('verifyUserPassword', () => {
       credentials: { passwordHash, legacyHashFingerprint: fingerprint },
       pepper,
     });
-    assert.deepEqual(result, { ok: true, credentialsUpdate: null });
+    assert.deepEqual(result, { ok: true, rehash: null, usedScrypt: true });
     const wrong = await verifyUserPassword({
       password: 'nope',
       legacyHash: legacy,
@@ -39,17 +39,14 @@ describe('verifyUserPassword', () => {
     assert.deepEqual(wrong, { ok: false });
   });
 
-  it('rehashes outdated scrypt parameters keeping the fingerprint, without the password in the update', async () => {
+  it('asks for a rehash of outdated scrypt parameters keeping the fingerprint, without computing it', async () => {
     const result = await verifyUserPassword({
       password: PASSWORD,
       legacyHash: legacy,
       credentials: { passwordHash: oldScrypt(PASSWORD), legacyHashFingerprint: fingerprint },
       pepper,
     });
-    assert.ok(result.ok && result.credentialsUpdate !== null);
-    assert.equal(result.credentialsUpdate.legacyHashFingerprint, fingerprint);
-    assert.equal(needsRehash(result.credentialsUpdate.passwordHash), false);
-    assert.equal(await verifyPassword(PASSWORD, result.credentialsUpdate.passwordHash), true);
+    assert.deepEqual(result, { ok: true, rehash: { legacyHashFingerprint: fingerprint }, usedScrypt: true });
     assert.ok(!JSON.stringify(result).includes(PASSWORD));
   });
 
@@ -72,14 +69,12 @@ describe('verifyUserPassword', () => {
       credentials: { passwordHash, legacyHashFingerprint: null },
       pepper,
     });
-    assert.deepEqual(result, { ok: true, credentialsUpdate: null });
+    assert.deepEqual(result, { ok: true, rehash: null, usedScrypt: true });
   });
 
-  it('migrates a legacy-only user: verifies and returns scrypt plus the fingerprint', async () => {
+  it('migrates a legacy-only user: verifies and asks for scrypt with the fingerprint, running no scrypt itself', async () => {
     const result = await verifyUserPassword({ password: PASSWORD, legacyHash: legacy, credentials: null, pepper });
-    assert.ok(result.ok && result.credentialsUpdate !== null);
-    assert.equal(result.credentialsUpdate.legacyHashFingerprint, fingerprint);
-    assert.equal(await verifyPassword(PASSWORD, result.credentialsUpdate.passwordHash), true);
+    assert.deepEqual(result, { ok: true, rehash: { legacyHashFingerprint: fingerprint }, usedScrypt: false });
     assert.ok(!JSON.stringify(result).includes(PASSWORD));
     assert.deepEqual(await verifyUserPassword({ password: 'bad', legacyHash: legacy, credentials: null, pepper }), { ok: false });
   });
@@ -89,9 +84,7 @@ describe('verifyUserPassword', () => {
     const newLegacy = legacyPasswordHash('changed-in-legacy', pepper);
     const credentials = { passwordHash: staleScrypt, legacyHashFingerprint: fingerprint };
     const ok = await verifyUserPassword({ password: 'changed-in-legacy', legacyHash: newLegacy, credentials, pepper });
-    assert.ok(ok.ok && ok.credentialsUpdate !== null);
-    assert.equal(ok.credentialsUpdate.legacyHashFingerprint, legacyHashFingerprint(newLegacy));
-    assert.equal(await verifyPassword('changed-in-legacy', ok.credentialsUpdate.passwordHash), true);
+    assert.deepEqual(ok, { ok: true, rehash: { legacyHashFingerprint: legacyHashFingerprint(newLegacy) }, usedScrypt: false });
     // The old scrypt password no longer works once the legacy changed it.
     const stale = await verifyUserPassword({ password: 'old-password-before', legacyHash: newLegacy, credentials, pepper });
     assert.deepEqual(stale, { ok: false });
@@ -128,10 +121,7 @@ describe('verifyUserPassword', () => {
   it('with a null fingerprint only scrypt decides and the legacy hash is ignored', async () => {
     const passwordHash = await hashPassword('new-password-123');
     const credentials = { passwordHash, legacyHashFingerprint: null };
-    assert.deepEqual(await verifyUserPassword({ password: 'new-password-123', legacyHash: legacy, credentials, pepper }), {
-      ok: true,
-      credentialsUpdate: null,
-    });
+    assert.deepEqual(await verifyUserPassword({ password: 'new-password-123', legacyHash: legacy, credentials, pepper }), { ok: true, rehash: null, usedScrypt: true });
     assert.deepEqual(await verifyUserPassword({ password: PASSWORD, legacyHash: legacy, credentials, pepper }), { ok: false });
     const rehash = await verifyUserPassword({
       password: PASSWORD,
@@ -139,13 +129,13 @@ describe('verifyUserPassword', () => {
       credentials: { passwordHash: oldScrypt(PASSWORD), legacyHashFingerprint: null },
       pepper,
     });
-    assert.ok(rehash.ok && rehash.credentialsUpdate?.legacyHashFingerprint === null);
+    assert.deepEqual(rehash, { ok: true, rehash: { legacyHashFingerprint: null }, usedScrypt: true });
   });
 
   it('when the legacy hash is gone scrypt stays valid and the fingerprint is kept', async () => {
     const credentials = { passwordHash: oldScrypt(PASSWORD), legacyHashFingerprint: fingerprint };
     const result = await verifyUserPassword({ password: PASSWORD, legacyHash: null, credentials, pepper });
-    assert.ok(result.ok && result.credentialsUpdate?.legacyHashFingerprint === fingerprint);
+    assert.deepEqual(result, { ok: true, rehash: { legacyHashFingerprint: fingerprint }, usedScrypt: true });
     assert.deepEqual(await verifyUserPassword({ password: 'wrong', legacyHash: null, credentials, pepper }), { ok: false });
   });
 
@@ -156,7 +146,7 @@ describe('verifyUserPassword', () => {
     const old = await verifyUserPassword({ password: PASSWORD, legacyHash: legacy, credentials, pepper });
     assert.deepEqual(old, { ok: false });
     const fresh = await verifyUserPassword({ password: 'brand-new-password', legacyHash: legacy, credentials, pepper });
-    assert.deepEqual(fresh, { ok: true, credentialsUpdate: null });
+    assert.deepEqual(fresh, { ok: true, rehash: null, usedScrypt: true });
   });
 });
 

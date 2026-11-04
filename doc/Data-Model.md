@@ -15,24 +15,29 @@ Convenzioni: nomi in camelCase inglese; date `Date` in UTC; riferimenti `ObjectI
 | `createdAt`, `updatedAt`, `deletedAt` | Date | |
 Indici: `dealerId`, `status`.
 
-## users — utenti
-| Campo | Tipo | Note |
+## users — utenti (collection legacy condivisa, D-03)
+Realizzata come **lettura e scrittura compatibile con il legacy** (passo 3A): il documento resta nel formato legacy, la traduzione nel modello di dominio avviene nel repository (`backend/src/modules/users/`). Campi legacy principali e loro significato nel dominio:
+| Campo legacy | Dominio | Note |
 |---|---|---|
-| `_id` | ObjectId | |
-| `username` | string | univoco, normalizzato |
-| `email` | string | |
-| `passwordHash` | string | `scrypt$N$r$p$salt$hash`; assente per utenti `E` se non accedono mai con password |
-| `role` | `PSA` \| `D` \| `SA` \| `CA` \| `PA` \| `E` | |
-| `groupId` | ObjectId \| null | null solo per `PSA` e `D` |
-| `dealerId` | ObjectId \| null | per gli utenti `D`: identificativo del dealer |
-| `companyIds` | ObjectId[] | per `CA` |
-| `placeIds` | ObjectId[] | per `PA` ed `E` |
-| `status` | `active` \| `disabled` | |
-| `passwordChangedAt`, `lastLoginAt` | Date | |
-| `failedLogins`, `lockedUntil` | number, Date | blocco progressivo |
-| `createdBy`, `createdAt`, `updatedAt`, `deletedAt` | | |
-Indici: `username` univoco; `groupId + role`; `dealerId`.
-Vincoli: `PSA`/`D` senza `groupId`; tutti gli altri con `groupId`; `CA` con almeno una azienda; `PA`/`E` con almeno un punto vendita.
+| `_id` | `id` | ObjectId |
+| `userName` (in subordine `username`) | `username` | nuovi o cambiati: unici globalmente confrontando NFKC, spazi e minuscole (D-15); indice legacy `userName_1` univoco esatto, intatto |
+| `name`, `surname`, `email`, `telephone` | `firstName`, `lastName`, `email`, `phone` | in chiaro (D-05) |
+| `role` | `role` | PSA, D, SA, CA, PA, E; assente = E; altri valori (es. `API`) = nessun accesso |
+| `groupId`, `dealerId` | idem | ObjectId |
+| `companyId` | `companyIds` | lista nel dominio, scritta come primo elemento (D-08) |
+| `placeId`, `placesId` | `placeIds` | unione in lettura; in scrittura `placeId` = primo, `placesId` = tutti (D-08) |
+| `status`, `trash` | `status` (`active`/`disabled`), `trashed` | booleani legacy |
+| `settings.language`, `settings.hiddenInStats` | `language`, `hiddenInStats` | |
+| `permissions.<modulo>.{r,w}`, `permissions.status` | matrice dei permessi, `canManagePermissions` | D-06; `permissions.apps.*` conservato, mai scritto né esposto |
+| `password` | — | hash legacy HMAC-SHA512 (D-04); al cambio password scritto se la coesistenza è attiva, rimosso se è spenta |
+| `tokens` | — | JWT legacy; svuotato a revoca, cambio password, disattivazione (D-11) |
+| `pin`, `servicesId`, `shiftTime`, `avatar` | — | conservati, mai esposti su `/v1` |
+| `insertDate`, `updateDate` | `createdAt`, `updatedAt` | |
+- Scrittura solo con `$set`/`$unset` dei campi posseduti (elenco nel registro delle collection del backend), mai sostituzione del documento.
+- Indici aggiunti dal nuovo backend (non univoci): `groupId_1_role_1`, `dealerId_1`.
+
+## userCredentials — credenziali del nuovo backend
+Realizzata (passo 3A, D-03): `_id` = id dell'utente, `passwordHash` (scrypt `scrypt$N$r$p$salt$hash`, facoltativo), `legacyHashFingerprint` (SHA-256 dell'hash legacy da cui deriva, o null), `passwordChangedAt`, `failedLogins`, `lockedUntil` (blocco progressivo dal 5° fallimento: 1, 2, 4, 8, poi 15 minuti), `lastLoginAt`, `createdAt`, `updatedAt`. Validazione `$jsonSchema`; nessun indice oltre `_id`.
 
 ## companies — soggetti giuridici
 `_id`, `groupId`, `name`, `vatNumber`, `fiscalCode`, `address`, `status`, `createdAt`, `updatedAt`, `deletedAt`.
@@ -69,7 +74,7 @@ Documento unico (`_id: 'platform'`), modificabile solo da `PSA`; ogni modifica v
 `_id` = `<storeServerId>:<jti>`, `expiresAt` (TTL, poco oltre la tolleranza di ±5 minuti).
 
 ## sessions — sessioni del backoffice
-`_id`, `userId`, `groupId`, `familyId`, `accessTokenHash` (univoco), `accessExpiresAt`, `refreshTokenHash` (univoco), `refreshExpiresAt` (TTL), `refreshUsedAt`, `familyExpiresAt`, `revokedAt`, `revokedReason`, `ip`, `userAgent`, `createdAt`, `lastUsedAt`.
+Realizzata (passo 3A): un documento per famiglia di sessione. `_id` (id esposto della sessione), `userId`, `accessTokenHash` (SHA-256 del token corrente, univoco), `accessExpiresAt`, `refreshTokenHash` (corrente, univoco), `previousRefreshHashes` (ultimi 50 hash ruotati, per rilevare il riuso), `rotatedAt`, `refreshExpiresAt` (inattività), `familyExpiresAt` (durata massima), `createdAt`, `lastUsedAt`, `userAgent`, `ip`, `revokedAt`, `revokeReason`, `expiresAt` (TTL = fine famiglia + 1 giorno). Indici: `accessTokenHash_1` e `refreshTokenHash_1` univoci, `previousRefreshHashes_1`, `userId_1_revokedAt_1`, TTL `expiresAt_1`. Validazione `$jsonSchema`.
 
 ## storeServerTokens — access token dei server di punto vendita
 `_id`, `storeServerId`, `keyId`, `tokenHash` (univoco), `expiresAt` (TTL), `revokedAt`, `createdAt`.

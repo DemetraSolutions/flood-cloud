@@ -84,6 +84,15 @@ describe('loadConfig', () => {
     }
   });
 
+  it('reads and validates the refresh reuse grace window', () => {
+    assert.equal(loadConfig(validEnv()).refreshReuseGraceSeconds, 30);
+    assert.equal(loadConfig(validEnv({ REFRESH_REUSE_GRACE_SECONDS: '0' })).refreshReuseGraceSeconds, 0);
+    assert.equal(loadConfig(validEnv({ REFRESH_REUSE_GRACE_SECONDS: '300' })).refreshReuseGraceSeconds, 300);
+    for (const bad of ['301', '-1', 'x']) {
+      assert.match(reasonFor(validEnv({ REFRESH_REUSE_GRACE_SECONDS: bad }), 'REFRESH_REUSE_GRACE_SECONDS') ?? '', /must be a decimal integer between/);
+    }
+  });
+
   it('reads every explicit value', () => {
     const config = loadConfig(
       validEnv({

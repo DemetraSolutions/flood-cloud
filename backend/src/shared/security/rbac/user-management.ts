@@ -1,3 +1,4 @@
+import { isAlwaysGranted } from './effective-permissions.ts';
 import type { ReadOnlySet } from '../frozen.ts';
 import type { ObjectId } from 'mongodb';
 import type { AuthPrincipal, UserScopeView } from '../scope/principal.ts';
@@ -138,8 +139,7 @@ export function checkUserChange(actor: AuthPrincipal, before: UserChangeView | n
   }
 
   const previous = before?.permissions;
-  const isOwnSession = (permission: string): boolean => permission.startsWith('sessions:');
-  const granted = [...after.permissions].filter((permission) => !isOwnSession(permission) && previous?.has(permission) !== true);
+  const granted = [...after.permissions].filter((permission) => !isAlwaysGranted(permission) && previous?.has(permission) !== true);
   if (granted.some((permission) => !hasPermission(actor, permission))) {
     violations.add('permissionNotHeld');
   }

@@ -13,10 +13,10 @@ import { testConfig } from '../helpers/app.ts';
 const rules = createRateLimitRules(testConfig());
 
 describe('createRateLimitRules', () => {
-  it('builds the six rules from the thresholds', () => {
+  it('builds the seven rules from the thresholds', () => {
     assert.deepEqual(
       Object.values(rules).map(({ bucket, limit }) => [bucket, limit]),
-      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['api:user', 300]],
+      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['password-change:user', 5], ['api:user', 300]],
     );
     const custom = createRateLimitRules(testConfig({ RATE_LIMIT_LOGIN_PER_USERNAME: '7', RATE_LIMIT_API_PER_USER: '9' }));
     assert.deepEqual([custom.loginPerUsername.limit, custom.apiPerUser.limit], [7, 9]);
@@ -40,6 +40,8 @@ describe('createRateLimitRules', () => {
     assert.equal(rules.loginPerUsername.key(body('ＭＡＲＩＯ'), empty), 'mario');
     assert.equal(rules.apiPerUser.key({} as never, res), '0123456789abcdef01234567');
     assert.equal(rules.usernameCheckPerUser.key({} as never, empty), null);
+    assert.equal(rules.passwordChangePerUser.key({} as never, res), '0123456789abcdef01234567');
+    assert.equal(rules.passwordChangePerUser.key({} as never, empty), null);
   });
 });
 

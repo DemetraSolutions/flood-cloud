@@ -14,6 +14,8 @@ export interface RateLimitRules {
   readonly refreshPerIp: RateLimitRule;
   /** Username availability checks per authenticated user. */
   readonly usernameCheckPerUser: RateLimitRule;
+  /** Attempts to change the password per authenticated user (same threshold as the login per username). */
+  readonly passwordChangePerUser: RateLimitRule;
   /** Failed authentications per client IP on `/v1`; successful requests never count (offices behind NAT). */
   readonly unauthenticatedPerIp: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
@@ -48,6 +50,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     unauthenticatedPerIp: Object.freeze({ bucket: 'auth-fail:ip', limit: config.rateLimitUnauthenticatedPerIp, key: ip }),
     refreshPerIp: Object.freeze({ bucket: 'refresh:ip', limit: config.rateLimitRefreshPerIp, key: ip }),
     usernameCheckPerUser: Object.freeze({ bucket: 'usernameCheck:user', limit: config.rateLimitUsernameCheckPerUser, key: perUser }),
+    passwordChangePerUser: Object.freeze({ bucket: 'password-change:user', limit: config.rateLimitLoginPerUsername, key: perUser }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
   });
 }

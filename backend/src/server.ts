@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { MongoClient } from 'mongodb';
 import { createApp } from './app.ts';
+import { createBackofficeModules } from './composition.ts';
 import { loadConfig } from './config.ts';
 import type { Config } from './config.ts';
 import { createMongoClient } from './db/client.ts';
@@ -134,16 +135,21 @@ export async function run(
   const openClient = client;
 
   let shuttingDown = false;
+  const activityLog = createActivityLog({
+    databases,
+    logger,
+    retentionDays: config.activityLogRetentionDays,
+    errorRetentionDays: config.activityLogErrorRetentionDays,
+  });
+  const backoffice = createBackofficeModules({ config, databases, activityLog, logger });
   const app = createApp({
     config,
     logger,
-    activityLog: createActivityLog({
-      databases,
-      logger,
-      retentionDays: config.activityLogRetentionDays,
-      errorRetentionDays: config.activityLogErrorRetentionDays,
-    }),
+    activityLog,
     rateLimiter: createRateLimiter(databases),
+    routes: { v1: backoffice.routes },
+    authenticate: { v1: backoffice.authenticate },
+    groupAccess: { groups: backoffice.groups },
     readiness: { isShuttingDown: () => shuttingDown, checks: [createPingCheck(databases)] },
   });
 

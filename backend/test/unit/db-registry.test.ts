@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { COLLECTIONS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
+import { COLLECTIONS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
+import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from '../../src/db/sessions-schema.ts';
+import { USER_CREDENTIALS_VALIDATOR } from '../../src/db/user-credentials-schema.ts';
 import type { CollectionRegistry } from '../../src/db/collections.ts';
 
 const SRC = fileURLToPath(new URL('../../src', import.meta.url));
@@ -19,19 +21,41 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 }
 
 describe('collection registry', () => {
-  it('registers the shared legacy collections as read-only and the two new ones with their indexes and validator', () => {
-    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityLog', 'countries', 'groups', 'rateLimits', 'users']);
+  it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes and validators', () => {
+    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityLog', 'countries', 'groups', 'rateLimits', 'sessions', 'userCredentials', 'users']);
     assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'places']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
-      assert.equal(spec.ownership, name === 'activityLog' || name === 'rateLimits' ? 'new' : 'legacy-read', name);
+      const expected = ['activityLog', 'rateLimits', 'sessions', 'userCredentials'].includes(name) ? 'new' : name === 'users' ? 'legacy-write' : 'legacy-read';
+      assert.equal(spec.ownership, expected, name);
     }
+    assert.deepEqual(
+      COLLECTIONS.common.users.indexes.map((index) => index.name),
+      ['groupId_1_role_1', 'dealerId_1'],
+    );
+    for (const index of COLLECTIONS.common.users.indexes) {
+      assert.equal('unique' in index || 'expireAfterSeconds' in index, false, index.name);
+    }
+    assert.deepEqual([...COLLECTIONS.common.users.ownedFields].sort(), [...USERS_OWNED_FIELDS].sort());
+    for (const field of ['name', 'surname', 'email', 'telephone', 'settings.language', 'settings.hiddenInStats', 'status', 'trash', 'role', 'groupId', 'dealerId', 'companyId', 'placeId', 'placesId', 'permissions.status', 'permissions.users.r', 'permissions.users.w', 'permissions.logs.r', 'permissions.logs.w', 'password', 'tokens', 'userName', 'insertDate', 'updateDate']) {
+      assert.ok(COLLECTIONS.common.users.ownedFields.includes(field), field);
+    }
+    for (const field of ['pin', 'avatar', 'servicesId', 'shiftTime', 'permissions.apps', 'permissions.apps.cash.status', 'permissions.products.r']) {
+      assert.equal(COLLECTIONS.common.users.ownedFields.includes(field), false, field);
+    }
+    assert.equal(COLLECTIONS.common.userCredentials.validator, USER_CREDENTIALS_VALIDATOR);
     assert.deepEqual(
       COLLECTIONS.common.activityLog.indexes.map((index) => index.name),
       ['groupId_1_at_-1', 'actor.id_1_at_-1', 'category_1_at_-1', 'requestId_1', 'expiresAt_1'],
     );
     assert.deepEqual(COLLECTIONS.common.rateLimits.indexes, [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }]);
+    assert.equal(COLLECTIONS.common.sessions.validator, SESSIONS_VALIDATOR);
+    assert.equal(COLLECTIONS.common.sessions.indexes, SESSIONS_INDEXES);
+    assert.deepEqual(
+      SESSIONS_INDEXES.map(({ name, unique, expireAfterSeconds }) => [name, unique ?? false, expireAfterSeconds ?? null]),
+      [['accessTokenHash_1', true, null], ['refreshTokenHash_1', true, null], ['previousRefreshHashes_1', false, null], ['userId_1_revokedAt_1', false, null], ['expiresAt_1', false, 0]],
+    );
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityLog', 'companies', 'countries', 'groups', 'places', 'rateLimits', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityLog', 'companies', 'countries', 'groups', 'places', 'rateLimits', 'sessions', 'userCredentials', 'users']);
   });
 
   it('accepts valid new, legacy-read and legacy-write entries', () => {

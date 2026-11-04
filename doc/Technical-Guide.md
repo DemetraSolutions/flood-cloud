@@ -6,7 +6,7 @@
 ## 1. Stato del progetto
 Realizzate le fondamenta del backend (`doc/Tasks.md` 1.1–1.4, 1.6): progetto TypeScript, configurazione validata, applicazione Express con envelope, errori, header di sicurezza, CORS, log strutturati, builder delle route, endpoint di salute e arresto ordinato; client MongoDB sul cluster condiviso con guardia d'ambiente, registro delle collection, indici, strumento di profilazione in sola lettura del legacy, MongoDB locale per i test. Nessuna autenticazione, nessun endpoint di dominio, nessuna scrittura su database.
 
-Realizzate le primitive crittografiche e la compatibilità con le password legacy (2.1, 2.2.1–2.2.3), RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4), rate limit e registro delle attività (2.5, 2.6.1–2.6.5), come sola logica senza endpoint (§8).
+Realizzate le primitive crittografiche e la compatibilità con le password legacy (2.1, 2.2.1–2.2.3), RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4), rate limit e registro delle attività (2.5, 2.6.1–2.6.5) (§8); validatore dell'input (1.5.1), modello utente, login, sessioni e profilo (3.1–3.3), con i primi endpoint della superficie `/v1` (§6).
 
 Realizzate anche le fondamenta del backoffice (1.7, 1.8): progetto Angular 22.2, configurazione pubblica, accesso HTTP, lingua, design system, componenti condivisi, shell e server statico di produzione (§11).
 
@@ -51,6 +51,7 @@ Lettura e validazione in `src/config.ts` (`loadConfig`, funzione pura). Tutti i 
 | `RATE_LIMIT_UNAUTHENTICATED_PER_IP` | no | intero 1–100000, autenticazioni fallite su `/v1` al minuto per IP | `300` |
 | `ACTIVITY_LOG_RETENTION_DAYS` | no | intero 1–3650, conservazione delle voci `data` e `security` | `365` |
 | `ACTIVITY_LOG_ERROR_RETENTION_DAYS` | no | intero 1–3650, conservazione delle voci `error` | `90` |
+| `REFRESH_REUSE_GRACE_SECONDS` | no | intero 0–300, finestra in cui un refresh appena ruotato che ricompare non chiude la sessione | `30` |
 | `LEGACY_PASSWORD_PEPPER` | sì, segreto | non vuoto, senza spazi iniziali o finali (D-04) | — |
 | `LEGACY_PASSWORD_COEXISTENCE` | no | `true` \| `false`: al cambio password si scrive anche l'hash legacy. Da spegnere solo al passaggio definitivo, e solo una volta (§8) | `true` |
 
@@ -70,7 +71,13 @@ src/
     collections.ts             # registro della proprietà delle collection
     indexes.ts                 # ensureIndexes all'avvio
     ping.ts                    # controllo di readiness sul database common
-  modules/health/health.routes.ts
+  composition.ts               # composizione dei moduli del backoffice (servizi, repository, authenticate)
+  modules/
+    health/health.routes.ts
+    users/                     # modello utente: tipi, mapper legacy ↔ dominio, repository utenti e credenziali
+    auth/                      # login, refresh, logout, middleware Bearer, stato dell'account
+    sessions/                  # repository e audit delle sessioni
+    me/                        # profilo, cambio password, proprie sessioni
   tools/profile-legacy/        # CLI di profilazione in sola lettura (cli.ts → main.ts → profile.ts e analisi)
   shared/
     http/
@@ -88,8 +95,9 @@ src/
       express-locals.d.ts      # tipi di res.locals
     logging/logger.ts          # logger JSON con redazione
     activity-log/              # registro delle attività: catalogo, servizio, cambi prima/dopo, accessi trasversali
+    validation/                # validatore per allowlist e middleware validateBody/Query/Params
     security/
-      rate-limit/              # contatori, middleware e regole di rate limit
+      rate-limit/              # contatori, middleware e regole di rate limit (anche cambio password per utente)
       username.ts              # normalizzazione dello username
       client-ip.ts             # chiave IP per i limiti (IPv4, IPv6 /64)
       secret.ts                # Secret
@@ -156,8 +164,17 @@ Endpoint di salute per GKE, fuori dalle superfici API, dichiarati anonimi nel bu
 - `GET /health/live`: sempre `200` se il processo risponde.
 - `GET /health/ready`: `200` se il server non è in arresto e tutti i controlli di prontezza riescono entro 2 s ciascuno; altrimenti `503 SERVICE_UNAVAILABLE` senza dettagli (il motivo va nel log `warn`). Controllo attivo: `ping` sul database common.
 
+### users, auth, sessions, me (passo 3A)
+Riferimento delle route in `doc/API.md`.
+- **Validatore** (`shared/validation/`): schemi componibili per allowlist (`string`, `personName`, `integer`, `boolean`, `enumOf`, `objectId`, `isoDate`, `email`, `phone`, `nullable`, `optional`, `object`, `array`) con tipi derivati (`Infer`). Rifiuta proprietà sconosciute, chiavi `$…`, con `.`, `__proto__`/`constructor`/`prototype`, profondità oltre 8, Unicode non valido; lunghezze sempre limitate; i nomi rifiutano caratteri di controllo e override bidi. Errori `422 VALIDATION_ERROR` con `details` `{ field, issue }` (massimo 50, mai il valore ricevuto). Middleware `validateBody`, `validateQuery`, `validateParams`; valori in `res.locals.input`.
+- **Modello utente** (`modules/users/`): `fromLegacy` traduce il documento legacy nel dominio con raccolta delle anomalie (ruolo non valido, stato non booleano, username mancante, dati cifrati, riferimenti non validi, scope mancante); `toLegacyUpdate` produce solo `$set`/`$unset` dei campi posseduti (mai `apps`, mai ruolo `API`); `updateOwned` rifiuta operatori diversi e campi non posseduti; `toResponse` è un'allowlist senza segreti. Ricerca per il login: corrispondenza esatta su `userName`, altrimenti ricerca senza maiuscole (regex ancorata ed escapata) accettata solo se c'è un solo utente con lo stesso username normalizzato.
+- **Login** (`POST /v1/auth/login`): limiti di input (1–1024 unità, body 4 KB) prima di ogni hash; ricerca utente; account bloccato, password errata, utente inesistente, disattivato, cestinato, ruolo E o non valido, SA/CA/PA senza gruppo o con gruppo sospeso o cestinato ⇒ sempre `401 INVALID_CREDENTIALS` con una sola scrypt (la riscrittura dell'hash avviene solo dopo il controllo dello stato). Blocco progressivo in `userCredentials`. Eventi `auth.loginSucceeded`/`auth.loginFailed` con il motivo nei metadata, mai lo username.
+- **Sessioni**: access token `fc_at_` (15 minuti) e refresh `fc_rt_` (7 giorni di inattività, 30 giorni di durata massima della famiglia) nel body della risposta, mai compresso; a riposo solo SHA-256. Refresh con rotazione atomica; un refresh già ruotato che ricompare entro `REFRESH_REUSE_GRACE_SECONDS` (30 s) riceve 401 senza token e senza chiudere la sessione (`auth.refreshRaceTolerated`), oltre o se più vecchio la famiglia viene revocata (`auth.refreshReuseDetected`, registrato solo se la revoca è avvenuta). Logout della sessione corrente e da tutti i dispositivi (svuota anche `tokens` legacy).
+- **Middleware Bearer** (`modules/auth/authenticate.ts`): `Authorization: Bearer fc_at_…`; formato errato, sconosciuto o revocato ⇒ `UNAUTHENTICATED`; scaduto ⇒ `TOKEN_EXPIRED`; a ogni richiesta rilegge utente e gruppo (disattivazione o sospensione ⇒ revoca e 401 immediato) e ricostruisce principal e scope; `lastUsedAt` al massimo una volta al minuto. Il backoffice deve fare il refresh solo su `TOKEN_EXPIRED`.
+- **Profilo** (`/v1/me`): profilo con permessi effettivi, `canManagePermissions`, riepilogo dello scope (per i dealer al massimo 100 id più il totale) e gruppo `{ id, name }` per SA, CA, PA; mai segreti. Modifica di nome, cognome, email, telefono, lingua (`user.updated` con prima/dopo). Cambio password: password attuale (errata ⇒ `422` `currentPassword`/`incorrect` ed evento `auth.passwordCheckFailed`), policy D-19, scrypt più hash legacy con coesistenza attiva (rimosso con coesistenza spenta), revoca delle altre sessioni, `tokens` legacy svuotati; rate limit per utente con la soglia del login. Elenco e revoca delle proprie sessioni (`404` su sessioni altrui). Permessi `profile:read`, `profile:update` e `sessions:*`, sempre concessi a PSA–PA.
+
 ## 7. Database
-**Cluster condiviso con il legacy** (`doc/Tasks.md` §0.1–0.2): stesse credenziali Atlas (D-02), stessi database. In questo passo il backend **non scrive** su nessun database.
+**Cluster condiviso con il legacy** (`doc/Tasks.md` §0.1–0.2): stesse credenziali Atlas (D-02), stessi database. Il backend scrive solo nelle collection nuove e, su `users`, nei soli campi posseduti.
 
 **Client** (`db/client.ts`): un solo `MongoClient` per processo, creato in `server.ts`: `appName: flood-cloud-backend`, `retryWrites`, `w: majority`, `readPreference: primary`, `serverSelectionTimeoutMS` e `connectTimeoutMS` = `MONGODB_SERVER_SELECTION_TIMEOUT_MS`, `maxPoolSize` = `MONGODB_MAX_POOL_SIZE`. In produzione, dopo la costruzione, si verifica che TLS sia attivo e senza opzioni insicure.
 
@@ -169,7 +186,8 @@ Endpoint di salute per GKE, fuori dalle superfici API, dichiarati anonimi nel bu
 | Database | Collection | Proprietà |
 |---|---|---|
 | common | `users`, `groups`, `countries` | legacy, sola lettura |
-| common | `rateLimits`, `activityLog` | nuove (indici e, per `activityLog`, validazione `$jsonSchema`) |
+| common | `users` | legacy, scrivibile solo nei campi posseduti (passo 3A) |
+| common | `rateLimits`, `activityLog`, `userCredentials`, `sessions` | nuove (indici e validazione `$jsonSchema` dove prevista) |
 | gruppo | `companies`, `places` | legacy, sola lettura |
 Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `legacy-write` (con elenco obbligatorio dei campi posseduti). Sulle collection legacy sono vietati indici univoci e TTL. Un test vieta in `src/` nomi di collection non letterali o non registrati.
 
@@ -215,7 +233,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
   - impronta nulla (cambio password con coesistenza spenta): decide solo scrypt, il vecchio hash legacy non vale più. Per questo la coesistenza si spegne una sola volta, al passaggio definitivo: riaccendendola, i cambi password fatti dal legacy verrebbero ignorati per chi ha impronta nulla.
   - Ogni fallimento costa uno scrypt (anche quando decide l'hash legacy o manca ogni hash) e un utente inesistente si verifica con `verifyDummyPassword`, il cui hash fittizio è precalcolato all'avvio: i tempi di risposta non rivelano se un utente esiste.
 - **Cambio password** (`password-change.ts`): policy, poi scrypt più, se `LEGACY_PASSWORD_COEXISTENCE=true`, l'hash legacy e la sua impronta.
-- **Limiti da applicare al login** (area 3): password e username da 1 a 1024 unità UTF-16 e body del login di pochi KB, validati prima di ogni hash; rate limit e concorrenza di scrypt limitata (un hash occupa un thread del pool di libuv).
+- **Limiti del login** (applicati nel passo 3A): password e username da 1 a 1024 unità UTF-16 e body del login di 4 KB, validati prima di ogni hash; rate limit per username e IP.
 - **Rate limit** (`security/rate-limit/`): finestra fissa di 1 minuto con contatori in `rateLimits` (`_id` = `<bucket>:<SHA-256 della chiave>:<inizio finestra>`, un solo `findOneAndUpdate` atomico, TTL a fine finestra più 60 s): username e IP mai in chiaro. Header `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`; oltre soglia `429 RATE_LIMITED` con `Retry-After`; se il database non risponde la richiesta fallisce (fallire chiusi). Regole: login per username (normalizzato con NFKC, trim e minuscole, conteggiato dopo il parser) e per IP, refresh per IP, verifica dello username per utente, `/v1` per utente autenticato (sempre presente sulle route `user`, dopo l'autenticazione e prima di gruppo e permesso), autenticazioni fallite per IP (controllate prima di `authenticate`, consumate solo sui 401, così un ufficio dietro lo stesso IP non viene bloccato dalle richieste valide). Ogni route anonima deve dichiarare una regola che giri prima del parser; solo `/health` ne è esente con un motivo dichiarato. Chiave IP: IPv4 mappati ricondotti a IPv4, IPv6 per prefisso /64. In produzione con `TRUST_PROXY=0` l'avvio segnala che tutti i client avrebbero l'IP del load balancer. Rischio accettato: 5 tentativi al minuto per username permettono a un terzo di bloccare il login di un utente specifico.
 - **Registro delle attività** (`shared/activity-log/`, collection `activityLog`): una voce ha `at`, `category` (`data`, `security`, `error`), `action` da catalogo, `outcome` (`success`, `failure`, `denied`), `actor` (`user` con id e ruolo, `anonymous`, `system`), `groupId`, `resource`, `changes`, `requestId`, `ip` (in chiaro, legittimo interesse alla sicurezza), `metadata` (chiavi ammesse per azione, massimo 20 valori scalari), `expiresAt` (TTL: 365 giorni per `data` e `security`, 90 per `error`). Validazione per allowlist nel servizio e `$jsonSchema` nel database. Le scritture non fanno mai fallire una richiesta: una voce malformata o un errore del database finiscono redatti su stdout.
   - **Cambi prima/dopo** (`computeChanges`, `recordDataChange` per lo strato service): percorsi fino a profondità 4, array e sottoalberi più profondi confrontati per intero, massimo 200 cambi per voce, stringhe troncate a 1000 caratteri. I segreti sono oscurati per chiave a ogni livello (password, PIN, token, chiavi, credenziali, firme…) e per prefisso (`integrations`, `settings.integrations`, `fattura_elettronica`, `settings.email`, anche sul campo stesso). Nome, email e telefono restano in chiaro (decisione dell'utente del 2026-11-02); su stdout invece sono redatti.
@@ -230,7 +248,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 - `test/integration/`: database reale (guardia, transazione tra common e gruppo, indici, readiness), profilazione e sua CLI (compreso un test che verifica l'assenza nel report di valori sentinella, chiavi di P.IVA, codici fiscali, hex e username), pipeline HTTP completa con `fetch` su porta effimera (`test/helpers/app.ts` monta l'app con route di prova e un logger in memoria), endpoint di salute, `run()` del server con processo simulato, avvio reale di `node src/server.ts` come processo figlio (avvio, `SIGTERM`, configurazione errata).
 - Oltre a `FLOOD_CLOUD_TEST_MONGO_URI` nessuna variabile richiesta: i test costruiscono la configurazione con valori fittizi.
 - **Isolamento** (`test/helpers/isolation.ts`): cluster legacy con due dealer e due gruppi ciascuno e casi standard (altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita, E, gruppo sospeso, cestinato o inesistente) da riusare per ogni endpoint.
-- Stato: 666 test, coverage 100%.
+- Stato: 900 test, coverage 100%.
 
 **CI** (`.github/workflows/backend.yml`): **disattivata** per decisione dell'utente del 2026-11-01, parte solo a mano (`workflow_dispatch`); i trigger su `push` e `pull_request` sono commentati nel file. Contenuto: MongoDB `mongo:8.0.34` col compose, Node 24.22.2, `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, `npm audit --audit-level=moderate`, `npm audit signatures`; job separato di secret scanning con gitleaks 8.30.1 (binario verificato con sha256) su tutta la storia del repository. Permessi `contents: read`, action pinnate per SHA.
 
@@ -243,6 +261,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 | 2026-11-02 | Primitive crittografiche e password legacy (2.1, 2.2.1–2.2.3) | segreti con hash a riposo, confronto a tempo costante, scrypt con limiti contro record manomessi, policy D-19, verifica dell'hash legacy con coesistenza e impronta, cambio password, tempi uniformi contro l'enumerazione degli utenti |
 | 2026-11-02 | RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4) | catalogo dei permessi e tetti per ruolo, matrice per utente con default, route con permesso e gruppo dichiarativi, scope calcolato dal server con filtri sulle collection legacy, gruppo nel percorso con 404 fuori perimetro, anti-escalation con regola dei pari, modello di test di isolamento |
 | 2026-11-02 | Rate limit e registro delle attività (2.5, 2.6.1–2.6.5) | contatori atomici con chiavi hashate e TTL, regole per login, refresh, username, utente e autenticazioni fallite, collection activityLog con validazione e conservazione per categoria, cambi prima/dopo con segreti oscurati, accessi trasversali ed errori 5xx registrati |
+| 2026-11-04 | Autenticazione e profilo (1.5.1, 3.1–3.3) | validatore per allowlist, modello utente compatibile con il legacy, userCredentials con blocco progressivo, login con risposte e tempi uniformi, sessioni con rotazione, rilevamento del riuso e finestra di grazia, middleware Bearer con ricontrollo a ogni richiesta, profilo, cambio password e proprie sessioni |
 
 ## 11. Backoffice
 SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Nessun login né pagina di dominio: sessione, guard e permessi arrivano con l'area 3.

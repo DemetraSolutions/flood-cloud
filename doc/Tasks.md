@@ -93,10 +93,10 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   - `autoDepartments` e `advancedProducts`: diventano modificabili?
   - `plan`, `type` ed `expirationDate` del gruppo sono deprecati;
   - i flag valgono anche per PSA e D?
-- [ ] **D-14** Cancellazione: cestino (`trash`) sempre; eliminazione definitiva solo PSA o mai finché il legacy è attivo (raccomandato: mai).
-- [ ] **D-15** Univocità di `username` e `vatNumber`: globale o per gruppo, decisa sui dati reali dopo la profilazione (1.3.6).
+- [x] **D-14** Cancellazione degli utenti: cestino (`trash`) e, dal cestino, eliminazione definitiva ammessa a PSA, D e SA nel proprio perimetro e con le regole anti-escalation (permesso `users:delete`); il database è condiviso, quindi l'utente sparisce anche dal legacy. Decisione dell'utente del 2026-11-02.
+- [x] **D-15** Univocità dello username: globale, confrontando NFKC, spazi e minuscole, per gli username nuovi o cambiati; i duplicati esistenti (§0.4.1) restano. Decisione dell'utente del 2026-11-02. L'univocità di `vatNumber` (`companies.code`) si decide con l'area 6.
 - [x] **D-16** Valori ammessi di `APP_ENV`: `development` e `production`, come i database esistenti. Decisione dell'utente del 2026-11-01.
-- [ ] **D-17** Login: solo `username` (come `doc/Security-Model.md` §4) oppure anche email e telefono, come oggi nel legacy.
+- [x] **D-17** Login solo con username: corrispondenza esatta, altrimenti senza maiuscole se esiste un solo utente con lo stesso username normalizzato. Email e telefono no (duplicati, §0.4.1). Decisione dell'utente del 2026-11-02.
 - [ ] **D-18** Onboarding: preset per tipologia (risto, retail, beauty) e struttura minima del database di un gruppo nuovo richiesta dal legacy.
 - [x] **D-19** Policy delle password nuove o cambiate: da 12 a 128 code point dopo NFC, nessuna regola sulle classi, diversa dallo username, nessun carattere Unicode non valido. Le password legacy esistenti restano valide. Decisione dell'utente del 2026-11-02.
 - [x] **D-20** Forma della copia nel common: **documento intero** del database del gruppo, con `groupId` impostato dal nome del database. Proposta dell'utente del 2026-11-01. Il nuovo backend traduce i nomi legacy nel modello di dominio (§0.2, tabelle 6.1 e 7.1).
@@ -198,7 +198,7 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
 - [x] **1.4.8** Endpoint di liveness e readiness per GKE (readiness con ping del database), dichiarati esplicitamente anonimi. Readiness con `ping` sul database common.
 
 ### 1.5 Validazione dell'input e liste
-- [ ] **1.5.1** Validatore per allowlist (skill `input-validation`):
+- [x] **1.5.1** Validatore per allowlist (skill `input-validation`):
   - controlla tipi, lunghezze, enum, ObjectId e date;
   - rifiuta le proprietà sconosciute e le chiavi con `$` o `.`;
   - risponde `422` con dettagli per campo.
@@ -291,6 +291,8 @@ Decisione dell'utente del 2026-11-01: una sola collection nuova nel common per a
 
 ## 3. Autenticazione e utenti
 
+Passi decisi dall'utente il 2026-11-02: **3A** = 1.5.1, 3.1, 3.2, 3.3; **3B** = 1.5.2–1.5.3 e 3.4; **3C** = 3.5.1–3.5.5; **3D** = 3.5.6–3.5.8, poi 2.6.6–2.6.7.
+
 ### 3.1 Modello utente
 Modello di dominio ↔ documento legacy `<env>_common.users` (D-03):
 
@@ -321,39 +323,39 @@ Modello di dominio ↔ documento legacy `<env>_common.users` (D-03):
 - **Collection nuova `userCredentials`** (D-03, permanente): `_id` = `userId`, `passwordHash` (scrypt), `legacyHashFingerprint` (impronta dell'hash legacy da cui deriva, 2.2.2), `passwordChangedAt`, `failedLogins`, `lockedUntil`, `lastLoginAt`, `createdAt`, `updatedAt`.
 
 Task:
-- [ ] **3.1.1** Tipi `User` (dominio) e `LegacyUserDocument` (tutti i campi facoltativi, tipi reali dalla profilazione).
-- [ ] **3.1.2** Mapper legacy → dominio con raccolta delle anomalie (ruolo sconosciuto, scope incoerente, dati non decifrabili).
-- [ ] **3.1.3** Mapper dominio → aggiornamento legacy: solo `$set` dei campi posseduti, conversione di stato, cestino e scope (D-08). Matrice dei permessi scritta solo con `$set` puntuali di `permissions.<modulo>.r|w` e `permissions.status` (moduli in allowlist), conservando `apps.cash.*`; `/v1` rifiuta con `422` le modifiche ad `apps` (revisione del passo 2B).
-- [ ] **3.1.4** Collection `userCredentials` con `$jsonSchema` e indici.
-- [ ] **3.1.5** Mapper di risposta `/v1` con allowlist esplicita dei campi.
-- [ ] **3.1.6** Indici su `users` verificati con `getIndexes()`; aggiunta dei soli indici non univoci approvati (`groupId + role`, `dealerId`).
+- [x] **3.1.1** Tipi `User` (dominio) e `LegacyUserDocument` (tutti i campi facoltativi, tipi reali dalla profilazione).
+- [x] **3.1.2** Mapper legacy → dominio con raccolta delle anomalie (ruolo sconosciuto, scope incoerente, dati non decifrabili).
+- [x] **3.1.3** Mapper dominio → aggiornamento legacy: solo `$set` dei campi posseduti, conversione di stato, cestino e scope (D-08). Matrice dei permessi scritta solo con `$set` puntuali di `permissions.<modulo>.r|w` e `permissions.status` (moduli in allowlist), conservando `apps.cash.*`; `/v1` rifiuta con `422` le modifiche ad `apps` (revisione del passo 2B).
+- [x] **3.1.4** Collection `userCredentials` con `$jsonSchema` e indici.
+- [x] **3.1.5** Mapper di risposta `/v1` con allowlist esplicita dei campi.
+- [x] **3.1.6** Indici su `users` verificati con `getIndexes()`; aggiunta dei soli indici non univoci approvati (`groupId + role`, `dealerId`).
 
 ### 3.2 Login e sessioni (backend)
-- [ ] **3.2.1** `POST /v1/auth/login` con username e password (D-17) e risposta `INVALID_CREDENTIALS` identica per ogni fallimento. Rifiuta, con la stessa risposta:
+- [x] **3.2.1** `POST /v1/auth/login` con username e password (D-17) e risposta `INVALID_CREDENTIALS` identica per ogni fallimento. Rifiuta, con la stessa risposta:
   - utente disattivato o cestinato;
   - ruolo `E` (il ruolo `API` non esiste più, D-07);
   - gruppo sospeso o cestinato.
 
   Limiti validati prima di ogni hash (revisione del passo 2A): `username` e `password` da 1 a 1024 unità UTF-16, body del login di pochi KB; oltre i limiti la stessa risposta di credenziali errate. Per gli utenti inesistenti `verifyDummyPassword`.
-- [ ] **3.2.2** Blocco progressivo con `failedLogins` e `lockedUntil` in `userCredentials`.
-- [ ] **3.2.3** Collection `sessions` con indici univoci sugli hash e TTL sulla scadenza del refresh.
-- [ ] **3.2.4** Access token di 15 minuti; refresh con rotazione a ogni uso e rilevamento del riuso (revoca della famiglia e audit); scadenza per inattività e durata massima della famiglia.
-- [ ] **3.2.5** `POST /v1/auth/refresh` e `POST /v1/auth/logout`; logout da tutti i dispositivi.
-- [ ] **3.2.6** Trasporto del refresh token secondo D-12: nel body di login e refresh, nessun cookie; il backoffice lo conserva in `sessionStorage`. Compressione disattivata sulle risposte che contengono token.
-- [ ] **3.2.7** Middleware Bearer di `/v1`:
+- [x] **3.2.2** Blocco progressivo con `failedLogins` e `lockedUntil` in `userCredentials`.
+- [x] **3.2.3** Collection `sessions` con indici univoci sugli hash e TTL sulla scadenza del refresh.
+- [x] **3.2.4** Access token di 15 minuti; refresh con rotazione a ogni uso e rilevamento del riuso (revoca della famiglia e audit); scadenza per inattività e durata massima della famiglia.
+- [x] **3.2.5** `POST /v1/auth/refresh` e `POST /v1/auth/logout`; logout da tutti i dispositivi.
+- [x] **3.2.6** Trasporto del refresh token secondo D-12 (con finestra di grazia di 30 s per i refresh ripetuti, decisione dell'utente del 2026-11-04): nel body di login e refresh, nessun cookie; il backoffice lo conserva in `sessionStorage`. Compressione disattivata sulle risposte che contengono token.
+- [x] **3.2.7** Middleware Bearer di `/v1`:
   - distingue `TOKEN_EXPIRED` da `UNAUTHENTICATED`;
   - a ogni richiesta ricontrolla lo stato di utente e gruppo, con proiezione minima: disattivato ⇒ `401` immediato, come nel legacy.
 - [ ] **3.2.8** Revoca delle sessioni a cambio password, cambio di ruolo o scope, disattivazione dell'utente e sospensione del gruppo; svuotamento di `users.tokens[]` legacy (D-11).
 
 ### 3.3 Profilo e avvio della sessione
-- [ ] **3.3.1** `GET /v1/me`, riletto a ogni avvio del backoffice. Restituisce:
+- [x] **3.3.1** `GET /v1/me`, riletto a ogni avvio del backoffice. Restituisce:
   - profilo, ruolo, permessi effettivi, riepilogo dello scope;
   - per SA, CA e PA anche il contesto del gruppo (4.3).
 
   **Mai segreti**: il legacy restituiva l'intero gruppo con le API key e il PIN dell'utente.
-- [ ] **3.3.2** `PATCH /v1/me`: nome, cognome, email, telefono, lingua.
-- [ ] **3.3.3** Cambio della propria password: richiede la password attuale, revoca le altre sessioni, scrive secondo D-04.
-- [ ] **3.3.4** Elenco e revoca delle proprie sessioni (dispositivo, IP, ultimo uso).
+- [x] **3.3.2** `PATCH /v1/me`: nome, cognome, email, telefono, lingua.
+- [x] **3.3.3** Cambio della propria password: richiede la password attuale, revoca le altre sessioni, scrive secondo D-04.
+- [x] **3.3.4** Elenco e revoca delle proprie sessioni (dispositivo, IP, ultimo uso). Route del profilo con i permessi `profile:read` e `profile:update` (decisione dell'utente del 2026-11-04); con coesistenza spenta il cambio password rimuove `users.password`.
 
 ### 3.4 Gestione utenti (backend)
 URL definitivi da concordare con `api_expert`: utenti di un gruppo sotto `/v1/groups/{groupId}/users`, elenco trasversale per PSA e D.

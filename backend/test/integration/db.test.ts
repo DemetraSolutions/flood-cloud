@@ -53,17 +53,43 @@ describe('ensureIndexes (real MongoDB)', () => {
     await assert.rejects(probes.insertOne({ code: 'A' }), (error: { code?: number }) => error.code === 11000);
   });
 
-  it('does nothing with the real registry (no indexes declared yet)', async () => {
+  it('applies the real registry idempotently: the users indexes are non-unique and the legacy unique index is untouched', async () => {
+    const users = ctx.databases.common().collection('users');
+    // As in production: the legacy unique index on userName already exists before the backend starts.
+    await users.createIndex({ userName: 1 }, { name: 'userName_1', unique: true });
     await ensureIndexes(ctx.databases);
+    await ensureIndexes(ctx.databases);
+    const byName = new Map((await users.indexes()).map((index) => [index.name, index]));
+    assert.deepEqual([...byName.keys()].sort(), ['_id_', 'dealerId_1', 'groupId_1_role_1', 'userName_1']);
+    assert.equal(byName.get('userName_1')?.unique, true);
+    assert.deepEqual(byName.get('groupId_1_role_1')?.key, { groupId: 1, role: 1 });
+    assert.deepEqual(byName.get('dealerId_1')?.key, { dealerId: 1 });
+    // Nothing unique or TTL was added by us, and no validator was put on the shared collection.
+    for (const name of ['groupId_1_role_1', 'dealerId_1']) {
+      assert.equal(byName.get(name)?.unique, undefined);
+      assert.equal(byName.get(name)?.expireAfterSeconds, undefined);
+    }
+    const [usersInfo] = await ctx.databases.common().listCollections({ name: 'users' }).toArray();
+    assert.equal((usersInfo as { options?: { validator?: unknown } }).options?.validator, undefined);
+    const [credentialsInfo] = await ctx.databases.common().listCollections({ name: 'userCredentials' }).toArray();
+    assert.ok((credentialsInfo as { options?: { validator?: unknown } }).options?.validator !== undefined);
+    assert.deepEqual((await ctx.databases.common().collection('userCredentials').indexes()).map((index) => index.name), ['_id_']);
+    const sessionIndexes = new Map((await ctx.databases.common().collection('sessions').indexes()).map((index) => [index.name, index]));
+    assert.deepEqual([...sessionIndexes.keys()].sort(), ['_id_', 'accessTokenHash_1', 'expiresAt_1', 'previousRefreshHashes_1', 'refreshTokenHash_1', 'userId_1_revokedAt_1']);
+    assert.equal(sessionIndexes.get('accessTokenHash_1')?.unique, true);
+    assert.equal(sessionIndexes.get('refreshTokenHash_1')?.unique, true);
+    assert.equal(sessionIndexes.get('expiresAt_1')?.expireAfterSeconds, 0);
+    const [sessionsInfo] = await ctx.databases.common().listCollections({ name: 'sessions' }).toArray();
+    assert.ok((sessionsInfo as { options?: { validator?: unknown } }).options?.validator !== undefined);
   });
 
   it('refuses a registry that breaks the coexistence rules, before touching the database', async () => {
     const legacyUnique: CollectionRegistry = {
-      common: { users: { ownership: 'legacy-read', indexes: [{ name: 'u', key: { userName: 1 }, unique: true }] } },
+      common: { legacyProbe: { ownership: 'legacy-read', indexes: [{ name: 'u', key: { userName: 1 }, unique: true }] } },
       group: {},
     };
     await assert.rejects(ensureIndexes(ctx.databases, legacyUnique), /unique and TTL indexes are forbidden/);
-    const names = (await ctx.databases.common().listCollections({ name: 'users' }).toArray()).length;
+    const names = (await ctx.databases.common().listCollections({ name: 'legacyProbe' }).toArray()).length;
     assert.equal(names, 0);
   });
 
