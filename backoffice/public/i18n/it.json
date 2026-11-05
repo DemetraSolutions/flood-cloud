@@ -8,7 +8,8 @@
     "LOADING": "Caricamento in corso",
     "CANCEL": "Annulla",
     "CONFIRM": "Conferma",
-    "ACTIONS": "Azioni"
+    "ACTIONS": "Azioni",
+    "SAVE": "Salva"
   },
   "PAGINATION": {
     "LABEL": "Paginazione",
@@ -32,7 +33,8 @@
     "CLOSE_MENU": "Chiudi il menu"
   },
   "MENU": {
-    "HOME": "Home"
+    "HOME": "Home",
+    "PROFILE": "Profilo"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -74,9 +76,11 @@
       "MALFORMED_JSON": "La richiesta non è valida.",
       "BAD_REQUEST": "La richiesta non è valida.",
       "UNAUTHENTICATED": "Accesso richiesto: effettua il login.",
+      "INVALID_CREDENTIALS": "Nome utente o password non corretti.",
       "TOKEN_EXPIRED": "La sessione è scaduta.",
       "CLOCK_SKEW": "L’orologio del dispositivo non è allineato.",
       "FORBIDDEN": "Non hai i permessi per questa operazione.",
+      "PASSWORD_CHANGE_REQUIRED": "Devi cambiare la password provvisoria prima di continuare.",
       "NOT_FOUND": "Elemento non trovato.",
       "METHOD_NOT_ALLOWED": "Operazione non supportata.",
       "CONFLICT": "L’operazione è in conflitto con lo stato attuale dei dati.",
@@ -92,5 +96,116 @@
       "UNKNOWN_ERROR": "Si è verificato un errore imprevisto."
     },
     "BACK_HOME": "Torna alla home"
+  },
+  "AUTH": {
+    "SESSION_EXPIRED": "La sessione è scaduta: accedi di nuovo.",
+    "LOGIN": {
+      "TITLE": "Accedi",
+      "USERNAME": "Nome utente",
+      "PASSWORD": "Password",
+      "SHOW_PASSWORD": "Mostra la password",
+      "SUBMIT": "Accedi",
+      "INVALID_CREDENTIALS": "Nome utente o password non corretti.",
+      "RATE_LIMITED_WAIT": "Troppi tentativi: riprova tra {seconds} secondi."
+    },
+    "CHANGE_PASSWORD": {
+      "TITLE": "Cambio password",
+      "INTRO": "Scegli una nuova password per il tuo account.",
+      "INTRO_REQUIRED": "La tua password è provvisoria: per continuare devi sceglierne una nuova.",
+      "CURRENT": "Password attuale",
+      "NEW": "Nuova password",
+      "CONFIRM": "Conferma la nuova password",
+      "POLICY": "Da {min} a {max} caratteri, diversa dal nome utente e dalla password attuale.",
+      "SUBMIT": "Cambia password",
+      "SUCCESS": "Password cambiata."
+    }
+  },
+  "USER_MENU": {
+    "LABEL": "Menu utente di {username}",
+    "PROFILE": "Profilo",
+    "CHANGE_PASSWORD": "Cambio password",
+    "LOGOUT": "Esci",
+    "LOGOUT_ALL": "Esci da tutti i dispositivi",
+    "LOGOUT_ALL_CONFIRM": "Verranno chiuse tutte le tue sessioni, su ogni dispositivo, compresa questa. Vuoi continuare?"
+  },
+  "ROLE": {
+    "PSA": "Amministratore di piattaforma",
+    "D": "Dealer",
+    "SA": "Amministratore di gruppo",
+    "CA": "Amministratore di azienda",
+    "PA": "Amministratore di punto vendita",
+    "E": "Operatore"
+  },
+  "PROFILE": {
+    "TITLE": "Profilo",
+    "ACCOUNT": "Account",
+    "PERSONAL": "Dati personali",
+    "USERNAME": "Nome utente",
+    "ROLE": "Ruolo",
+    "GROUP": "Gruppo",
+    "SCOPE_LABEL": "Perimetro",
+    "SCOPE": {
+      "PLATFORM": "Tutta la piattaforma",
+      "DEALER": "{groups} gruppi",
+      "GROUP": "Intero gruppo",
+      "COMPANIES": "{companies} aziende, {places} punti vendita",
+      "PLACES": "{places} punti vendita",
+      "NONE": "Nessun dato"
+    },
+    "FIRST_NAME": "Nome",
+    "LAST_NAME": "Cognome",
+    "EMAIL": "Email",
+    "PHONE": "Telefono",
+    "LANGUAGE": "Lingua",
+    "CHANGE_PASSWORD": "Cambia password",
+    "SESSIONS": "Sessioni attive",
+    "SAVED": "Profilo aggiornato."
+  },
+  "SESSIONS": {
+    "TITLE": "Sessioni attive",
+    "INTRO": "I dispositivi su cui hai effettuato l’accesso. Revoca quelli che non riconosci.",
+    "DEVICE": "Dispositivo",
+    "IP": "Indirizzo IP",
+    "CREATED": "Accesso",
+    "LAST_USED": "Ultimo utilizzo",
+    "STATE": "Stato",
+    "UNKNOWN": "Non disponibile",
+    "THIS_SESSION": "Questa sessione",
+    "REVOKE": "Revoca",
+    "REVOKE_LABEL": "Revoca la sessione iniziata il {created}",
+    "REVOKED": "Sessione revocata.",
+    "CONFIRM_TITLE": "Revoca sessione",
+    "CONFIRM_CURRENT": "Questa è la sessione che stai usando: revocarla equivale a uscire. Vuoi continuare?",
+    "CONFIRM_OTHER": "Il dispositivo dovrà accedere di nuovo. Vuoi revocare questa sessione?",
+    "LOAD_ERROR": "Impossibile caricare le sessioni",
+    "EMPTY": "Nessuna sessione attiva",
+    "EMPTY_MESSAGE": "Non ci sono sessioni da mostrare.",
+    "BACK": "Torna al profilo"
+  },
+  "FORM": {
+    "ISSUE": {
+      "REQUIRED": "Campo obbligatorio.",
+      "TYPE": "Valore non valido.",
+      "MIN_LENGTH": "Valore troppo corto.",
+      "MAX_LENGTH": "Valore troppo lungo.",
+      "PATTERN": "Formato non valido.",
+      "MINIMUM": "Valore troppo basso.",
+      "MAXIMUM": "Valore troppo alto.",
+      "ENUM": "Valore non ammesso.",
+      "UNKNOWN": "Campo non riconosciuto.",
+      "FORBIDDEN_KEY": "Campo non ammesso.",
+      "FORMAT": "Formato non valido.",
+      "TOO_DEEP": "Struttura troppo annidata.",
+      "TOO_MANY": "Troppi elementi.",
+      "INCORRECT": "Valore non corretto.",
+      "TAKEN": "Valore già in uso.",
+      "REUSED": "La nuova password deve essere diversa da quella attuale.",
+      "TOO_SHORT": "La password è troppo corta.",
+      "TOO_LONG": "La password è troppo lunga.",
+      "SAME_AS_USERNAME": "La password non può essere uguale al nome utente.",
+      "INVALID_CHARACTERS": "La password contiene caratteri non ammessi.",
+      "MISMATCH": "Le due password non coincidono.",
+      "INVALID": "Valore non valido."
+    }
   }
 }

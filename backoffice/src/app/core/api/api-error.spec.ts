@@ -56,6 +56,36 @@ describe('toApiError', () => {
   });
 });
 
+describe('toApiError Retry-After', () => {
+  const body = { error: { code: 'RATE_LIMITED', message: 'Slow down' } };
+  const withHeader = (value: string | null) =>
+    new HttpErrorResponse({
+      status: 429,
+      error: body,
+      headers: value === null ? new HttpHeaders() : new HttpHeaders({ 'Retry-After': value }),
+    });
+
+  it('reads the seconds to wait', () => {
+    expect(toApiError(withHeader('30')).retryAfterSeconds).toBe(30);
+  });
+
+  it.each([null, 'soon', '-3', '1.5', 'Wed, 21 Oct 2026 07:28:00 GMT', '9999999'])(
+    'ignores the invalid value %s',
+    (value) => {
+      expect(toApiError(withHeader(value)).retryAfterSeconds).toBeNull();
+    },
+  );
+
+  it('also keeps it on a non-conforming body', () => {
+    const response = new HttpErrorResponse({
+      status: 429,
+      error: 'x',
+      headers: new HttpHeaders({ 'Retry-After': '5' }),
+    });
+    expect(toApiError(response).retryAfterSeconds).toBe(5);
+  });
+});
+
 describe('parseApiErrorBody', () => {
   const invalid: [string, unknown][] = [
     ['null', null],

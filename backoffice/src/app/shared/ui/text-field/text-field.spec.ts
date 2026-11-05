@@ -10,6 +10,8 @@ import { TextField } from './text-field';
     [hint]="hint()"
     [error]="error()"
     autocomplete="email"
+    autocapitalize="none"
+    spellcheck="false"
     required
     [disabled]="disabled()"
     [(value)]="value"
@@ -41,6 +43,8 @@ describe('TextField', () => {
     expect(input.value).toBe('a@b.it');
     expect(input.required).toBe(true);
     expect(input.getAttribute('autocomplete')).toBe('email');
+    expect(input.getAttribute('autocapitalize')).toBe('none');
+    expect(input.getAttribute('spellcheck')).toBe('false');
     expect(input.hasAttribute('aria-invalid')).toBe(false);
     expect(input.hasAttribute('aria-describedby')).toBe(false);
   });
@@ -77,5 +81,12 @@ describe('TextField', () => {
     host.disabled.set(true);
     await fixture.whenStable();
     expect(input.disabled).toBe(true);
+  });
+
+  it('focuses the input when asked to (Signal Forms focus the first invalid field)', async () => {
+    const { fixture, input } = await render();
+    const field = fixture.debugElement.children[0].componentInstance as TextField;
+    field.focus();
+    expect(document.activeElement).toBe(input);
   });
 });

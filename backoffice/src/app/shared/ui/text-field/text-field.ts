@@ -1,4 +1,13 @@
-import { booleanAttribute, Component, computed, input, model, output } from '@angular/core';
+import {
+  booleanAttribute,
+  Component,
+  computed,
+  ElementRef,
+  input,
+  model,
+  output,
+  viewChild,
+} from '@angular/core';
 import { Icon } from '../icon/icon';
 import { uniqueId } from '../unique-id';
 
@@ -31,6 +40,10 @@ export class TextField {
   readonly error = input<string | null>(null);
   /** `autocomplete` attribute. */
   readonly autocomplete = input<string | null>(null);
+  /** `autocapitalize` attribute (e.g. `none` for usernames). */
+  readonly autocapitalize = input<string | null>(null);
+  /** `spellcheck` attribute. */
+  readonly spellcheck = input<'true' | 'false' | null>(null);
   /** Placeholder (never a replacement for the label). */
   readonly placeholder = input('');
   /** Marks the field as required. */
@@ -40,6 +53,8 @@ export class TextField {
   /** Emitted when the field loses focus (to start showing errors). */
   readonly blurred = output<void>();
 
+  private readonly control = viewChild.required<ElementRef<HTMLInputElement>>('control');
+
   protected readonly id = uniqueId('fc-text-field');
   protected readonly hintId = `${this.id}-hint`;
   protected readonly errorId = `${this.id}-error`;
@@ -47,6 +62,11 @@ export class TextField {
     const ids = [this.hint() ? this.hintId : '', this.error() ? this.errorId : ''];
     return ids.filter((id) => id !== '').join(' ') || null;
   });
+
+  /** Focuses the input (used by Signal Forms to focus the first invalid field). */
+  focus(options?: FocusOptions): void {
+    this.control().nativeElement.focus(options);
+  }
 
   protected onInput(event: Event): void {
     this.value.set((event.target as HTMLInputElement).value);

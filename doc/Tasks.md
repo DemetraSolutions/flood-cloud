@@ -378,15 +378,15 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
 - [x] **3.4.9** Test di isolamento (2.4.5) e di escalation su ogni endpoint.
 
 ### 3.5 Backoffice
-- [ ] **3.5.1** Pagina di login (Signal Forms, errori accessibili, messaggio di rate limit).
-- [ ] **3.5.2** Servizio di sessione:
+- [x] **3.5.1** Pagina di login (Signal Forms, errori accessibili, messaggio di rate limit).
+- [x] **3.5.2** Servizio di sessione (sessione esclusiva per scheda con Web Locks: una scheda duplicata chiede il login, decisione dell'utente del 2026-11-05):
   - access token solo in memoria;
   - refresh unico condiviso su `401 TOKEN_EXPIRED`;
   - ripristino della sessione all'avvio;
   - logout.
-- [ ] **3.5.3** Avvio dell'app con `GET /v1/me`; stato della sessione a signal.
-- [ ] **3.5.4** Guard `canMatch` per sessione e permesso, direttiva o helper `hasPermission` per menu e azioni (le route sono protette, non solo i menu come nel legacy).
-- [ ] **3.5.5** Profilo, cambio password, elenco e revoca delle sessioni.
+- [x] **3.5.3** Avvio dell'app con `GET /v1/me`; stato della sessione a signal.
+- [x] **3.5.4** Guard `canMatch` per sessione e permesso, direttiva o helper `hasPermission` per menu e azioni (le route sono protette, non solo i menu come nel legacy).
+- [x] **3.5.5** Profilo, cambio password, elenco e revoca delle sessioni.
 - [ ] **3.5.6** Elenco utenti: filtri nell'URL, paginazione a cursore, quattro stati della vista, selezione multipla con conferma.
 - [ ] **3.5.7** Dettaglio, creazione e modifica dell'utente:
   - ruoli proposti in base a chi crea;

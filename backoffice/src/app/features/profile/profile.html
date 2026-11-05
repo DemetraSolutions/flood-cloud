@@ -1,0 +1,82 @@
+<h1>{{ 'PROFILE.TITLE' | t }}</h1>
+
+@if (session.me(); as me) {
+  <section aria-labelledby="account-heading">
+    <h2 id="account-heading">{{ 'PROFILE.ACCOUNT' | t }}</h2>
+    <dl>
+      <div>
+        <dt>{{ 'PROFILE.USERNAME' | t }}</dt>
+        <dd>{{ me.username }}</dd>
+      </div>
+      <div>
+        <dt>{{ 'PROFILE.ROLE' | t }}</dt>
+        <dd>{{ roleLabel(me.role) }}</dd>
+      </div>
+      @if (me.group; as group) {
+        <div>
+          <dt>{{ 'PROFILE.GROUP' | t }}</dt>
+          <dd>{{ group.name }}</dd>
+        </div>
+      }
+      <div>
+        <dt>{{ 'PROFILE.SCOPE_LABEL' | t }}</dt>
+        <dd>{{ scopeText(me.scope) }}</dd>
+      </div>
+    </dl>
+    <p class="links">
+      <a routerLink="/change-password">{{ 'PROFILE.CHANGE_PASSWORD' | t }}</a>
+      <a routerLink="/profile/sessions">{{ 'PROFILE.SESSIONS' | t }}</a>
+    </p>
+  </section>
+
+  <section aria-labelledby="personal-heading">
+    <h2 id="personal-heading">{{ 'PROFILE.PERSONAL' | t }}</h2>
+    <form novalidate (submit)="onSubmit($event)">
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+      }
+      <fc-text-field
+        [formField]="profileForm.firstName"
+        [label]="'PROFILE.FIRST_NAME' | t"
+        autocomplete="given-name"
+        [error]="error(profileForm.firstName)"
+        (blurred)="profileForm.firstName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="profileForm.lastName"
+        [label]="'PROFILE.LAST_NAME' | t"
+        autocomplete="family-name"
+        [error]="error(profileForm.lastName)"
+        (blurred)="profileForm.lastName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="profileForm.email"
+        type="email"
+        [label]="'PROFILE.EMAIL' | t"
+        autocomplete="email"
+        [error]="error(profileForm.email)"
+        (blurred)="profileForm.email().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="profileForm.phone"
+        type="tel"
+        [label]="'PROFILE.PHONE' | t"
+        autocomplete="tel"
+        [error]="error(profileForm.phone)"
+        (blurred)="profileForm.phone().markAsTouched()"
+      />
+      <fc-select
+        [formField]="profileForm.language"
+        [label]="'PROFILE.LANGUAGE' | t"
+        [options]="languages"
+        [error]="error(profileForm.language)"
+        (blurred)="profileForm.language().markAsTouched()"
+      />
+      <div class="actions">
+        <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+          {{ 'COMMON.SAVE' | t }}
+        </button>
+      </div>
+    </form>
+  </section>
+}

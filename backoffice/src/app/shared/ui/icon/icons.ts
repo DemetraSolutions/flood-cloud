@@ -20,6 +20,7 @@ export const ICONS = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
   logout: 'M10 4H5v16h5M15 8l4 4-4 4M19 12H9',
   home: 'M4 11l8-7 8 7M6 10v10h12V10',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20c0-3.3 3.6-6 8-6s8 2.7 8 6',
 } as const;
 
 /** Name of an available icon. */

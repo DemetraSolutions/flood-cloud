@@ -1,0 +1,47 @@
+<h1>{{ 'SESSIONS.TITLE' | t }}</h1>
+<p>{{ 'SESSIONS.INTRO' | t }}</p>
+
+@if (sessions.error()) {
+  <fc-error-state
+    [title]="'SESSIONS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="requestId()"
+    (retry)="sessions.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'SESSIONS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="sessions.isLoading()"
+    [emptyTitle]="'SESSIONS.EMPTY' | t"
+    [emptyMessage]="'SESSIONS.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="current" let-row>
+      @if (row.current) {
+        <fc-status-badge tone="info">{{ 'SESSIONS.THIS_SESSION' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      <button fc-button variant="secondary" [attr.aria-label]="revokeLabel(row)" (click)="ask(row)">
+        {{ 'SESSIONS.REVOKE' | t }}
+      </button>
+    </ng-template>
+  </fc-data-table>
+}
+
+<p>
+  <a routerLink="/profile">{{ 'SESSIONS.BACK' | t }}</a>
+</p>
+
+<fc-confirm-dialog
+  [heading]="'SESSIONS.CONFIRM_TITLE' | t"
+  [message]="confirmMessage()"
+  [confirmLabel]="'SESSIONS.REVOKE' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="revoke()"
+/>

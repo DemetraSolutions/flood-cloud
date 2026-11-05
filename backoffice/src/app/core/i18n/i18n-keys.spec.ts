@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { API_ERROR_CODES, CLIENT_ERROR_CODES } from '../api/api.types';
+import { FIELD_ISSUES, issueMessageKey } from '../api/field-issues';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -61,6 +62,21 @@ describe('dictionaries', () => {
       for (const code of [...API_ERROR_CODES, ...CLIENT_ERROR_CODES]) {
         expect(keys.has(`ERRORS.API.${code}`)).toBe(true);
       }
+    }
+  });
+
+  it('defines a message for every field issue and for the generic one', () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      const keys = dictionary(language);
+      for (const issue of [...FIELD_ISSUES, 'not-an-issue']) {
+        expect(keys.has(issueMessageKey(issue))).toBe(true);
+      }
+    }
+  });
+
+  it('defines the role names, whose keys are built at run time', () => {
+    for (const role of ['PSA', 'D', 'SA', 'CA', 'PA', 'E']) {
+      expect(dictionary('it').has(`ROLE.${role}`)).toBe(true);
     }
   });
 });

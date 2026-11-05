@@ -1,0 +1,44 @@
+@if (session.me(); as me) {
+  <button
+    #toggle
+    type="button"
+    class="trigger"
+    aria-controls="user-menu-panel"
+    [attr.aria-expanded]="open()"
+    [attr.aria-label]="'USER_MENU.LABEL' | t: { username: me.username }"
+    (click)="open.set(!open())"
+  >
+    <fc-icon name="user" />
+    <span class="name">{{ me.username }}</span>
+  </button>
+  @if (open()) {
+    <ul id="user-menu-panel" class="entries">
+      @if (session.status() === 'authenticated') {
+        <li>
+          <a routerLink="/profile" (click)="close()">{{ 'USER_MENU.PROFILE' | t }}</a>
+        </li>
+        <li>
+          <a routerLink="/change-password" (click)="close()">{{
+            'USER_MENU.CHANGE_PASSWORD' | t
+          }}</a>
+        </li>
+      }
+      <li>
+        <button type="button" (click)="logout()">{{ 'USER_MENU.LOGOUT' | t }}</button>
+      </li>
+      <li>
+        <button type="button" (click)="askLogoutAll()">{{ 'USER_MENU.LOGOUT_ALL' | t }}</button>
+      </li>
+    </ul>
+  }
+}
+<fc-confirm-dialog
+  [heading]="'USER_MENU.LOGOUT_ALL' | t"
+  [message]="'USER_MENU.LOGOUT_ALL_CONFIRM' | t"
+  [confirmLabel]="'USER_MENU.LOGOUT_ALL' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="logoutAll()"
+/>

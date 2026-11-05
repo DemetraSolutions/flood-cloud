@@ -3,12 +3,15 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { signIn } from '../../../testing/session';
 import { I18nService } from '../i18n/i18n.service';
+import { SessionService } from '../session/session.service';
+import { Profile } from '../session/session.types';
 import { PageAnnouncer } from './page-announcer';
 import { MENU_ITEMS, MenuItem } from './menu';
 import { Shell } from './shell';
 
-async function render(menu?: readonly MenuItem[]) {
+async function render(menu?: readonly MenuItem[], profile: Partial<Profile> | null = {}) {
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(),
@@ -29,6 +32,9 @@ async function render(menu?: readonly MenuItem[]) {
     ],
   });
   vi.spyOn(TestBed.inject(I18nService), 't').mockImplementation((key) => `[${key}]`);
+  if (profile !== null) {
+    signIn(profile);
+  }
   const harness = await RouterTestingHarness.create('/page');
   const root = harness.routeNativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -63,10 +69,39 @@ describe('Shell', () => {
   it('lists the visible menu entries with the current page marked', async () => {
     const { root } = await render();
     const links = root.querySelectorAll<HTMLAnchorElement>('nav a');
-    expect(links.length).toBe(1);
+    expect(links.length).toBe(2);
     expect(links[0].textContent).toContain('[MENU.HOME]');
     expect(links[0].getAttribute('href')).toBe('/');
     expect(links[0].hasAttribute('aria-current')).toBe(false);
+    expect(links[1].textContent).toContain('[MENU.PROFILE]');
+  });
+
+  it('hides the entries whose permission the user lacks', async () => {
+    const { root } = await render(undefined, { permissions: [] });
+    const links = root.querySelectorAll<HTMLAnchorElement>('nav a');
+    expect([...links].map((l) => l.getAttribute('href'))).toEqual(['/']);
+  });
+
+  it('follows the permissions of the session when they change', async () => {
+    const { harness, root } = await render(undefined, { permissions: [] });
+    signIn({ permissions: ['profile:read'] });
+    harness.detectChanges();
+    expect(root.querySelectorAll('nav a').length).toBe(2);
+  });
+
+  it('offers no side menu while a temporary password must be changed', async () => {
+    const { root } = await render(undefined, { passwordChangeRequired: true });
+    expect(root.querySelector('nav')).toBeNull();
+    expect(root.querySelector('.menu-toggle')).toBeNull();
+    expect(root.querySelector('fc-user-menu')).not.toBeNull();
+    expect(TestBed.inject(SessionService).status()).toBe('passwordChangeRequired');
+  });
+
+  it('shows the user menu in the header', async () => {
+    const { root } = await render();
+    expect(root.querySelector('header fc-user-menu .trigger')?.textContent).toContain(
+      'mario.rossi',
+    );
   });
 
   it('renders groups with their sub-entries and marks the current page', async () => {

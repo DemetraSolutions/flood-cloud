@@ -22,6 +22,13 @@ export interface MenuItem {
 /** Menu configuration. Entries for each area are added by the steps that create their pages. */
 export const MENU: readonly MenuItem[] = [
   { id: 'home', labelKey: 'MENU.HOME', icon: 'home', route: '/' },
+  {
+    id: 'profile',
+    labelKey: 'MENU.PROFILE',
+    icon: 'user',
+    route: '/profile',
+    permission: 'profile:read',
+  },
 ];
 
 /** Menu entries used by the shell; tests (or future steps) can provide a different set. */
@@ -31,9 +38,8 @@ export const MENU_ITEMS = new InjectionToken<readonly MenuItem[]>('MENU_ITEMS', 
 });
 
 /**
- * Predicate that allows everything. It is used for both `can` and `hasFeature` until the
- * session (task 3.5.4) and the enabled features (task 4.5.2) exist: then the shell passes the
- * real predicates to {@link visibleMenu}.
+ * Predicate that allows everything. The shell uses it for `hasFeature` until the enabled
+ * features (task 4.5.2) exist; `can` comes from the session.
  */
 export function allowAll(_value: string): boolean {
   return true;

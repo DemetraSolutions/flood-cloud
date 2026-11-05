@@ -7,6 +7,7 @@ import { I18nService } from '../i18n/i18n.service';
 import { PageReloader } from './page-reloader';
 import { initializeApp } from './app-initializer';
 import { STARTUP_ERROR_FALLBACK, StartupError } from './startup-error';
+import { SessionService } from '../session/session.service';
 import { StartupState } from './startup-state';
 
 const DICTIONARY = {
@@ -15,6 +16,7 @@ const DICTIONARY = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
   TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
 });
 
@@ -46,6 +48,34 @@ describe('initializeApp', () => {
     await done;
     return TestBed.inject(StartupState);
   }
+
+  it('restores the session once configuration and dictionary are loaded', async () => {
+    const restore = vi.spyOn(TestBed.inject(SessionService), 'restore').mockResolvedValue();
+    await run(
+      { status: 200, body: DICTIONARY },
+      { status: 200, body: { apiBaseUrl: 'https://api.example.com' } },
+    );
+    expect(restore).toHaveBeenCalledOnce();
+  });
+
+  it('shows the startup error, logging it, when the session restore fails transiently', async () => {
+    vi.spyOn(TestBed.inject(SessionService), 'restore').mockRejectedValue(new Error('net'));
+    const state = await run(
+      { status: 200, body: DICTIONARY },
+      { status: 200, body: { apiBaseUrl: 'https://api.example.com' } },
+    );
+    expect(state.failed()).toBe(true);
+    expect(console.error).toHaveBeenCalledOnce();
+  });
+
+  it('does not restore the session when startup failed', async () => {
+    const restore = vi.spyOn(TestBed.inject(SessionService), 'restore').mockResolvedValue();
+    await run(
+      { status: 500, body: 'x' },
+      { status: 200, body: { apiBaseUrl: 'https://api.example.com' } },
+    );
+    expect(restore).not.toHaveBeenCalled();
+  });
 
   it('succeeds when dictionary and configuration load', async () => {
     const state = await run(

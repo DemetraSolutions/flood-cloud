@@ -64,8 +64,8 @@ describe('visibleMenu', () => {
     expect(ITEMS[3].children?.length).toBe(2);
   });
 
-  it('allowAll allows anything and the initial menu has the home entry', () => {
+  it('allowAll allows anything and the initial menu has the home and profile entries', () => {
     expect(allowAll('x')).toBe(true);
-    expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual(['home']);
+    expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual(['home', 'profile']);
   });
 });

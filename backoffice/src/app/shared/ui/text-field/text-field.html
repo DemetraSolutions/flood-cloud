@@ -1,6 +1,7 @@
 <div class="field">
   <label class="label" [class.required]="required()" [for]="id">{{ label() }}</label>
   <input
+    #control
     class="control"
     [id]="id"
     [type]="type()"
@@ -9,6 +10,8 @@
     [required]="required()"
     [placeholder]="placeholder()"
     [attr.autocomplete]="autocomplete()"
+    [attr.autocapitalize]="autocapitalize()"
+    [attr.spellcheck]="spellcheck()"
     [attr.aria-invalid]="error() ? 'true' : null"
     [attr.aria-describedby]="describedBy()"
     (input)="onInput($event)"

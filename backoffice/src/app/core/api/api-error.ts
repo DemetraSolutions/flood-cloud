@@ -10,6 +10,9 @@ import {
 /** Name of the response header carrying the backend request identifier. */
 export const REQUEST_ID_HEADER = 'X-Request-Id';
 
+/** Name of the response header carrying the seconds to wait after a `429`. */
+export const RETRY_AFTER_HEADER = 'Retry-After';
+
 /** Error raised for any failed call to the backend API, normalised from the HTTP failure. */
 export class ApiError extends Error {
   override readonly name = 'ApiError';
@@ -21,6 +24,8 @@ export class ApiError extends Error {
   readonly details: readonly ApiErrorDetail[];
   /** Value of the `X-Request-Id` response header, `null` when absent. */
   readonly requestId: string | null;
+  /** Seconds to wait before retrying, from the `Retry-After` header; `null` when absent or invalid. */
+  readonly retryAfterSeconds: number | null;
 
   constructor(init: {
     status: number;
@@ -28,13 +33,20 @@ export class ApiError extends Error {
     message: string;
     details?: readonly ApiErrorDetail[];
     requestId?: string | null;
+    retryAfterSeconds?: number | null;
   }) {
     super(init.message);
     this.status = init.status;
     this.code = init.code;
     this.details = init.details ?? [];
     this.requestId = init.requestId ?? null;
+    this.retryAfterSeconds = init.retryAfterSeconds ?? null;
   }
+}
+
+/** Parses a `Retry-After` header expressed in whole seconds (the form the backend sends). */
+function parseRetryAfter(value: string | null): number | null {
+  return value !== null && /^\d{1,6}$/.test(value) ? Number(value) : null;
 }
 
 const KNOWN_CODES: ReadonlySet<string> = new Set(API_ERROR_CODES);
@@ -90,6 +102,7 @@ export function parseApiErrorBody(body: unknown): ApiErrorBody['error'] | null {
  */
 export function toApiError(response: HttpErrorResponse): ApiError {
   const requestId = response.headers.get(REQUEST_ID_HEADER);
+  const retryAfterSeconds = parseRetryAfter(response.headers.get(RETRY_AFTER_HEADER));
   if (response.status === 0) {
     return new ApiError({ status: 0, code: 'NETWORK_ERROR', message: 'Network error', requestId });
   }
@@ -100,6 +113,7 @@ export function toApiError(response: HttpErrorResponse): ApiError {
       code: 'UNKNOWN_ERROR',
       message: 'Unexpected error response',
       requestId,
+      retryAfterSeconds,
     });
   }
   return new ApiError({
@@ -108,6 +122,7 @@ export function toApiError(response: HttpErrorResponse): ApiError {
     message: parsed.message,
     details: parsed.details,
     requestId,
+    retryAfterSeconds,
   });
 }
 
