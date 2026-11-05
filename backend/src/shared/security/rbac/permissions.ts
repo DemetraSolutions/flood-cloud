@@ -41,6 +41,7 @@ export const PERMISSIONS = Object.freeze({
   SESSIONS_REVOKE: 'sessions:revoke',
   PROFILE_READ: 'profile:read',
   PROFILE_UPDATE: 'profile:update',
+  CLIENT_ERRORS_CREATE: 'clientErrors:create',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

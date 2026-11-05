@@ -49,8 +49,8 @@ export const DATA_VERBS = Object.freeze(['created', 'updated', 'trashed', 'resto
 /** A data action: `<resource>.<verb>`, for example `user.created`. */
 export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}`;
 
-/** Error actions. */
-export const ERROR_ACTIONS = Object.freeze(['request.failed'] as const);
+/** Error actions: a server error that became a `500`, and a JavaScript error reported by the backoffice in the browser. */
+export const ERROR_ACTIONS = Object.freeze(['request.failed', 'client.error'] as const);
 
 /** Every action the log accepts. */
 export type ActivityAction = (typeof SECURITY_ACTIONS)[number] | DataAction | (typeof ERROR_ACTIONS)[number];
@@ -86,6 +86,8 @@ const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]
 export interface ActionDefinition {
   readonly categories: readonly ActivityCategory[];
   readonly metadataKeys: readonly string[];
+  /** `true` when the entry carries the dedicated `error` field (name, message, stack of a browser error). */
+  readonly hasErrorDetails?: true;
 }
 
 /**
@@ -105,6 +107,7 @@ export const ACTION_CATALOG: ReadonlyMap<string, ActionDefinition> = (() => {
     });
   }
   catalog.set('request.failed', { categories: ['error'], metadataKeys: ['method', 'route', 'errorName', 'errorCode'] });
+  catalog.set('client.error', { categories: ['error'], metadataKeys: ['route', 'appVersion', 'userAgent'], hasErrorDetails: true });
   return catalog;
 })();
 

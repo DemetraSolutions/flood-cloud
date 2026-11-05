@@ -13,7 +13,9 @@ import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
 /** A frozen clock for the real counters: the one-minute window cannot change in the middle of a test. */
-const FROZEN_NOW = Date.UTC(2026, 0, 1, 12, 0, 0);
+// Frozen at the real time of the run, never in the past: counters live in MongoDB with a TTL, and the TTL monitor
+// would delete the counters of a window that already ended while the test is still running.
+const FROZEN_NOW = Date.now();
 let ctx: TestDatabases;
 let office: Backoffice;
 const limiter = memoryRateLimiter();

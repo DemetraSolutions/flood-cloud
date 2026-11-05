@@ -20,6 +20,8 @@ export interface RateLimitRules {
   readonly passwordChangePerUser: RateLimitRule;
   /** Failed authentications per client IP on `/v1`; successful requests never count (offices behind NAT). */
   readonly unauthenticatedPerIp: RateLimitRule;
+  /** Browser error reports per authenticated user. */
+  readonly clientErrorsPerUser: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
   readonly apiPerUser: RateLimitRule;
 }
@@ -54,6 +56,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     usernameCheckPerUser: Object.freeze({ bucket: 'usernameCheck:user', limit: config.rateLimitUsernameCheckPerUser, key: perUser }),
     userCredentialsPerUser: Object.freeze({ bucket: 'user-credentials:user', limit: config.rateLimitUserCredentialsPerUser, key: perUser }),
     passwordChangePerUser: Object.freeze({ bucket: 'password-change:user', limit: config.rateLimitLoginPerUsername, key: perUser }),
+    clientErrorsPerUser: Object.freeze({ bucket: 'client-errors:user', limit: config.rateLimitClientErrorsPerUser, key: perUser }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
   });
 }

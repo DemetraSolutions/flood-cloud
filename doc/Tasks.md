@@ -6,7 +6,7 @@
 > - Un task si spunta solo quando il codice funziona, i test sono al 100% con typecheck verde, la documentazione è aggiornata (skill `docs-sync-checklist`) e l'utente ha confermato (`GEMINI.md` §1).
 > - Le decisioni `D-nn` (§0.4) vanno prese **prima** dei task che le citano.
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
-> - Stato al 2026-11-05: aree 1, 2 e 3 completate (restano 2.3.4 per l'area 4 e 2.6.6–2.6.7 dopo l'area 3).
+> - Stato al 2026-11-05: aree 1, 2 e 3 completate (resta 2.3.4, con l'area 4).
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -280,8 +280,8 @@ Decisione dell'utente del 2026-11-01: una sola collection nuova nel common per a
 - [x] **2.6.3** Durata di conservazione con TTL (decisione dell'utente del 2026-11-02): `data` e `security` 365 giorni, `error` 90, configurabili. IP in chiaro (legittimo interesse alla sicurezza, da riportare nell'informativa privacy).
 - [x] **2.6.4** *(funzioni pronte per lo strato service; usate dai domini delle aree 3+)* Registro delle scritture (inserimenti, modifiche, cancellazioni): chi, quando, risorsa e campi cambiati con valore precedente e nuovo; dei campi sensibili (password, token, credenziali) solo il nome; nome, email e telefono in chiaro (decisione dell'utente del 2026-11-02). Scritto dallo strato service, mai dai controller. Le letture non si registrano.
 - [x] **2.6.5** Errori del backend nel registro, collegati a `requestId` e utente; un fallimento della scrittura non blocca la risposta e resta su stdout.
-- [ ] **2.6.6** Endpoint per ricevere gli errori JavaScript del backoffice, con validazione, limiti di dimensione e rate limit.
-- [ ] **2.6.7** Monitor nel backoffice: elenco filtrabile per gruppo, utente, categoria, periodo e `requestId`, con permesso dedicato.
+- [x] **2.6.6** Endpoint per ricevere gli errori JavaScript del backoffice, con validazione, limiti di dimensione e rate limit.
+- [x] **2.6.7** Monitor nel backoffice: elenco filtrabile per gruppo, utente, categoria, periodo e `requestId`, con permesso dedicato. Visibilità decisa dall'utente il 2026-11-05: PSA tutto, D propri gruppi, SA proprio gruppo, CA e PA solo le proprie azioni; errori solo al PSA; staff di ruolo superiore mostrato solo col ruolo. Errori JavaScript deduplicati per 10 minuti.
 
 ### 2.7 Chiusura
 - [x] **2.7.1** Revisione del `security_expert` sulle aree 2.1–2.6 *(fatta a ogni passo 2A, 2B, 2C; 2.6.6–2.6.7 la avranno dopo l'area 3)*.

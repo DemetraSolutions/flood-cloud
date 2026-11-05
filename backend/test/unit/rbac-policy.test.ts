@@ -35,6 +35,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'sessions:revoke': FROM_PA,
   'profile:read': FROM_PA,
   'profile:update': FROM_PA,
+  'clientErrors:create': FROM_PA,
 };
 
 describe('permission catalog', () => {

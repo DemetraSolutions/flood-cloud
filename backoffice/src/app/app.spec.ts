@@ -149,6 +149,7 @@ describe('routes', () => {
       ['/platform/users/new', psa([...READ, 'users:create']), '⟦USERS.FORM.NEW_TITLE⟧'],
       ['/platform/users/u1', psa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
       ['/groups', psa(), '⟦GROUP_CHOOSER.TITLE⟧'],
+      ['/activity-log', sa(['activityLog:read', 'profile:read']), '⟦ACTIVITY.TITLE⟧'],
     ])('lazy-loads %s', async (url, profile, expected) => {
       expect(await go(url, profile)).toBe(expected);
     });
@@ -164,6 +165,7 @@ describe('routes', () => {
       ['/groups', sa([])],
       ['/platform/users', sa()],
       ['/platform/users', { ...psa([]) }],
+      ['/activity-log', sa()],
     ])('protects %s', async (url, profile) => {
       await go(url, profile);
       expect(location()).toBe('/forbidden');

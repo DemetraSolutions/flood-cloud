@@ -1,0 +1,134 @@
+<header class="page-header">
+  <h1>{{ 'ACTIVITY.TITLE' | t }}</h1>
+</header>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-select
+    [label]="'ACTIVITY.FILTER.CATEGORY' | t"
+    [placeholder]="'ACTIVITY.FILTER.ALL_CATEGORIES' | t"
+    [options]="categoryOptions()"
+    [value]="categoryFilter() ?? ''"
+    (valueChange)="onSelect('category', $event)"
+  />
+  <fc-select
+    [label]="'ACTIVITY.FILTER.OUTCOME' | t"
+    [placeholder]="'ACTIVITY.FILTER.ALL_OUTCOMES' | t"
+    [options]="outcomeOptions()"
+    [value]="outcome() ?? ''"
+    (valueChange)="onSelect('outcome', $event)"
+  />
+  <fc-select
+    [label]="'ACTIVITY.FILTER.ACTION' | t"
+    [placeholder]="'ACTIVITY.FILTER.ALL_ACTIONS' | t"
+    [options]="actionOptions()"
+    [value]="action() ?? ''"
+    (valueChange)="onSelect('action', $event)"
+  />
+  <fc-text-field
+    type="date"
+    [label]="'ACTIVITY.FILTER.FROM' | t"
+    [value]="from() ?? ''"
+    (valueChange)="onDate('from', $event)"
+  />
+  <fc-text-field
+    type="date"
+    [label]="'ACTIVITY.FILTER.TO' | t"
+    [value]="to() ?? ''"
+    [error]="periodError()"
+    (valueChange)="onDate('to', $event)"
+  />
+  <fc-text-field
+    type="search"
+    autocapitalize="none"
+    spellcheck="false"
+    [label]="'ACTIVITY.FILTER.REQUEST_ID' | t"
+    [value]="requestText()"
+    (valueChange)="onRequestId($event)"
+  />
+</form>
+
+@if (actorFilter() || canFilterGroup()) {
+  <div class="active-filters">
+    @if (actorFilter(); as actor) {
+      <button fc-button variant="secondary" (click)="clearActor()">
+        {{ 'ACTIVITY.FILTER.CLEAR_ACTOR' | t: { id: abbreviate(actor) } }}
+      </button>
+    }
+    @if (canFilterGroup()) {
+      <fc-checkbox
+        [label]="'ACTIVITY.FILTER.CURRENT_GROUP' | t"
+        [checked]="groupFilterActive()"
+        [disabled]="!groupFilterActive() && !groups.groupId()"
+        (checkedChange)="onGroupFilter($event)"
+      />
+    }
+  </div>
+}
+
+@if (entries.error()) {
+  <fc-error-state
+    [title]="'ACTIVITY.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="entries.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'ACTIVITY.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="entries.isLoading()"
+    [emptyTitle]="'ACTIVITY.EMPTY' | t"
+    [emptyMessage]="'ACTIVITY.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="category" let-row>
+      <fc-status-badge [tone]="categoryTone(row)">{{ categoryLabel(row) }}</fc-status-badge>
+    </ng-template>
+    <ng-template fcCell="outcome" let-row>
+      <fc-status-badge [tone]="outcomeTone(row)">{{ outcomeLabel(row) }}</fc-status-badge>
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      <div class="row-actions">
+        <button
+          fc-button
+          variant="ghost"
+          [attr.aria-label]="rowLabel('ACTIVITY.DETAIL_LABEL', row)"
+          (click)="openDetails(row)"
+        >
+          {{ 'ACTIVITY.DETAIL.OPEN' | t }}
+        </button>
+        @if (canFilterActor(row)) {
+          <button
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="rowLabel('ACTIVITY.FILTER_ACTOR_LABEL', row)"
+            (click)="filterByActor(row)"
+          >
+            {{ 'ACTIVITY.FILTER_ACTOR' | t }}
+          </button>
+        }
+      </div>
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="entries.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-dialog
+  [heading]="'ACTIVITY.DETAIL.TITLE' | t"
+  [open]="detailOpen()"
+  (openChange)="detailOpen.set($event)"
+>
+  @if (selected(); as entry) {
+    <fc-activity-detail [entry]="entry" />
+  }
+</fc-dialog>

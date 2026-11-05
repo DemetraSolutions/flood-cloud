@@ -12,7 +12,8 @@ import { Icon } from '../icon/icon';
 import { uniqueId } from '../unique-id';
 
 /** Input types supported by {@link TextField}. */
-export type TextFieldType = 'text' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'number';
+export type TextFieldType =
+  'text' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'number' | 'date';
 
 /**
  * Labelled text input on a native `<input>`. The label is always visible; hint and error are

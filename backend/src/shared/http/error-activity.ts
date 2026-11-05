@@ -3,11 +3,11 @@ import type { ActivityLog } from '../activity-log/activity-log.ts';
 import type { MetadataValue } from '../activity-log/activity-log.ts';
 import { actorOf } from '../activity-log/actor.ts';
 import type { Logger } from '../logging/logger.ts';
+import { createMinuteCap } from './minute-cap.ts';
 
 /** Maximum `error` entries per minute and process; beyond it errors go to stdout only. */
 export const MAX_ERROR_ENTRIES_PER_MINUTE = 100;
 
-const MINUTE_MS = 60_000;
 const UNMATCHED = '[unmatched]';
 
 /** Reports an unexpected error to the activity log. */
@@ -46,28 +46,18 @@ export interface ErrorActivityOptions {
  */
 export function createErrorActivityReporter(options: ErrorActivityOptions): ErrorActivityReporter {
   const maxPerMinute = options.maxPerMinute ?? MAX_ERROR_ENTRIES_PER_MINUTE;
-  let minute = -1;
-  let written = 0;
-  let skipped = 0;
+  const cap = createMinuteCap({
+    limit: maxPerMinute,
+    now: options.now,
+    logger: options.logger,
+    skippingMessage: 'error activity entries are being skipped by the per-minute limit',
+    skippedMessage: 'error activity entries were skipped by the per-minute limit',
+  });
   return {
     report: (error, req, res) => {
-      const current = Math.floor(options.now() / MINUTE_MS);
-      if (current !== minute) {
-        if (skipped > 0) {
-          options.logger.warn('error activity entries were skipped by the per-minute limit', { skipped, limit: maxPerMinute });
-        }
-        minute = current;
-        written = 0;
-        skipped = 0;
-      }
-      if (written >= maxPerMinute) {
-        if (skipped === 0) {
-          options.logger.warn('error activity entries are being skipped by the per-minute limit', { limit: maxPerMinute });
-        }
-        skipped += 1;
+      if (!cap.take()) {
         return;
       }
-      written += 1;
       const code = (error as { code?: unknown } | null)?.code;
       const metadata: Record<string, MetadataValue> = {
         method: req.method,

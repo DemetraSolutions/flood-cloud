@@ -1,0 +1,85 @@
+@let item = entry();
+<dl class="summary">
+  <dt>{{ 'ACTIVITY.COLUMN.AT' | t }}</dt>
+  <dd>{{ when() }}</dd>
+  <dt>{{ 'ACTIVITY.COLUMN.CATEGORY' | t }}</dt>
+  <dd>{{ 'ACTIVITY.CATEGORY.' + item.category.toUpperCase() | t }}</dd>
+  <dt>{{ 'ACTIVITY.COLUMN.ACTION' | t }}</dt>
+  <dd>{{ action() }}</dd>
+  <dt>{{ 'ACTIVITY.COLUMN.OUTCOME' | t }}</dt>
+  <dd>{{ 'ACTIVITY.OUTCOME.' + item.outcome.toUpperCase() | t }}</dd>
+  <dt>{{ 'ACTIVITY.COLUMN.ACTOR' | t }}</dt>
+  <dd>
+    {{ actor() }}
+    @if (item.actor.role && (item.actor.username || item.actor.id)) {
+      <span class="muted">{{ 'ROLE_SHORT.' + item.actor.role | t }}</span>
+    }
+  </dd>
+  @if (item.groupId) {
+    <dt>{{ 'ACTIVITY.COLUMN.GROUP' | t }}</dt>
+    <dd class="code">{{ item.groupId }}</dd>
+  }
+  @if (item.resource) {
+    <dt>{{ 'ACTIVITY.COLUMN.RESOURCE' | t }}</dt>
+    <dd class="code">
+      {{ item.resource.type }}{{ item.resource.id ? ' ' + item.resource.id : '' }}
+    </dd>
+  }
+  @if (item.requestId) {
+    <dt>{{ 'ACTIVITY.COLUMN.REQUEST_ID' | t }}</dt>
+    <dd class="code">{{ item.requestId }}</dd>
+  }
+  @if (item.ip) {
+    <dt>{{ 'ACTIVITY.DETAIL.IP' | t }}</dt>
+    <dd class="code">{{ item.ip }}</dd>
+  }
+</dl>
+
+@if (changes().length > 0) {
+  <h3>{{ 'ACTIVITY.DETAIL.CHANGES' | t }}</h3>
+  <div class="scroll" role="region" tabindex="0" [attr.aria-label]="'ACTIVITY.DETAIL.CHANGES' | t">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">{{ 'ACTIVITY.DETAIL.FIELD' | t }}</th>
+          <th scope="col">{{ 'ACTIVITY.DETAIL.BEFORE' | t }}</th>
+          <th scope="col">{{ 'ACTIVITY.DETAIL.AFTER' | t }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (change of changes(); track change.field) {
+          <tr>
+            <th scope="row">{{ change.field }}</th>
+            <td>{{ value(change, 'before') }}</td>
+            <td>{{ value(change, 'after') }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
+
+@if (metadata().length > 0) {
+  <h3>{{ 'ACTIVITY.DETAIL.METADATA' | t }}</h3>
+  <dl class="summary">
+    @for (pair of metadata(); track pair[0]) {
+      <dt>{{ pair[0] }}</dt>
+      <dd class="code">{{ pair[1] }}</dd>
+    }
+  </dl>
+}
+
+@if (item.error; as failure) {
+  <h3>{{ 'ACTIVITY.DETAIL.ERROR' | t }}</h3>
+  <dl class="summary">
+    <dt>{{ 'ACTIVITY.DETAIL.ERROR_NAME' | t }}</dt>
+    <dd class="code">{{ failure.name }}</dd>
+    <dt>{{ 'ACTIVITY.DETAIL.ERROR_MESSAGE' | t }}</dt>
+    <dd>{{ failure.message }}</dd>
+  </dl>
+  @if (failure.stack) {
+    <pre tabindex="0" [attr.aria-label]="'ACTIVITY.DETAIL.ERROR_STACK' | t">{{
+      failure.stack
+    }}</pre>
+  }
+}

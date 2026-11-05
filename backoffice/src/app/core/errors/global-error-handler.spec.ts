@@ -4,14 +4,17 @@ import { ErrorHandler } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ToastService } from '../../shared/ui/toast/toast.service';
 import { I18nService } from '../i18n/i18n.service';
+import { ClientErrorReporter } from './client-error-reporter';
 import { GlobalErrorHandler } from './global-error-handler';
 
 describe('GlobalErrorHandler', () => {
-  it('logs the error and shows a generic toast without technical details', () => {
+  it('logs the error, reports it and shows a generic toast without technical details', () => {
+    const report = vi.fn();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: ClientErrorReporter, useValue: { report } },
         { provide: ErrorHandler, useClass: GlobalErrorHandler },
       ],
     });
@@ -20,6 +23,7 @@ describe('GlobalErrorHandler', () => {
     const error = new Error('boom: db password');
     TestBed.inject(ErrorHandler).handleError(error);
     expect(log).toHaveBeenCalledWith(error);
+    expect(report).toHaveBeenCalledWith(error);
     const toasts = TestBed.inject(ToastService).toasts();
     expect(toasts.length).toBe(1);
     expect(toasts[0].kind).toBe('error');

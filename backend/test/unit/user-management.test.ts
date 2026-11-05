@@ -324,7 +324,7 @@ describe('checkUserChange on views produced by effectivePermissions', () => {
   it('a legacy matrix full of garbage produces a view that grants nothing', () => {
     const garbage = realView('PA', { status: 'yes', users: 'rw', places: [true], logs: null });
     assert.equal(garbage.matrix.status, false);
-    assert.deepEqual([...garbage.permissions].sort(), ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
+    assert.deepEqual([...garbage.permissions].sort(), ['clientErrors:create', 'profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
     assert.deepEqual(checkUserChange(actors.SA, null, garbage), []);
   });
 });

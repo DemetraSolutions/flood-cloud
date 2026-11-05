@@ -12,7 +12,8 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 let ctx: TestDatabases;
 let repository: SessionsRepository;
 const sessions = () => ctx.databases.common().collection('sessions');
-const NOW = new Date('2026-11-04T10:00:00.000Z');
+// Anchored at the real time: sessions have a TTL index and must never be born expired.
+const NOW = new Date(Math.floor(Date.now() / 1000) * 1000);
 const at = (ms: number): Date => new Date(NOW.getTime() + ms);
 let counter = 0;
 const hash = (): string => hashSecret(`token-${String(counter++)}`);

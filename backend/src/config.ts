@@ -56,6 +56,8 @@ export interface Config {
   readonly rateLimitUsernameCheckPerUser: number;
   /** Creations and password resets of users per minute allowed to a user (`RATE_LIMIT_USER_CREDENTIALS_PER_USER`): each costs a scrypt run. */
   readonly rateLimitUserCredentialsPerUser: number;
+  /** Browser error reports per minute allowed to a user (`RATE_LIMIT_CLIENT_ERRORS_PER_USER`). */
+  readonly rateLimitClientErrorsPerUser: number;
   /** Requests per minute allowed to a user on the `/v1` API (`RATE_LIMIT_API_PER_USER`). */
   readonly rateLimitApiPerUser: number;
   /** Failed authentications per minute allowed to a client IP on `/v1` (`RATE_LIMIT_UNAUTHENTICATED_PER_IP`). */
@@ -289,7 +291,8 @@ export function loadConfig(env: Env): Config {
 
   const database = readDatabaseConfig(env, issues);
   const appEnv = database?.appEnv;
-  const port = readInteger(env, issues, 'PORT', 3000, 1, 65535);
+  // 0 asks the operating system for a free port: the tests use it so no other process can take the port between choosing and binding it.
+  const port = readInteger(env, issues, 'PORT', 3000, 0, 65535);
 
   const trustProxy = readInteger(env, issues, 'TRUST_PROXY', 0, 0, 5);
 
@@ -327,6 +330,7 @@ export function loadConfig(env: Env): Config {
   const rateLimitRefreshPerIp = readInteger(env, issues, 'RATE_LIMIT_REFRESH_PER_IP', 30, 1, 100000);
   const rateLimitUsernameCheckPerUser = readInteger(env, issues, 'RATE_LIMIT_USERNAME_CHECK_PER_USER', 15, 1, 100000);
   const rateLimitUserCredentialsPerUser = readInteger(env, issues, 'RATE_LIMIT_USER_CREDENTIALS_PER_USER', 20, 1, 100000);
+  const rateLimitClientErrorsPerUser = readInteger(env, issues, 'RATE_LIMIT_CLIENT_ERRORS_PER_USER', 30, 1, 100000);
   const rateLimitApiPerUser = readInteger(env, issues, 'RATE_LIMIT_API_PER_USER', 300, 1, 100000);
   const rateLimitUnauthenticatedPerIp = readInteger(env, issues, 'RATE_LIMIT_UNAUTHENTICATED_PER_IP', 300, 1, 100000);
   const activityLogRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_RETENTION_DAYS', 365, 1, 3650);
@@ -372,6 +376,7 @@ export function loadConfig(env: Env): Config {
     rateLimitRefreshPerIp === undefined ||
     rateLimitUsernameCheckPerUser === undefined ||
     rateLimitUserCredentialsPerUser === undefined ||
+    rateLimitClientErrorsPerUser === undefined ||
     rateLimitApiPerUser === undefined ||
     rateLimitUnauthenticatedPerIp === undefined ||
     activityLogRetentionDays === undefined ||
@@ -398,6 +403,7 @@ export function loadConfig(env: Env): Config {
     rateLimitRefreshPerIp,
     rateLimitUsernameCheckPerUser,
     rateLimitUserCredentialsPerUser,
+    rateLimitClientErrorsPerUser,
     rateLimitApiPerUser,
     rateLimitUnauthenticatedPerIp,
     activityLogRetentionDays,

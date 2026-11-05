@@ -75,7 +75,12 @@ export async function startApp(
   };
 }
 
-/** Finds a free TCP port by binding to port 0 and releasing it. */
+/**
+ * Finds a TCP port nobody listens on, by binding to port 0 and releasing it. Never use it to start a
+ * server (another process may take the port before it is bound: start with `PORT=0` and read the real port
+ * from `server.address()` or from the start log). It is only for a port that must stay unused, such as the
+ * address of an unreachable MongoDB.
+ */
 export async function freePort(): Promise<number> {
   const { createServer } = await import('node:net');
   const probe = createServer();

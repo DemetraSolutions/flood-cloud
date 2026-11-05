@@ -19,7 +19,8 @@ after(async () => {
 });
 
 const DAY = 86_400_000;
-const NOW = Date.UTC(2026, 5, 1);
+// Anchored at the real time: documents with a TTL must never be born expired.
+const NOW = Date.now();
 const log = () => ctx.databases.common().collection<ActivityLogDocument>('activityLog');
 const make = (logger = memoryLogger().logger, databases: Databases = ctx.databases) =>
   createActivityLog({ databases, logger, retentionDays: 365, errorRetentionDays: 90, now: () => NOW });
@@ -43,9 +44,21 @@ describe('activityLog collection (real MongoDB)', () => {
     assert.deepEqual(options.validator.$jsonSchema.required, ['at', 'category', 'action', 'outcome', 'actor', 'expiresAt']);
     assert.deepEqual([options.validationLevel, options.validationAction], ['strict', 'error']);
     const indexes = new Map((await log().indexes()).map((index) => [index.name, index]));
-    assert.deepEqual([...indexes.keys()].sort(), ['_id_', 'actor.id_1_at_-1', 'category_1_at_-1', 'expiresAt_1', 'groupId_1_at_-1', 'requestId_1']);
+    assert.deepEqual([...indexes.keys()].sort(), ['_id_', 'actor.id_1_at_-1__id_-1', 'at_-1__id_-1', 'category_1_at_-1__id_-1', 'expiresAt_1', 'groupId_1_at_-1__id_-1', 'requestId_1']);
     assert.equal(indexes.get('expiresAt_1')?.expireAfterSeconds, 0);
-    assert.deepEqual(indexes.get('groupId_1_at_-1')?.key, { groupId: 1, at: -1 });
+    assert.deepEqual(indexes.get('groupId_1_at_-1__id_-1')?.key, { groupId: 1, at: -1, _id: -1 });
+  });
+
+  it('replaces the indexes of earlier versions by the current ones, idempotently', async () => {
+    await log().createIndexes([
+      { key: { groupId: 1, at: -1 }, name: 'groupId_1_at_-1' },
+      { key: { 'actor.id': 1, at: -1 }, name: 'actor.id_1_at_-1' },
+      { key: { category: 1, at: -1 }, name: 'category_1_at_-1' },
+    ]);
+    await ensureIndexes(ctx.databases);
+    await ensureIndexes(ctx.databases);
+    const names = (await log().indexes()).map((index) => index.name);
+    assert.deepEqual(names.sort(), ['_id_', 'actor.id_1_at_-1__id_-1', 'at_-1__id_-1', 'category_1_at_-1__id_-1', 'expiresAt_1', 'groupId_1_at_-1__id_-1', 'requestId_1']);
   });
 
   it('updates an outdated validator in place on the next startup', async () => {
@@ -56,7 +69,7 @@ describe('activityLog collection (real MongoDB)', () => {
   });
 
   it('rejects documents that break the schema', async () => {
-    const valid = { at: new Date(NOW), category: 'data', action: 'user.created', outcome: 'success', actor: { kind: 'anonymous' }, expiresAt: new Date(NOW) };
+    const valid = { at: new Date(NOW), category: 'data', action: 'user.created', outcome: 'success', actor: { kind: 'anonymous' }, expiresAt: new Date(NOW + DAY) };
     await log().insertOne(valid as never);
     const invalid: Array<Record<string, unknown>> = [
       { ...valid, extra: 1 },
@@ -224,7 +237,7 @@ describe('ActivityLog.record (real MongoDB)', () => {
   });
 
   it('has a validator that also bounds the metadata and requires the id of a user actor', async () => {
-    const base = { at: new Date(NOW), category: 'security', action: 'rateLimit.exceeded', outcome: 'denied', expiresAt: new Date(NOW) };
+    const base = { at: new Date(NOW), category: 'security', action: 'rateLimit.exceeded', outcome: 'denied', expiresAt: new Date(NOW + DAY) };
     const code121 = (error: { code?: number }) => error.code === 121;
     await log().insertOne({ ...base, actor: { kind: 'user', id: new ObjectId() }, metadata: { bucket: 'x', n: 1, ok: true, none: null, f: 1.5 } } as never);
     await log().insertOne({ ...base, actor: { kind: 'system' } } as never);

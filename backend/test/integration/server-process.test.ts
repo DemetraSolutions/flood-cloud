@@ -5,7 +5,6 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { freePort } from '../helpers/app.ts';
 import { mongoEnv } from '../helpers/mongo.ts';
 
 const SERVER = fileURLToPath(new URL('../../src/server.ts', import.meta.url));
@@ -49,12 +48,13 @@ function spawnServer(env: Record<string, string | undefined>, onStdout?: (text: 
 
 describe('node src/server.ts', () => {
   it('starts, serves health and exits 0 on SIGTERM', async () => {
-    const port = await freePort();
     let probed = false;
     const outcome = await spawnServer(
-      mongoEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }) as Record<string, string>,
+      mongoEnv({ PORT: '0', SHUTDOWN_DRAIN_MS: '0' }) as Record<string, string>,
       (stdout, child) => {
-        if (!probed && stdout.includes('server started')) {
+        // The start log carries the port the operating system gave to the child.
+        const port = /"port":(\d+)[^\n]*"msg":"server started"/.exec(stdout)?.[1];
+        if (!probed && port !== undefined) {
           probed = true;
           fetch(`http://127.0.0.1:${port}/health/ready`)
             .then(async (res) => {

@@ -13,7 +13,9 @@ import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
 /** A frozen clock for the real counters: the one-minute window cannot change in the middle of a test. */
-const FROZEN_NOW = Date.UTC(2026, 0, 1, 12, 0, 0);
+// Frozen at the real time of the run, never in the past: counters live in MongoDB with a TTL, and the TTL monitor
+// would delete the counters of a window that already ended while the test is still running.
+const FROZEN_NOW = Date.now();
 let ctx: TestDatabases;
 let office: Backoffice;
 const cleanups: Array<() => Promise<void>> = [];
@@ -83,7 +85,7 @@ describe('GET /v1/me', () => {
   it('narrows the permissions to the ones the user holds', async () => {
     const { name } = await addUser({ permissions: { status: false, users: { r: true, w: false } } });
     const profile = await profileOf(await office.call('GET', '/me', (await office.tokens(name)).accessToken));
-    assert.deepEqual(profile.permissions, [PERMISSIONS.PROFILE_READ, PERMISSIONS.PROFILE_UPDATE, PERMISSIONS.SESSIONS_READ, PERMISSIONS.SESSIONS_REVOKE, PERMISSIONS.USERS_READ].sort());
+    assert.deepEqual(profile.permissions, [PERMISSIONS.CLIENT_ERRORS_CREATE, PERMISSIONS.PROFILE_READ, PERMISSIONS.PROFILE_UPDATE, PERMISSIONS.SESSIONS_READ, PERMISSIONS.SESSIONS_REVOKE, PERMISSIONS.USERS_READ].sort());
     assert.equal(profile['canManagePermissions'], false);
   });
 

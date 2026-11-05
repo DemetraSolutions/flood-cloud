@@ -1,5 +1,5 @@
 import { CORE_MODULES } from '../shared/security/rbac/permission-matrix.ts';
-import { ACTIVITY_LOG_INDEXES, ACTIVITY_LOG_VALIDATOR } from './activity-log-schema.ts';
+import { ACTIVITY_LOG_INDEXES, ACTIVITY_LOG_OBSOLETE_INDEXES, ACTIVITY_LOG_VALIDATOR } from './activity-log-schema.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
 
@@ -26,6 +26,8 @@ export interface CollectionSpec {
   readonly ownedFields?: readonly string[];
   /** Indexes to create at startup. */
   readonly indexes?: readonly IndexSpec[];
+  /** Names of indexes this backend created in the past and replaced; dropped after the new ones exist (`new` collections only). */
+  readonly obsoleteIndexes?: readonly string[];
   /** `$jsonSchema` applied at startup (strict, errors on violation); allowed only on `new` collections. */
   readonly validator?: Readonly<Record<string, unknown>>;
 }
@@ -84,7 +86,7 @@ export const COLLECTIONS = {
     groups: { ownership: 'legacy-read' },
     countries: { ownership: 'legacy-read' },
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
-    activityLog: { ownership: 'new', indexes: ACTIVITY_LOG_INDEXES, validator: ACTIVITY_LOG_VALIDATOR },
+    activityLog: { ownership: 'new', indexes: ACTIVITY_LOG_INDEXES, obsoleteIndexes: ACTIVITY_LOG_OBSOLETE_INDEXES, validator: ACTIVITY_LOG_VALIDATOR },
     userCredentials: { ownership: 'new', validator: USER_CREDENTIALS_VALIDATOR },
     sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
   },

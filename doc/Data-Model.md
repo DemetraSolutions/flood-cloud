@@ -102,8 +102,9 @@ Realizzata (passo 2C, decisione dell'utente del 2026-11-01): un'unica collection
 | `changes` | `{ field, before?, after?, redacted?, truncated? }[]` | solo `data`; segreti oscurati |
 | `requestId`, `ip` | string | |
 | `metadata` | oggetto | chiavi ammesse per azione, massimo 20 valori scalari |
+| `error` | `{ name, message, stack }` | solo per `client.error` (errori JavaScript del backoffice): messaggio fino a 300 caratteri, prime 10 righe dello stack di massimo 300 caratteri, redatti |
 | `expiresAt` | Date | TTL: 365 giorni per `data` e `security`, 90 per `error` |
-Validazione `$jsonSchema`. Indici: `groupId_1_at_-1`, `actor.id_1_at_-1`, `category_1_at_-1`, `requestId_1`, TTL `expiresAt_1`.
+Validazione `$jsonSchema`. Indici: `at_-1__id_-1`, `groupId_1_at_-1__id_-1`, `actor.id_1_at_-1__id_-1`, `category_1_at_-1__id_-1` (ordinamento del monitor senza ordinamento in memoria), `requestId_1`, TTL `expiresAt_1`. Gli indici precedenti senza `_id` vengono rimossi all'avvio dopo la creazione dei nuovi.
 
 ## Domande aperte
 1. `groups.dealerId`: nel legacy riferisce l'`_id` dell'utente `D` o un'anagrafica dealer separata? Un dealer può avere più utenti?

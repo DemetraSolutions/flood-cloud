@@ -52,7 +52,7 @@ Fuori dalle superfici API, per le sonde di GKE.
 ## Superficie backoffice — `/v1`
 
 > **Flusso di sessione.** Il login restituisce una coppia di token opachi: l'**access token** (`fc_at_…`, valido 15 minuti) va inviato in `Authorization: Bearer` e il client lo tiene **solo in memoria**; il **refresh token** (`fc_rt_…`) viaggia nel body, non in un cookie, e il client lo conserva in `sessionStorage`. Il client rinnova la coppia **solo quando riceve `401 TOKEN_EXPIRED`**, con **un'unica richiesta di refresh condivisa** tra le chiamate concorrenti, e poi ripete la chiamata originale; ogni altro `401` (`UNAUTHENTICATED`) porta al login. Ogni refresh **ruota** il refresh token: quello precedente non vale più. Un nuovo tentativo con il token appena sostituito, entro **30 secondi** dalla rotazione (risposta persa per la rete), è rifiutato con `401 UNAUTHENTICATED` ma **non** termina la sessione e la coppia già emessa resta valida; un riuso fuori da quella finestra, o di un token più vecchio, fa revocare l'intera sessione. Il logout revoca la sessione corrente (`/auth/logout`) o tutte quelle dell'utente (`/auth/logout-all`). Le scadenze non superano mai la durata massima della sessione.
-> **Password provvisoria.** Quando un amministratore crea l'utente o ne reimposta la password, il login risponde con `passwordChangeRequired: true` (come `GET /v1/me`). Finché la password non è cambiata, tutte le route con Bearer rispondono `403 PASSWORD_CHANGE_REQUIRED`, **tranne** `GET /v1/me`, `PUT /v1/me/password`, `POST /v1/auth/logout` e `POST /v1/auth/logout-all`. Il client porta l'utente alla schermata di cambio password; dopo il cambio la sessione corrente resta valida e il flag torna `false`.
+> **Password provvisoria.** Quando un amministratore crea l'utente o ne reimposta la password, il login risponde con `passwordChangeRequired: true` (come `GET /v1/me`). Finché la password non è cambiata, tutte le route con Bearer rispondono `403 PASSWORD_CHANGE_REQUIRED`, **tranne** `GET /v1/me`, `PUT /v1/me/password`, `POST /v1/auth/logout`, `POST /v1/auth/logout-all` e `POST /v1/client-errors`. Il client porta l'utente alla schermata di cambio password; dopo il cambio la sessione corrente resta valida e il flag torna `false`.
 > Le risposte che contengono token non sono mai compresse.
 > **Header comuni:** dove è applicato un rate limit la risposta porta `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` (secondi alla riapertura della finestra); oltre il limite `429 RATE_LIMITED` aggiunge `Retry-After` (secondi).
 > **Errori delle route con Bearer:** `401 UNAUTHENTICATED` (token assente, malformato, sconosciuto o revocato), `401 TOKEN_EXPIRED` (access token scaduto: il client esegue il refresh), `403 FORBIDDEN` (permesso mancante).
@@ -453,6 +453,65 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
   }
   ```
 - **Errori:** comuni; `404 NOT_FOUND`
+
+## Registro attività ed errori (`/v1`)
+
+### GET /v1/activity-log
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `activityLog:read`
+- **Ruoli e perimetro:** PSA: tutto il registro; D: le voci dei propri gruppi (attivi); SA: le voci del proprio gruppo; CA e PA: **solo le proprie azioni**. La categoria `error` (e le sue azioni, come `client.error`) è **riservata al PSA**: per gli altri ruoli `category=error` o un'`action` di quella categoria dà `403 FORBIDDEN`. Un `groupId` fuori dal perimetro non dà errore: la pagina è vuota.
+- **Query:**
+  | Parametro | Tipo | Note |
+  |---|---|---|
+  | `limit`, `cursor` | come nelle "Liste" | l'ordine è fisso: più recenti prima (data decrescente); nessun `sort` né `q` |
+  | `category` | `data`, `security`, `error` | |
+  | `action` | uno dei nomi del catalogo delle azioni (es. `auth.loginFailed`, `user.created`, `client.error`) | un nome sconosciuto è `422` (`enum`) |
+  | `outcome` | `success`, `failure`, `denied` | |
+  | `actorId`, `groupId` | 24 caratteri esadecimali | |
+  | `requestId` | stringa 1–128 caratteri | l'id della richiesta (`X-Request-Id`) che ha generato la voce |
+  | `from`, `to` | data `2026-11-01` o data-ora UTC `2026-11-01T08:00:00.000Z` | estremi **inclusivi**; `to` precedente a `from` o intervallo oltre **400 giorni** è `422` su `to` (`minimum` / `maximum`) |
+- **Risposta:** `200` `{ data, page }`. Ogni voce ha: `id`, `at` (ISO UTC), `category`, `action`, `outcome`, `actor` (`kind` `user` / `anonymous` / `system`, `id`, `role`, `username`), `groupId`, `resource` (`type`, `id`) o `null`, `changes` (modifiche di campo `field`, `before`, `after`, con `redacted` / `truncated` quando il valore è oscurato o troncato), `requestId`, `ip`, `metadata` (valori semplici) e, solo sulle voci `client.error`, `error` (`name`, `message`, `stack`). Se l'attore ha un **ruolo superiore** a chi guarda, `actor.id`, `actor.username` e `ip` sono `null` (il ruolo resta visibile); `username` è `null` anche per attori non utente o utenti non più esistenti.
+  ```json
+  {
+    "data": [
+      {
+        "id": "665f1c2e9b1d4a0012ab3500",
+        "at": "2026-11-04T09:12:30.000Z",
+        "category": "data",
+        "action": "user.updated",
+        "outcome": "success",
+        "actor": { "kind": "user", "id": "665f1c2e9b1d4a0012ab34ce", "role": "SA", "username": "mario.rossi" },
+        "groupId": "665f1c2e9b1d4a0012ab34a1",
+        "resource": { "type": "user", "id": "665f1c2e9b1d4a0012ab34d2" },
+        "changes": [{ "field": "phone", "before": null, "after": "+39 02 1234567" }],
+        "requestId": "0b9f3c2a-7e1d-4c55-9a38-2f6d1e8b7a10",
+        "ip": "203.0.113.10",
+        "metadata": {}
+      }
+    ],
+    "page": { "limit": 50, "next": null }
+  }
+  ```
+- **Errori:** `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante, categoria o azione `error` per i non PSA), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR` (parametri non validi, intervallo, `cursor`/`format`)
+
+### POST /v1/client-errors
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `clientErrors:create`, concesso **sempre** a ogni ruolo da PSA a PA. È ammessa anche con una password provvisoria da cambiare (l'errore può avvenire proprio in quella schermata).
+- **Body** (`application/json`, massimo 8 KB, nessun'altra proprietà): un errore JavaScript intercettato dal backoffice.
+  | Campo | Tipo | Obbligatorio | Vincoli |
+  |---|---|---|---|
+  | `name` | stringa | sì | 1–100 caratteri, senza caratteri di controllo (es. `TypeError`) |
+  | `message` | stringa | sì | fino a 300 caratteri (anche vuota) |
+  | `stack` | stringa | no | fino a 4000 caratteri |
+  | `route` | stringa | sì | 1–200 caratteri; il **pattern** della route, non l'URL concreto: `/` oppure segmenti che sono un nome letterale (`A-Za-z0-9_-`), un parametro `:nome` o `**`. Query string, frammenti, segmenti numerici e id esadecimali di 24 caratteri sono rifiutati (`pattern`), es. `/groups/:groupId/users` |
+  | `appVersion` | stringa | sì | 1–32 caratteri tra lettere, cifre, `.`, `+`, `-` (es. `1.4.2`) |
+  | `occurredAt` | data ISO 8601 | no | validata, ma non conservata |
+  ```json
+  { "name": "TypeError", "message": "Cannot read properties of undefined", "stack": "TypeError: …\n    at …", "route": "/groups/:groupId/users", "appVersion": "1.4.2" }
+  ```
+- **Header particolari:** `RateLimit-*` (**30 richieste al minuto per utente** di default)
+- **Risposta:** `202` senza body. Viene salvata una voce `client.error` (categoria `error`, esito `failure`) nel registro attività, attribuita all'utente e al suo gruppo, con `route`, `appVersion` e `User-Agent` (troncato a 120 caratteri) nei `metadata`, e `name`, `message`, `stack` in `error`; il testo è redatto dei dati sensibili e limitato in lunghezza. Lo stesso errore (stesso utente, nome, messaggio e prima riga dello stack) non viene salvato di nuovo per **10 minuti**; oltre un tetto di voci al minuto sul server le segnalazioni in eccesso sono scartate. In entrambi i casi la risposta è comunque `202`: la segnalazione non fallisce mai la richiesta.
+- **Errori:** `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN`, `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`, `422 VALIDATION_ERROR` (per campo, `route` / `appVersion` `pattern`), `429 RATE_LIMITED` con `Retry-After`
 
 ## Superficie server di punto vendita — `/store/v1`
 Nessun endpoint realizzato.

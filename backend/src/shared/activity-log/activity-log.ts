@@ -37,6 +37,24 @@ export interface ActivityResource {
 /** A scalar metadata value. */
 export type MetadataValue = string | number | boolean | null;
 
+/** Maximum length of the `error.name` of a browser error. */
+export const MAX_ERROR_NAME_LENGTH = 100;
+/** Maximum length of the `error.message` of a browser error; longer values are cut. */
+export const MAX_ERROR_MESSAGE_LENGTH = 300;
+/** Maximum number of stack lines kept of a browser error. */
+export const MAX_ERROR_STACK_LINES = 10;
+/** Maximum length of one stack line of a browser error; longer lines are cut before redaction. */
+export const MAX_ERROR_STACK_LINE_LENGTH = 300;
+/** Maximum length of the stack of a browser error; longer values are cut. */
+export const MAX_ERROR_STACK_LENGTH = 4000;
+
+/** The JavaScript error of a `client.error` entry. */
+export interface ActivityError {
+  readonly name: string;
+  readonly message: string;
+  readonly stack?: string;
+}
+
 /** What a caller reports to {@link ActivityLog.record}. */
 export interface ActivityEntry {
   readonly category: ActivityCategory;
@@ -50,6 +68,8 @@ export interface ActivityEntry {
   readonly ip?: string;
   /** Scalar values under the keys the action allows (`ACTION_CATALOG`). */
   readonly metadata?: Readonly<Record<string, MetadataValue>>;
+  /** The browser error, only for the actions that carry one (`client.error`). */
+  readonly error?: ActivityError;
 }
 
 /** The stored document: an entry plus its time and expiry. */
@@ -110,6 +130,23 @@ function cleanChange(change: FieldChange): FieldChange {
     ...(change.redacted === undefined ? {} : { redacted: change.redacted }),
     ...(change.truncated === undefined ? {} : { truncated: change.truncated }),
   };
+}
+
+/**
+ * Redacts and bounds a browser error: name and message are redacted and cut; the stack is reduced to
+ * its first lines, each redacted on its own (a credential-looking line becomes `[REDACTED]`, the others
+ * stay readable), and cut.
+ */
+function cleanError(error: ActivityError): ActivityError {
+  const name = clean(error.name, MAX_ERROR_NAME_LENGTH);
+  const message = clean(error.message, MAX_ERROR_MESSAGE_LENGTH);
+  // Browsers repeat `Name: message` as the first stack line, with the full message: keep the bounded one.
+  const lines = error.stack === undefined ? [] : error.stack.split('\n').slice(0, MAX_ERROR_STACK_LINES);
+  const stack = lines
+    .map((line, index) => (index === 0 && line.startsWith(`${error.name}:`) ? `${name}: ${message}` : (redact(line.slice(0, MAX_ERROR_STACK_LINE_LENGTH)) as string)))
+    .join('\n')
+    .slice(0, MAX_ERROR_STACK_LENGTH);
+  return { name, message, ...(stack === '' ? {} : { stack }) };
 }
 
 function invalid(reason: string): never {
@@ -181,6 +218,9 @@ export function buildActivityDocument(entry: ActivityEntry, at: Date, retentionD
   if ((entry.changes?.length ?? 0) > MAX_CHANGES) {
     invalid('too many changes');
   }
+  if (entry.error !== undefined && definition.hasErrorDetails !== true) {
+    invalid(`action ${entry.action} does not carry an error`);
+  }
   return {
     at,
     category: entry.category,
@@ -204,6 +244,7 @@ export function buildActivityDocument(entry: ActivityEntry, at: Date, retentionD
     ...(entry.requestId === undefined ? {} : { requestId: clean(entry.requestId, 128) }),
     ...(entry.ip === undefined ? {} : { ip: clean(entry.ip, 64) }),
     ...(entry.metadata === undefined ? {} : { metadata: cleanMetadata(entry.action, entry.metadata, definition.metadataKeys) }),
+    ...(entry.error === undefined ? {} : { error: cleanError(entry.error) }),
     expiresAt: new Date(at.getTime() + retentionDays * DAY_MS),
   };
 }

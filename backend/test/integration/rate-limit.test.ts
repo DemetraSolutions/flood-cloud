@@ -18,9 +18,12 @@ after(async () => {
 
 const counters = () => ctx.databases.common().collection<{ _id: string; count: number; expiresAt: Date }>('rateLimits');
 
+// Anchored at the start of the current minute: counters have a TTL and must never be born expired.
+const BASE = Math.floor(Date.now() / 60_000) * 60_000;
+
 describe('rate limiter (real MongoDB)', () => {
   it('counts per window, reports remaining and reset, and flags only the first excess', async () => {
-    const start = Date.UTC(2026, 0, 1, 12, 0, 10);
+    const start = BASE + 10_000;
     const limiter = createRateLimiter(ctx.databases, () => start);
     const results = [];
     for (let i = 0; i < 4; i += 1) {
@@ -40,7 +43,7 @@ describe('rate limiter (real MongoDB)', () => {
   });
 
   it('starts a fresh count in the next window', async () => {
-    let now = Date.UTC(2026, 0, 1, 13, 0, 59, 500);
+    let now = BASE + 59_500;
     const limiter = createRateLimiter(ctx.databases, () => now);
     assert.equal((await limiter.consume('refresh:ip', 'a', 1)).allowed, true);
     const blocked = await limiter.consume('refresh:ip', 'a', 1);
@@ -51,7 +54,7 @@ describe('rate limiter (real MongoDB)', () => {
   });
 
   it('keeps keys and buckets independent', async () => {
-    const limiter = createRateLimiter(ctx.databases, () => Date.UTC(2026, 0, 1, 14, 0, 0));
+    const limiter = createRateLimiter(ctx.databases, () => BASE);
     assert.equal((await limiter.consume('b1', 'k1', 1)).allowed, true);
     assert.equal((await limiter.consume('b1', 'k1', 1)).allowed, false);
     assert.equal((await limiter.consume('b1', 'k2', 1)).allowed, true);
@@ -59,10 +62,10 @@ describe('rate limiter (real MongoDB)', () => {
   });
 
   it('never stores the key in clear and expires the counter after the window', async () => {
-    const now = Date.UTC(2026, 0, 1, 15, 0, 30);
+    const now = BASE + 30_000;
     await createRateLimiter(ctx.databases, () => now).consume('login:username', 'Mario.Rossi@example.com', 5);
     const hash = createHash('sha256').update('Mario.Rossi@example.com').digest('hex');
-    const windowStart = Date.UTC(2026, 0, 1, 15, 0, 0) / 1000;
+    const windowStart = BASE / 1000;
     const stored = await counters().findOne({ _id: `login:username:${hash}:${windowStart}` });
     assert.equal(stored?.count, 1);
     assert.equal(stored?.expiresAt.getTime(), (windowStart + 120) * 1000);
@@ -77,7 +80,7 @@ describe('rate limiter (real MongoDB)', () => {
   });
 
   it('does not let concurrent requests exceed the limit', async () => {
-    const limiter = createRateLimiter(ctx.databases, () => Date.UTC(2026, 0, 1, 16, 0, 0));
+    const limiter = createRateLimiter(ctx.databases, () => BASE);
     const results = await Promise.all(Array.from({ length: 40 }, () => limiter.consume('race', 'same', 10)));
     assert.equal(results.filter((result) => result.allowed).length, 10);
     assert.equal(results.filter((result) => result.firstExcess).length, 1);

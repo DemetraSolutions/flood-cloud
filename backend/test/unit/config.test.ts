@@ -61,6 +61,7 @@ describe('loadConfig', () => {
         RATE_LIMIT_REFRESH_PER_IP: '3',
         RATE_LIMIT_USERNAME_CHECK_PER_USER: '4',
         RATE_LIMIT_USER_CREDENTIALS_PER_USER: '7',
+        RATE_LIMIT_CLIENT_ERRORS_PER_USER: '9',
         RATE_LIMIT_API_PER_USER: '100000',
         RATE_LIMIT_UNAUTHENTICATED_PER_IP: '100000',
         ACTIVITY_LOG_RETENTION_DAYS: '3650',
@@ -70,6 +71,7 @@ describe('loadConfig', () => {
     );
     assert.deepEqual([custom.rateLimitLoginPerUsername, custom.rateLimitLoginPerIp, custom.rateLimitRefreshPerIp, custom.rateLimitUsernameCheckPerUser, custom.rateLimitApiPerUser], [1, 15, 3, 4, 100000]);
     assert.equal(custom.rateLimitUnauthenticatedPerIp, 100000);
+    assert.deepEqual([loadConfig(validEnv()).rateLimitClientErrorsPerUser, custom.rateLimitClientErrorsPerUser], [30, 9]);
     assert.deepEqual([loadConfig(validEnv()).rateLimitUserCredentialsPerUser, custom.rateLimitUserCredentialsPerUser], [20, 7]);
     assert.deepEqual([custom.activityLogRetentionDays, custom.activityLogErrorRetentionDays], [3650, 7]);
     for (const [variable, bad] of [
@@ -166,11 +168,12 @@ describe('loadConfig', () => {
   });
 
   it('validates PORT', () => {
-    for (const value of ['0', '65536', '1e3', '0x10', ' 80', '+80', '-1', '8.5', '9'.repeat(30)]) {
-      assert.match(reasonFor(validEnv({ PORT: value }), 'PORT') ?? '', /between 1 and 65535/, value);
+    for (const value of ['65536', '1e3', '0x10', ' 80', '+80', '-1', '8.5', '9'.repeat(30)]) {
+      assert.match(reasonFor(validEnv({ PORT: value }), 'PORT') ?? '', /between 0 and 65535/, value);
     }
     assert.equal(loadConfig(validEnv({ PORT: '65535' })).port, 65535);
     assert.equal(loadConfig(validEnv({ PORT: '1' })).port, 1);
+    assert.equal(loadConfig(validEnv({ PORT: '0' })).port, 0, '0 lets the operating system choose the port');
   });
 
   it('validates the MongoDB timeout and pool size', () => {

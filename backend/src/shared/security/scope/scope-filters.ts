@@ -123,3 +123,30 @@ export function placesScopeFilter(scope: Scope): Filter<Document> {
       return NOTHING;
   }
 }
+
+/**
+ * Filter restricting `common.activityLog` to the entries a principal may read. A PSA reads everything; a
+ * dealer the entries of his groups, a group administrator those of his group; a company or place
+ * administrator only his own actions. Entries of the `error` category are the PSA's alone, so for every
+ * other role they are excluded here. Combine with {@link withScope}.
+ *
+ * @param principal Id and scope of the caller.
+ * @returns A MongoDB filter; it matches nothing for the scope `none`.
+ */
+export function activityLogScopeFilter(principal: Pick<AuthPrincipal, 'userId' | 'scope'>): Filter<Document> {
+  const { scope } = principal;
+  const notErrors: Filter<Document> = { category: { $ne: 'error' } };
+  switch (scope.kind) {
+    case 'platform':
+      return {};
+    case 'dealer':
+      return { ...notErrors, groupId: { $in: [...scope.groupIds].map((hex) => ObjectId.createFromHexString(hex)) } };
+    case 'group':
+      return { ...notErrors, groupId: scope.groupId };
+    case 'companies':
+    case 'places':
+      return { ...notErrors, 'actor.id': principal.userId };
+    case 'none':
+      return NOTHING;
+  }
+}

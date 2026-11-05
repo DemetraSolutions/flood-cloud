@@ -105,6 +105,13 @@ export const routes: Routes = [
           ...userRoutes('groups/:groupId/users', [permission('users:read')]),
           ...userRoutes('platform/users', [role('PSA'), permission('users:read')]),
           {
+            path: 'activity-log',
+            canMatch: [permission('activityLog:read')],
+            title: 'ACTIVITY.TITLE',
+            loadComponent: () =>
+              import('./features/activity-log/activity-log').then((m) => m.ActivityLogPage),
+          },
+          {
             path: 'forbidden',
             title: 'ERRORS.FORBIDDEN.TITLE',
             data: { kind: 'FORBIDDEN' },

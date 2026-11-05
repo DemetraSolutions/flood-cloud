@@ -53,6 +53,13 @@ export const MENU: readonly MenuItem[] = [
     permission: 'users:read',
     roles: ['PSA'],
   },
+  {
+    id: 'activity-log',
+    labelKey: 'MENU.ACTIVITY_LOG',
+    icon: 'log',
+    route: '/activity-log',
+    permission: 'activityLog:read',
+  },
 ];
 
 /** Menu entries used by the shell; tests (or future steps) can provide a different set. */

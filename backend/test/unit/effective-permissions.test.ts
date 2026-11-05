@@ -7,7 +7,7 @@ import type { Permission } from '../../src/shared/security/rbac/permissions.ts';
 import { ROLE_CEILING } from '../../src/shared/security/rbac/policy.ts';
 
 const sorted = (set: ReadOnlySet<Permission>): Permission[] => [...set].sort();
-const SESSIONS: Permission[] = ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke'];
+const SESSIONS: Permission[] = ['clientErrors:create', 'profile:read', 'profile:update', 'sessions:read', 'sessions:revoke'];
 
 describe('effectivePermissions (D-06)', () => {
   it('maps r to read and w to every write action, plus own sessions', () => {
@@ -106,7 +106,7 @@ describe('effectivePermissions (D-06)', () => {
     const result = effectivePermissions('PSA', matrix);
     assert.equal(calls, 0);
     assert.equal(result.canManagePermissions, false);
-    assert.deepEqual(sorted(result.permissions), ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke', 'users:create', 'users:delete', 'users:trash', 'users:update']);
+    assert.deepEqual(sorted(result.permissions), ['clientErrors:create', 'profile:read', 'profile:update', 'sessions:read', 'sessions:revoke', 'users:create', 'users:delete', 'users:trash', 'users:update']);
   });
 
   it('returns a read-only set', () => {
@@ -128,7 +128,7 @@ describe('effectivePermissions (D-06)', () => {
 describe('always granted permissions', () => {
   it('names exactly the own session and profile permissions, and a prefix is not enough', async () => {
     const { ALWAYS_GRANTED_PERMISSIONS, isAlwaysGranted } = await import('../../src/shared/security/rbac/effective-permissions.ts');
-    assert.deepEqual([...ALWAYS_GRANTED_PERMISSIONS].sort(), ['profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
+    assert.deepEqual([...ALWAYS_GRANTED_PERMISSIONS].sort(), ['clientErrors:create', 'profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
     for (const permission of ALWAYS_GRANTED_PERMISSIONS) {
       assert.equal(isAlwaysGranted(permission), true);
     }

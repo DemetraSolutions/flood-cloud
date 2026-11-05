@@ -14,8 +14,8 @@ export interface EffectivePermissions {
   readonly canManagePermissions: boolean;
 }
 
-/** Permissions every user holds on his own account (sessions and profile), within the role ceiling (no legacy module). */
-export const ALWAYS_GRANTED_PERMISSIONS: readonly Permission[] = [P.SESSIONS_READ, P.SESSIONS_REVOKE, P.PROFILE_READ, P.PROFILE_UPDATE];
+/** Permissions every user holds on his own account (sessions, profile, browser error reports), within the role ceiling (no legacy module). */
+export const ALWAYS_GRANTED_PERMISSIONS: readonly Permission[] = [P.SESSIONS_READ, P.SESSIONS_REVOKE, P.PROFILE_READ, P.PROFILE_UPDATE, P.CLIENT_ERRORS_CREATE];
 
 /**
  * Computes what a user may do (D-06) from an already normalized matrix: the ceiling of the role

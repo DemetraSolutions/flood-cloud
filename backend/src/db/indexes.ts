@@ -52,7 +52,8 @@ export async function ensureIndexes(databases: Databases, registry: CollectionRe
     if (spec.indexes === undefined || spec.indexes.length === 0) {
       continue;
     }
-    await databases.common().collection(name).createIndexes(
+    const collection = databases.common().collection(name);
+    await collection.createIndexes(
       spec.indexes.map(({ key, name: indexName, unique, expireAfterSeconds }) => ({
         key: { ...key },
         name: indexName,
@@ -60,5 +61,12 @@ export async function ensureIndexes(databases: Databases, registry: CollectionRe
         ...(expireAfterSeconds !== undefined ? { expireAfterSeconds } : {}),
       })),
     );
+    // Only after the replacements exist, so queries are never left without an index.
+    const existing = new Set((await collection.indexes()).map((index) => index.name));
+    for (const obsolete of spec.obsoleteIndexes ?? []) {
+      if (existing.has(obsolete)) {
+        await collection.dropIndex(obsolete);
+      }
+    }
   }
 }

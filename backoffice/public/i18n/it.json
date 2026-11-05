@@ -36,7 +36,8 @@
     "HOME": "Home",
     "PROFILE": "Profilo",
     "USERS": "Utenti",
-    "PLATFORM_USERS": "Utenti di piattaforma"
+    "PLATFORM_USERS": "Utenti di piattaforma",
+    "ACTIVITY_LOG": "Registro attività"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -375,5 +376,110 @@
     "CA": "Amm. azienda",
     "PA": "Amm. negozio",
     "E": "Operatore"
+  },
+  "ACTIVITY": {
+    "TITLE": "Registro attività",
+    "LOAD_ERROR": "Impossibile caricare il registro attività",
+    "EMPTY": "Nessuna attività",
+    "EMPTY_MESSAGE": "Nessuna attività corrisponde ai filtri.",
+    "REDACTED": "oscurato",
+    "DETAIL_LABEL": "Dettagli dell'attività {action} del {date}",
+    "FILTER_ACTOR": "Filtra per questo attore",
+    "FILTER_ACTOR_LABEL": "Filtra per l'attore dell'attività {action} del {date}",
+    "CATEGORY": {
+      "DATA": "Dati",
+      "SECURITY": "Sicurezza",
+      "ERROR": "Errore"
+    },
+    "OUTCOME": {
+      "SUCCESS": "Riuscita",
+      "FAILURE": "Fallita",
+      "DENIED": "Negata"
+    },
+    "ACTOR": {
+      "SYSTEM": "Sistema",
+      "ANONYMOUS": "Anonimo",
+      "USER": "Utente"
+    },
+    "COLUMN": {
+      "AT": "Data e ora",
+      "CATEGORY": "Categoria",
+      "ACTION": "Azione",
+      "OUTCOME": "Esito",
+      "ACTOR": "Attore",
+      "GROUP": "Gruppo",
+      "RESOURCE": "Risorsa",
+      "REQUEST_ID": "Request id"
+    },
+    "FILTER": {
+      "CATEGORY": "Categoria",
+      "ALL_CATEGORIES": "Tutte le categorie",
+      "OUTCOME": "Esito",
+      "ALL_OUTCOMES": "Tutti gli esiti",
+      "ACTION": "Azione",
+      "ALL_ACTIONS": "Tutte le azioni",
+      "FROM": "Dal",
+      "TO": "Al",
+      "REQUEST_ID": "Request id",
+      "CLEAR_ACTOR": "Rimuovi il filtro per attore ({id})",
+      "CURRENT_GROUP": "Solo il gruppo selezionato"
+    },
+    "PERIOD": {
+      "ORDER": "La data finale precede quella iniziale.",
+      "TOO_LONG": "Il periodo non può superare 400 giorni."
+    },
+    "DETAIL": {
+      "OPEN": "Dettagli",
+      "TITLE": "Dettagli dell'attività",
+      "IP": "Indirizzo IP",
+      "CHANGES": "Modifiche",
+      "FIELD": "Campo",
+      "BEFORE": "Prima",
+      "AFTER": "Dopo",
+      "METADATA": "Informazioni aggiuntive",
+      "ERROR": "Errore",
+      "ERROR_NAME": "Nome",
+      "ERROR_MESSAGE": "Messaggio",
+      "ERROR_STACK": "Stack dell'errore"
+    },
+    "ACTION": {
+      "AUTH_LOGIN_SUCCEEDED": "Accesso riuscito",
+      "AUTH_LOGIN_FAILED": "Accesso fallito",
+      "AUTH_REFRESHED": "Sessione rinnovata",
+      "AUTH_REFRESH_REUSE_DETECTED": "Riuso di un token di rinnovo",
+      "AUTH_REFRESH_RACE_TOLERATED": "Rinnovo concorrente tollerato",
+      "AUTH_PASSWORD_CHECK_FAILED": "Verifica della password fallita",
+      "SESSION_REVOKED": "Sessione revocata",
+      "USER_ROLE_CHANGED": "Ruolo utente modificato",
+      "USER_SCOPE_CHANGED": "Perimetro utente modificato",
+      "USER_STATUS_CHANGED": "Stato utente modificato",
+      "USER_PERMISSIONS_CHANGED": "Permessi utente modificati",
+      "GROUP_CROSS_ACCESS": "Accesso a un altro gruppo",
+      "GROUP_SUSPENDED": "Gruppo sospeso",
+      "GROUP_REACTIVATED": "Gruppo riattivato",
+      "RATE_LIMIT_EXCEEDED": "Limite di richieste superato",
+      "REQUEST_FAILED": "Richiesta fallita",
+      "CLIENT_ERROR": "Errore del backoffice",
+      "USER_CREATED": "Utente creato",
+      "USER_UPDATED": "Utente modificato",
+      "USER_TRASHED": "Utente spostato nel cestino",
+      "USER_RESTORED": "Utente ripristinato",
+      "USER_DELETED": "Utente eliminato",
+      "GROUP_CREATED": "Gruppo creato",
+      "GROUP_UPDATED": "Gruppo modificato",
+      "GROUP_TRASHED": "Gruppo spostato nel cestino",
+      "GROUP_RESTORED": "Gruppo ripristinato",
+      "GROUP_DELETED": "Gruppo eliminato",
+      "COMPANY_CREATED": "Azienda creata",
+      "COMPANY_UPDATED": "Azienda modificata",
+      "COMPANY_TRASHED": "Azienda spostata nel cestino",
+      "COMPANY_RESTORED": "Azienda ripristinata",
+      "COMPANY_DELETED": "Azienda eliminata",
+      "PLACE_CREATED": "Punto vendita creato",
+      "PLACE_UPDATED": "Punto vendita modificato",
+      "PLACE_TRASHED": "Punto vendita spostato nel cestino",
+      "PLACE_RESTORED": "Punto vendita ripristinato",
+      "PLACE_DELETED": "Punto vendita eliminato"
+    }
   }
 }

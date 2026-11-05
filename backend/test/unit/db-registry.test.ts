@@ -45,7 +45,7 @@ describe('collection registry', () => {
     assert.equal(COLLECTIONS.common.userCredentials.validator, USER_CREDENTIALS_VALIDATOR);
     assert.deepEqual(
       COLLECTIONS.common.activityLog.indexes.map((index) => index.name),
-      ['groupId_1_at_-1', 'actor.id_1_at_-1', 'category_1_at_-1', 'requestId_1', 'expiresAt_1'],
+      ['at_-1__id_-1', 'groupId_1_at_-1__id_-1', 'actor.id_1_at_-1__id_-1', 'category_1_at_-1__id_-1', 'requestId_1', 'expiresAt_1'],
     );
     assert.deepEqual(COLLECTIONS.common.rateLimits.indexes, [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }]);
     assert.equal(COLLECTIONS.common.sessions.validator, SESSIONS_VALIDATOR);

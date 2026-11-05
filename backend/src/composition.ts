@@ -9,10 +9,17 @@ import { createCompanyPlacesRepository } from './shared/security/scope/company-p
 import { createDealerGroupsRepository } from './shared/security/scope/dealer-groups.repository.ts';
 import { createGroupsRepository } from './shared/security/scope/groups.repository.ts';
 import type { GroupsRepository } from './shared/security/scope/groups.repository.ts';
+import { createActivityLogController } from './modules/activity-log/activity-log.controller.ts';
+import { createActivityLogRepository } from './modules/activity-log/activity-log.repository.ts';
+import { createActivityLogRoutes } from './modules/activity-log/activity-log.routes.ts';
+import { createActivityLogService } from './modules/activity-log/activity-log.service.ts';
 import { createAuthController } from './modules/auth/auth.controller.ts';
 import { createAuthRoutes } from './modules/auth/auth.routes.ts';
 import { createAuthService } from './modules/auth/auth.service.ts';
 import { createAuthenticate } from './modules/auth/authenticate.ts';
+import { createClientErrorsController } from './modules/client-errors/client-errors.controller.ts';
+import { createClientErrorsRoutes } from './modules/client-errors/client-errors.routes.ts';
+import { createClientErrorsService } from './modules/client-errors/client-errors.service.ts';
 import { createGroupSummaryRepository } from './modules/me/group-summary.repository.ts';
 import { createMeController } from './modules/me/me.controller.ts';
 import { createMeRoutes } from './modules/me/me.routes.ts';
@@ -51,7 +58,7 @@ export interface BackofficeDeps {
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile, the user management and the reference lists. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management, the reference lists, the activity log monitor and the browser error reports. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -93,8 +100,13 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     }),
   );
   const reference = createReferenceController(createReferenceService(createReferenceRepository(databases)));
+  const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
+  const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
-    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createReferenceRoutes(reference)],
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createReferenceRoutes(reference),
+      ...createActivityLogRoutes(activity),
+      ...createClientErrorsRoutes(clientErrors, rules),
+    ],
     authenticate,
     groups,
   };

@@ -64,9 +64,14 @@ describe('visibleMenu', () => {
     expect(ITEMS[3].children?.length).toBe(2);
   });
 
-  it('allowAll allows anything and the initial menu has the home, profile and users entries', () => {
+  it('allowAll allows anything and the initial menu has the home, profile, users and activity log entries', () => {
     expect(allowAll('x')).toBe(true);
-    expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual(['home', 'profile', 'users']);
+    expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual([
+      'home',
+      'profile',
+      'users',
+      'activity-log',
+    ]);
   });
 
   it('shows entries limited to some roles only to those roles', () => {

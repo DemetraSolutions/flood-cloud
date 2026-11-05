@@ -1,6 +1,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect, createServer } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { loadDotEnv, run, SHUTDOWN_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS } from '../../src/server.ts';
 import type { ProcessLike, RunningServer } from '../../src/server.ts';
 import { freePort } from '../helpers/app.ts';
@@ -29,11 +30,10 @@ function errnoError(code: string): Error {
 }
 
 async function started(extra: Record<string, string> = {}) {
-  const port = await freePort();
-  const fake = fakeProcess(mongoEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0', ...extra }));
+  const fake = fakeProcess(mongoEnv({ PORT: '0', SHUTDOWN_DRAIN_MS: '0', ...extra }));
   const running = (await run(fake.proc)) as RunningServer;
   assert.ok(running);
-  return { ...fake, running, port };
+  return { ...fake, running, port: (running.server.address() as AddressInfo).port };
 }
 
 async function closed(running: RunningServer): Promise<void> {
@@ -100,8 +100,7 @@ describe('run', () => {
   });
 
   it('tolerates a missing .env and propagates other .env errors', async () => {
-    const port = await freePort();
-    const missing = fakeProcess(mongoEnv({ PORT: String(port) }), () => { throw errnoError('ENOENT'); });
+    const missing = fakeProcess(mongoEnv({ PORT: '0' }), () => { throw errnoError('ENOENT'); });
     const running = await run(missing.proc);
     assert.ok(running);
     await closed(running);
@@ -279,8 +278,7 @@ describe('run: database lifecycle', () => {
   });
 
   it('starts in production when no .env file exists', async () => {
-    const port = await freePort();
-    const fake = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }));
+    const fake = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', PORT: '0', SHUTDOWN_DRAIN_MS: '0' }));
     const { client } = fakeClient();
     const running = (await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes, dotEnvExists: () => false })) as RunningServer;
     assert.ok(running);
@@ -290,8 +288,7 @@ describe('run: database lifecycle', () => {
 
   it('does not warn about TRUST_PROXY when it is set in production, nor in development', async () => {
     for (const extra of [{ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', TRUST_PROXY: '1' }, {}]) {
-      const port = await freePort();
-      const fake = fakeProcess(mongoEnv({ ...extra, PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }));
+      const fake = fakeProcess(mongoEnv({ ...extra, PORT: '0', SHUTDOWN_DRAIN_MS: '0' }));
       const { client } = fakeClient();
       const running = (await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes, dotEnvExists: () => false })) as RunningServer;
       assert.ok(running);
@@ -318,6 +315,7 @@ describe('run: database lifecycle', () => {
   });
 
   it('really fails to connect to an unreachable server within the selection timeout', async () => {
+    // A port nobody listens on, known before the run: see the helper.
     const port = await freePort();
     const fake = fakeProcess(
       mongoEnv({ MONGODB_URI: `mongodb://127.0.0.1:${port}/?directConnection=true`, MONGODB_SERVER_SELECTION_TIMEOUT_MS: '1000' }),
@@ -342,8 +340,7 @@ describe('run: database lifecycle', () => {
   });
 
   it('closes the client on shutdown, and exits 1 if closing it fails', async () => {
-    const port = await freePort();
-    const fake = fakeProcess(mongoEnv({ PORT: String(port), SHUTDOWN_DRAIN_MS: '0' }));
+    const fake = fakeProcess(mongoEnv({ PORT: '0', SHUTDOWN_DRAIN_MS: '0' }));
     const { client, closes } = fakeClient({ close: new Error('close failed') });
     const running = (await run(fake.proc, { createClient: () => client, ensureIndexes: noIndexes })) as RunningServer;
     (fake.listeners.get('SIGTERM') as Listener)();
