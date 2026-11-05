@@ -12,6 +12,8 @@ import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
+/** A frozen clock for the real counters: the one-minute window cannot change in the middle of a test. */
+const FROZEN_NOW = Date.UTC(2026, 0, 1, 12, 0, 0);
 let ctx: TestDatabases;
 let office: Backoffice;
 const limiter = memoryRateLimiter();
@@ -41,7 +43,7 @@ describe('POST /v1/auth/login: success', () => {
     assert.equal(response.headers.get('content-encoding'), null);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const { data } = (await response.json()) as { data: Tokens };
-    assert.deepEqual(Object.keys(data).sort(), ['accessToken', 'accessTokenExpiresAt', 'refreshToken', 'refreshTokenExpiresAt', 'sessionId']);
+    assert.deepEqual(Object.keys(data).sort(), ['accessToken', 'accessTokenExpiresAt', 'passwordChangeRequired', 'refreshToken', 'refreshTokenExpiresAt', 'sessionId']);
     assert.match(data.accessToken, /^fc_at_[A-Za-z0-9_-]{43}$/);
     assert.match(data.refreshToken, /^fc_rt_[A-Za-z0-9_-]{43}$/);
     const now = office.clock.now();
@@ -300,7 +302,7 @@ describe('POST /v1/auth/login: rate limit (real counters)', () => {
   before(async () => {
     const own = await openTestDatabases();
     limited = await startBackoffice(own, {
-      rateLimiter: createRateLimiter(own.databases),
+      rateLimiter: createRateLimiter(own.databases, () => FROZEN_NOW),
       env: { RATE_LIMIT_LOGIN_PER_USERNAME: '2', RATE_LIMIT_LOGIN_PER_IP: '5' },
     });
     cleanups.push(async () => {

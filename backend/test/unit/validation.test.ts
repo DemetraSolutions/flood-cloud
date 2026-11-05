@@ -314,7 +314,7 @@ describe('validate', () => {
   });
 
   it('exposes the closed list of issues and the INVALID marker', () => {
-    assert.deepEqual([...VALIDATION_ISSUES], ['required', 'type', 'minLength', 'maxLength', 'pattern', 'minimum', 'maximum', 'enum', 'unknown', 'forbiddenKey', 'format', 'tooDeep', 'tooMany', 'incorrect']);
+    assert.deepEqual([...VALIDATION_ISSUES], ['required', 'type', 'minLength', 'maxLength', 'pattern', 'minimum', 'maximum', 'enum', 'unknown', 'forbiddenKey', 'format', 'tooDeep', 'tooMany', 'incorrect', 'taken', 'reused']);
     assert.equal(typeof INVALID, 'symbol');
     assert.ok(Object.isFrozen(string({ max: 1 })));
   });

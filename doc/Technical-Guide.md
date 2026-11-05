@@ -6,7 +6,7 @@
 ## 1. Stato del progetto
 Realizzate le fondamenta del backend (`doc/Tasks.md` 1.1–1.4, 1.6): progetto TypeScript, configurazione validata, applicazione Express con envelope, errori, header di sicurezza, CORS, log strutturati, builder delle route, endpoint di salute e arresto ordinato; client MongoDB sul cluster condiviso con guardia d'ambiente, registro delle collection, indici, strumento di profilazione in sola lettura del legacy, MongoDB locale per i test. Nessuna autenticazione, nessun endpoint di dominio, nessuna scrittura su database.
 
-Realizzate le primitive crittografiche e la compatibilità con le password legacy (2.1, 2.2.1–2.2.3), RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4), rate limit e registro delle attività (2.5, 2.6.1–2.6.5) (§8); validatore dell'input (1.5.1), modello utente, login, sessioni e profilo (3.1–3.3), con i primi endpoint della superficie `/v1` (§6).
+Realizzate le primitive crittografiche e la compatibilità con le password legacy (2.1, 2.2.1–2.2.3), RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4), rate limit e registro delle attività (2.5, 2.6.1–2.6.5) (§8); validatore dell'input (1.5.1), modello utente, login, sessioni e profilo (3.1–3.3), liste a cursore e gestione degli utenti (1.5.2–1.5.3, 3.4) (§6).
 
 Realizzate anche le fondamenta del backoffice (1.7, 1.8): progetto Angular 22.2, configurazione pubblica, accesso HTTP, lingua, design system, componenti condivisi, shell e server statico di produzione (§11).
 
@@ -51,6 +51,7 @@ Lettura e validazione in `src/config.ts` (`loadConfig`, funzione pura). Tutti i 
 | `RATE_LIMIT_UNAUTHENTICATED_PER_IP` | no | intero 1–100000, autenticazioni fallite su `/v1` al minuto per IP | `300` |
 | `ACTIVITY_LOG_RETENTION_DAYS` | no | intero 1–3650, conservazione delle voci `data` e `security` | `365` |
 | `ACTIVITY_LOG_ERROR_RETENTION_DAYS` | no | intero 1–3650, conservazione delle voci `error` | `90` |
+| `RATE_LIMIT_USER_CREDENTIALS_PER_USER` | no | intero 1–100000, creazioni di utenti e reset di password al minuto per amministratore | `20` |
 | `REFRESH_REUSE_GRACE_SECONDS` | no | intero 0–300, finestra in cui un refresh appena ruotato che ricompare non chiude la sessione | `30` |
 | `LEGACY_PASSWORD_PEPPER` | sì, segreto | non vuoto, senza spazi iniziali o finali (D-04) | — |
 | `LEGACY_PASSWORD_COEXISTENCE` | no | `true` \| `false`: al cambio password si scrive anche l'hash legacy. Da spegnere solo al passaggio definitivo, e solo una volta (§8) | `true` |
@@ -74,7 +75,7 @@ src/
   composition.ts               # composizione dei moduli del backoffice (servizi, repository, authenticate)
   modules/
     health/health.routes.ts
-    users/                     # modello utente: tipi, mapper legacy ↔ dominio, repository utenti e credenziali
+    users/                     # modello utente (mapper legacy ↔ dominio, repository) e gestione degli utenti (route, service, regole di accesso)
     auth/                      # login, refresh, logout, middleware Bearer, stato dell'account
     sessions/                  # repository e audit delle sessioni
     me/                        # profilo, cambio password, proprie sessioni
@@ -96,6 +97,7 @@ src/
     logging/logger.ts          # logger JSON con redazione
     activity-log/              # registro delle attività: catalogo, servizio, cambi prima/dopo, accessi trasversali
     validation/                # validatore per allowlist e middleware validateBody/Query/Params
+    http/list.ts               # parametri di lista e paginazione a cursore
     security/
       rate-limit/              # contatori, middleware e regole di rate limit (anche cambio password per utente)
       username.ts              # normalizzazione dello username
@@ -173,6 +175,16 @@ Riferimento delle route in `doc/API.md`.
 - **Middleware Bearer** (`modules/auth/authenticate.ts`): `Authorization: Bearer fc_at_…`; formato errato, sconosciuto o revocato ⇒ `UNAUTHENTICATED`; scaduto ⇒ `TOKEN_EXPIRED`; a ogni richiesta rilegge utente e gruppo (disattivazione o sospensione ⇒ revoca e 401 immediato) e ricostruisce principal e scope; `lastUsedAt` al massimo una volta al minuto. Il backoffice deve fare il refresh solo su `TOKEN_EXPIRED`.
 - **Profilo** (`/v1/me`): profilo con permessi effettivi, `canManagePermissions`, riepilogo dello scope (per i dealer al massimo 100 id più il totale) e gruppo `{ id, name }` per SA, CA, PA; mai segreti. Modifica di nome, cognome, email, telefono, lingua (`user.updated` con prima/dopo). Cambio password: password attuale (errata ⇒ `422` `currentPassword`/`incorrect` ed evento `auth.passwordCheckFailed`), policy D-19, scrypt più hash legacy con coesistenza attiva (rimosso con coesistenza spenta), revoca delle altre sessioni, `tokens` legacy svuotati; rate limit per utente con la soglia del login. Elenco e revoca delle proprie sessioni (`404` su sessioni altrui). Permessi `profile:read`, `profile:update` e `sessions:*`, sempre concessi a PSA–PA.
 
+### Gestione utenti (passo 3B)
+Riferimento delle route in `doc/API.md`.
+- **Liste** (`shared/http/list.ts`): `limit` 1–200 (default 50), `cursor` opaco (base64url di versione, ordinamento, valore e `_id`; validato e lungo al massimo 2200 caratteri), `sort` in allowlist per risorsa, `q` fino a 64 caratteri con escape della regex sui campi ammessi. La lista è una pipeline di aggregazione: filtro di scope e filtri (sempre con `withScope`), chiave di ordinamento calcolata (`__sortKey`: il valore se ha il tipo atteso, altrimenti null, così valori legacy anomali non ripetono pagine), spareggio su `_id`, `limit + 1`. `maxTimeMS` su ogni query, nessun conteggio totale.
+- **Utenti di gruppo** (`/v1/groups/{groupId}/users`) e **di piattaforma** (`/v1/users`, utenti PSA e D gestiti solo dal PSA; elenco trasversale per PSA e dealer): elenco con filtri (ruolo, stato, cestino; gruppo e dealer solo per il PSA) e ordinamenti, dettaglio (`404` identico fuori perimetro), creazione, modifica (JSON Merge Patch), reset della password, cestino e ripristino, eliminazione definitiva, disponibilità dello username.
+- **Regole** (`users/user-access.ts`, `rbac/user-management.ts`): ruolo gestibile e perimetro (`canManageUser`), anti-escalation sullo stato prima e dopo (`checkUserChange`), nessuna auto-modifica (per sé stessi si usa `/v1/me`); per qualunque modifica, reset, cestino ed eliminazione l'attore deve avere almeno tutti i permessi del bersaglio (`holdsEverythingOf`, decisione dell'utente del 2026-11-05: un pari con meno permessi non può toccare un pari più forte). Scope obbligatorio per ruolo (D-08) con aziende e punti vendita esistenti, non cestinati e nel perimetro dell'attore: inesistente, fuori perimetro, cestinato o di altro gruppo danno lo stesso `422` `companyIds.N`/`placeIds.N` `incorrect`. `dealerId` calcolato dal server. Username nuovi o cambiati solo ASCII (`A-Z a-z 0-9 . _ @ + -`, 3–64), unici globalmente senza distinzione di maiuscole (`409` `username`/`taken`); la policy della password si controlla prima dell'unicità.
+- **Scritture**: documento legacy completo dei soli campi posseduti (mai `role: 'API'`), in transazione con `userCredentials` (creazione), revoca delle sessioni e `tokens` legacy svuotati (cambio di ruolo, scope, stato, permessi, cestino, reset), eliminazione definitiva solo di un utente nel cestino (`deleteOne` condizionato) insieme a credenziali e sessioni. Un dealer ancora assegnato a gruppi non si elimina (`409`). Eventi `user.created`, `user.updated` (prima/dopo, password oscurata), `user.trashed`, `user.restored`, `user.deleted` (senza dati personali) ed eventi di sicurezza su ruolo, scope, stato e permessi.
+- **Password provvisoria** (decisione dell'utente del 2026-11-05): creazione e reset impostano una password secondo D-19 con `mustChangePassword` (per tutti i ruoli); il reset azzera anche il blocco del login. Il login e `GET /v1/me` riportano `passwordChangeRequired`; finché è vero il builder, dopo i rate limit, ammette solo le route dichiarate `allowWithPendingPasswordChange` (`GET /v1/me`, `PUT /v1/me/password`, logout, logout-all) e risponde `403 PASSWORD_CHANGE_REQUIRED` alle altre. La nuova password non può coincidere con l'attuale (`422` `newPassword`/`reused`). Limite noto: con la coesistenza attiva la password provvisoria vale anche nel legacy senza obbligo di cambio.
+- **Transazioni**: `Databases.transaction` sul common (replica set).
+- **Rate limit dedicati**: creazioni e reset 20 al minuto per amministratore (`RATE_LIMIT_USER_CREDENTIALS_PER_USER`, ogni operazione costa uno scrypt); disponibilità dello username 15 al minuto per utente.
+
 ## 7. Database
 **Cluster condiviso con il legacy** (`doc/Tasks.md` §0.1–0.2): stesse credenziali Atlas (D-02), stessi database. Il backend scrive solo nelle collection nuove e, su `users`, nei soli campi posseduti.
 
@@ -248,7 +260,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 - `test/integration/`: database reale (guardia, transazione tra common e gruppo, indici, readiness), profilazione e sua CLI (compreso un test che verifica l'assenza nel report di valori sentinella, chiavi di P.IVA, codici fiscali, hex e username), pipeline HTTP completa con `fetch` su porta effimera (`test/helpers/app.ts` monta l'app con route di prova e un logger in memoria), endpoint di salute, `run()` del server con processo simulato, avvio reale di `node src/server.ts` come processo figlio (avvio, `SIGTERM`, configurazione errata).
 - Oltre a `FLOOD_CLOUD_TEST_MONGO_URI` nessuna variabile richiesta: i test costruiscono la configurazione con valori fittizi.
 - **Isolamento** (`test/helpers/isolation.ts`): cluster legacy con due dealer e due gruppi ciascuno e casi standard (altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita, E, gruppo sospeso, cestinato o inesistente) da riusare per ogni endpoint.
-- Stato: 900 test, coverage 100%.
+- Stato: 1041 test, coverage 100%.
 
 **CI** (`.github/workflows/backend.yml`): **disattivata** per decisione dell'utente del 2026-11-01, parte solo a mano (`workflow_dispatch`); i trigger su `push` e `pull_request` sono commentati nel file. Contenuto: MongoDB `mongo:8.0.34` col compose, Node 24.22.2, `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, `npm audit --audit-level=moderate`, `npm audit signatures`; job separato di secret scanning con gitleaks 8.30.1 (binario verificato con sha256) su tutta la storia del repository. Permessi `contents: read`, action pinnate per SHA.
 
@@ -262,6 +274,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 | 2026-11-02 | RBAC, scope e isolamento dei gruppi (2.3.1–2.3.3, 2.4) | catalogo dei permessi e tetti per ruolo, matrice per utente con default, route con permesso e gruppo dichiarativi, scope calcolato dal server con filtri sulle collection legacy, gruppo nel percorso con 404 fuori perimetro, anti-escalation con regola dei pari, modello di test di isolamento |
 | 2026-11-02 | Rate limit e registro delle attività (2.5, 2.6.1–2.6.5) | contatori atomici con chiavi hashate e TTL, regole per login, refresh, username, utente e autenticazioni fallite, collection activityLog con validazione e conservazione per categoria, cambi prima/dopo con segreti oscurati, accessi trasversali ed errori 5xx registrati |
 | 2026-11-04 | Autenticazione e profilo (1.5.1, 3.1–3.3) | validatore per allowlist, modello utente compatibile con il legacy, userCredentials con blocco progressivo, login con risposte e tempi uniformi, sessioni con rotazione, rilevamento del riuso e finestra di grazia, middleware Bearer con ricontrollo a ogni richiesta, profilo, cambio password e proprie sessioni |
+| 2026-11-05 | Liste a cursore e gestione utenti (1.5.2–1.5.3, 3.4) | paginazione a cursore stabile anche con dati legacy anomali, utenti di gruppo e di piattaforma con perimetro e anti-escalation (anche sui permessi del bersaglio), password provvisoria con cambio obbligatorio, transazioni, eliminazione definitiva dal cestino, rate limit dedicati |
 
 ## 11. Backoffice
 SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Nessun login né pagina di dominio: sessione, guard e permessi arrivano con l'area 3.

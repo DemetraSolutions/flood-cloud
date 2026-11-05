@@ -12,6 +12,8 @@ import type { Backoffice, Tokens } from '../helpers/backoffice.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
+/** A frozen clock for the real counters: the one-minute window cannot change in the middle of a test. */
+const FROZEN_NOW = Date.UTC(2026, 0, 1, 12, 0, 0);
 let ctx: TestDatabases;
 let office: Backoffice;
 const cleanups: Array<() => Promise<void>> = [];
@@ -67,7 +69,7 @@ describe('GET /v1/me', () => {
     }
     const profile = await profileOf(response);
     assert.deepEqual(Object.keys(profile).sort(), [
-      'canManagePermissions', 'companyIds', 'createdAt', 'dealerId', 'email', 'firstName', 'group', 'groupId', 'hiddenInStats', 'id', 'language', 'lastName', 'permissions', 'phone', 'placeIds', 'role', 'scope', 'status', 'trashed', 'updatedAt', 'username',
+      'canManagePermissions', 'companyIds', 'createdAt', 'dealerId', 'email', 'firstName', 'group', 'groupId', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'placeIds', 'role', 'scope', 'status', 'trashed', 'updatedAt', 'username',
     ]);
     assert.equal(profile['id'], id.toHexString());
     assert.equal(profile['username'], name);
@@ -287,7 +289,7 @@ describe('PUT /v1/me/password', () => {
 
   it('limits the attempts per user', async () => {
     const own = await openTestDatabases();
-    const limited = await startBackoffice(own, { rateLimiter: createRateLimiter(own.databases), env: { RATE_LIMIT_LOGIN_PER_USERNAME: '2' } });
+    const limited = await startBackoffice(own, { rateLimiter: createRateLimiter(own.databases, () => FROZEN_NOW), env: { RATE_LIMIT_LOGIN_PER_USERNAME: '2' } });
     cleanups.push(async () => {
       await limited.close();
       await own.cleanup();

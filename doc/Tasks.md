@@ -202,8 +202,8 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
   - controlla tipi, lunghezze, enum, ObjectId e date;
   - rifiuta le proprietà sconosciute e le chiavi con `$` o `.`;
   - risponde `422` con dettagli per campo.
-- [ ] **1.5.2** Parametri delle liste: `limit` (default 50, massimo 200), `cursor` opaco, `sort` in allowlist, ricerca `q` con escape della regex lato server e lunghezza limitata.
-- [ ] **1.5.3** Paginazione a cursore con ordinamento stabile (spareggio su `_id`), ordinamento applicato **prima** della pagina (nel legacy i punti vendita erano ordinati solo dentro la pagina).
+- [x] **1.5.2** Parametri delle liste: `limit` (default 50, massimo 200), `cursor` opaco, `sort` in allowlist, ricerca `q` con escape della regex lato server e lunghezza limitata.
+- [x] **1.5.3** Paginazione a cursore con ordinamento stabile (spareggio su `_id`), ordinamento applicato **prima** della pagina (nel legacy i punti vendita erano ordinati solo dentro la pagina).
 - [ ] **1.5.4** Supporto a `ETag` e `If-None-Match` (`304`) per le liste compatte usate come cache dal backoffice.
 
 ### 1.6 Infrastruttura di test del backend
@@ -358,24 +358,24 @@ Task:
 - [x] **3.3.4** Elenco e revoca delle proprie sessioni (dispositivo, IP, ultimo uso). Route del profilo con i permessi `profile:read` e `profile:update` (decisione dell'utente del 2026-11-04); con coesistenza spenta il cambio password rimuove `users.password`.
 
 ### 3.4 Gestione utenti (backend)
-URL definitivi da concordare con `api_expert`: utenti di un gruppo sotto `/v1/groups/{groupId}/users`, elenco trasversale per PSA e D.
-- [ ] **3.4.1** Elenco:
+URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users`; utenti di piattaforma (PSA, D) sotto `/v1/users`, gestiti solo dal PSA, con elenco trasversale per PSA e D; `GET /v1/usernames/{username}/availability`. Decisioni dell'utente del 2026-11-05: password provvisoria con cambio obbligatorio al primo accesso (per tutti i ruoli); utente nuovo attivo; username nuovi solo ASCII; chi non ha almeno tutti i permessi del bersaglio non può modificarlo, resettarne la password, cestinarlo o eliminarlo; un dealer con gruppi non si elimina.
+- [x] **3.4.1** Elenco:
   - filtri per ruolo, stato, cestino, dealer e gruppo (solo PSA e D);
   - ricerca `q` su username, nome, cognome, email e telefono;
   - paginazione a cursore e ordinamenti in allowlist.
-- [ ] **3.4.2** Dettaglio di un utente nello scope (`404` fuori scope).
-- [ ] **3.4.3** Creazione:
+- [x] **3.4.2** Dettaglio di un utente nello scope (`404` fuori scope).
+- [x] **3.4.3** Creazione:
   - ruolo gestibile da chi crea (pari ammessi, 2.4.4) e scope dentro il suo;
   - scope obbligatorio per ruolo (D-08);
   - username univoco (`409`, D-15);
   - password iniziale secondo la policy (D-19);
   - scrittura compatibile con il legacy (§0.2).
-- [ ] **3.4.4** Modifica parziale: nessuna modifica del proprio ruolo o scope; i cambi di ruolo, scope o stato revocano le sessioni (3.2.8).
-- [ ] **3.4.5** Reset della password di un utente subordinato, con revoca delle sue sessioni.
-- [ ] **3.4.6** Attivazione e disattivazione.
-- [ ] **3.4.7** Cestino e ripristino (`trash` legacy); eliminazione definitiva secondo D-14.
-- [ ] **3.4.8** Verifica della disponibilità dello username, con rate limit (sostituisce il controllo a ogni tasto del legacy).
-- [ ] **3.4.9** Test di isolamento (2.4.5) e di escalation su ogni endpoint.
+- [x] **3.4.4** Modifica parziale: nessuna modifica del proprio ruolo o scope; i cambi di ruolo, scope o stato revocano le sessioni (3.2.8).
+- [x] **3.4.5** Reset della password di un utente subordinato, con revoca delle sue sessioni, password provvisoria e azzeramento del blocco del login.
+- [x] **3.4.6** Attivazione e disattivazione.
+- [x] **3.4.7** Cestino e ripristino (`trash` legacy); eliminazione definitiva dal cestino secondo D-14 (PSA, D, SA), con credenziali e sessioni.
+- [x] **3.4.8** Verifica della disponibilità dello username, con rate limit (sostituisce il controllo a ogni tasto del legacy).
+- [x] **3.4.9** Test di isolamento (2.4.5) e di escalation su ogni endpoint.
 
 ### 3.5 Backoffice
 - [ ] **3.5.1** Pagina di login (Signal Forms, errori accessibili, messaggio di rate limit).

@@ -33,7 +33,8 @@ export interface AuthController {
 export function createAuthController(service: AuthService): AuthController {
   return {
     login: async (req, res) => {
-      sendData(res, tokenResponse(await service.login(inputOf<LoginBody>(res, 'body'), clientContextOf(req, res))));
+      const result = await service.login(inputOf<LoginBody>(res, 'body'), clientContextOf(req, res));
+      sendData(res, { ...tokenResponse(result), passwordChangeRequired: result.passwordChangeRequired });
     },
     refresh: async (req, res) => {
       sendData(res, tokenResponse(await service.refresh(inputOf<RefreshBody>(res, 'body').refreshToken, clientContextOf(req, res))));

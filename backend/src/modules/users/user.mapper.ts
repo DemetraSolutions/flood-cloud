@@ -5,7 +5,7 @@ import type { ModuleFlags } from '../../shared/security/rbac/permission-matrix.t
 import { isRole } from '../../shared/security/rbac/permissions.ts';
 import { legacyScopeIds } from '../../shared/security/scope/legacy-scope.ts';
 import { INVALID_ROLE } from './user.types.ts';
-import type { LegacyUserDocument, LegacyUserUpdate, MappedUser, User, UserAnomaly, UserChanges, UserPermissions, UserResponse, UserRole } from './user.types.ts';
+import type { LegacyUserDocument, LegacyUserUpdate, MappedUser, NewUser, User, UserAnomaly, UserChanges, UserPermissions, UserResponse, UserRole } from './user.types.ts';
 
 /** Names of the permission modules this backend maps and may write (`permissions.<module>.r|w`). */
 export const OWNED_PERMISSION_MODULES: readonly string[] = Object.freeze(Object.keys(CORE_MODULES));
@@ -246,6 +246,56 @@ export function toLegacyUpdate(changes: UserChanges, now: Date = new Date()): Le
   }
   set['updateDate'] = now;
   return Object.keys(unset).length === 0 ? { $set: set } : { $set: set, $unset: unset };
+}
+
+/**
+ * Builds the legacy `users` document of a new user: the fields the backend owns, in the types the
+ * legacy writes (`status` and `trash` booleans, ObjectId references, `settings.language`, the
+ * `permissions.<module>.{r,w}` matrix and `permissions.status`, an empty `tokens[]`). Personal values
+ * that are `null` are left out, as in most legacy documents; scope follows D-08 (`companyId` = first
+ * company or `null`, `placeId` = first place or `null`, `placesId` = all places); `password` is present
+ * only while the legacy coexists. Never `apps`, `pin`, `avatar`, `servicesId` or `shiftTime`.
+ *
+ * @param user The new user.
+ * @param now Value of `insertDate` and `updateDate`.
+ * @returns The document to insert, with `_id`.
+ * @throws {Error} For a role that is not one of the six (`API` included), a permission module outside
+ * the core allowlist, or an id that is not hexadecimal: callers validate input first, so these are bugs.
+ */
+export function toLegacyDocument(user: NewUser, now: Date): Record<string, unknown> {
+  if (!isRole(user.role)) {
+    throw new Error('Refusing to write a role that is not one of the six roles');
+  }
+  const permissions: Record<string, unknown> = { status: user.permissions.status };
+  for (const [module, flags] of Object.entries(user.permissions.modules)) {
+    if (!OWNED_PERMISSION_MODULES.includes(module)) {
+      throw new Error(`Refusing to write the permission module "${module}": not in the core allowlist`);
+    }
+    permissions[module] = { r: flags.r, w: flags.w };
+  }
+  const personal = (field: string, value: string | null): Record<string, string> => (value === null ? {} : { [field]: value });
+  return {
+    _id: user.id,
+    userName: user.username,
+    ...personal('name', user.firstName),
+    ...personal('surname', user.lastName),
+    ...personal('email', user.email),
+    ...personal('telephone', user.phone),
+    ...(user.legacyPasswordHash === null ? {} : { password: user.legacyPasswordHash }),
+    role: user.role,
+    groupId: user.groupId === null ? null : toObjectId(user.groupId),
+    dealerId: user.dealerId === null ? null : toObjectId(user.dealerId),
+    companyId: user.companyIds[0] === undefined ? null : toObjectId(user.companyIds[0]),
+    placeId: user.placeIds[0] === undefined ? null : toObjectId(user.placeIds[0]),
+    placesId: user.placeIds.map(toObjectId),
+    permissions,
+    settings: { language: user.language, hiddenInStats: false },
+    status: user.status === 'active',
+    trash: false,
+    tokens: [],
+    insertDate: now,
+    updateDate: now,
+  };
 }
 
 /**

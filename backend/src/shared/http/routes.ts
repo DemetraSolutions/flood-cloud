@@ -35,6 +35,11 @@ export interface UserAuth {
    * group's state before the permission check. Must be `true` exactly when the path contains `:groupId`.
    */
   readonly group?: boolean;
+  /**
+   * `true` on the few routes a user who still has to replace a provisional password may call (his
+   * profile, the password change, the logout). Every other `user` route answers `403 PASSWORD_CHANGE_REQUIRED` to him.
+   */
+  readonly allowWithPendingPasswordChange?: true;
 }
 
 /** Authentication requirement of a route. */
@@ -114,7 +119,7 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     if (typeof route.path !== 'string' || !route.path.startsWith('/')) {
       problems.push(`${label}: path must be a string starting with "/"`);
     }
-    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; group?: unknown } | undefined;
+    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; group?: unknown; allowWithPendingPasswordChange?: unknown } | undefined;
     if (auth === undefined || auth === null) {
       problems.push(`${label}: missing auth declaration`);
     } else if (auth.kind === 'anonymous') {
@@ -137,8 +142,14 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
       } else if (auth.group === true && options.groupAccess === undefined) {
         problems.push(`${label}: group route needs the groupAccess dependencies`);
       }
+      if (auth.allowWithPendingPasswordChange !== undefined && auth.allowWithPendingPasswordChange !== true) {
+        problems.push(`${label}: allowWithPendingPasswordChange can only be true`);
+      }
     } else {
       problems.push(`${label}: unknown auth kind`);
+    }
+    if (auth?.kind === 'anonymous' && auth.allowWithPendingPasswordChange !== undefined) {
+      problems.push(`${label}: only user routes can allow a pending password change`);
     }
     if ((auth?.kind === 'anonymous' || auth?.kind === 'user') && !allowed.includes(auth.kind)) {
       problems.push(`${label}: auth kind "${auth.kind}" is not allowed on this surface`);
@@ -206,6 +217,14 @@ const requireJsonContentType: RequestHandler = (req, _res, next) => {
   next();
 };
 
+/** Stops a user who has not yet replaced his provisional password from using the route. */
+const refusePendingPasswordChange: RequestHandler = (_req, res, next) => {
+  if (res.locals.passwordChangeRequired === true) {
+    throw new AppError('PASSWORD_CHANGE_REQUIRED');
+  }
+  next();
+};
+
 /** Options of {@link mountRoutes}. */
 export interface MountOptions {
   /**
@@ -229,7 +248,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * Mounts validated routes on a router. For every path it registers the declared
  * methods plus a catch-all answering 405 with the `Allow` header. `GET` implies `HEAD`.
  * The chain of a `user` route is: `authenticate` (guarded by the per-IP limit on failed authentications), the rate limit (the per-user API rule, then the
- * declared rules), the group check (when `group: true`), `requirePermission` (which reports PSA and D
+ * declared rules), the refusal of a user with a provisional password (unless the route allows it), the group check (when `group: true`), `requirePermission` (which reports PSA and D
  * group requests with their outcome), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser,
  * then the declared rules that read the body (`needsBody`), then the route `middleware` (validation), then the handler. An anonymous route runs
  * its declared rules, the guard and parser, the body rules, the handler. `/health` declares none.
@@ -277,6 +296,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         guardAuthentication(authenticate!, rateLimitOptions!),
         ...limits([rateLimitOptions!.apiRule]),
         ...beforeBody,
+        ...(route.auth.allowWithPendingPasswordChange === true ? [] : [refusePendingPasswordChange]),
         ...(grouped ? [requireGroupAccess(groupAccess!.groups)] : []),
         requirePermission(route.auth.permission, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
       );

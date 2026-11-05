@@ -12,6 +12,7 @@ export const USER_CREDENTIALS_VALIDATOR: Readonly<Record<string, unknown>> = Obj
     passwordHash: { bsonType: 'string', minLength: 1, maxLength: 512 },
     legacyHashFingerprint: { bsonType: ['string', 'null'], maxLength: 128 },
     passwordChangedAt: { bsonType: 'date' },
+    mustChangePassword: { bsonType: 'bool' },
     failedLogins: { bsonType: ['int', 'long'], minimum: 0 },
     lockedUntil: { bsonType: ['date', 'null'] },
     lastLoginAt: { bsonType: 'date' },

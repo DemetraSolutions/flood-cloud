@@ -1,4 +1,4 @@
-import type { Collection, ObjectId } from 'mongodb';
+import type { ClientSession, Collection, ObjectId } from 'mongodb';
 import { MAX_PREVIOUS_REFRESH_HASHES } from '../../db/sessions-schema.ts';
 import type { Databases } from '../../db/databases.ts';
 
@@ -122,9 +122,18 @@ export interface SessionsRepository {
    * @param reason Reason code.
    * @param now Revocation time.
    * @param except A session to keep (the current one when the password changes).
+   * @param session Transaction the write belongs to, if any.
    * @returns How many sessions were revoked.
    */
-  revokeAllOfUser(userId: ObjectId, reason: string, now: Date, except?: ObjectId): Promise<number>;
+  revokeAllOfUser(userId: ObjectId, reason: string, now: Date, except?: ObjectId, session?: ClientSession): Promise<number>;
+  /**
+   * Deletes every session document of a user, revoked or not (permanent deletion of the user).
+   *
+   * @param userId Owner.
+   * @param session Transaction the write belongs to, if any.
+   * @returns How many documents were deleted.
+   */
+  deleteAllOfUser(userId: ObjectId, session?: ClientSession): Promise<number>;
   /**
    * The active sessions of a user (not revoked, not over), most recently used first.
    *
@@ -255,12 +264,18 @@ export function createSessionsRepository(databases: Databases): SessionsReposito
       return result.modifiedCount === 1;
     },
 
-    revokeAllOfUser: async (userId, reason, now, except) => {
+    revokeAllOfUser: async (userId, reason, now, except, session) => {
       const result = await sessions().updateMany(
         { userId, ...active, ...(except === undefined ? {} : { _id: { $ne: except } }) },
         { $set: { revokedAt: now, revokeReason: reason } },
+        session === undefined ? {} : { session },
       );
       return result.modifiedCount;
+    },
+
+    deleteAllOfUser: async (userId, session) => {
+      const result = await sessions().deleteMany({ userId }, session === undefined ? {} : { session });
+      return result.deletedCount;
     },
 
     listActive: async (userId, now) => {

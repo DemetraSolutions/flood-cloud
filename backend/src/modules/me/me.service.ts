@@ -52,7 +52,7 @@ export interface MeService {
   /**
    * Changes the password: checks the current one (no progressive lock, but a dedicated rate limit on
    * the route; a wrong one is logged as `auth.passwordCheckFailed`), applies the policy, writes the legacy hash while the legacy coexists (removes it otherwise), then the scrypt
-   * credentials, revokes the other sessions and empties the legacy `tokens[]` (D-11).
+   * credentials (clearing the "must change the password" flag of a provisional one), revokes the other sessions and empties the legacy `tokens[]` (D-11).
    *
    * @param principal The authenticated user.
    * @param sessionId The current session, which stays valid.
@@ -118,7 +118,8 @@ export function createMeService(deps: MeServiceDeps): MeService {
       throw new AppError('NOT_FOUND');
     }
     const groupId = principal.scope.kind === 'group' || principal.scope.kind === 'companies' || principal.scope.kind === 'places' ? principal.scope.groupId : null;
-    return toProfile(mapped.user, principal, groupId === null ? null : await groups.find(groupId));
+    const stored = await credentials.find(principal.userId);
+    return toProfile(mapped.user, principal, groupId === null ? null : await groups.find(groupId), stored?.mustChangePassword === true);
   };
 
   return {
@@ -171,6 +172,9 @@ export function createMeService(deps: MeServiceDeps): MeService {
         });
         throw new AppError('VALIDATION_ERROR', { details: [{ field: 'currentPassword', issue: 'incorrect' }] });
       }
+      if (newPassword.normalize('NFC') === currentPassword.normalize('NFC')) {
+        throw new AppError('VALIDATION_ERROR', { details: [{ field: 'newPassword', issue: 'reused' }] });
+      }
       const change = await buildPasswordChange(newPassword, {
         username: record.user.username,
         pepper: config.legacyPasswordPepper,
@@ -183,7 +187,7 @@ export function createMeService(deps: MeServiceDeps): MeService {
       // The legacy first: if the second write fails, the legacy hash alone decides and the new password already works.
       // With the coexistence off there is no legacy hash to keep in step: the old one is removed.
       await users.updateOwned(principal.userId, toLegacyUpdate({ password: change.legacyHash }, now));
-      await credentials.upsertPassword(principal.userId, { passwordHash: change.passwordHash, legacyHashFingerprint: change.legacyHashFingerprint, passwordChanged: true, now });
+      await credentials.upsertPassword(principal.userId, { passwordHash: change.passwordHash, legacyHashFingerprint: change.legacyHashFingerprint, passwordChanged: true, mustChangePassword: false, now });
       const revoked = await sessions.revokeAllOfUser(principal.userId, 'passwordChanged', now, sessionId);
       await users.clearLegacyTokens(principal.userId);
       const groupId = principal.groupId === null ? {} : { groupId: principal.groupId };

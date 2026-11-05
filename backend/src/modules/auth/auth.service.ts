@@ -28,6 +28,11 @@ export interface IssuedSession {
   readonly sessionId: string;
 }
 
+/** The token pair of a login, and whether the user must replace a provisional password before anything else. */
+export interface LoginResult extends IssuedSession {
+  readonly passwordChangeRequired: boolean;
+}
+
 /** What the login needs from the request body. */
 export interface LoginInput {
   readonly username: string;
@@ -45,10 +50,10 @@ export interface AuthService {
    *
    * @param input Username and password.
    * @param client Request context for the session and the log.
-   * @returns The new token pair.
+   * @returns The new token pair, and `passwordChangeRequired` when an administrator set the password.
    * @throws {AppError} `INVALID_CREDENTIALS`.
    */
-  login(input: LoginInput, client: ClientContext): Promise<IssuedSession>;
+  login(input: LoginInput, client: ClientContext): Promise<LoginResult>;
   /**
    * Rotates a refresh token. A token that was already used revokes the whole session family and
    * is reported as `auth.refreshReuseDetected`. Every refusal is `401 UNAUTHENTICATED`.
@@ -255,7 +260,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
         resource: { type: 'session', id: session.id.toHexString() },
         ...entry(client),
       });
-      return issued(pair, session.id);
+      return { ...issued(pair, session.id), passwordChangeRequired: stored?.mustChangePassword === true };
     },
 
     refresh: async (refreshToken, client) => {

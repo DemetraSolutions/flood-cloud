@@ -7,6 +7,7 @@ import { hashSecret, parseSecret } from '../../shared/security/secrets.ts';
 import type { GroupsRepository } from '../../shared/security/scope/groups.repository.ts';
 import { buildPrincipal } from '../../shared/security/scope/principal.ts';
 import type { ComputeScopeDeps } from '../../shared/security/scope/scope.ts';
+import type { CredentialsRepository } from '../users/credentials.repository.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import { auditSessionsRevoked } from '../sessions/session-audit.ts';
 import { LAST_USED_RESOLUTION_MS } from '../sessions/sessions.repository.ts';
@@ -19,6 +20,8 @@ const BEARER = /^Bearer (\S+)$/i;
 export interface AuthenticateDeps {
   readonly sessions: SessionsRepository;
   readonly users: UsersRepository;
+  /** Tells whether the user still has to replace a provisional password. */
+  readonly credentials: Pick<CredentialsRepository, 'isPasswordChangeRequired'>;
   readonly groups: GroupsRepository;
   /** Dealer groups and company places, for the scope computed on every request. */
   readonly scope: ComputeScopeDeps;
@@ -37,14 +40,16 @@ export interface AuthenticateDeps {
  * user and his group are read again: a disabled or trashed user, a role that may not use the
  * backoffice, a suspended or trashed group revoke the session at once (`401 UNAUTHENTICATED`).
  * Permissions and scope are recomputed from the stored user on every request and stored, with the
- * session id, in `res.locals`. `lastUsedAt` is refreshed at most once a minute, off the response
+ * session id, in `res.locals`; a user who still has to replace a provisional password gets
+ * `res.locals.passwordChangeRequired`, which the route builder turns into `403 PASSWORD_CHANGE_REQUIRED`
+ * on every route not declared to allow it. `lastUsedAt` is refreshed at most once a minute, off the response
  * path: a failure is logged and never fails the request.
  *
  * @param deps Repositories, activity log, logger and clock.
  * @returns The middleware to pass to `mountRoutes` for `/v1`.
  */
 export function createAuthenticate(deps: AuthenticateDeps): RequestHandler {
-  const { sessions, users, groups, scope, activityLog, logger } = deps;
+  const { sessions, users, credentials, groups, scope, activityLog, logger } = deps;
   return async (req, res, next) => {
     const presented = BEARER.exec(req.get('authorization') ?? '')?.[1];
     const token = parseSecret(presented, 'fc_at_');
@@ -76,6 +81,9 @@ export function createAuthenticate(deps: AuthenticateDeps): RequestHandler {
     }
     res.locals.auth = principal;
     res.locals.sessionId = session.id;
+    if (await credentials.isPasswordChangeRequired(session.userId)) {
+      res.locals.passwordChangeRequired = true;
+    }
     if (now.getTime() - session.lastUsedAt.getTime() >= LAST_USED_RESOLUTION_MS) {
       sessions.touch(session.id, now).catch((error: unknown) => {
         logger.error('updating the last use of a session failed', { error });

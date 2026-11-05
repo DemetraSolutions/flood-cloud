@@ -16,6 +16,8 @@ declare global {
       auth?: AuthPrincipal;
       /** Id of the session whose access token authenticated the request, set by the Bearer middleware. */
       sessionId?: ObjectId;
+      /** Set by the Bearer middleware when the user must change a provisional password before doing anything else. */
+      passwordChangeRequired?: true;
       /** Set by the route builder for routes that return credentials: the response must not be compressed (BREACH). */
       noCompression?: true;
       /** Validated body, query and params, set by `validateBody`, `validateQuery` and `validateParams`. */

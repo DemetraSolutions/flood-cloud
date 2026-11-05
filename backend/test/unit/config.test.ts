@@ -60,6 +60,7 @@ describe('loadConfig', () => {
         RATE_LIMIT_LOGIN_PER_USERNAME: '1',
         RATE_LIMIT_REFRESH_PER_IP: '3',
         RATE_LIMIT_USERNAME_CHECK_PER_USER: '4',
+        RATE_LIMIT_USER_CREDENTIALS_PER_USER: '7',
         RATE_LIMIT_API_PER_USER: '100000',
         RATE_LIMIT_UNAUTHENTICATED_PER_IP: '100000',
         ACTIVITY_LOG_RETENTION_DAYS: '3650',
@@ -69,12 +70,14 @@ describe('loadConfig', () => {
     );
     assert.deepEqual([custom.rateLimitLoginPerUsername, custom.rateLimitLoginPerIp, custom.rateLimitRefreshPerIp, custom.rateLimitUsernameCheckPerUser, custom.rateLimitApiPerUser], [1, 15, 3, 4, 100000]);
     assert.equal(custom.rateLimitUnauthenticatedPerIp, 100000);
+    assert.deepEqual([loadConfig(validEnv()).rateLimitUserCredentialsPerUser, custom.rateLimitUserCredentialsPerUser], [20, 7]);
     assert.deepEqual([custom.activityLogRetentionDays, custom.activityLogErrorRetentionDays], [3650, 7]);
     for (const [variable, bad] of [
       ['RATE_LIMIT_LOGIN_PER_USERNAME', '0'],
       ['RATE_LIMIT_LOGIN_PER_IP', '100001'],
       ['RATE_LIMIT_REFRESH_PER_IP', 'x'],
       ['RATE_LIMIT_USERNAME_CHECK_PER_USER', '-1'],
+      ['RATE_LIMIT_USER_CREDENTIALS_PER_USER', '0'],
       ['RATE_LIMIT_API_PER_USER', '1.5'],
       ['RATE_LIMIT_UNAUTHENTICATED_PER_IP', '0'],
       ['ACTIVITY_LOG_RETENTION_DAYS', '3651'],

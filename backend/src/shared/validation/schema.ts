@@ -17,6 +17,8 @@ export const VALIDATION_ISSUES = Object.freeze([
   'tooDeep',
   'tooMany',
   'incorrect',
+  'taken',
+  'reused',
 ] as const);
 
 /** A reason a field was rejected. */
@@ -181,6 +183,20 @@ export function integer(options: IntegerOptions = {}): Schema<number, false> {
     }
     return value;
   });
+}
+
+/**
+ * A safe non-negative integer written as decimal digits in a query string (`limit=50`), converted
+ * explicitly. Anything else is a `type` problem, and so is a repeated parameter (an array); a value out of range
+ * gives `minimum` or `maximum`.
+ *
+ * @param options Inclusive bounds.
+ */
+export function integerString(options: IntegerOptions = {}): Schema<number, false> {
+  const inner = integer(options);
+  return schemaOf(false, (value, path, context, depth) =>
+    typeof value === 'string' && /^\d{1,15}$/.test(value) ? inner.parse(Number(value), path, context, depth) : context.report(path, 'type'),
+  );
 }
 
 /** A boolean (no coercion from strings). */

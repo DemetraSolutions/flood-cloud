@@ -280,3 +280,74 @@ describe('findLoginRecordById', () => {
     assert.equal(await repository.findLoginRecordById(new ObjectId()), null);
   });
 });
+
+describe('the writes of user management, with and without a transaction', () => {
+  const credentials = () => ctx.databases.common().collection('userCredentials');
+
+  it('inserts a document of owned fields, and refuses one with a field the backend does not own', async () => {
+    const document = { _id: new ObjectId(), userName: 'inserted.once', role: 'SA', status: true, trash: false, tokens: [], insertDate: new Date(), updateDate: new Date(), settings: { language: 'it', hiddenInStats: false } };
+    const mapped = await repository.insert(document);
+    assert.deepEqual([mapped.user.username, mapped.user.role, mapped.anomalies.map((anomaly) => anomaly.kind)], ['inserted.once', 'SA', []]);
+    assert.equal(await users().countDocuments({ _id: document._id }), 1);
+    await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', pin: '1234' }), /does not own: pin/);
+    await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', permissions: { apps: { cash: { status: true } } } }), /does not own: permissions.apps.cash.status/);
+    await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', settings: { integrations: {} } }), /does not own: settings.integrations/);
+    assert.equal(await users().countDocuments({ userName: 'x' }), 0);
+    await assert.rejects(repository.insert({ ...document }), { code: 11000 });
+  });
+
+  it('rolls back every write of a transaction that fails and commits the ones that succeed', async () => {
+    const first = { _id: new ObjectId(), userName: 'in.transaction', role: 'SA', status: true };
+    await assert.rejects(
+      ctx.databases.transaction(async (session) => {
+        await repository.insert(first, session);
+        await credentials().insertOne({ _id: first._id, failedLogins: 0, createdAt: new Date(), updatedAt: new Date() }, { session });
+        throw new Error('abort');
+      }),
+      /abort/,
+    );
+    assert.deepEqual([await users().countDocuments({ _id: first._id }), await credentials().countDocuments({ _id: first._id })], [0, 0]);
+    const result = await ctx.databases.transaction(async (session) => {
+      await repository.insert(first, session);
+      assert.equal(await repository.updateOwned(first._id, toLegacyUpdate({ status: 'disabled' }), session), true);
+      assert.equal(await repository.clearLegacyTokens(first._id, session), true);
+      return 'committed';
+    });
+    assert.equal(result, 'committed');
+    assert.equal((await users().findOne({ _id: first._id }))!['status'], false);
+  });
+
+  it('deletes a user only from the trash, with or without a session, and says whether it did', async () => {
+    const one = { _id: new ObjectId(), userName: 'to.delete.1', role: 'SA', status: true, trash: true };
+    const two = { _id: new ObjectId(), userName: 'to.delete.2', role: 'SA', status: true, trash: true };
+    const live = { _id: new ObjectId(), userName: 'to.delete.3', role: 'SA', status: true, trash: false };
+    await repository.insert(live);
+    assert.equal(await repository.deleteTrashed(live._id), false);
+    assert.equal(await users().countDocuments({ _id: live._id }), 1);
+    await repository.insert(one);
+    await repository.insert(two);
+    assert.equal(await repository.deleteTrashed(one._id), true);
+    assert.equal(await repository.deleteTrashed(one._id), false);
+    assert.equal(await ctx.databases.transaction((session) => repository.deleteTrashed(two._id, session)), true);
+    assert.equal(await users().countDocuments({ _id: { $in: [one._id, two._id] } }), 0);
+  });
+
+  it('finds one user to manage with the whole stored matrix, and nothing outside the filter', async () => {
+    const found = await repository.findManaged({ _id: id(5) });
+    assert.ok(found !== null);
+    assert.deepEqual([found.user.username, found.stored.role, found.stored.userId.toHexString()], ['user-005', 'PA', id(5).toHexString()]);
+    assert.ok((found.stored.legacyPermissions as Document)['apps'] !== undefined, 'the non-core modules and the cash permissions are read, to be kept');
+    const text = JSON.stringify(found);
+    assert.ok(!text.includes('1234') && !text.includes('token-005'));
+    assert.equal(await repository.findManaged({ _id: id(5), role: 'SA' }), null);
+  });
+
+  it('lists a page in the order asked, with the scope filter combined and the cursor applied', async () => {
+    const params = { limit: 3, sort: 'username', q: null, cursor: null };
+    const page = await repository.list({ role: { $in: ['SA'] } }, {}, params);
+    assert.equal(page.users.length, 3);
+    assert.notEqual(page.page.next, null);
+    assert.ok(page.users.every((mapped) => mapped.user.role === 'SA'));
+    assert.deepEqual(page.users.map((mapped) => mapped.user.username), [...page.users.map((mapped) => mapped.user.username)].sort());
+  });
+});

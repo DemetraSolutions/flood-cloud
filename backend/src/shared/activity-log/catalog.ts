@@ -79,6 +79,9 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
 
 const DATA_METADATA: readonly string[] = ['changesTotal', 'changesTruncated'];
 
+/** Extra metadata keys of some data actions: a permanent deletion keeps no field changes, only the role of the user it removed (the group is the entry's `groupId`). */
+const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'] };
+
 /** Definition of one action: its categories and the metadata keys it may carry (anything else is rejected). */
 export interface ActionDefinition {
   readonly categories: readonly ActivityCategory[];
@@ -98,7 +101,7 @@ export const ACTION_CATALOG: ReadonlyMap<string, ActionDefinition> = (() => {
     const security = catalog.get(action);
     catalog.set(action, {
       categories: security === undefined ? ['data'] : ['security', 'data'],
-      metadataKeys: [...(security?.metadataKeys ?? []), ...DATA_METADATA],
+      metadataKeys: [...(security?.metadataKeys ?? []), ...DATA_METADATA, ...(DATA_EXTRA_METADATA[action] ?? [])],
     });
   }
   catalog.set('request.failed', { categories: ['error'], metadataKeys: ['method', 'route', 'errorName', 'errorCode'] });

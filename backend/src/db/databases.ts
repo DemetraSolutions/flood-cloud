@@ -1,4 +1,4 @@
-import type { Db, MongoClient, ObjectId } from 'mongodb';
+import type { ClientSession, Db, MongoClient, ObjectId } from 'mongodb';
 import { commonDatabaseName, groupDatabaseName, parseGroupDatabaseName } from './names.ts';
 import type { DatabaseNameContext } from './names.ts';
 
@@ -39,6 +39,16 @@ export interface Databases {
    */
   group(groupId: ObjectId): Db;
   /**
+   * Runs `work` in a transaction (replica set): every write that receives the session commits together
+   * or none does. The driver retries `work` on transient errors and on an unknown commit result, so
+   * it must hold database operations only (no side effect that cannot be repeated). Whatever `work`
+   * throws aborts the transaction and is rethrown.
+   *
+   * @param work The operations, each passing the session it is given.
+   * @returns What `work` returned.
+   */
+  transaction<T>(work: (session: ClientSession) => Promise<T>): Promise<T>;
+  /**
    * Ids of the group databases that exist on the server for this prefix and environment
    * (names are parsed, never trusted), sorted by hex.
    */
@@ -74,6 +84,7 @@ export function createDatabases(client: MongoClient, context: DatabaseNameContex
   };
   return {
     common: () => open(commonDatabaseName(context)),
+    transaction: (work) => client.withSession((session) => session.withTransaction(() => work(session))),
     group: (groupId) => open(groupDatabaseName(context, groupId)),
     listGroupIds: async () => {
       const ids: ObjectId[] = [];

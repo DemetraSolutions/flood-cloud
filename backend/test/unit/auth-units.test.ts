@@ -261,6 +261,7 @@ describe('Bearer authentication: paths a race or an incident can reach', () => {
     const handler = createAuthenticate({
       sessions: fakeSessions({}),
       users: fakeUsers({}),
+      credentials: fakeCredentials({ isPasswordChangeRequired: () => Promise.resolve(false) }),
       groups: available,
       scope: fake<AuthenticateDeps['scope']>({}),
       activityLog,

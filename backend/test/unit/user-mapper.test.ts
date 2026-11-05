@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { BSON, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { COLLECTIONS } from '../../src/db/collections.ts';
-import { OWNED_PERMISSION_MODULES, fromLegacy, toLegacyUpdate, toResponse } from '../../src/modules/users/user.mapper.ts';
+import { OWNED_PERMISSION_MODULES, fromLegacy, toLegacyDocument, toLegacyUpdate, toResponse } from '../../src/modules/users/user.mapper.ts';
 import type { LegacyUserDocument, UserChanges } from '../../src/modules/users/user.types.ts';
 import { dirtyScope, encryptLegacy, fixtureId, legacyEncryptionKey, legacyUser } from '../helpers/legacy-fixtures.ts';
 
@@ -416,5 +416,73 @@ describe('toResponse', () => {
     const sentinel = 'SENTINEL-SECRET-VALUE';
     const text = JSON.stringify(toResponse(read(doc(3, { password: sentinel, pin: sentinel, tokens: [{ token: sentinel }], permissions: { apps: { cash: { status: sentinel } } } })).user));
     assert.equal(text.includes(sentinel), false);
+  });
+});
+
+describe('toLegacyDocument', () => {
+  const NOW = new Date('2026-11-05T09:00:00.000Z');
+  const modules = { groups: { r: false, w: false }, users: { r: true, w: true }, companies: { r: true, w: false }, places: { r: true, w: true }, logs: { r: true, w: false } };
+  const base = {
+    id: fixtureId('user', 700),
+    username: 'new.user',
+    firstName: 'Ada',
+    lastName: null,
+    email: null,
+    phone: '+39 06 1234',
+    role: 'CA' as const,
+    groupId: group.toHexString(),
+    dealerId: dealer.toHexString(),
+    companyIds: [company.toHexString()],
+    placeIds: [place.toHexString(), place2.toHexString()],
+    status: 'active' as const,
+    language: 'it',
+    permissions: { status: true, modules },
+    legacyPasswordHash: 'a'.repeat(128),
+  };
+
+  it('builds a complete legacy document of the owned fields, with the types the legacy writes', () => {
+    const document = toLegacyDocument(base, NOW);
+    assert.deepEqual(Object.keys(document).sort(), [
+      '_id', 'companyId', 'dealerId', 'groupId', 'insertDate', 'name', 'password', 'permissions', 'placeId', 'placesId', 'role', 'settings', 'status', 'telephone', 'tokens', 'trash', 'updateDate', 'userName',
+    ]);
+    assert.deepEqual(document, {
+      _id: base.id,
+      userName: 'new.user',
+      name: 'Ada',
+      telephone: '+39 06 1234',
+      password: 'a'.repeat(128),
+      role: 'CA',
+      groupId: group,
+      dealerId: dealer,
+      companyId: company,
+      placeId: place,
+      placesId: [place, place2],
+      permissions: { status: true, groups: { r: false, w: false }, users: { r: true, w: true }, companies: { r: true, w: false }, places: { r: true, w: true }, logs: { r: true, w: false } },
+      settings: { language: 'it', hiddenInStats: false },
+      status: true,
+      trash: false,
+      tokens: [],
+      insertDate: NOW,
+      updateDate: NOW,
+    });
+    const owned = new Set(COLLECTIONS.common.users.ownedFields);
+    const leaves = (value: Document, prefix = ''): string[] =>
+      Object.entries(value).flatMap(([key, item]) => (item !== null && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype ? leaves(item as Document, `${prefix}${key}.`) : [`${prefix}${key}`]));
+    assert.deepEqual(leaves(document).filter((path) => path !== '_id' && !owned.has(path)), []);
+    assert.deepEqual(read(document).anomalies, []);
+  });
+
+  it('leaves out the null personal values and the legacy hash when there is none, and writes null scope references', () => {
+    const document = toLegacyDocument({ ...base, firstName: null, phone: null, legacyPasswordHash: null, role: 'SA', companyIds: [], placeIds: [], groupId: null, dealerId: null, status: 'disabled' }, NOW);
+    for (const field of ['name', 'surname', 'email', 'telephone', 'password']) {
+      assert.ok(!(field in document), field);
+    }
+    assert.deepEqual([document['companyId'], document['placeId'], document['placesId'], document['groupId'], document['dealerId'], document['status']], [null, null, [], null, null, false]);
+  });
+
+  it('refuses a role that is not one of the six, a module outside the core and an id that is not hexadecimal', () => {
+    assert.throws(() => toLegacyDocument({ ...base, role: 'API' as never }, NOW), /not one of the six roles/);
+    assert.throws(() => toLegacyDocument({ ...base, permissions: { status: false, modules: { products: { r: true, w: true } } } }, NOW), /not in the core allowlist/);
+    assert.throws(() => toLegacyDocument({ ...base, groupId: 'zz' }, NOW));
   });
 });

@@ -19,6 +19,10 @@ import { createMeRoutes } from './modules/me/me.routes.ts';
 import { createMeService } from './modules/me/me.service.ts';
 import { createSessionsRepository } from './modules/sessions/sessions.repository.ts';
 import { createCredentialsRepository } from './modules/users/credentials.repository.ts';
+import { createGroupDirectoryRepository } from './modules/users/group-directory.repository.ts';
+import { createUsersController } from './modules/users/users.controller.ts';
+import { createUsersRoutes } from './modules/users/users.routes.ts';
+import { createUsersService } from './modules/users/users.service.ts';
 import { createUsersRepository } from './modules/users/users.repository.ts';
 
 /** Everything the application needs from the backoffice modules, wired over real repositories. */
@@ -43,7 +47,7 @@ export interface BackofficeDeps {
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, and the profile. The only place that
+ * the services, controllers and routes of login and sessions, the profile and the user management. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -61,6 +65,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const authenticate = createAuthenticate({
     sessions,
     users,
+    credentials,
     groups,
     scope: { ...createDealerGroupsRepository(databases), ...createCompanyPlacesRepository(databases) },
     activityLog,
@@ -71,5 +76,17 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const me = createMeController(
     createMeService({ config, users, credentials, sessions, groups: createGroupSummaryRepository(databases), activityLog, now }),
   );
-  return { routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules)], authenticate, groups };
+  const usersController = createUsersController(
+    createUsersService({
+      config,
+      users,
+      credentials,
+      sessions,
+      directory: createGroupDirectoryRepository(databases),
+      activityLog,
+      transaction: (work) => databases.transaction(work),
+      now,
+    }),
+  );
+  return { routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules)], authenticate, groups };
 }

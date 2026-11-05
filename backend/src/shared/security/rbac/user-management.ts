@@ -74,6 +74,21 @@ export function canManageUser(actor: AuthPrincipal, target: UserScopeView): bool
 }
 
 /**
+ * Whether the actor holds everything the target can do: every effective permission of the target
+ * (the always-granted ones apart) is held by the actor, and, when the target manages other users'
+ * permissions, so does the actor. Required before the actor can lock a user out or remove him
+ * (reset his password, disable, trash or delete him): nobody can take down an account stronger than his own.
+ *
+ * @param actor The authenticated caller.
+ * @param target The user as stored.
+ * @returns `true` when the actor holds at least what the target holds.
+ */
+export function holdsEverythingOf(actor: AuthPrincipal, target: UserChangeView): boolean {
+  const permissionsHeld = [...target.permissions].every((permission) => isAlwaysGranted(permission) || hasPermission(actor, permission));
+  return permissionsHeld && (!target.matrix.status || actor.canManagePermissions);
+}
+
+/**
  * Whether the actor holds a flag of a module. Core modules: the corresponding effective
  * permissions (`r` the read one; `w` every write one the actor's role can have, and at least one).
  * Other modules: the actor's own raw flag.
@@ -92,8 +107,14 @@ function moduleNames(...matrices: PermissionMatrix[]): string[] {
   return [...new Set(matrices.flatMap((matrix) => Object.keys(matrix.modules)))];
 }
 
-/** The matrix a user born from an actor without `canManagePermissions` gets: the role default limited to the actor's flags. */
-function inheritedMatrix(actor: AuthPrincipal, role: UserScopeView['role']): PermissionMatrix {
+/**
+ * The matrix a new user gets when nobody chose one: the default of the role limited to the flags the
+ * actor holds, with `status` off. It is what a creator without `canManagePermissions` is allowed to give.
+ *
+ * @param actor The authenticated creator.
+ * @param role Role of the new user.
+ */
+export function inheritedMatrix(actor: AuthPrincipal, role: UserScopeView['role']): PermissionMatrix {
   const base = defaultMatrix(role);
   const modules: Record<string, { r: boolean; w: boolean }> = Object.create(null) as Record<string, { r: boolean; w: boolean }>;
   for (const name of moduleNames(base)) {

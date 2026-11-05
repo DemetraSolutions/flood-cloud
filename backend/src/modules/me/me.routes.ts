@@ -19,7 +19,7 @@ const ME_BODY_LIMIT = '8kb';
  */
 export function createMeRoutes(controller: MeController, rules: RateLimitRules): RouteDefinition[] {
   return [
-    defineRoute({ method: 'GET', path: '/me', auth: { kind: 'user', permission: 'profile:read' }, handler: controller.get }),
+    defineRoute({ method: 'GET', path: '/me', auth: { kind: 'user', permission: 'profile:read', allowWithPendingPasswordChange: true }, handler: controller.get }),
     defineRoute({
       method: 'PATCH',
       path: '/me',
@@ -31,7 +31,7 @@ export function createMeRoutes(controller: MeController, rules: RateLimitRules):
     defineRoute({
       method: 'PUT',
       path: '/me/password',
-      auth: { kind: 'user', permission: 'profile:update' },
+      auth: { kind: 'user', permission: 'profile:update', allowWithPendingPasswordChange: true },
       bodyLimit: ME_BODY_LIMIT,
       rateLimit: [rules.passwordChangePerUser],
       middleware: [validateBody(changePasswordBody)],

@@ -180,3 +180,34 @@ describe('touch', () => {
     assert.equal((await repository.findByAccessHash(created.accessTokenHash))?.lastUsedAt.getTime(), at(60_000).getTime());
   });
 });
+
+describe('deleteAllOfUser', () => {
+  it('deletes every session of the user, revoked or not, with or without a transaction, and no other', async () => {
+    const userId = new ObjectId();
+    const other = new ObjectId();
+    const kept = await repository.create(newSession({ userId: other }));
+    const first = await repository.create(newSession({ userId }));
+    await repository.create(newSession({ userId }));
+    await repository.revoke(first.id, 'test', NOW);
+    assert.equal(await repository.deleteAllOfUser(userId), 2);
+    assert.equal(await sessions().countDocuments({ userId }), 0);
+    await repository.create(newSession({ userId }));
+    assert.equal(await ctx.databases.transaction((session) => repository.deleteAllOfUser(userId, session)), 1);
+    assert.equal(await repository.deleteAllOfUser(userId), 0);
+    assert.equal(await sessions().countDocuments({ _id: kept.id }), 1);
+  });
+
+  it('revokes inside a transaction together with other writes', async () => {
+    const userId = new ObjectId();
+    await repository.create(newSession({ userId }));
+    await assert.rejects(
+      ctx.databases.transaction(async (session) => {
+        assert.equal(await repository.revokeAllOfUser(userId, 'test', NOW, undefined, session), 1);
+        throw new Error('abort');
+      }),
+      /abort/,
+    );
+    assert.equal(await sessions().countDocuments({ userId, revokedAt: null }), 1);
+    assert.equal(await ctx.databases.transaction((session) => repository.revokeAllOfUser(userId, 'test', NOW, undefined, session)), 1);
+  });
+});

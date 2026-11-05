@@ -37,7 +37,7 @@ Realizzata come **lettura e scrittura compatibile con il legacy** (passo 3A): il
 - Indici aggiunti dal nuovo backend (non univoci): `groupId_1_role_1`, `dealerId_1`.
 
 ## userCredentials — credenziali del nuovo backend
-Realizzata (passo 3A, D-03): `_id` = id dell'utente, `passwordHash` (scrypt `scrypt$N$r$p$salt$hash`, facoltativo), `legacyHashFingerprint` (SHA-256 dell'hash legacy da cui deriva, o null), `passwordChangedAt`, `failedLogins`, `lockedUntil` (blocco progressivo dal 5° fallimento: 1, 2, 4, 8, poi 15 minuti), `lastLoginAt`, `createdAt`, `updatedAt`. Validazione `$jsonSchema`; nessun indice oltre `_id`.
+Realizzata (passo 3A, D-03): `_id` = id dell'utente, `passwordHash` (scrypt `scrypt$N$r$p$salt$hash`, facoltativo), `legacyHashFingerprint` (SHA-256 dell'hash legacy da cui deriva, o null), `passwordChangedAt`, `failedLogins`, `lockedUntil` (blocco progressivo dal 5° fallimento: 1, 2, 4, 8, poi 15 minuti; azzerati dal reset dell'amministratore), `mustChangePassword` (password provvisoria impostata da un amministratore: va cambiata al primo accesso; passo 3B), `lastLoginAt`, `createdAt`, `updatedAt`. Validazione `$jsonSchema`; nessun indice oltre `_id`.
 
 ## companies — soggetti giuridici
 `_id`, `groupId`, `name`, `vatNumber`, `fiscalCode`, `address`, `status`, `createdAt`, `updatedAt`, `deletedAt`.

@@ -1,11 +1,16 @@
 import { ObjectId } from 'mongodb';
-import type { Collection, Document } from 'mongodb';
+import type { ClientSession, Collection, Document, Filter } from 'mongodb';
 import { COLLECTIONS } from '../../db/collections.ts';
 import type { Databases } from '../../db/databases.ts';
+import { LIST_MAX_TIME_MS, escapeRegExp, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
+import type { ListParams } from '../../shared/http/list.ts';
+import type { PageInfo } from '../../shared/http/envelope.ts';
 import { legacyScopeIds } from '../../shared/security/scope/legacy-scope.ts';
+import { withScope } from '../../shared/security/scope/scope-filters.ts';
 import { normalizeUsername } from '../../shared/security/username.ts';
 import { OWNED_PERMISSION_MODULES, fromLegacy } from './user.mapper.ts';
 import type { StoredUser } from '../../shared/security/scope/principal.ts';
+import { USERS_LIST } from './users.list.ts';
 import type { AuthRecord, LegacyUserDocument, LegacyUserUpdate, LoginRecord, MappedUser } from './user.types.ts';
 
 /** Candidates read when looking a username up without regard to case: more than this is not a real situation. */
@@ -61,9 +66,28 @@ const AUTH_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
   permissions: 1,
 });
 
-/** Escapes a string for literal use inside a regular expression. */
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * What managing a user needs: the profile fields of {@link USER_PROJECTION} and, whole, the stored
+ * permission matrix (its non-core modules limit what the actor may grant). No password, PIN, token or picture.
+ */
+const MANAGE_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
+  ...Object.fromEntries(Object.keys(USER_PROJECTION).filter((key) => !key.startsWith('permissions.')).map((key) => [key, 1 as const])),
+  permissions: 1,
+});
+
+/** A page of users. */
+export interface UserPage {
+  readonly users: readonly MappedUser[];
+  readonly page: PageInfo;
+}
+
+/** Collects the leaf paths of a document: plain objects with content are walked, anything else (arrays, dates, ids, an empty object) is a leaf. */
+function leafPaths(value: Document, prefix = ''): string[] {
+  return Object.entries(value).flatMap(([key, item]) =>
+    typeof item === 'object' && item !== null && Object.getPrototypeOf(item) === Object.prototype && Object.keys(item).length > 0
+      ? leafPaths(item as Document, `${prefix}${key}.`)
+      : [`${prefix}${key}`],
+  );
 }
 
 /** Reads and updates the shared legacy `common.users` collection, translating it to the domain model. */
@@ -82,6 +106,42 @@ export interface UsersRepository {
    * @returns The record, or `null` when the user does not exist.
    */
   findAuthRecord(id: ObjectId): Promise<AuthRecord | null>;
+  /**
+   * Reads one user to manage him: the profile, the scope ids and the whole stored permission matrix.
+   * The filter decides who can be found, so callers build it with `withScope`.
+   *
+   * @param filter Scope-limited filter that selects exactly one user (by `_id`).
+   * @returns The record, or `null` when no user matches.
+   */
+  findManaged(filter: Filter<Document>): Promise<AuthRecord | null>;
+  /**
+   * Reads a page of users. The scope filter is combined with `withScope`, then the resource filters,
+   * the search and the cursor; the order is applied before the page is cut, with `_id` as the tie-breaker.
+   *
+   * @param scopeFilter Filter of the caller's perimeter (`usersScopeFilter`) and of the area (a group, the platform).
+   * @param filter Filters of the request (role, status, trash…).
+   * @param params Validated list parameters.
+   * @returns The users of the page and its `{ limit, next }`.
+   */
+  list(scopeFilter: Filter<Document>, filter: Filter<Document>, params: ListParams): Promise<UserPage>;
+  /**
+   * Inserts a new user document built by `toLegacyDocument`.
+   *
+   * @param document The document, with `_id`.
+   * @param session Transaction the write belongs to, if any.
+   * @returns The user as read back from the stored shape.
+   * @throws {Error} If the document has a field the backend does not own.
+   * @throws {MongoServerError} Duplicate key (`11000`) when the exact user name exists.
+   */
+  insert(document: Document, session?: ClientSession): Promise<MappedUser>;
+  /**
+   * Deletes a user document, but only while it is in the trash: the check and the delete are one operation.
+   *
+   * @param id Id of the user.
+   * @param session Transaction the write belongs to, if any.
+   * @returns `false` when the user does not exist or is not in the trash.
+   */
+  deleteTrashed(id: ObjectId, session?: ClientSession): Promise<boolean>;
   /**
    * Reads a user with the legacy password hash, to check a password outside the login.
    *
@@ -113,17 +173,19 @@ export interface UsersRepository {
    *
    * @param id Id of the user.
    * @param update `$set`/`$unset` update.
+   * @param session Transaction the write belongs to, if any.
    * @returns `false` when the user does not exist.
    * @throws {Error} If the update contains a field outside the owned fields or an operator other than `$set` and `$unset`.
    */
-  updateOwned(id: ObjectId, update: LegacyUserUpdate): Promise<boolean>;
+  updateOwned(id: ObjectId, update: LegacyUserUpdate, session?: ClientSession): Promise<boolean>;
   /**
    * Empties the legacy `tokens[]` so that the legacy platform disconnects the user at once (D-11).
    *
    * @param id Id of the user.
+   * @param session Transaction the write belongs to, if any.
    * @returns `false` when the user does not exist.
    */
-  clearLegacyTokens(id: ObjectId): Promise<boolean>;
+  clearLegacyTokens(id: ObjectId, session?: ClientSession): Promise<boolean>;
 }
 
 /**
@@ -143,6 +205,23 @@ export function createUsersRepository(databases: Databases): UsersRepository {
   const normalizedMatch = (candidate: Document, normalized: string): boolean =>
     [candidate['userName'], candidate['username']].some((name) => typeof name === 'string' && normalizeUsername(name) === normalized);
 
+  const toAuthRecord = (document: Document): AuthRecord => {
+    const mapped = fromLegacy(document as LegacyUserDocument);
+    const { companyIds, placeIds } = legacyScopeIds(document);
+    return {
+      ...mapped,
+      stored: {
+        userId: document['_id'] as ObjectId,
+        // A role outside the six stays as the marker: `buildPrincipal` gives such a user nothing.
+        role: mapped.user.role as StoredUser['role'],
+        groupId: document['groupId'] instanceof ObjectId ? document['groupId'] : null,
+        companyIds,
+        placeIds,
+        legacyPermissions: document['permissions'],
+      },
+    };
+  };
+
   return {
     findById: async (id) => {
       const document = await users().findOne({ _id: id }, { projection: USER_PROJECTION });
@@ -151,23 +230,33 @@ export function createUsersRepository(databases: Databases): UsersRepository {
 
     findAuthRecord: async (id) => {
       const document = await users().findOne({ _id: id }, { projection: AUTH_PROJECTION });
-      if (document === null) {
-        return null;
+      return document === null ? null : toAuthRecord(document);
+    },
+
+    findManaged: async (filter) => {
+      const document = await users().findOne(filter, { projection: MANAGE_PROJECTION, maxTimeMS: LIST_MAX_TIME_MS });
+      return document === null ? null : toAuthRecord(document);
+    },
+
+    list: async (scopeFilter, filter, params) => {
+      const match = withScope(scopeFilter, { $and: [filter, listSearch(params, USERS_LIST)] });
+      const documents = await users().aggregate(listPipeline(match, params, USERS_LIST, USER_PROJECTION), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
+      const { items, page } = pageOf(documents, params);
+      return { users: items.map((document) => fromLegacy(document as LegacyUserDocument)), page };
+    },
+
+    insert: async (document, session) => {
+      const foreign = leafPaths(document).filter((path) => path !== '_id' && !owned.has(path));
+      if (foreign.length > 0) {
+        throw new Error(`Refusing to write fields the backend does not own: ${foreign.join(', ')}`);
       }
-      const mapped = fromLegacy(document as LegacyUserDocument);
-      const { companyIds, placeIds } = legacyScopeIds(document);
-      return {
-        ...mapped,
-        stored: {
-          userId: id,
-          // A role outside the six stays as the marker: `buildPrincipal` gives such a user nothing.
-          role: mapped.user.role as StoredUser['role'],
-          groupId: document['groupId'] instanceof ObjectId ? document['groupId'] : null,
-          companyIds,
-          placeIds,
-          legacyPermissions: document['permissions'],
-        },
-      };
+      await users().insertOne({ ...document }, session === undefined ? {} : { session });
+      return fromLegacy(document as LegacyUserDocument);
+    },
+
+    deleteTrashed: async (id, session) => {
+      const result = await users().deleteOne({ _id: id, trash: true }, session === undefined ? {} : { session });
+      return result.deletedCount === 1;
     },
 
     findLoginRecordById: async (id) => {
@@ -195,12 +284,12 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       const normalized = normalizeUsername(username);
       const pattern = { $regex: `^${escapeRegExp(normalized)}$`, $options: 'i' };
       const candidates = await users()
-        .find({ $or: [{ userName: pattern }, { username: pattern }], ...(excludeId === undefined ? {} : { _id: { $ne: excludeId } }) }, { projection: { userName: 1, username: 1 }, limit: MAX_USERNAME_CANDIDATES })
+        .find({ $or: [{ userName: pattern }, { username: pattern }], ...(excludeId === undefined ? {} : { _id: { $ne: excludeId } }) }, { projection: { userName: 1, username: 1 }, limit: MAX_USERNAME_CANDIDATES, maxTimeMS: LIST_MAX_TIME_MS })
         .toArray();
       return candidates.some((candidate) => normalizedMatch(candidate, normalized));
     },
 
-    updateOwned: async (id, update) => {
+    updateOwned: async (id, update, session) => {
       const operators = Object.keys(update).filter((key) => key !== '$set' && key !== '$unset');
       if (operators.length > 0) {
         throw new Error('Refusing an update with operators other than $set and $unset');
@@ -210,12 +299,16 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       if (foreign.length > 0) {
         throw new Error(`Refusing to write fields the backend does not own: ${foreign.join(', ')}`);
       }
-      const result = await users().updateOne({ _id: id }, { $set: { ...update.$set }, ...(update.$unset === undefined ? {} : { $unset: { ...update.$unset } }) });
+      const result = await users().updateOne(
+        { _id: id },
+        { $set: { ...update.$set }, ...(update.$unset === undefined ? {} : { $unset: { ...update.$unset } }) },
+        session === undefined ? {} : { session },
+      );
       return result.matchedCount === 1;
     },
 
-    clearLegacyTokens: async (id) => {
-      const result = await users().updateOne({ _id: id }, { $set: { tokens: [] } });
+    clearLegacyTokens: async (id, session) => {
+      const result = await users().updateOne({ _id: id }, { $set: { tokens: [] } }, session === undefined ? {} : { session });
       return result.matchedCount === 1;
     },
   };

@@ -27,7 +27,7 @@ function build(users: Partial<UsersRepository>, groupFind: () => Promise<{ id: s
   const service = createMeService({
     config: { legacyPasswordPepper: new Secret('unit-test-pepper'), legacyPasswordCoexistence: true },
     users: unexpected,
-    credentials: { find: () => Promise.resolve(null), recordFailure: () => Promise.reject(new Error('unexpected')), recordSuccess: () => Promise.reject(new Error('unexpected')), upsertPassword: () => Promise.reject(new Error('unexpected')) },
+    credentials: { find: () => Promise.resolve(null), recordFailure: () => Promise.reject(new Error('unexpected')), recordSuccess: () => Promise.reject(new Error('unexpected')), upsertPassword: () => Promise.reject(new Error('unexpected')), isPasswordChangeRequired: () => Promise.resolve(false), clearLock: () => Promise.reject(new Error('unexpected')), delete: () => Promise.reject(new Error('unexpected')) },
     sessions: {} as MeServiceDeps['sessions'],
     groups: { find: groupFind },
     activityLog,
@@ -110,5 +110,26 @@ describe('summarizeScope', () => {
     assert.deepEqual(summarizeScope(principalOf('SA', { groupId: group })), { kind: 'group', groupId: group.toHexString() });
     assert.deepEqual(summarizeScope(principalOf('CA', { groupId: group, companyIds: [fixtureId('company', 1)], placeIds: [place, fixtureId('place', 2)] })), { kind: 'companies', groupId: group.toHexString(), companies: 1, places: 2 });
     assert.deepEqual(summarizeScope(principalOf('PA', { groupId: group, placeIds: [place] })), { kind: 'places', groupId: group.toHexString(), places: 1 });
+  });
+});
+
+describe('MeService: a new password equal to the current one after NFC', () => {
+  it('refuses a composed password written decomposed, and the other way round', async () => {
+    const pepper = new Secret('unit-test-pepper');
+    const composed = 'café-the-long-passphrase';
+    const decomposed = 'café-the-long-passphrase';
+    assert.notEqual(composed, decomposed);
+    for (const [current, next] of [[composed, decomposed], [decomposed, composed]]) {
+      const service = createMeService({
+        config: { legacyPasswordPepper: pepper, legacyPasswordCoexistence: true },
+        users: { findLoginRecordById: () => Promise.resolve({ ...mapped(), legacyPasswordHash: legacyPasswordHash(current!, pepper) }) } as unknown as UsersRepository,
+        credentials: { find: () => Promise.resolve(null) } as unknown as MeServiceDeps['credentials'],
+        sessions: {} as MeServiceDeps['sessions'],
+        groups: { find: () => Promise.resolve(null) },
+        activityLog: memoryActivityLog(),
+        now: () => Date.now(),
+      });
+      await assert.rejects(service.changePassword(principal, new ObjectId(), { currentPassword: current!, newPassword: next! }, CLIENT), { code: 'VALIDATION_ERROR', details: [{ field: 'newPassword', issue: 'reused' }] });
+    }
   });
 });

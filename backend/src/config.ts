@@ -54,6 +54,8 @@ export interface Config {
   readonly rateLimitRefreshPerIp: number;
   /** Username availability checks per minute allowed to a user (`RATE_LIMIT_USERNAME_CHECK_PER_USER`). */
   readonly rateLimitUsernameCheckPerUser: number;
+  /** Creations and password resets of users per minute allowed to a user (`RATE_LIMIT_USER_CREDENTIALS_PER_USER`): each costs a scrypt run. */
+  readonly rateLimitUserCredentialsPerUser: number;
   /** Requests per minute allowed to a user on the `/v1` API (`RATE_LIMIT_API_PER_USER`). */
   readonly rateLimitApiPerUser: number;
   /** Failed authentications per minute allowed to a client IP on `/v1` (`RATE_LIMIT_UNAUTHENTICATED_PER_IP`). */
@@ -324,6 +326,7 @@ export function loadConfig(env: Env): Config {
   const rateLimitLoginPerIp = readInteger(env, issues, 'RATE_LIMIT_LOGIN_PER_IP', 15, 1, 100000);
   const rateLimitRefreshPerIp = readInteger(env, issues, 'RATE_LIMIT_REFRESH_PER_IP', 30, 1, 100000);
   const rateLimitUsernameCheckPerUser = readInteger(env, issues, 'RATE_LIMIT_USERNAME_CHECK_PER_USER', 15, 1, 100000);
+  const rateLimitUserCredentialsPerUser = readInteger(env, issues, 'RATE_LIMIT_USER_CREDENTIALS_PER_USER', 20, 1, 100000);
   const rateLimitApiPerUser = readInteger(env, issues, 'RATE_LIMIT_API_PER_USER', 300, 1, 100000);
   const rateLimitUnauthenticatedPerIp = readInteger(env, issues, 'RATE_LIMIT_UNAUTHENTICATED_PER_IP', 300, 1, 100000);
   const activityLogRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_RETENTION_DAYS', 365, 1, 3650);
@@ -368,6 +371,7 @@ export function loadConfig(env: Env): Config {
     rateLimitLoginPerIp === undefined ||
     rateLimitRefreshPerIp === undefined ||
     rateLimitUsernameCheckPerUser === undefined ||
+    rateLimitUserCredentialsPerUser === undefined ||
     rateLimitApiPerUser === undefined ||
     rateLimitUnauthenticatedPerIp === undefined ||
     activityLogRetentionDays === undefined ||
@@ -393,6 +397,7 @@ export function loadConfig(env: Env): Config {
     rateLimitLoginPerIp,
     rateLimitRefreshPerIp,
     rateLimitUsernameCheckPerUser,
+    rateLimitUserCredentialsPerUser,
     rateLimitApiPerUser,
     rateLimitUnauthenticatedPerIp,
     activityLogRetentionDays,

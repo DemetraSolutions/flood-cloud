@@ -28,7 +28,7 @@ describe('credentials: password', () => {
     const userId = new ObjectId();
     await repository.upsertPassword(userId, { passwordHash: 'scrypt$1', legacyHashFingerprint: 'fp-1', passwordChanged: false, now: T0 });
     assert.deepEqual(await repository.find(userId), {
-      userId, passwordHash: 'scrypt$1', legacyHashFingerprint: 'fp-1', passwordChangedAt: null, failedLogins: 0, lockedUntil: null, lastLoginAt: null, createdAt: T0, updatedAt: T0,
+      userId, passwordHash: 'scrypt$1', legacyHashFingerprint: 'fp-1', passwordChangedAt: null, mustChangePassword: false, failedLogins: 0, lockedUntil: null, lastLoginAt: null, createdAt: T0, updatedAt: T0,
     });
     await repository.upsertPassword(userId, { passwordHash: 'scrypt$2', legacyHashFingerprint: null, passwordChanged: true, now: minutes(5) });
     const changed = (await repository.find(userId))!;
@@ -92,7 +92,7 @@ describe('credentials: progressive lock', () => {
     assert.deepEqual((await repository.recordFailure(userId, minutes(31))), { failedLogins: 1, lockedUntil: null });
     const fresh = new ObjectId();
     await repository.recordSuccess(fresh, T0);
-    assert.deepEqual(await repository.find(fresh), { userId: fresh, passwordHash: null, legacyHashFingerprint: null, passwordChangedAt: null, failedLogins: 0, lockedUntil: null, lastLoginAt: T0, createdAt: T0, updatedAt: T0 });
+    assert.deepEqual(await repository.find(fresh), { userId: fresh, passwordHash: null, legacyHashFingerprint: null, passwordChangedAt: null, mustChangePassword: false, failedLogins: 0, lockedUntil: null, lastLoginAt: T0, createdAt: T0, updatedAt: T0 });
   });
 });
 
@@ -104,5 +104,54 @@ describe('userCredentials validator and indexes', () => {
       await assert.rejects(collection.insertOne({ _id: new ObjectId(), ...bad }), /validation/i);
     }
     assert.deepEqual((await collection.indexes()).map((index) => index.name), ['_id_']);
+  });
+});
+
+describe('the flag of a provisional password', () => {
+  it('is set by an administrator, read on its own, kept by a rehash and cleared by the user', async () => {
+    const userId = new ObjectId();
+    assert.equal(await repository.isPasswordChangeRequired(userId), false);
+    await repository.upsertPassword(userId, { passwordHash: 'scrypt$1', legacyHashFingerprint: null, passwordChanged: true, mustChangePassword: true, now: T0 });
+    assert.equal(await repository.isPasswordChangeRequired(userId), true);
+    assert.equal((await repository.find(userId))!.mustChangePassword, true);
+    // A rehash at login does not say anything about the flag.
+    await repository.upsertPassword(userId, { passwordHash: 'scrypt$2', legacyHashFingerprint: null, passwordChanged: false, now: minutes(1) });
+    assert.equal(await repository.isPasswordChangeRequired(userId), true);
+    await repository.upsertPassword(userId, { passwordHash: 'scrypt$3', legacyHashFingerprint: null, passwordChanged: true, mustChangePassword: false, now: minutes(2) });
+    assert.equal(await repository.isPasswordChangeRequired(userId), false);
+    assert.equal((await repository.find(userId))!.mustChangePassword, false);
+  });
+
+  it('writes inside a transaction and deletes the credentials with or without one', async () => {
+    const first = new ObjectId();
+    const second = new ObjectId();
+    await repository.upsertPassword(first, { passwordHash: 'scrypt$1', legacyHashFingerprint: null, passwordChanged: true, now: T0 });
+    await repository.delete(first);
+    assert.equal(await repository.find(first), null);
+    await assert.rejects(
+      ctx.databases.transaction(async (session) => {
+        await repository.upsertPassword(second, { passwordHash: 'scrypt$2', legacyHashFingerprint: null, passwordChanged: true, now: T0 }, session);
+        throw new Error('abort');
+      }),
+      /abort/,
+    );
+    assert.equal(await repository.find(second), null);
+    await ctx.databases.transaction(async (session) => {
+      await repository.upsertPassword(second, { passwordHash: 'scrypt$2', legacyHashFingerprint: null, passwordChanged: true, now: T0 }, session);
+    });
+    await ctx.databases.transaction((session) => repository.delete(second, session));
+    assert.equal(await repository.find(second), null);
+  });
+});
+
+describe('clearLock', () => {
+  it('zeroes the counter and the lock, with or without a transaction', async () => {
+    const userId = new ObjectId();
+    await repository.recordFailure(userId, T0);
+    await repository.clearLock(userId, minutes(1));
+    assert.deepEqual([(await repository.find(userId))!.failedLogins, (await repository.find(userId))!.lockedUntil], [0, null]);
+    await repository.recordFailure(userId, T0);
+    await ctx.databases.transaction((session) => repository.clearLock(userId, minutes(2), session));
+    assert.equal((await repository.find(userId))!.failedLogins, 0);
   });
 });

@@ -133,6 +133,17 @@ describe('mountRoutes with user routes', () => {
     assert.match(mountMessage([userRoute({ path: '/g/:groupIds/places', auth: grouped })], both), /exactly when/);
   });
 
+  it('accepts allowWithPendingPasswordChange only as true on a user route', () => {
+    mountRoutes(express.Router(), [userRoute({ auth: { kind: 'user', permission: 'places:read', allowWithPendingPasswordChange: true } })], options);
+    for (const value of [false, 'yes', null, 1]) {
+      assert.match(mountMessage([userRoute({ auth: { kind: 'user', permission: 'places:read', allowWithPendingPasswordChange: value } })], options), /allowWithPendingPasswordChange can only be true/);
+    }
+    assert.match(
+      mountMessage([route({ auth: { kind: 'anonymous', reason: 'public test route', allowWithPendingPasswordChange: true } })], { allowedAuth: ['anonymous'], ...withLimit }),
+      /only user routes can allow a pending password change/,
+    );
+  });
+
   it('requires the group access dependencies for a group route', () => {
     const grouped = { kind: 'user', permission: 'places:read', group: true };
     assert.match(mountMessage([userRoute({ path: '/g/:groupId', auth: grouped })], options), /needs the groupAccess dependencies/);

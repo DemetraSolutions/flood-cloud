@@ -25,6 +25,8 @@ export type Profile = Omit<UserResponse, 'permissions'> & {
   readonly scope: ScopeSummary;
   /** Id and name of the group for SA, CA and PA; `null` otherwise. */
   readonly group: GroupSummary | null;
+  /** Whether the password was set by an administrator and must be replaced before anything else. */
+  readonly passwordChangeRequired: boolean;
 };
 
 /**
@@ -55,13 +57,15 @@ export function summarizeScope({ scope }: AuthPrincipal): ScopeSummary {
  * @param user The stored user.
  * @param principal The authenticated principal (permissions and scope recomputed on this request).
  * @param group Summary of the user's group, or `null`.
+ * @param passwordChangeRequired Whether a provisional password is still to be replaced.
  */
-export function toProfile(user: User, principal: AuthPrincipal, group: GroupSummary | null): Profile {
+export function toProfile(user: User, principal: AuthPrincipal, group: GroupSummary | null, passwordChangeRequired: boolean): Profile {
   return {
     ...toResponse(user),
     permissions: [...ALL_PERMISSIONS].filter((permission) => hasPermission(principal, permission)).sort(),
     canManagePermissions: principal.canManagePermissions,
     scope: summarizeScope(principal),
     group,
+    passwordChangeRequired,
   };
 }

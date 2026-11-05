@@ -21,6 +21,8 @@ export interface DataChange {
   readonly sensitive?: readonly string[];
   readonly requestId?: string;
   readonly ip?: string;
+  /** Scalar metadata under the keys the action allows (`user.deleted` accepts `role`). */
+  readonly metadata?: Readonly<Record<string, string | number | boolean | null>>;
 }
 
 /**
@@ -44,6 +46,6 @@ export async function recordDataChange(activityLog: ActivityLog, change: DataCha
     changes: truncated ? all.slice(0, MAX_CHANGES) : all,
     ...(change.requestId === undefined ? {} : { requestId: change.requestId }),
     ...(change.ip === undefined ? {} : { ip: change.ip }),
-    ...(truncated ? { metadata: { changesTruncated: true, changesTotal: all.length } } : {}),
+    ...(change.metadata === undefined && !truncated ? {} : { metadata: { ...change.metadata, ...(truncated ? { changesTruncated: true, changesTotal: all.length } : {}) } }),
   });
 }
