@@ -1,0 +1,24 @@
+<button
+  #trigger
+  type="button"
+  class="trigger"
+  [attr.aria-expanded]="open()"
+  [attr.aria-controls]="panelId"
+  [attr.aria-label]="label()"
+  [attr.title]="text()"
+  (click)="toggle()"
+>
+  <fc-icon name="more" />
+</button>
+<div
+  class="panel"
+  role="group"
+  [id]="panelId"
+  [attr.aria-label]="label()"
+  [hidden]="!open()"
+  [style.top.px]="top()"
+  [style.right.px]="right()"
+  (click)="onPanelClick()"
+>
+  <ng-content />
+</div>

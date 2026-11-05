@@ -8,6 +8,7 @@ export const ICONS = {
   'chevron-left': 'M15 6l-6 6 6 6',
   'chevron-right': 'M9 6l6 6-6 6',
   'chevron-up': 'M6 15l6-6 6 6',
+  more: 'M12 6v.01M12 12v.01M12 18v.01',
   'chevron-down': 'M6 9l6 6 6-6',
   sort: 'M8 9l4-4 4 4M8 15l4 4 4-4',
   check: 'M5 12.5l4.5 4.5L19 7.5',
@@ -20,6 +21,8 @@ export const ICONS = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
   logout: 'M10 4H5v16h5M15 8l4 4-4 4M19 12H9',
   home: 'M4 11l8-7 8 7M6 10v10h12V10',
+  users:
+    'M9 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 19c0-3 2.9-5 6.5-5s6.5 2 6.5 5M16 5.2a3.5 3.5 0 0 1 0 6.6M18 14.3c2 .6 3.5 2.2 3.5 4.7',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20c0-3.3 3.6-6 8-6s8 2.7 8 6',
 } as const;
 

@@ -6,7 +6,7 @@
 > - Un task si spunta solo quando il codice funziona, i test sono al 100% con typecheck verde, la documentazione è aggiornata (skill `docs-sync-checklist`) e l'utente ha confermato (`GEMINI.md` §1).
 > - Le decisioni `D-nn` (§0.4) vanno prese **prima** dei task che le citano.
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
-> - Stato al 2026-11-01: area 1 (fondamenta di backend e backoffice) completata.
+> - Stato al 2026-11-05: aree 1, 2 e 3 completate (restano 2.3.4 per l'area 4 e 2.6.6–2.6.7 dopo l'area 3).
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -387,16 +387,16 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
 - [x] **3.5.3** Avvio dell'app con `GET /v1/me`; stato della sessione a signal.
 - [x] **3.5.4** Guard `canMatch` per sessione e permesso, direttiva o helper `hasPermission` per menu e azioni (le route sono protette, non solo i menu come nel legacy).
 - [x] **3.5.5** Profilo, cambio password, elenco e revoca delle sessioni.
-- [ ] **3.5.6** Elenco utenti: filtri nell'URL, paginazione a cursore, quattro stati della vista, selezione multipla con conferma.
-- [ ] **3.5.7** Dettaglio, creazione e modifica dell'utente:
+- [x] **3.5.6** Elenco utenti: filtri nell'URL, paginazione a cursore, quattro stati della vista, selezione multipla con conferma.
+- [x] **3.5.7** Dettaglio, creazione e modifica dell'utente (con letture compatte di gruppi, aziende e punti vendita aggiunte nel passo 3D per decisione dell'utente del 2026-11-05, da estendere nelle aree 4, 6, 7):
   - ruoli proposti in base a chi crea;
   - scope scelto dai dati di riferimento (4.5.3);
   - errori `422` e `409` sui campi.
-- [ ] **3.5.8** Reset della password, disattivazione, cestino e ripristino dall'interfaccia.
+- [x] **3.5.8** Reset della password, disattivazione, cestino e ripristino dall'interfaccia.
 
 ### 3.6 Chiusura
-- [ ] **3.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`users`, `userCredentials`, `sessions`, `rateLimits`, `auditLog`).
-- [ ] **3.6.2** Revisione del `security_expert`; conferma dell'utente.
+- [x] **3.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`users`, `userCredentials`, `sessions`, `rateLimits`, `auditLog`).
+- [x] **3.6.2** Revisione del `security_expert` (a ogni passo 3A–3D); conferma dell'utente.
 
 ---
 
@@ -463,7 +463,7 @@ Task:
 ### 4.5 Backoffice
 - [ ] **4.5.1** Selettore del gruppo per PSA e D, con il gruppo nell'URL `/groups/:groupId/...` (D-10).
 - [ ] **4.5.2** Feature nel client: menu, route e sezioni condizionati dalle feature del gruppo corrente (guard e direttiva).
-- [ ] **4.5.3** Store dei dati di riferimento del gruppo (sostituisce lo store in memoria del legacy):
+- [ ] **4.5.3** *(prime letture compatte e selettore del gruppo già realizzati nel passo 3D)* Store dei dati di riferimento del gruppo (sostituisce lo store in memoria del legacy):
   - liste compatte per gruppo, con ETag;
   - riconvalida all'avvio e al cambio di gruppo;
   - invalidazione dopo ogni creazione, modifica o cancellazione;

@@ -10,6 +10,8 @@
         @for (column of columns(); track column.key) {
           <th
             scope="col"
+            [class.narrow]="column.narrow"
+            [class.hide-narrow]="column.hideNarrow"
             [attr.data-align]="column.align ?? 'start'"
             [attr.aria-sort]="ariaSort(column)"
           >
@@ -51,11 +53,20 @@
           <tr>
             @for (column of columns(); track column.key) {
               @if (column.key === rowHeader()) {
-                <th scope="row" [attr.data-align]="column.align ?? 'start'">
+                <th
+                  scope="row"
+                  [class.narrow]="column.narrow"
+                  [class.hide-narrow]="column.hideNarrow"
+                  [attr.data-align]="column.align ?? 'start'"
+                >
                   <ng-container *ngTemplateOutlet="cell; context: { $implicit: row, column }" />
                 </th>
               } @else {
-                <td [attr.data-align]="column.align ?? 'start'">
+                <td
+                  [class.narrow]="column.narrow"
+                  [class.hide-narrow]="column.hideNarrow"
+                  [attr.data-align]="column.align ?? 'start'"
+                >
                   <ng-container *ngTemplateOutlet="cell; context: { $implicit: row, column }" />
                 </td>
               }

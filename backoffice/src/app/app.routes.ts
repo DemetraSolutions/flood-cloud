@@ -1,11 +1,41 @@
-import { Routes } from '@angular/router';
+import { CanMatchFn, Routes } from '@angular/router';
 import {
   anonymousOnly,
   authenticated,
+  groupLanding,
   passwordChangeAllowed,
   permission,
+  role,
 } from './core/auth/guards';
 import { Shell } from './core/layout/shell';
+
+/**
+ * List, creation and detail of users under a path prefix (the group area and the platform
+ * area). Each route carries its full path so that the route parameters reach the pages as
+ * inputs without depending on parameter inheritance.
+ */
+function userRoutes(prefix: string, canMatch: CanMatchFn[]): Routes {
+  return [
+    {
+      path: prefix,
+      canMatch,
+      title: 'USERS.TITLE',
+      loadComponent: () => import('./features/users/users-list').then((m) => m.UsersList),
+    },
+    {
+      path: `${prefix}/new`,
+      canMatch: [...canMatch, permission('users:create')],
+      title: 'USERS.FORM.NEW_TITLE',
+      loadComponent: () => import('./features/users/user-form').then((m) => m.UserForm),
+    },
+    {
+      path: `${prefix}/:userId`,
+      canMatch,
+      title: 'USERS.FORM.EDIT_TITLE',
+      loadComponent: () => import('./features/users/user-form').then((m) => m.UserForm),
+    },
+  ];
+}
 
 /**
  * Routes of the application; pages are lazy-loaded and `title` is a dictionary key (translated
@@ -64,6 +94,16 @@ export const routes: Routes = [
               },
             ],
           },
+          {
+            path: 'groups',
+            pathMatch: 'full',
+            canMatch: [permission('users:read'), groupLanding],
+            title: 'GROUP_CHOOSER.TITLE',
+            loadComponent: () =>
+              import('./features/groups/group-chooser').then((m) => m.GroupChooser),
+          },
+          ...userRoutes('groups/:groupId/users', [permission('users:read')]),
+          ...userRoutes('platform/users', [role('PSA'), permission('users:read')]),
           {
             path: 'forbidden',
             title: 'ERRORS.FORBIDDEN.TITLE',

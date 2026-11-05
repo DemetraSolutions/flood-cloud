@@ -64,8 +64,18 @@ describe('visibleMenu', () => {
     expect(ITEMS[3].children?.length).toBe(2);
   });
 
-  it('allowAll allows anything and the initial menu has the home and profile entries', () => {
+  it('allowAll allows anything and the initial menu has the home, profile and users entries', () => {
     expect(allowAll('x')).toBe(true);
-    expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual(['home', 'profile']);
+    expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual(['home', 'profile', 'users']);
+  });
+
+  it('shows entries limited to some roles only to those roles', () => {
+    const items: MenuItem[] = [
+      { id: 'p', labelKey: 'P', icon: 'home', route: '/p', roles: ['PSA'] },
+    ];
+    expect(ids(visibleMenu(items, allowAll, allowAll, 'PSA'))).toEqual(['p']);
+    expect(ids(visibleMenu(items, allowAll, allowAll, 'D'))).toEqual([]);
+    expect(ids(visibleMenu(items, allowAll, allowAll))).toEqual([]);
+    expect(ids(visibleMenu(MENU, allowAll, allowAll, 'PSA'))).toContain('platform-users');
   });
 });

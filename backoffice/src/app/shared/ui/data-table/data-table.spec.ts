@@ -47,7 +47,7 @@ class Host {
   readonly columns: TableColumn<Row>[] = [
     { key: 'name', header: 'Nome', cell: (r) => r.name, sortable: true },
     { key: 'qty', header: 'Quantità', cell: (r) => String(r.qty), sortable: true, align: 'end' },
-    { key: 'note', header: 'Note' },
+    { key: 'note', header: 'Note', narrow: true, hideNarrow: true },
   ];
   readonly rows = signal<Row[]>(ROWS);
   readonly loading = signal(false);
@@ -77,6 +77,8 @@ describe('DataTable', () => {
     expect(root.querySelector('caption')?.textContent?.trim()).toBe('Prodotti');
     const headers = [...root.querySelectorAll('thead th')];
     expect(headers.map((h) => h.getAttribute('scope'))).toEqual(['col', 'col', 'col']);
+    expect(headers[2].classList.contains('hide-narrow')).toBe(true);
+    expect(headers[0].classList.contains('hide-narrow')).toBe(false);
     const firstRow = root.querySelector('tbody tr')!;
     expect(firstRow.querySelector('th')?.getAttribute('scope')).toBe('row');
     expect(firstRow.querySelector('th')?.textContent?.trim()).toBe('Alfa');
@@ -84,6 +86,9 @@ describe('DataTable', () => {
     expect(cells[0].textContent?.trim()).toBe('3');
     expect(cells[0].getAttribute('data-align')).toBe('end');
     expect(cells[1].textContent?.trim()).toBe('');
+    expect(cells[1].classList.contains('narrow')).toBe(true);
+    expect(headers[2].classList.contains('narrow')).toBe(true);
+    expect(headers[0].classList.contains('narrow')).toBe(false);
     expect(root.querySelectorAll('tbody tr').length).toBe(2);
     expect(root.querySelector('table')?.hasAttribute('aria-busy')).toBe(false);
   });

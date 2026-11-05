@@ -17,6 +17,10 @@ export interface TableColumn<T> {
   readonly cell?: (row: T) => string;
   /** Adds a sort button to the header. */
   readonly sortable?: boolean;
+  /** Shrinks the column to its content (checkbox and similar narrow columns). */
+  readonly narrow?: boolean;
+  /** Hides the column when the table container is narrow (it stays available elsewhere). */
+  readonly hideNarrow?: boolean;
   /** Text alignment; numbers and amounts should use `end`. */
   readonly align?: 'start' | 'end';
 }

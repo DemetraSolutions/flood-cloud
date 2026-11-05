@@ -12,15 +12,17 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { TPipe } from '../i18n/t-pipe';
 import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { Icon } from '../../shared/ui/icon/icon';
+import { GroupContext } from '../groups/group-context';
+import { GroupSelector } from './group-selector';
 import { LanguageSelector } from './language-selector';
 import { SessionService } from '../session/session.service';
-import { allowAll, MENU_ITEMS, visibleMenu } from './menu';
+import { allowAll, MENU_ITEMS, MenuItem, visibleMenu } from './menu';
 import { PageAnnouncer } from './page-announcer';
 import { ThemeSelector } from './theme-selector';
 import { UserMenu } from './user-menu';
 
 /**
- * Application shell: skip link, header (name, theme and language selectors, user menu), side menu that
+ * Application shell: skip link, header (name, group selector for PSA and dealers, theme and language selectors, user menu), side menu that
  * collapses to a drawer on small screens, the `<main>` content area and a live region that
  * announces page changes.
  */
@@ -30,6 +32,7 @@ import { UserMenu } from './user-menu';
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
+    GroupSelector,
     Icon,
     IconButton,
     LanguageSelector,
@@ -52,6 +55,7 @@ export class Shell {
 
   private readonly session = inject(SessionService);
   private readonly menuItems = inject(MENU_ITEMS);
+  protected readonly groups = inject(GroupContext);
 
   /** The side menu is offered only to a fully signed-in user (not while a password change is pending). */
   protected readonly showNav = computed(() => this.session.status() === 'authenticated');
@@ -61,8 +65,21 @@ export class Shell {
    * Enabled features arrive with task 4.5.2: until then every feature is considered enabled.
    */
   protected readonly menu = computed(() =>
-    visibleMenu(this.menuItems, (permission) => this.session.can(permission), allowAll),
+    visibleMenu(
+      this.menuItems,
+      (permission) => this.session.can(permission),
+      allowAll,
+      this.session.me()?.role,
+    ),
   );
+
+  /** Router link of an entry: group pages point to the working group once there is one. */
+  protected link(item: MenuItem): string {
+    const groupId = this.groups.groupId();
+    return item.groupPath === undefined || groupId === null
+      ? item.route
+      : `/groups/${groupId}/${item.groupPath}`;
+  }
 
   /** Whether the drawer is open (only meaningful on small screens). */
   protected readonly menuOpen = signal(false);

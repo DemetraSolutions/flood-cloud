@@ -1,4 +1,10 @@
-import { readStorage, writeStorage } from './storage';
+import {
+  readSessionStorage,
+  readStorage,
+  removeSessionStorage,
+  writeSessionStorage,
+  writeStorage,
+} from './storage';
 
 describe('storage', () => {
   afterEach(() => {
@@ -30,6 +36,33 @@ describe('storage', () => {
     });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     writeStorage('fc.test', 'x');
+    expect(warn).toHaveBeenCalledOnce();
+  });
+});
+
+describe('session storage', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sessionStorage.clear();
+  });
+
+  it('round-trips and removes a value', () => {
+    writeSessionStorage('fc.test', 'x');
+    expect(readSessionStorage('fc.test')).toBe('x');
+    removeSessionStorage('fc.test');
+    expect(readSessionStorage('fc.test')).toBeNull();
+  });
+
+  it.each([
+    ['getItem', () => readSessionStorage('k')],
+    ['setItem', () => writeSessionStorage('k', 'v')],
+    ['removeItem', () => removeSessionStorage('k')],
+  ] as const)('logs and carries on when %s fails', (method, run) => {
+    vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(run() ?? null).toBeNull();
     expect(warn).toHaveBeenCalledOnce();
   });
 });

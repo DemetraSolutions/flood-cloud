@@ -60,6 +60,28 @@ export function usersScopeFilter(principal: Pick<AuthPrincipal, 'role' | 'scope'
 }
 
 /**
+ * Filter restricting `common.groups` to the groups inside a perimeter: all of them for the platform, the groups
+ * of the dealer, the own group for the group scopes (`group`, `companies`, `places`). Combine with {@link withScope}.
+ *
+ * @param scope Scope of the caller.
+ * @returns A MongoDB filter; it matches nothing for `none`.
+ */
+export function groupsScopeFilter(scope: Scope): Filter<Document> {
+  switch (scope.kind) {
+    case 'platform':
+      return {};
+    case 'dealer':
+      return { _id: { $in: [...scope.groupIds].map((hex) => ObjectId.createFromHexString(hex)) } };
+    case 'group':
+    case 'companies':
+    case 'places':
+      return { _id: scope.groupId };
+    case 'none':
+      return NOTHING;
+  }
+}
+
+/**
  * Filter restricting `companies` of a group database (already resolved from a verified group
  * access) to the companies inside a perimeter. Combine with {@link withScope}.
  *

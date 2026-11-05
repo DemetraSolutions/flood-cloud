@@ -1,5 +1,7 @@
 :host {
   display: flex;
+  min-inline-size: 0;
+  max-inline-size: 100vw;
   flex-direction: column;
   min-block-size: 100vh;
 }
@@ -43,6 +45,10 @@ header {
   display: flex;
   gap: var(--space-3);
   margin-inline-start: auto;
+}
+
+.tools fc-group-selector {
+  inline-size: 16rem;
 }
 
 .tools fc-theme-selector,
@@ -141,6 +147,10 @@ main:focus {
     z-index: calc(var(--z-drawer) - 1);
     display: block;
     background: var(--color-overlay);
+  }
+
+  .tools fc-group-selector {
+    inline-size: 16rem;
   }
 
   .tools fc-theme-selector,

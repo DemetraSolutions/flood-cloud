@@ -79,6 +79,7 @@ src/
     auth/                      # login, refresh, logout, middleware Bearer, stato dell'account
     sessions/                  # repository e audit delle sessioni
     me/                        # profilo, cambio password, proprie sessioni
+    reference/                 # letture compatte di gruppi, aziende e punti vendita per i selettori
   tools/profile-legacy/        # CLI di profilazione in sola lettura (cli.ts → main.ts → profile.ts e analisi)
   shared/
     http/
@@ -185,6 +186,12 @@ Riferimento delle route in `doc/API.md`.
 - **Transazioni**: `Databases.transaction` sul common (replica set).
 - **Rate limit dedicati**: creazioni e reset 20 al minuto per amministratore (`RATE_LIMIT_USER_CREDENTIALS_PER_USER`, ogni operazione costa uno scrypt); disponibilità dello username 15 al minuto per utente.
 
+### reference (passo 3D)
+Letture compatte per i selettori del backoffice (decisione dell'utente del 2026-11-05), estese poi dalle aree 4, 6 e 7. Riferimento in `doc/API.md`.
+- `GET /v1/groups` (`groups:read`): PSA tutti i gruppi con filtri `status` e `trashed`; D i propri gruppi attivi e non cestinati; SA il proprio; per chi non è PSA i filtri `status` e `trashed=true` danno 403 e il filtro aggiunge sempre `status: true` e non cestinato.
+- `GET /v1/groups/{groupId}/companies` (`companies:read`) e `GET /v1/groups/{groupId}/places` (`places:read`, filtro `companyId`): nel perimetro (`withScope` con i filtri di scope), non cestinati per default.
+- Liste a cursore standard con ricerca sul nome; proiezioni e mapper in allowlist (`id`, `name`, `status`, `trashed`, `companyId`): apiKey del gruppo, integrazioni e credenziali dei punti vendita non vengono mai lette.
+
 ## 7. Database
 **Cluster condiviso con il legacy** (`doc/Tasks.md` §0.1–0.2): stesse credenziali Atlas (D-02), stessi database. Il backend scrive solo nelle collection nuove e, su `users`, nei soli campi posseduti.
 
@@ -260,7 +267,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 - `test/integration/`: database reale (guardia, transazione tra common e gruppo, indici, readiness), profilazione e sua CLI (compreso un test che verifica l'assenza nel report di valori sentinella, chiavi di P.IVA, codici fiscali, hex e username), pipeline HTTP completa con `fetch` su porta effimera (`test/helpers/app.ts` monta l'app con route di prova e un logger in memoria), endpoint di salute, `run()` del server con processo simulato, avvio reale di `node src/server.ts` come processo figlio (avvio, `SIGTERM`, configurazione errata).
 - Oltre a `FLOOD_CLOUD_TEST_MONGO_URI` nessuna variabile richiesta: i test costruiscono la configurazione con valori fittizi.
 - **Isolamento** (`test/helpers/isolation.ts`): cluster legacy con due dealer e due gruppi ciascuno e casi standard (altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita, E, gruppo sospeso, cestinato o inesistente) da riusare per ogni endpoint.
-- Stato: 1041 test, coverage 100%.
+- Stato: 1063 test, coverage 100%.
 
 **CI** (`.github/workflows/backend.yml`): **disattivata** per decisione dell'utente del 2026-11-01, parte solo a mano (`workflow_dispatch`); i trigger su `push` e `pull_request` sono commentati nel file. Contenuto: MongoDB `mongo:8.0.34` col compose, Node 24.22.2, `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, `npm audit --audit-level=moderate`, `npm audit signatures`; job separato di secret scanning con gitleaks 8.30.1 (binario verificato con sha256) su tutta la storia del repository. Permessi `contents: read`, action pinnate per SHA.
 
@@ -278,7 +285,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 | 2026-11-05 | Sessione e profilo nel backoffice (3.5.1–3.5.5) | servizio di sessione con access token in memoria e refresh condiviso, sessione esclusiva per scheda, login, password provvisoria, guard per sessione e permesso, profilo, cambio password e proprie sessioni |
 
 ## 11. Backoffice
-SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Realizzati: fondamenta (1.7, 1.8), sessione, login, guard, profilo e proprie sessioni (3.5.1–3.5.5). La gestione utenti arriva con il passo 3D.
+SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Realizzati: fondamenta (1.7, 1.8), sessione, login, guard, profilo e proprie sessioni (3.5.1–3.5.5), gestione degli utenti con selettore del gruppo (3.5.6–3.5.8).
 
 ### 11.1 Comandi e dipendenze
 Dalla cartella `backoffice/`:
@@ -333,6 +340,16 @@ server/                      # server statico di produzione (§11.6)
 - **Shell** (`core/layout/`): link "Salta al contenuto", header con selettori di tema e lingua, menu laterale che sotto 48rem diventa un cassetto (pulsante di chiusura, sfondo cliccabile, Esc, pagina dietro `inert`, focus restituito al pulsante Menu), annuncio del cambio pagina in una regione live, titoli di pagina tradotti. Il menu è una configurazione (`menu.ts`) filtrata da `visibleMenu(items, can, hasFeature)`; oggi i predicati lasciano tutto visibile, finché sessione e feature del gruppo non arrivano (3.5.4, 4.5.2). Voci: Home.
 - **Route** lazy: `/login` fuori dalla shell (solo anonimi); dentro la shell (solo autenticati) `''` (home), `/change-password`, `/profile` e `/profile/sessions` (permesso `profile:read`), `forbidden` (403), `error` (errore generico con request id opzionale), `**` (404).
 
+### 11.6 Server statico e container
+- **Server** (`server/`): Node 24 senza dipendenze, TypeScript con type stripping. Configurazione validata all'avvio: `API_BASE_URL` (obbligatoria, stesse regole di `apiBaseUrl`), `PORT` (default 8080), `STATIC_ROOT`.
+  - `GET /config.json` generato in memoria (`no-store`); `GET /healthz` per GKE.
+  - File statici solo con `GET`/`HEAD` (altri metodi 405 con `Allow`), risoluzione sicura dei percorsi (400 per encoding errati, null byte, backslash, segmenti `.`/`..` e segmenti oltre 255 byte; 414 oltre 2048 caratteri; 404 per symlink fuori dalla root), MIME da tabella, `ETag`/304, precompressi `.br`/`.gz` con `Vary`. Asset con hash `immutable`, il resto `no-cache`. Fallback su `index.html` per le navigazioni.
+  - Header su ogni risposta, anche sugli errori di protocollo di Node: CSP `default-src 'none'; script-src 'self'; style-src 'self' 'nonce-…'; img-src 'self' data:; font-src 'self'; connect-src 'self' <origine API>; manifest-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types angular angular#bundler`, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, COOP, CORP, `Permissions-Policy`, `X-Request-Id` generato dal server. Il nonce (16 byte casuali per richiesta) sostituisce `__CSP_NONCE__` in `index.html`, servito `no-store`; il build di produzione non inserisce stili critici inline (`inlineCritical: false`).
+  - Timeout: header 15 s, richiesta 30 s, inattività del socket 30 s, keep-alive 5 s. Log JSON di accesso (percorso senza query, troncato a 256 caratteri). Arresto ordinato su `SIGTERM` (drenaggio 5 s, uscita forzata 25 s).
+- **Container** (`backoffice/Dockerfile`, contesto `backoffice/`): build su `node:24.22.2-bookworm`, runtime `node:24.22.2-bookworm-slim` (entrambe per digest) senza npm, npx e corepack, utente 1000, solo `dist/` e `server/`, compatibile con filesystem in sola lettura, porta 8080. `.dockerignore` esclude dipendenze, build, `.env*`, chiavi e log a ogni livello.
+- **CI** (`.github/workflows/backoffice.yml`): disattivata come quella del backend (solo `workflow_dispatch`). Contenuto: `npm ci --ignore-scripts`, test Angular, test e typecheck del server, build, `npm audit --audit-level=moderate`, `npm audit signatures`.
+- **Stato dei test**: 821 test Angular e 56 del server, coverage 100%.
+
 ### 11.7 Sessione e autenticazione (passo 3C)
 - **Token** (D-12): access token solo in memoria nel `SessionService` (mai in storage, URL, log o errori); refresh token, scadenza e id della sessione in `sessionStorage` (`fc.session`), validati in lettura (formato `fc_rt_` + 43 caratteri) e rimossi a logout e scadenza. `localStorage` contiene solo le preferenze di tema e lingua.
 - **Interceptor** (ordine `apiBaseUrl → auth → apiError`): `Authorization: Bearer` solo sulle richieste verso l'API (`/v1/…`, mai su `config.json`, dizionari o altri host), escluse login e refresh. `401 TOKEN_EXPIRED` ⇒ un unico refresh condiviso tra le richieste concorrenti e un solo nuovo tentativo; altri `401` ⇒ fine sessione e login con `returnUrl` interno validato; `403 PASSWORD_CHANGE_REQUIRED` ⇒ pagina di cambio password. Un refresh rifiutato (4xx) chiude la sessione; errori di rete, 429 e 5xx la lasciano intatta.
@@ -342,12 +359,9 @@ server/                      # server statico di produzione (§11.6)
 - **Pagine**: login (Signal Forms, messaggio generico per credenziali errate, attesa indicata con i secondi di `Retry-After` sul 429, password svuotata e nascosta dopo un errore); cambio password obbligatorio o volontario con gli errori del backend sui campi; profilo con modifica di nome, cognome, email, telefono e lingua (solo i campi cambiati); elenco e revoca delle proprie sessioni; menu utente con Esci ed Esci da tutti i dispositivi. Se il caricamento del profilo fallisce dopo il login, la sessione viene revocata anche sul server.
 - **Errori imprevisti**: `ErrorHandler` globale che scrive in console e mostra un toast generico.
 
-### 11.6 Server statico e container
-- **Server** (`server/`): Node 24 senza dipendenze, TypeScript con type stripping. Configurazione validata all'avvio: `API_BASE_URL` (obbligatoria, stesse regole di `apiBaseUrl`), `PORT` (default 8080), `STATIC_ROOT`.
-  - `GET /config.json` generato in memoria (`no-store`); `GET /healthz` per GKE.
-  - File statici solo con `GET`/`HEAD` (altri metodi 405 con `Allow`), risoluzione sicura dei percorsi (400 per encoding errati, null byte, backslash, segmenti `.`/`..` e segmenti oltre 255 byte; 414 oltre 2048 caratteri; 404 per symlink fuori dalla root), MIME da tabella, `ETag`/304, precompressi `.br`/`.gz` con `Vary`. Asset con hash `immutable`, il resto `no-cache`. Fallback su `index.html` per le navigazioni.
-  - Header su ogni risposta, anche sugli errori di protocollo di Node: CSP `default-src 'none'; script-src 'self'; style-src 'self' 'nonce-…'; img-src 'self' data:; font-src 'self'; connect-src 'self' <origine API>; manifest-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types angular angular#bundler`, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, COOP, CORP, `Permissions-Policy`, `X-Request-Id` generato dal server. Il nonce (16 byte casuali per richiesta) sostituisce `__CSP_NONCE__` in `index.html`, servito `no-store`; il build di produzione non inserisce stili critici inline (`inlineCritical: false`).
-  - Timeout: header 15 s, richiesta 30 s, inattività del socket 30 s, keep-alive 5 s. Log JSON di accesso (percorso senza query, troncato a 256 caratteri). Arresto ordinato su `SIGTERM` (drenaggio 5 s, uscita forzata 25 s).
-- **Container** (`backoffice/Dockerfile`, contesto `backoffice/`): build su `node:24.22.2-bookworm`, runtime `node:24.22.2-bookworm-slim` (entrambe per digest) senza npm, npx e corepack, utente 1000, solo `dist/` e `server/`, compatibile con filesystem in sola lettura, porta 8080. `.dockerignore` esclude dipendenze, build, `.env*`, chiavi e log a ogni livello.
-- **CI** (`.github/workflows/backoffice.yml`): disattivata come quella del backend (solo `workflow_dispatch`). Contenuto: `npm ci --ignore-scripts`, test Angular, test e typecheck del server, build, `npm audit --audit-level=moderate`, `npm audit signatures`.
-- **Stato dei test**: 574 test Angular e 56 del server, coverage 100%.
+### 11.8 Gestione utenti (passo 3D)
+- **Contesto del gruppo** (D-10, `core/groups/group-context.ts`): il gruppo di lavoro è nell'URL (`/groups/:groupId/...`). SA, CA e PA usano il gruppo del profilo; PSA e dealer lo scelgono dal selettore nell'header (combobox accessibile con ricerca su `GET /v1/groups`) o dalla pagina `/groups`. Il gruppo diventa quello di lavoro solo dopo una risposta positiva del backend; la preferenza (`fc.lastGroupId` e nome) sta in `sessionStorage`, validata in lettura e rimossa al logout.
+- **Menu e route**: "Utenti" (`users:read`) verso `/groups/{gruppo}/users`; "Utenti di piattaforma" solo per il PSA (`/platform/users`). Route lazy `groups/:groupId/users`, `.../new`, `.../:userId` e `platform/users[...]`; guard per permesso e ruolo (il backend resta l'autorità).
+- **Elenco** (`features/users/users-list`): filtri `q`, ruolo, stato e cestino, ordinamento e paginazione a cursore nell'URL; quattro stati; azioni di riga in un menu compatto (`shared/ui/actions-menu`) secondo i permessi, nascoste sulla riga dell'utente corrente; selezione multipla con cestino e ripristino in blocco ed esiti per riga. La pagina non scorre in orizzontale (tabella in un contenitore scorrevole con `position: relative`, colonne ridotte sotto 800 px di contenitore).
+- **Form** (`user-form`): ruoli proposti in base a chi opera; perimetro scelto dalle letture di riferimento (CA: aziende; PA ed E: punti vendita, filtrabili per azienda se l'utente può leggere le aziende); username ASCII con verifica di disponibilità; password provvisoria con generatore locale (`crypto.getRandomValues`, 16 caratteri, mostrata una volta, mai salvata né loggata); matrice dei permessi modificabile solo con `canManagePermissions`, altrimenti i default del ruolo limitati a quelli di chi crea, mostrati in sola lettura; errori `422`, `409` e `403` sui campi.
+- **Azioni** (`user-actions`): reset della password (dialog ricreato a ogni apertura, password azzerata alla chiusura), attiva e disattiva, cestino e ripristino, eliminazione definitiva solo dal cestino con conferma digitando lo username; tutte con conferma e messaggio di esito.

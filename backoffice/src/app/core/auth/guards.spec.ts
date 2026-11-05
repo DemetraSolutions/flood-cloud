@@ -3,7 +3,15 @@ import { CanMatchFn, Route, Router, UrlSegment, UrlTree } from '@angular/router'
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signIn } from '../../../testing/session';
-import { anonymousOnly, authenticated, passwordChangeAllowed, permission } from './guards';
+import {
+  anonymousOnly,
+  authenticated,
+  groupLanding,
+  passwordChangeAllowed,
+  permission,
+  role,
+} from './guards';
+import { GroupContext } from '../groups/group-context';
 
 beforeEach(() => {
   TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
@@ -90,5 +98,38 @@ describe('permission', () => {
 
   it('sends an anonymous visitor to /forbidden', () => {
     expect(serialized(run(permission('users:read')))).toBe('/forbidden');
+  });
+});
+
+describe('role', () => {
+  it('lets one of the allowed roles through', () => {
+    signIn({ role: 'PSA' });
+    expect(run(role('PSA', 'D'))).toBe(true);
+  });
+
+  it('sends other roles, and anonymous visitors, to /forbidden', () => {
+    expect(serialized(run(role('PSA')))).toBe('/forbidden');
+    signIn({ role: 'SA' });
+    expect(serialized(run(role('PSA')))).toBe('/forbidden');
+  });
+});
+
+describe('groupLanding', () => {
+  it('redirects to the users of the working group', () => {
+    signIn({ role: 'SA' });
+    expect(serialized(run(groupLanding))).toBe('/groups/665f1c2e9b1d4a0012ab34a1/users');
+  });
+
+  it('stays on the page when a PSA has not chosen a group', () => {
+    sessionStorage.clear();
+    signIn({ role: 'PSA' });
+    expect(run(groupLanding)).toBe(true);
+  });
+
+  it('uses the group chosen with the selector', () => {
+    signIn({ role: 'D' });
+    TestBed.inject(GroupContext).choose({ id: '665f1c2e9b1d4a0012ab34a2', name: 'Alfa' });
+    expect(serialized(run(groupLanding))).toBe('/groups/665f1c2e9b1d4a0012ab34a2/users');
+    sessionStorage.clear();
   });
 });

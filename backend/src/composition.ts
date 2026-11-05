@@ -17,6 +17,10 @@ import { createGroupSummaryRepository } from './modules/me/group-summary.reposit
 import { createMeController } from './modules/me/me.controller.ts';
 import { createMeRoutes } from './modules/me/me.routes.ts';
 import { createMeService } from './modules/me/me.service.ts';
+import { createReferenceController } from './modules/reference/reference.controller.ts';
+import { createReferenceRepository } from './modules/reference/reference.repository.ts';
+import { createReferenceRoutes } from './modules/reference/reference.routes.ts';
+import { createReferenceService } from './modules/reference/reference.service.ts';
 import { createSessionsRepository } from './modules/sessions/sessions.repository.ts';
 import { createCredentialsRepository } from './modules/users/credentials.repository.ts';
 import { createGroupDirectoryRepository } from './modules/users/group-directory.repository.ts';
@@ -47,7 +51,7 @@ export interface BackofficeDeps {
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile and the user management. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management and the reference lists. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -88,5 +92,10 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       now,
     }),
   );
-  return { routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules)], authenticate, groups };
+  const reference = createReferenceController(createReferenceService(createReferenceRepository(databases)));
+  return {
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createReferenceRoutes(reference)],
+    authenticate,
+    groups,
+  };
 }

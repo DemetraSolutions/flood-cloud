@@ -1,0 +1,233 @@
+<h1>{{ (isNew() ? 'USERS.FORM.NEW_TITLE' : 'USERS.FORM.EDIT_TITLE') | t }}</h1>
+
+@if (failed()) {
+  <fc-error-state
+    [title]="'USERS.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ 'USERS.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  @let current = user();
+  @if (current) {
+    <p class="summary">
+      <strong>{{ current.username }}</strong>
+      @if (current.trashed) {
+        <fc-status-badge tone="danger">{{ 'USERS.STATUS.TRASHED' | t }}</fc-status-badge>
+      } @else if (current.status === 'active') {
+        <fc-status-badge tone="success">{{ 'USERS.STATUS.ACTIVE' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge tone="warning">{{ 'USERS.STATUS.DISABLED' | t }}</fc-status-badge>
+      }
+    </p>
+    @if (!isSelf()) {
+      <div class="actions-bar">
+        @if (current.trashed) {
+          <button
+            *fcCan="'users:trash'"
+            fc-button
+            variant="secondary"
+            (click)="actions.run('restore', current)"
+          >
+            {{ 'USERS.ACTION.RESTORE' | t }}
+          </button>
+          <button
+            *fcCan="'users:delete'"
+            fc-button
+            variant="danger"
+            (click)="actions.run('delete', current)"
+          >
+            {{ 'USERS.ACTION.DELETE' | t }}
+          </button>
+        } @else {
+          <button
+            *fcCan="'users:update'"
+            fc-button
+            variant="secondary"
+            (click)="actions.run('resetPassword', current)"
+          >
+            {{ 'USERS.ACTION.RESET_PASSWORD' | t }}
+          </button>
+          <button
+            *fcCan="'users:update'"
+            fc-button
+            variant="secondary"
+            (click)="actions.run(current.status === 'active' ? 'disable' : 'enable', current)"
+          >
+            {{ (current.status === 'active' ? 'USERS.ACTION.DISABLE' : 'USERS.ACTION.ENABLE') | t }}
+          </button>
+          <button
+            *fcCan="'users:trash'"
+            fc-button
+            variant="secondary"
+            (click)="actions.run('trash', current)"
+          >
+            {{ 'USERS.ACTION.TRASH' | t }}
+          </button>
+        }
+      </div>
+    } @else {
+      <p class="note">{{ 'USERS.FORM.SELF' | t }}</p>
+    }
+  }
+
+  @if (isNew() || current) {
+    @if (!canWrite() && !isSelf()) {
+      <p class="note">{{ 'USERS.FORM.READ_ONLY' | t }}</p>
+    }
+    <form novalidate (submit)="onSubmit($event)">
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+      }
+      <fc-text-field
+        [formField]="userForm.username"
+        [label]="'USERS.FORM.USERNAME' | t"
+        autocomplete="off"
+        autocapitalize="none"
+        spellcheck="false"
+        [hint]="usernameHint()"
+        [error]="usernameError()"
+        (blurred)="userForm.username().markAsTouched()"
+      />
+      @if (isNew()) {
+        <fc-text-field
+          [formField]="userForm.password"
+          type="password"
+          autocomplete="new-password"
+          [label]="'USERS.FORM.PASSWORD' | t"
+          [hint]="'USERS.FORM.PASSWORD_HINT' | t"
+          [error]="error(userForm.password)"
+          (blurred)="userForm.password().markAsTouched()"
+        />
+        <fc-password-generator (generated)="onGenerated($event)" />
+      }
+      <fc-select
+        [formField]="userForm.role"
+        [label]="'USERS.FORM.ROLE' | t"
+        [options]="roleOptions()"
+        [error]="error(userForm.role)"
+        (blurred)="userForm.role().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="userForm.firstName"
+        [label]="'PROFILE.FIRST_NAME' | t"
+        [error]="error(userForm.firstName)"
+        (blurred)="userForm.firstName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="userForm.lastName"
+        [label]="'PROFILE.LAST_NAME' | t"
+        [error]="error(userForm.lastName)"
+        (blurred)="userForm.lastName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="userForm.email"
+        type="email"
+        [label]="'PROFILE.EMAIL' | t"
+        [error]="error(userForm.email)"
+        (blurred)="userForm.email().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="userForm.phone"
+        type="tel"
+        [label]="'PROFILE.PHONE' | t"
+        [error]="error(userForm.phone)"
+        (blurred)="userForm.phone().markAsTouched()"
+      />
+      <fc-select
+        [formField]="userForm.language"
+        [label]="'PROFILE.LANGUAGE' | t"
+        [options]="languages"
+        [error]="error(userForm.language)"
+        (blurred)="userForm.language().markAsTouched()"
+      />
+      <fc-select
+        [formField]="userForm.status"
+        [label]="'USERS.FORM.STATUS' | t"
+        [options]="statusOptions()"
+        [error]="error(userForm.status)"
+        (blurred)="userForm.status().markAsTouched()"
+      />
+
+      @if (scopeKind() === 'companies') {
+        <fc-reference-picker
+          [formField]="userForm.companyIds"
+          [label]="'USERS.FORM.COMPANIES' | t"
+          [loader]="companyLoader()"
+          [error]="error(userForm.companyIds)"
+          (blurred)="userForm.companyIds().markAsTouched()"
+        />
+      } @else if (scopeKind() === 'places') {
+        @if (showCompanyFilter()) {
+          <fc-select
+            [label]="'USERS.FORM.COMPANY_FILTER' | t"
+            [placeholder]="'USERS.FORM.ALL_COMPANIES' | t"
+            [options]="companyOptions()"
+            [value]="companyFilter()"
+            (valueChange)="companyFilter.set($event)"
+          />
+        }
+        <fc-reference-picker
+          [formField]="userForm.placeIds"
+          [label]="'USERS.FORM.PLACES' | t"
+          [loader]="placeLoader()"
+          [error]="error(userForm.placeIds)"
+          (blurred)="userForm.placeIds().markAsTouched()"
+        />
+      }
+
+      <fieldset class="matrix">
+        <legend>{{ 'USERS.FORM.PERMISSIONS' | t }}</legend>
+        @if (isNew() && canManagePermissions()) {
+          <fc-checkbox
+            [label]="'USERS.FORM.DEFAULT_PERMISSIONS' | t"
+            [checked]="useDefaultPermissions()"
+            (checkedChange)="useDefaultPermissions.set($event)"
+          />
+        } @else if (!matrixEditable()) {
+          <p class="note">
+            {{
+              (isNew() ? 'USERS.FORM.PERMISSIONS_DEFAULT_NOTE' : 'USERS.FORM.PERMISSIONS_READONLY')
+                | t
+            }}
+          </p>
+        }
+        @for (module of modules; track module) {
+          <fieldset class="module">
+            <legend>{{ moduleLabel(module) }}</legend>
+            <fc-checkbox
+              [formField]="userForm.permissions.modules[module].r"
+              [label]="'USERS.FORM.READ' | t"
+            />
+            <fc-checkbox
+              [formField]="userForm.permissions.modules[module].w"
+              [label]="'USERS.FORM.WRITE' | t"
+            />
+          </fieldset>
+        }
+        <fc-checkbox
+          [formField]="userForm.permissions.canManagePermissions"
+          [label]="'USERS.FORM.CAN_MANAGE' | t"
+        />
+      </fieldset>
+
+      <div class="actions">
+        @if (canWrite()) {
+          <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+            {{ (isNew() ? 'USERS.FORM.CREATE' : 'COMMON.SAVE') | t }}
+          </button>
+        }
+        <a [routerLink]="listRoute()">{{
+          (canWrite() ? 'COMMON.CANCEL' : 'USERS.FORM.BACK') | t
+        }}</a>
+      </div>
+    </form>
+  }
+}
+
+<fc-user-actions #actions (done)="onAction($event)" />

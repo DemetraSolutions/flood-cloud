@@ -1,0 +1,191 @@
+<header class="page-header">
+  <h1>{{ (isPlatform() ? 'USERS.PLATFORM_TITLE' : 'USERS.TITLE') | t }}</h1>
+  <a *fcCan="'users:create'" class="new" [routerLink]="newRoute()">{{ 'USERS.NEW' | t }}</a>
+</header>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'USERS.FILTER.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+  <fc-select
+    [label]="'USERS.FILTER.ROLE' | t"
+    [placeholder]="'USERS.FILTER.ALL_ROLES' | t"
+    [options]="roleOptions()"
+    [value]="role() ?? ''"
+    (valueChange)="onFilter('role', $event)"
+  />
+  <fc-select
+    [label]="'USERS.FILTER.STATUS' | t"
+    [placeholder]="'USERS.FILTER.ALL_STATUSES' | t"
+    [options]="statusOptions()"
+    [value]="status() ?? ''"
+    (valueChange)="onFilter('status', $event)"
+  />
+  <fc-checkbox
+    [label]="'USERS.FILTER.TRASHED' | t"
+    [checked]="showTrashed()"
+    (checkedChange)="onTrashed($event)"
+  />
+</form>
+
+@if (users.error()) {
+  <fc-error-state
+    [title]="'USERS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="users.reload()"
+  />
+} @else {
+  @if (selectable().length > 0) {
+    <div class="bulk">
+      <fc-checkbox
+        [label]="'USERS.SELECT_ALL' | t"
+        [checked]="allSelected()"
+        (checkedChange)="toggleAll($event)"
+      />
+      @if (selectedUsers().length > 0) {
+        <span role="status">{{ 'USERS.SELECTED' | t: { count: selectedUsers().length } }}</span>
+        @if (showTrashed()) {
+          <button
+            *fcCan="'users:trash'"
+            fc-button
+            variant="secondary"
+            (click)="actions.runBulk('restore', selectedUsers())"
+          >
+            {{ 'USERS.BULK_RESTORE' | t }}
+          </button>
+        } @else {
+          <button
+            *fcCan="'users:trash'"
+            fc-button
+            variant="danger"
+            (click)="actions.runBulk('trash', selectedUsers())"
+          >
+            {{ 'USERS.BULK_TRASH' | t }}
+          </button>
+        }
+      }
+    </div>
+  }
+
+  <fc-data-table
+    [caption]="'USERS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="'username'"
+    [loading]="users.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'USERS.EMPTY' | t"
+    [emptyMessage]="'USERS.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'users:create'" fcEmptyAction [routerLink]="newRoute()">{{ 'USERS.NEW' | t }}</a>
+    <ng-template fcCell="select" let-row>
+      @if (!isSelf(row)) {
+        <input
+          type="checkbox"
+          [checked]="isSelected(row)"
+          [attr.aria-label]="selectLabel(row)"
+          (change)="toggleRow(row, $any($event.target).checked)"
+        />
+      }
+    </ng-template>
+    <ng-template fcCell="username" let-row>
+      <a [routerLink]="detailRoute(row)">{{ row.username }}</a>
+    </ng-template>
+    <ng-template fcCell="status" let-row>
+      @if (row.trashed) {
+        <fc-status-badge tone="danger">{{ 'USERS.STATUS.TRASHED' | t }}</fc-status-badge>
+      } @else if (row.status === 'active') {
+        <fc-status-badge tone="success">{{ 'USERS.STATUS.ACTIVE' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge tone="warning">{{ 'USERS.STATUS.DISABLED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      @if (!isSelf(row) && canAct()) {
+        <fc-actions-menu
+          [text]="'USERS.ACTIONS' | t"
+          [label]="rowLabel('USERS.ACTIONS_LABEL', row)"
+        >
+          @if (row.trashed) {
+            <button
+              *fcCan="'users:trash'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('USERS.ACTION.RESTORE_LABEL', row)"
+              (click)="actions.run('restore', row)"
+            >
+              {{ 'USERS.ACTION.RESTORE' | t }}
+            </button>
+            <button
+              *fcCan="'users:delete'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('USERS.ACTION.DELETE_LABEL', row)"
+              (click)="actions.run('delete', row)"
+            >
+              {{ 'USERS.ACTION.DELETE' | t }}
+            </button>
+          } @else {
+            <button
+              *fcCan="'users:update'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('USERS.ACTION.RESET_PASSWORD_LABEL', row)"
+              (click)="actions.run('resetPassword', row)"
+            >
+              {{ 'USERS.ACTION.RESET_PASSWORD' | t }}
+            </button>
+            @if (row.status === 'active') {
+              <button
+                *fcCan="'users:update'"
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="rowLabel('USERS.ACTION.DISABLE_LABEL', row)"
+                (click)="actions.run('disable', row)"
+              >
+                {{ 'USERS.ACTION.DISABLE' | t }}
+              </button>
+            } @else {
+              <button
+                *fcCan="'users:update'"
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="rowLabel('USERS.ACTION.ENABLE_LABEL', row)"
+                (click)="actions.run('enable', row)"
+              >
+                {{ 'USERS.ACTION.ENABLE' | t }}
+              </button>
+            }
+            <button
+              *fcCan="'users:trash'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('USERS.ACTION.TRASH_LABEL', row)"
+              (click)="actions.run('trash', row)"
+            >
+              {{ 'USERS.ACTION.TRASH' | t }}
+            </button>
+          }
+        </fc-actions-menu>
+      }
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="users.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-user-actions #actions (done)="users.reload()" />

@@ -398,6 +398,62 @@ Mai presenti password, hash, PIN o token. Le richieste di creazione e modifica a
   `available` è `false` anche se lo username appartiene a un utente nel cestino.
 - **Errori:** comuni; `422` (username non valido), `429 RATE_LIMITED`
 
+## Dati di riferimento (`/v1`)
+
+Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del backoffice, per esempio il gruppo, le aziende e i punti vendita nel perimetro di un utente. Le aree gruppi, aziende e punti vendita le estenderanno con le route di gestione complete. Parametri di lista comuni (`limit`, `cursor`, `sort`, `q`: vedi "Liste"); `sort` ammette solo `name` (default, anche `-name`), `q` cerca nel nome. Errori comuni a tutte e tre: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR` (parametri non validi, `cursor`/`format` per un cursore non valido).
+
+### GET /v1/groups
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `groups:read`
+- **Ruoli:** PSA: tutti i gruppi; D: i propri gruppi, solo attivi e non nel cestino; SA: il proprio gruppo, solo se attivo e non nel cestino. CA e PA non hanno il permesso (`403 FORBIDDEN`).
+- **Query:** parametri di lista; `status` (`active`, `suspended`); `trashed` (`true` per il cestino; default `false`, cestino escluso). I filtri `status` e `trashed=true` sono riservati al PSA: un altro ruolo che li usa riceve `403 FORBIDDEN`.
+- **Risposta:** `200`
+  ```json
+  {
+    "data": [
+      { "id": "665f1c2e9b1d4a0012ab34a1", "name": "Gruppo Esempio", "status": "active", "trashed": false }
+    ],
+    "page": { "limit": 50, "next": null }
+  }
+  ```
+  `status` è `active` o `suspended`.
+- **Errori:** comuni; `403 FORBIDDEN` anche per i filtri riservati
+
+### GET /v1/groups/{groupId}/companies
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `companies:read`
+- **Ruoli:** PSA, D e SA nel proprio perimetro, CA le proprie aziende; il PA non ha `companies:read` (`403`)
+- **Parametri di percorso:** `groupId` (24 caratteri esadecimali); un id malformato o fuori perimetro dà `404 NOT_FOUND`
+- **Query:** parametri di lista; `trashed` (`true` per il cestino; default `false`)
+- **Risposta:** `200`
+  ```json
+  {
+    "data": [
+      { "id": "665f1c2e9b1d4a0012ab34b2", "name": "Azienda Esempio Srl", "trashed": false }
+    ],
+    "page": { "limit": 50, "next": null }
+  }
+  ```
+- **Errori:** comuni; `404 NOT_FOUND`
+
+### GET /v1/groups/{groupId}/places
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `places:read`
+- **Ruoli:** i ruoli con il permesso, nel proprio perimetro
+- **Parametri di percorso:** `groupId` (come sopra)
+- **Query:** parametri di lista; `trashed` (default `false`); `companyId` (24 caratteri esadecimali) per limitare a un'azienda. Un'azienda fuori dal perimetro del chiamante non dà errore: la lista è **vuota**.
+- **Risposta:** `200`; `companyId` è `null` se il punto vendita non ha azienda
+  ```json
+  {
+    "data": [
+      { "id": "665f1c2e9b1d4a0012ab34b3", "name": "Punto Vendita Centro", "companyId": "665f1c2e9b1d4a0012ab34b2", "trashed": false },
+      { "id": "665f1c2e9b1d4a0012ab34b4", "name": "Punto Vendita Nord", "companyId": null, "trashed": false }
+    ],
+    "page": { "limit": 50, "next": null }
+  }
+  ```
+- **Errori:** comuni; `404 NOT_FOUND`
+
 ## Superficie server di punto vendita — `/store/v1`
 Nessun endpoint realizzato.
 

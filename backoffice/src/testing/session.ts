@@ -17,6 +17,7 @@ export function fakeProfile(overrides: Partial<Profile> = {}): Profile {
     status: 'active',
     language: 'it',
     permissions: ['profile:read', 'profile:update', 'sessions:revoke'],
+    canManagePermissions: false,
     passwordChangeRequired: false,
     scope: { kind: 'companies', groupId: '665f1c2e9b1d4a0012ab34a1', companies: 1, places: 2 },
     group: { id: '665f1c2e9b1d4a0012ab34a1', name: 'Gruppo Esempio' },

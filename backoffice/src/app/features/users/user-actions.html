@@ -1,0 +1,90 @@
+<fc-confirm-dialog
+  [heading]="confirmHeading()"
+  [message]="confirmMessage()"
+  [confirmLabel]="confirmLabel()"
+  [danger]="action() !== 'restore' && action() !== 'enable'"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="confirmAction()"
+/>
+
+<fc-dialog
+  [heading]="'USER_ACTIONS.TITLE.RESETPASSWORD' | t"
+  [open]="resetOpen()"
+  (openChange)="closeReset()"
+>
+  @if (resetOpen()) {
+    <form id="reset-password-form" novalidate (submit)="submitPassword($event)">
+      <p>{{ 'USER_ACTIONS.CONFIRM.RESETPASSWORD' | t: { username: username() } }}</p>
+      <p>{{ 'USER_ACTIONS.RESET_WARNING' | t }}</p>
+      <fc-text-field
+        type="password"
+        autocomplete="new-password"
+        [label]="'USER_ACTIONS.NEW_PASSWORD' | t"
+        [hint]="'USER_ACTIONS.PASSWORD_POLICY' | t"
+        [error]="passwordIssue()"
+        [value]="password()"
+        (valueChange)="onPassword($event)"
+      />
+      <fc-password-generator (generated)="onPassword($event)" />
+    </form>
+  }
+  <button fcDialogActions fc-button variant="secondary" [disabled]="busy()" (click)="closeReset()">
+    {{ 'COMMON.CANCEL' | t }}
+  </button>
+  <button fcDialogActions fc-button type="submit" form="reset-password-form" [loading]="busy()">
+    {{ 'USER_ACTIONS.LABEL.RESETPASSWORD' | t }}
+  </button>
+</fc-dialog>
+
+<fc-dialog
+  [heading]="'USER_ACTIONS.TITLE.DELETE' | t"
+  [open]="deleteOpen()"
+  (openChange)="deleteOpen.set($event)"
+>
+  <p>{{ 'USER_ACTIONS.CONFIRM.DELETE' | t: { username: username() } }}</p>
+  <fc-text-field
+    [label]="'USER_ACTIONS.TYPE_USERNAME' | t: { username: username() }"
+    autocomplete="off"
+    [value]="typedUsername()"
+    (valueChange)="typedUsername.set($event)"
+  />
+  <button
+    fcDialogActions
+    fc-button
+    variant="secondary"
+    [disabled]="busy()"
+    (click)="deleteOpen.set(false)"
+  >
+    {{ 'COMMON.CANCEL' | t }}
+  </button>
+  <button
+    fcDialogActions
+    fc-button
+    variant="danger"
+    [disabled]="!deleteReady()"
+    [loading]="busy()"
+    (click)="confirmAction()"
+  >
+    {{ 'USER_ACTIONS.LABEL.DELETE' | t }}
+  </button>
+</fc-dialog>
+
+<fc-dialog
+  [heading]="'USER_ACTIONS.RESULT_TITLE' | t"
+  [open]="resultOpen()"
+  (openChange)="resultOpen.set($event)"
+>
+  <p>{{ 'USER_ACTIONS.RESULT_INTRO' | t }}</p>
+  <ul>
+    @for (failure of failures(); track failure.username) {
+      <li>
+        <strong>{{ failure.username }}</strong> {{ failure.message }}
+      </li>
+    }
+  </ul>
+  <button fcDialogActions fc-button (click)="resultOpen.set(false)">
+    {{ 'COMMON.CLOSE' | t }}
+  </button>
+</fc-dialog>

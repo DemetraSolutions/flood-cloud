@@ -1,5 +1,6 @@
 import { InjectionToken } from '@angular/core';
 import { IconName } from '../../shared/ui/icon/icons';
+import { Role } from '../session/session.types';
 
 /** A navigation entry of the side menu. */
 export interface MenuItem {
@@ -13,6 +14,13 @@ export interface MenuItem {
   readonly route: string;
   /** Permission required to see the entry (checked against the session, see `visibleMenu`). */
   readonly permission?: string;
+  /** Roles that see the entry (any role when omitted). */
+  readonly roles?: readonly Role[];
+  /**
+   * Page of the working group (`/groups/{id}/<groupPath>`); `route` is the fallback while a
+   * PSA or dealer has not chosen a group.
+   */
+  readonly groupPath?: string;
   /** Feature (company/store module) that must be enabled to see the entry. */
   readonly feature?: string;
   /** Sub-entries; a group without any visible child is hidden. */
@@ -28,6 +36,22 @@ export const MENU: readonly MenuItem[] = [
     icon: 'user',
     route: '/profile',
     permission: 'profile:read',
+  },
+  {
+    id: 'users',
+    labelKey: 'MENU.USERS',
+    icon: 'users',
+    route: '/groups',
+    groupPath: 'users',
+    permission: 'users:read',
+  },
+  {
+    id: 'platform-users',
+    labelKey: 'MENU.PLATFORM_USERS',
+    icon: 'users',
+    route: '/platform/users',
+    permission: 'users:read',
+    roles: ['PSA'],
   },
 ];
 
@@ -46,23 +70,26 @@ export function allowAll(_value: string): boolean {
 }
 
 /**
- * Filters the menu by permission and enabled feature. Pure: the predicates come from the caller.
+ * Filters the menu by permission, role and enabled feature. Pure: the predicates come from the caller.
  * A group whose children are all hidden is hidden too.
  *
  * @param items Menu configuration.
  * @param can Whether the current user holds a permission.
  * @param hasFeature Whether a feature is enabled for the current context.
+ * @param role Role of the current user (if known), for entries limited to some roles.
  * @returns The visible entries (new objects where children were filtered).
  */
 export function visibleMenu(
   items: readonly MenuItem[],
   can: (permission: string) => boolean,
   hasFeature: (feature: string) => boolean,
+  role?: Role,
 ): MenuItem[] {
   const result: MenuItem[] = [];
   for (const item of items) {
     const allowed =
       (item.permission === undefined || can(item.permission)) &&
+      (item.roles === undefined || (role !== undefined && item.roles.includes(role))) &&
       (item.feature === undefined || hasFeature(item.feature));
     if (!allowed) {
       continue;
@@ -71,7 +98,7 @@ export function visibleMenu(
       result.push(item);
       continue;
     }
-    const children = visibleMenu(item.children, can, hasFeature);
+    const children = visibleMenu(item.children, can, hasFeature, role);
     if (children.length > 0) {
       result.push({ ...item, children });
     }

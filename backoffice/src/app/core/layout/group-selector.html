@@ -1,0 +1,60 @@
+<div class="field">
+  <label class="label" [for]="inputId">{{ 'GROUP_SELECTOR.LABEL' | t }}</label>
+  <input
+    class="control"
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    aria-autocomplete="list"
+    [id]="inputId"
+    [value]="inputValue()"
+    [placeholder]="'GROUP_SELECTOR.PLACEHOLDER' | t"
+    [attr.aria-expanded]="open()"
+    [attr.aria-controls]="listId"
+    [attr.aria-activedescendant]="activeId()"
+    (focus)="show()"
+    (click)="show()"
+    (input)="onInput($event)"
+    (keydown)="onKeydown($event)"
+  />
+  @if (open()) {
+    <div class="popup" (mousedown)="$event.preventDefault()">
+      <ul [id]="listId" role="listbox" [attr.aria-label]="'GROUP_SELECTOR.LABEL' | t">
+        @for (item of items(); track item.id; let i = $index) {
+          <li
+            role="option"
+            [id]="optionId(i)"
+            [class.active]="i === active()"
+            [attr.aria-selected]="item.id === context.groupId()"
+            (click)="activate(i)"
+          >
+            {{ item.name }}
+          </li>
+        }
+        @if (next() !== null) {
+          <li
+            role="option"
+            class="more"
+            [id]="optionId(items().length)"
+            [class.active]="items().length === active()"
+            aria-selected="false"
+            (click)="activate(items().length)"
+          >
+            {{ 'GROUP_SELECTOR.MORE' | t }}
+          </li>
+        }
+      </ul>
+      @if (loading()) {
+        <p class="note">{{ 'COMMON.LOADING' | t }}</p>
+      } @else if (failure(); as message) {
+        <p class="note" role="alert">
+          {{ message }}
+          <button type="button" (click)="retry()">{{ 'COMMON.RETRY' | t }}</button>
+        </p>
+      } @else if (items().length === 0) {
+        <p class="note">{{ 'GROUP_SELECTOR.EMPTY' | t }}</p>
+      }
+    </div>
+  }
+  <div class="visually-hidden" role="status">{{ announcement() }}</div>
+</div>

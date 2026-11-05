@@ -1,0 +1,28 @@
+fieldset {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+ul {
+  max-block-size: 14rem;
+  overflow-y: auto;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+li label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-min);
+}
+
+.count,
+.note {
+  margin: var(--space-2) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}

@@ -17,6 +17,9 @@
   }
   <span class="brand">{{ 'APP.NAME' | t }}</span>
   <div class="tools">
+    @if (showNav() && groups.canChoose()) {
+      <fc-group-selector />
+    }
     <fc-theme-selector />
     <fc-language-selector />
     <fc-user-menu />
@@ -42,7 +45,7 @@
         @for (item of menu(); track item.id) {
           <li>
             <a
-              [routerLink]="item.route"
+              [routerLink]="link(item)"
               routerLinkActive="active"
               ariaCurrentWhenActive="page"
               [routerLinkActiveOptions]="{ exact: item.route === '/' }"
@@ -55,7 +58,7 @@
                 @for (child of item.children; track child.id) {
                   <li>
                     <a
-                      [routerLink]="child.route"
+                      [routerLink]="link(child)"
                       routerLinkActive="active"
                       ariaCurrentWhenActive="page"
                     >

@@ -1,6 +1,8 @@
 import { inject } from '@angular/core';
 import { CanMatchFn, Router, UrlSegment, UrlTree } from '@angular/router';
+import { GroupContext } from '../groups/group-context';
 import { SessionService } from '../session/session.service';
+import { Role } from '../session/session.types';
 import { safeReturnUrl } from './return-url';
 
 /** Location the user was heading to, used as `returnUrl` when sending an anonymous user to login. */
@@ -55,3 +57,27 @@ export function permission(required: string): CanMatchFn {
   return () =>
     inject(SessionService).can(required) ? true : inject(Router).createUrlTree(['/forbidden']);
 }
+
+/**
+ * Requires one of the given roles (for areas that only make sense to them, e.g. platform
+ * users). Others land on `/forbidden`; the server still decides on every call.
+ *
+ * @param allowed Roles admitted.
+ */
+export function role(...allowed: Role[]): CanMatchFn {
+  return () => {
+    const current = inject(SessionService).me()?.role;
+    return current !== undefined && allowed.includes(current)
+      ? true
+      : inject(Router).createUrlTree(['/forbidden']);
+  };
+}
+
+/**
+ * Entry of the group area (`/groups`): with a working group it redirects to its users; a PSA
+ * or dealer who has not chosen one yet stays on the page that asks to choose.
+ */
+export const groupLanding: CanMatchFn = (): boolean | UrlTree => {
+  const groupId = inject(GroupContext).groupId();
+  return groupId === null ? true : inject(Router).createUrlTree(['/groups', groupId, 'users']);
+};

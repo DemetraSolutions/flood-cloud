@@ -1,0 +1,50 @@
+<fieldset [disabled]="disabled()" [attr.aria-describedby]="error() ? errorId : null">
+  <legend class="label">{{ label() }}</legend>
+  <fc-text-field
+    [label]="'REFERENCE_PICKER.SEARCH' | t"
+    type="search"
+    [value]="search()"
+    [disabled]="disabled()"
+    (valueChange)="onSearch($event)"
+  />
+  <p class="count">{{ 'REFERENCE_PICKER.SELECTED' | t: { count: value().length } }}</p>
+  <ul>
+    @for (item of items(); track item.id) {
+      <li>
+        <label>
+          <input
+            type="checkbox"
+            [checked]="selected().has(item.id)"
+            [attr.aria-invalid]="error() ? 'true' : null"
+            (change)="toggle(item.id, $any($event.target).checked)"
+            (blur)="blurred.emit()"
+          />
+          {{ item.name }}
+        </label>
+      </li>
+    }
+  </ul>
+  @if (loading()) {
+    <p class="note">{{ 'COMMON.LOADING' | t }}</p>
+  } @else if (failure(); as message) {
+    <p class="note" role="alert">
+      {{ message }}
+      <button fc-button variant="ghost" (click)="retry()">{{ 'COMMON.RETRY' | t }}</button>
+    </p>
+  } @else {
+    @if (items().length === 0) {
+      <p class="note">{{ 'REFERENCE_PICKER.EMPTY' | t }}</p>
+    }
+    @if (next() !== null) {
+      <button fc-button variant="secondary" (click)="loadMore()">
+        {{ 'REFERENCE_PICKER.MORE' | t }}
+      </button>
+    }
+  }
+  <div class="error" [id]="errorId" aria-live="polite">
+    @if (error()) {
+      <fc-icon name="error" />
+      <span>{{ error() }}</span>
+    }
+  </div>
+</fieldset>

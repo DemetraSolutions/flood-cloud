@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
+import { provideRouter, Router, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { signIn } from '../testing/session';
 import { App } from './app';
@@ -10,7 +10,11 @@ import { routes } from './app.routes';
 
 function setup() {
   TestBed.configureTestingModule({
-    providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes)],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      provideRouter(routes, withComponentInputBinding()),
+    ],
   });
 }
 
@@ -114,5 +118,55 @@ describe('routes', () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/profile/sessions');
     expect(TestBed.inject(Router).url).toBe('/forbidden');
+  });
+
+  describe('users', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a1';
+    const READ = ['users:read', 'profile:read'];
+    const sa = (permissions: string[] = READ) => ({ role: 'SA' as const, permissions });
+    const psa = (permissions: string[] = READ) => ({
+      role: 'PSA' as const,
+      groupId: null,
+      group: null,
+      permissions,
+    });
+
+    async function go(url: string, profile: Parameters<typeof signIn>[0]) {
+      setup();
+      sessionStorage.clear();
+      signIn(profile);
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(url);
+      return (harness.routeNativeElement as HTMLElement).querySelector('main h1')?.textContent;
+    }
+
+    it.each([
+      [`/groups/${GROUP}/users`, sa(), '⟦USERS.TITLE⟧'],
+      [`/groups/${GROUP}/users/new`, sa([...READ, 'users:create']), '⟦USERS.FORM.NEW_TITLE⟧'],
+      [`/groups/${GROUP}/users/u1`, sa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
+      ['/platform/users', psa(), '⟦USERS.PLATFORM_TITLE⟧'],
+      ['/platform/users/new', psa([...READ, 'users:create']), '⟦USERS.FORM.NEW_TITLE⟧'],
+      ['/platform/users/u1', psa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
+      ['/groups', psa(), '⟦GROUP_CHOOSER.TITLE⟧'],
+    ])('lazy-loads %s', async (url, profile, expected) => {
+      expect(await go(url, profile)).toBe(expected);
+    });
+
+    it('sends the user of a group from /groups to the users of their group', async () => {
+      await go('/groups', sa());
+      expect(location()).toBe(`/groups/${GROUP}/users`);
+    });
+
+    it.each([
+      [`/groups/${GROUP}/users`, sa([])],
+      [`/groups/${GROUP}/users/new`, sa()],
+      ['/groups', sa([])],
+      ['/platform/users', sa()],
+      ['/platform/users', { ...psa([]) }],
+    ])('protects %s', async (url, profile) => {
+      await go(url, profile);
+      expect(location()).toBe('/forbidden');
+    });
   });
 });

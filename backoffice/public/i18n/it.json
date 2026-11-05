@@ -34,7 +34,9 @@
   },
   "MENU": {
     "HOME": "Home",
-    "PROFILE": "Profilo"
+    "PROFILE": "Profilo",
+    "USERS": "Utenti",
+    "PLATFORM_USERS": "Utenti di piattaforma"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -207,5 +209,171 @@
       "MISMATCH": "Le due password non coincidono.",
       "INVALID": "Valore non valido."
     }
+  },
+  "GROUP_SELECTOR": {
+    "LABEL": "Gruppo",
+    "PLACEHOLDER": "Cerca un gruppo",
+    "EMPTY": "Nessun gruppo trovato.",
+    "MORE": "Carica altri",
+    "RESULTS": "{count} gruppi trovati",
+    "BY_ID": "Gruppo …{id}"
+  },
+  "GROUP_CHOOSER": {
+    "TITLE": "Scegli un gruppo",
+    "MESSAGE": "Seleziona il gruppo su cui lavorare con il selettore in alto: vedrai i suoi utenti."
+  },
+  "REFERENCE_PICKER": {
+    "SEARCH": "Cerca per nome",
+    "SELECTED": "{count} selezionati",
+    "EMPTY": "Nessun elemento trovato.",
+    "MORE": "Carica altri"
+  },
+  "PASSWORD_GENERATOR": {
+    "GENERATE": "Genera una password casuale",
+    "SHOWN_ONCE": "Password generata (mostrata una sola volta):",
+    "COPY": "Copia",
+    "COPIED": "Password copiata negli appunti.",
+    "COPY_FAILED": "Impossibile copiare: selezionala e copiala a mano."
+  },
+  "USER_ACTIONS": {
+    "TITLE": {
+      "RESETPASSWORD": "Reimposta la password",
+      "ENABLE": "Attiva l'utente",
+      "DISABLE": "Disattiva l'utente",
+      "TRASH": "Sposta nel cestino",
+      "RESTORE": "Ripristina",
+      "DELETE": "Elimina definitivamente"
+    },
+    "CONFIRM": {
+      "RESETPASSWORD": "Imposta una nuova password provvisoria per «{username}».",
+      "ENABLE": "Attivare l'utente «{username}»?",
+      "DISABLE": "Disattivare l'utente «{username}»? Le sue sessioni terminano.",
+      "TRASH": "Spostare «{username}» nel cestino? Le sue sessioni terminano.",
+      "RESTORE": "Ripristinare l'utente «{username}»?",
+      "DELETE": "Eliminare definitivamente «{username}»? L'operazione non si può annullare."
+    },
+    "BULK": {
+      "TRASH": "Spostare nel cestino {count} utenti?",
+      "RESTORE": "Ripristinare {count} utenti?"
+    },
+    "LABEL": {
+      "RESETPASSWORD": "Reimposta",
+      "ENABLE": "Attiva",
+      "DISABLE": "Disattiva",
+      "TRASH": "Sposta nel cestino",
+      "RESTORE": "Ripristina",
+      "DELETE": "Elimina definitivamente"
+    },
+    "DONE": {
+      "RESETPASSWORD": "Password reimpostata.",
+      "ENABLE": "Utente attivato.",
+      "DISABLE": "Utente disattivato.",
+      "TRASH": "Utente spostato nel cestino.",
+      "RESTORE": "Utente ripristinato.",
+      "DELETE": "Utente eliminato."
+    },
+    "BULK_DONE": "Operazione completata su {count} utenti.",
+    "RESET_WARNING": "L'utente dovrà cambiare la password al prossimo accesso e le sue sessioni terminano.",
+    "NEW_PASSWORD": "Nuova password provvisoria",
+    "PASSWORD_POLICY": "Da 12 a 128 caratteri, diversa dal nome utente.",
+    "TYPE_USERNAME": "Per confermare digita «{username}»",
+    "RESULT_TITLE": "Esito dell'operazione",
+    "RESULT_INTRO": "L'operazione non è riuscita per questi utenti:"
+  },
+  "USERS": {
+    "TITLE": "Utenti",
+    "PLATFORM_TITLE": "Utenti di piattaforma",
+    "NEW": "Nuovo utente",
+    "LOAD_ERROR": "Impossibile caricare gli utenti",
+    "EMPTY": "Nessun utente",
+    "EMPTY_MESSAGE": "Nessun utente corrisponde ai filtri.",
+    "FORBIDDEN_TARGET": "Non puoi modificare questo utente.",
+    "SELECT_ALL": "Seleziona tutti gli utenti della pagina",
+    "SELECT_ROW": "Seleziona {username}",
+    "SELECTED": "{count} selezionati",
+    "BULK_TRASH": "Sposta nel cestino",
+    "BULK_RESTORE": "Ripristina",
+    "FILTER": {
+      "SEARCH": "Cerca",
+      "ROLE": "Ruolo",
+      "ALL_ROLES": "Tutti i ruoli",
+      "STATUS": "Stato",
+      "ALL_STATUSES": "Tutti gli stati",
+      "TRASHED": "Mostra il cestino"
+    },
+    "STATUS": {
+      "ACTIVE": "Attivo",
+      "DISABLED": "Disattivato",
+      "TRASHED": "Nel cestino"
+    },
+    "COLUMN": {
+      "SELECT": "Seleziona",
+      "USERNAME": "Nome utente",
+      "NAME": "Nome e cognome",
+      "ROLE": "Ruolo",
+      "STATUS": "Stato",
+      "CREATED": "Creato il"
+    },
+    "ACTION": {
+      "RESET_PASSWORD": "Reimposta password",
+      "RESET_PASSWORD_LABEL": "Reimposta la password di {username}",
+      "ENABLE": "Attiva",
+      "ENABLE_LABEL": "Attiva {username}",
+      "DISABLE": "Disattiva",
+      "DISABLE_LABEL": "Disattiva {username}",
+      "TRASH": "Cestino",
+      "TRASH_LABEL": "Sposta {username} nel cestino",
+      "RESTORE": "Ripristina",
+      "RESTORE_LABEL": "Ripristina {username}",
+      "DELETE": "Elimina",
+      "DELETE_LABEL": "Elimina definitivamente {username}"
+    },
+    "MODULE": {
+      "GROUPS": "Gruppi",
+      "USERS": "Utenti",
+      "COMPANIES": "Aziende",
+      "PLACES": "Punti vendita",
+      "LOGS": "Registro attività"
+    },
+    "FORM": {
+      "NEW_TITLE": "Nuovo utente",
+      "EDIT_TITLE": "Utente",
+      "BACK": "Torna all'elenco",
+      "CREATE": "Crea utente",
+      "CREATED": "Utente creato.",
+      "SAVED": "Utente aggiornato.",
+      "SELF": "Questo è il tuo utente: modificalo dal profilo.",
+      "READ_ONLY": "Non hai il permesso di modificare questo utente.",
+      "USERNAME": "Nome utente",
+      "USERNAME_CHECKING": "Verifica della disponibilità in corso…",
+      "USERNAME_AVAILABLE": "Nome utente disponibile.",
+      "USERNAME_TAKEN": "Nome utente già in uso.",
+      "USERNAME_ERROR": "Impossibile verificare la disponibilità: il server controllerà al salvataggio.",
+      "PASSWORD": "Password provvisoria",
+      "PASSWORD_HINT": "Da 12 a 128 caratteri, diversa dal nome utente. L'utente dovrà cambiarla al primo accesso.",
+      "ROLE": "Ruolo",
+      "STATUS": "Stato",
+      "COMPANIES": "Aziende",
+      "PLACES": "Punti vendita",
+      "COMPANY_FILTER": "Filtra i punti vendita per azienda",
+      "ALL_COMPANIES": "Tutte le aziende",
+      "PERMISSIONS": "Permessi",
+      "DEFAULT_PERMISSIONS": "Usa i permessi predefiniti del ruolo",
+      "PERMISSIONS_DEFAULT_NOTE": "Verranno applicati i permessi predefiniti del ruolo.",
+      "PERMISSIONS_READONLY": "Solo chi può gestire i permessi può modificare questa matrice.",
+      "READ": "Lettura",
+      "WRITE": "Scrittura",
+      "CAN_MANAGE": "Gestisce i permessi degli altri utenti"
+    },
+    "ACTIONS": "Azioni",
+    "ACTIONS_LABEL": "Azioni per {username}"
+  },
+  "ROLE_SHORT": {
+    "PSA": "Amm. piattaforma",
+    "D": "Dealer",
+    "SA": "Amm. gruppo",
+    "CA": "Amm. azienda",
+    "PA": "Amm. negozio",
+    "E": "Operatore"
   }
 }

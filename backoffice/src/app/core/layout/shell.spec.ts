@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { signIn } from '../../../testing/session';
+import { GroupContext } from '../groups/group-context';
 import { I18nService } from '../i18n/i18n.service';
 import { SessionService } from '../session/session.service';
 import { Profile } from '../session/session.types';
@@ -118,6 +119,62 @@ describe('Shell', () => {
     expect([...links].map((l) => l.getAttribute('href'))).toEqual(['/g', '/page']);
     expect(links[1].getAttribute('aria-current')).toBe('page');
     expect(links[1].classList.contains('active')).toBe(true);
+  });
+
+  describe('working group', () => {
+    const usersMenu: MenuItem[] = [
+      { id: 'home', labelKey: 'HOME', icon: 'home', route: '/' },
+      {
+        id: 'users',
+        labelKey: 'USERS',
+        icon: 'users',
+        route: '/groups',
+        groupPath: 'users',
+        permission: 'users:read',
+      },
+    ];
+    const hrefs = (root: HTMLElement) =>
+      [...root.querySelectorAll('nav a')].map((a) => a.getAttribute('href'));
+
+    it('links group pages to the group of the profile and offers no selector', async () => {
+      const { root } = await render(usersMenu, { role: 'SA', permissions: ['users:read'] });
+      expect(hrefs(root)).toEqual(['/', '/groups/665f1c2e9b1d4a0012ab34a1/users']);
+      expect(root.querySelector('fc-group-selector')).toBeNull();
+    });
+
+    it('offers the selector to a PSA and links to the chooser until a group is chosen', async () => {
+      sessionStorage.clear();
+      const { root, harness } = await render(usersMenu, {
+        role: 'PSA',
+        groupId: null,
+        group: null,
+        permissions: ['users:read'],
+      });
+      expect(root.querySelector('header fc-group-selector')).not.toBeNull();
+      expect(hrefs(root)).toEqual(['/', '/groups']);
+      TestBed.inject(GroupContext).choose({ id: '665f1c2e9b1d4a0012ab34a2', name: 'Alfa' });
+      harness.detectChanges();
+      expect(hrefs(root)).toEqual(['/', '/groups/665f1c2e9b1d4a0012ab34a2/users']);
+      sessionStorage.clear();
+    });
+
+    it('links children of a group entry as well', async () => {
+      const { root } = await render(
+        [
+          {
+            id: 'g',
+            labelKey: 'G',
+            icon: 'home',
+            route: '/g',
+            children: [
+              { id: 'c', labelKey: 'C', icon: 'users', route: '/groups', groupPath: 'users' },
+            ],
+          },
+        ],
+        { role: 'SA' },
+      );
+      expect(hrefs(root)).toEqual(['/g', '/groups/665f1c2e9b1d4a0012ab34a1/users']);
+    });
   });
 
   describe('mobile drawer', () => {

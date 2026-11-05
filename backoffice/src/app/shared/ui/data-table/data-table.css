@@ -1,8 +1,14 @@
 :host {
   display: block;
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 .scroll {
+  container-type: inline-size;
+  /* Containing block of the absolutely positioned visually-hidden text inside the table. */
+  position: relative;
+  max-inline-size: 100%;
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -70,4 +76,22 @@ tbody th {
 
 [data-align='end'] .sort {
   flex-direction: row-reverse;
+}
+
+.narrow {
+  inline-size: 1%;
+  padding-inline: var(--space-2);
+  white-space: nowrap;
+}
+
+/* A narrow container (a laptop with the side menu open): drop optional columns, tighten cells. */
+@container (max-inline-size: 800px) {
+  .hide-narrow {
+    display: none;
+  }
+
+  th,
+  td {
+    padding-inline: var(--space-2);
+  }
 }

@@ -1,0 +1,41 @@
+:host {
+  display: block;
+  max-inline-size: 44rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.actions-bar,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.note {
+  color: var(--color-text-muted);
+}
+
+fieldset {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.module {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-block-end: var(--space-2);
+}

@@ -30,6 +30,8 @@ export interface Profile {
   readonly language: string;
   /** Effective permissions (`resource:action`) computed by the server. */
   readonly permissions: readonly string[];
+  /** Whether the user may change the permission matrix of other users. */
+  readonly canManagePermissions: boolean;
   readonly passwordChangeRequired: boolean;
   readonly scope: ScopeSummary;
   readonly group: { readonly id: string; readonly name: string } | null;

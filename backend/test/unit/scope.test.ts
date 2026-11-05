@@ -5,7 +5,7 @@ import { legacyScopeIds } from '../../src/shared/security/scope/legacy-scope.ts'
 import { buildPrincipal } from '../../src/shared/security/scope/principal.ts';
 import type { StoredUser } from '../../src/shared/security/scope/principal.ts';
 import { computeScope } from '../../src/shared/security/scope/scope.ts';
-import { companiesScopeFilter, placesScopeFilter, usersScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
+import { companiesScopeFilter, groupsScopeFilter, placesScopeFilter, usersScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
 import type { Scope } from '../../src/shared/security/scope/scope.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 
@@ -174,6 +174,15 @@ describe('scope filters', () => {
         { role: { $in: [] }, $or: [{ placeId: { $in: [p1, p2] } }, { placesId: { $in: [p1, p2] } }] },
       ],
     });
+  });
+
+  it('groups', () => {
+    assert.deepEqual(groupsScopeFilter({ kind: 'platform' }), {});
+    assert.deepEqual(groupsScopeFilter(dealer), { _id: { $in: [...(dealer as Extract<Scope, { kind: 'dealer' }>).groupIds].map((hex) => ObjectId.createFromHexString(hex)) } });
+    for (const scope of [{ kind: 'group', groupId: g1 }, companies, places] as Scope[]) {
+      assert.deepEqual(groupsScopeFilter(scope), { _id: g1 });
+    }
+    assert.deepEqual(groupsScopeFilter({ kind: 'none' }), NOTHING);
   });
 
   it('companies', () => {
