@@ -37,7 +37,8 @@
     "PROFILE": "Profilo",
     "USERS": "Utenti",
     "PLATFORM_USERS": "Utenti di piattaforma",
-    "ACTIVITY_LOG": "Registro attività"
+    "ACTIVITY_LOG": "Registro attività",
+    "DEALERS": "Dealer"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -483,6 +484,60 @@
       "PLACE_TRASHED": "Punto vendita spostato nel cestino",
       "PLACE_RESTORED": "Punto vendita ripristinato",
       "PLACE_DELETED": "Punto vendita eliminato"
+    }
+  },
+  "DEALERS": {
+    "TITLE": "Dealer",
+    "NEW": "Nuovo dealer",
+    "SEARCH": "Cerca per ragione sociale o P.IVA",
+    "NO_USER": "Nessun utente",
+    "LOAD_ERROR": "Impossibile caricare i dealer",
+    "EMPTY": "Nessun dealer",
+    "EMPTY_MESSAGE": "Nessun dealer corrisponde alla ricerca.",
+    "COLUMN": {
+      "NAME": "Ragione sociale",
+      "VAT": "P.IVA",
+      "LOCATION": "Comune",
+      "USER": "Utente",
+      "STATUS": "Stato"
+    },
+    "SOURCE": {
+      "manual": "Inserito a mano",
+      "migration": "Migrazione",
+      "user": "Creato da un utente"
+    },
+    "FIELD": {
+      "BUSINESS_NAME": "Ragione sociale",
+      "VAT": "Partita IVA",
+      "FISCAL_CODE": "Codice fiscale",
+      "STREET": "Via e numero civico",
+      "POSTCODE": "CAP",
+      "CITY": "Comune",
+      "PROVINCE": "Provincia",
+      "COUNTRY": "Nazione (codice a 2 lettere)",
+      "PEC": "PEC",
+      "SDI": "Codice destinatario SDI",
+      "EMAIL": "Email",
+      "PHONE": "Telefono",
+      "USER_EMAIL": "Email dell'utente",
+      "USER_PHONE": "Telefono dell'utente"
+    },
+    "FORM": {
+      "NEW_TITLE": "Nuovo dealer",
+      "EDIT_TITLE": "Dealer",
+      "BACK": "Torna all'elenco",
+      "CREATE": "Crea dealer",
+      "CREATED": "Dealer creato.",
+      "SAVED": "Dealer aggiornato.",
+      "READ_ONLY": "Non hai il permesso di modificare questo dealer.",
+      "COMPANY": "Ragione sociale",
+      "ACCESS_USER": "Utente di accesso (ruolo Dealer)",
+      "SUMMARY": "Riepilogo",
+      "USER": "Utente collegato",
+      "SOURCE": "Origine",
+      "UPDATED": "Ultima modifica",
+      "DELETE_NOTE": "Un dealer non si elimina da qui: elimina il suo utente dal cestino degli utenti di piattaforma.",
+      "CREATED_ON": "Creato il"
     }
   }
 }

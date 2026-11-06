@@ -398,7 +398,7 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
 
 ## 4. Gruppi
 
-Passi decisi dall'utente il 2026-11-06: **4A** = anagrafica dealer (D-09, realizzata); **4B** = gruppi nel backend (4.1–4.4, 2.3.4); **4C** = backoffice (4.5).
+Passi decisi dall'utente il 2026-11-06: **4A** = anagrafica dealer (D-09, realizzata, con le pagine dei dealer nel backoffice per il PSA); **4B** = gruppi nel backend (4.1–4.4, 2.3.4); **4C** = backoffice (4.5).
 
 ### 4.1 Modello gruppo
 Il modello comprende `dataCluster` (D-25): letto dal nuovo backend; impostato alla creazione (8.1.2); modificabile solo con una procedura di spostamento da progettare a parte.

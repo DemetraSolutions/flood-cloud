@@ -37,6 +37,33 @@ function userRoutes(prefix: string, canMatch: CanMatchFn[]): Routes {
   ];
 }
 
+/** List, creation and detail of dealers (PSA only). */
+const dealerRoutes: Routes = [
+  {
+    path: 'dealers',
+    canMatch: [role('PSA'), permission('dealers:read')],
+    title: 'DEALERS.TITLE',
+    loadComponent: () => import('./features/dealers/dealers-list').then((m) => m.DealersList),
+  },
+  {
+    path: 'dealers/new',
+    canMatch: [
+      role('PSA'),
+      permission('dealers:read'),
+      permission('dealers:create'),
+      permission('users:create'),
+    ],
+    title: 'DEALERS.FORM.NEW_TITLE',
+    loadComponent: () => import('./features/dealers/dealer-form').then((m) => m.DealerForm),
+  },
+  {
+    path: 'dealers/:dealerId',
+    canMatch: [role('PSA'), permission('dealers:read')],
+    title: 'DEALERS.FORM.EDIT_TITLE',
+    loadComponent: () => import('./features/dealers/dealer-form').then((m) => m.DealerForm),
+  },
+];
+
 /**
  * Routes of the application; pages are lazy-loaded and `title` is a dictionary key (translated
  * by `PageTitleStrategy`).
@@ -111,6 +138,7 @@ export const routes: Routes = [
           },
           ...userRoutes('groups/:groupId/users', [permission('users:read')]),
           ...userRoutes('platform/users', [role('PSA'), permission('users:read')]),
+          ...dealerRoutes,
           {
             path: 'activity-log',
             canMatch: [permission('activityLog:read')],

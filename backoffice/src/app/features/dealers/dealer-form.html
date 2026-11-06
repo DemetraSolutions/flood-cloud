@@ -1,0 +1,216 @@
+<h1>{{ (isNew() ? 'DEALERS.FORM.NEW_TITLE' : 'DEALERS.FORM.EDIT_TITLE') | t }}</h1>
+
+@if (failed()) {
+  <fc-error-state
+    [title]="'DEALERS.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a routerLink="/dealers">{{ 'DEALERS.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  @let current = dealer();
+  @if (current) {
+    <section class="summary" aria-labelledby="summary-heading">
+      <h2 id="summary-heading">{{ 'DEALERS.FORM.SUMMARY' | t }}</h2>
+      <dl>
+        <div>
+          <dt>{{ 'DEALERS.FORM.USER' | t }}</dt>
+          <dd>
+            @if (current.user; as user) {
+              <a [routerLink]="['/platform', 'users', user.id]">{{ user.username }}</a>
+              @if (user.status === 'active') {
+                <fc-status-badge tone="success">{{ 'USERS.STATUS.ACTIVE' | t }}</fc-status-badge>
+              } @else {
+                <fc-status-badge tone="warning">{{ 'USERS.STATUS.DISABLED' | t }}</fc-status-badge>
+              }
+            } @else {
+              {{ 'DEALERS.NO_USER' | t }}
+            }
+          </dd>
+        </div>
+        <div>
+          <dt>{{ 'DEALERS.FORM.SOURCE' | t }}</dt>
+          <dd>{{ 'DEALERS.SOURCE.' + current.source | t }}</dd>
+        </div>
+        <div>
+          <dt>{{ 'DEALERS.FORM.CREATED_ON' | t }}</dt>
+          <dd>{{ date(current.createdAt) }}</dd>
+        </div>
+        <div>
+          <dt>{{ 'DEALERS.FORM.UPDATED' | t }}</dt>
+          <dd>{{ date(current.updatedAt) }}</dd>
+        </div>
+      </dl>
+      <p class="note">{{ 'DEALERS.FORM.DELETE_NOTE' | t }}</p>
+    </section>
+  }
+
+  @if (isNew() || current) {
+    @if (!canWrite()) {
+      <p class="note">{{ 'DEALERS.FORM.READ_ONLY' | t }}</p>
+    }
+    <form novalidate (submit)="onSubmit($event)">
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+      }
+      <fieldset>
+        <legend>{{ 'DEALERS.FORM.COMPANY' | t }}</legend>
+        <fc-text-field
+          [formField]="dealerForm.businessName"
+          [label]="'DEALERS.FIELD.BUSINESS_NAME' | t"
+          [error]="error(dealerForm.businessName)"
+          (blurred)="dealerForm.businessName().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.vatNumber"
+          [label]="'DEALERS.FIELD.VAT' | t"
+          autocapitalize="characters"
+          [error]="error(dealerForm.vatNumber)"
+          (blurred)="dealerForm.vatNumber().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.fiscalCode"
+          [label]="'DEALERS.FIELD.FISCAL_CODE' | t"
+          autocapitalize="characters"
+          [error]="error(dealerForm.fiscalCode)"
+          (blurred)="dealerForm.fiscalCode().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.street"
+          [label]="'DEALERS.FIELD.STREET' | t"
+          autocomplete="street-address"
+          [error]="error(dealerForm.street)"
+          (blurred)="dealerForm.street().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.postcode"
+          [label]="'DEALERS.FIELD.POSTCODE' | t"
+          autocomplete="postal-code"
+          [error]="error(dealerForm.postcode)"
+          (blurred)="dealerForm.postcode().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.city"
+          [label]="'DEALERS.FIELD.CITY' | t"
+          [error]="error(dealerForm.city)"
+          (blurred)="dealerForm.city().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.province"
+          [label]="'DEALERS.FIELD.PROVINCE' | t"
+          autocapitalize="characters"
+          [error]="error(dealerForm.province)"
+          (blurred)="dealerForm.province().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.countryCode"
+          [label]="'DEALERS.FIELD.COUNTRY' | t"
+          autocapitalize="characters"
+          [error]="error(dealerForm.countryCode)"
+          (blurred)="dealerForm.countryCode().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.pec"
+          type="email"
+          [label]="'DEALERS.FIELD.PEC' | t"
+          [error]="error(dealerForm.pec)"
+          (blurred)="dealerForm.pec().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.sdiCode"
+          [label]="'DEALERS.FIELD.SDI' | t"
+          autocapitalize="characters"
+          [error]="error(dealerForm.sdiCode)"
+          (blurred)="dealerForm.sdiCode().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.email"
+          type="email"
+          [label]="'DEALERS.FIELD.EMAIL' | t"
+          [error]="error(dealerForm.email)"
+          (blurred)="dealerForm.email().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="dealerForm.phone"
+          type="tel"
+          [label]="'DEALERS.FIELD.PHONE' | t"
+          [error]="error(dealerForm.phone)"
+          (blurred)="dealerForm.phone().markAsTouched()"
+        />
+      </fieldset>
+
+      @if (isNew()) {
+        <fieldset>
+          <legend>{{ 'DEALERS.FORM.ACCESS_USER' | t }}</legend>
+          <fc-text-field
+            [formField]="dealerForm.username"
+            [label]="'USERS.FORM.USERNAME' | t"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+            [hint]="usernameHint()"
+            [error]="usernameError()"
+            (blurred)="dealerForm.username().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="dealerForm.password"
+            type="password"
+            autocomplete="new-password"
+            [label]="'USERS.FORM.PASSWORD' | t"
+            [hint]="'USERS.FORM.PASSWORD_HINT' | t"
+            [error]="error(dealerForm.password)"
+            (blurred)="dealerForm.password().markAsTouched()"
+          />
+          <fc-password-generator (generated)="onGenerated($event)" />
+          <fc-text-field
+            [formField]="dealerForm.userFirstName"
+            [label]="'PROFILE.FIRST_NAME' | t"
+            [error]="error(dealerForm.userFirstName)"
+            (blurred)="dealerForm.userFirstName().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="dealerForm.userLastName"
+            [label]="'PROFILE.LAST_NAME' | t"
+            [error]="error(dealerForm.userLastName)"
+            (blurred)="dealerForm.userLastName().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="dealerForm.userEmail"
+            type="email"
+            [label]="'DEALERS.FIELD.USER_EMAIL' | t"
+            [error]="error(dealerForm.userEmail)"
+            (blurred)="dealerForm.userEmail().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="dealerForm.userPhone"
+            type="tel"
+            [label]="'DEALERS.FIELD.USER_PHONE' | t"
+            [error]="error(dealerForm.userPhone)"
+            (blurred)="dealerForm.userPhone().markAsTouched()"
+          />
+          <fc-select
+            [formField]="dealerForm.userLanguage"
+            [label]="'PROFILE.LANGUAGE' | t"
+            [options]="languages"
+            [error]="error(dealerForm.userLanguage)"
+            (blurred)="dealerForm.userLanguage().markAsTouched()"
+          />
+        </fieldset>
+      }
+
+      <div class="actions">
+        @if (canWrite()) {
+          <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+            {{ (isNew() ? 'DEALERS.FORM.CREATE' : 'COMMON.SAVE') | t }}
+          </button>
+        }
+        <a routerLink="/dealers">{{ (canWrite() ? 'COMMON.CANCEL' : 'DEALERS.FORM.BACK') | t }}</a>
+      </div>
+    </form>
+  }
+}

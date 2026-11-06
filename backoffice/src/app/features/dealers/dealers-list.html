@@ -1,0 +1,69 @@
+<header class="page-header">
+  <h1>{{ 'DEALERS.TITLE' | t }}</h1>
+  @if (canCreate()) {
+    <a class="new" routerLink="/dealers/new">{{ 'DEALERS.NEW' | t }}</a>
+  }
+</header>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'DEALERS.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+</form>
+
+@if (dealers.error()) {
+  <fc-error-state
+    [title]="'DEALERS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="dealers.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'DEALERS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="dealers.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'DEALERS.EMPTY' | t"
+    [emptyMessage]="'DEALERS.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    @if (canCreate()) {
+      <a fcEmptyAction routerLink="/dealers/new">{{ 'DEALERS.NEW' | t }}</a>
+    }
+    <ng-template fcCell="businessName" let-row>
+      <a [routerLink]="['/dealers', row.id]">{{ row.businessName }}</a>
+    </ng-template>
+    <ng-template fcCell="user" let-row>
+      @if (row.user; as user) {
+        <a [routerLink]="['/platform', 'users', user.id]">{{ user.username }}</a>
+      } @else {
+        {{ 'DEALERS.NO_USER' | t }}
+      }
+    </ng-template>
+    <ng-template fcCell="status" let-row>
+      @if (row.user; as user) {
+        @if (user.status === 'active') {
+          <fc-status-badge tone="success">{{ 'USERS.STATUS.ACTIVE' | t }}</fc-status-badge>
+        } @else {
+          <fc-status-badge tone="warning">{{ 'USERS.STATUS.DISABLED' | t }}</fc-status-badge>
+        }
+      }
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="dealers.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}

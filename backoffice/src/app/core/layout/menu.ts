@@ -54,6 +54,14 @@ export const MENU: readonly MenuItem[] = [
     roles: ['PSA'],
   },
   {
+    id: 'dealers',
+    labelKey: 'MENU.DEALERS',
+    icon: 'building',
+    route: '/dealers',
+    permission: 'dealers:read',
+    roles: ['PSA'],
+  },
+  {
     id: 'activity-log',
     labelKey: 'MENU.ACTIVITY_LOG',
     icon: 'log',

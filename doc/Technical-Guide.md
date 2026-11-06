@@ -376,7 +376,7 @@ server/                      # server statico di produzione (§11.6)
   - Timeout: header 15 s, richiesta 30 s, inattività del socket 30 s, keep-alive 5 s. Log JSON di accesso (percorso senza query, troncato a 256 caratteri). Arresto ordinato su `SIGTERM` (drenaggio 5 s, uscita forzata 25 s).
 - **Container** (`backoffice/Dockerfile`, contesto `backoffice/`): build su `node:24.22.2-bookworm`, runtime `node:24.22.2-bookworm-slim` (entrambe per digest) senza npm, npx e corepack, utente 1000, solo `dist/` e `server/`, compatibile con filesystem in sola lettura, porta 8080. `.dockerignore` esclude dipendenze, build, `.env*`, chiavi e log a ogni livello.
 - **CI** (`.github/workflows/backoffice.yml`): disattivata come quella del backend (solo `workflow_dispatch`). Contenuto: `npm ci --ignore-scripts`, test Angular, test e typecheck del server, build, `npm audit --audit-level=moderate`, `npm audit signatures`.
-- **Stato dei test**: 880 test Angular e 56 del server, coverage 100%.
+- **Stato dei test**: 955 test Angular e 56 del server, coverage 100%.
 
 ### 11.7 Sessione e autenticazione (passo 3C)
 - **Token** (D-12): access token solo in memoria nel `SessionService` (mai in storage, URL, log o errori); refresh token, scadenza e id della sessione in `sessionStorage` (`fc.session`), validati in lettura (formato `fc_rt_` + 43 caratteri) e rimossi a logout e scadenza. `localStorage` contiene solo le preferenze di tema e lingua.
@@ -397,3 +397,9 @@ server/                      # server statico di produzione (§11.6)
 ### 11.9 Errori JavaScript e monitor dei log (passo 2D)
 - **Segnalazione** (`core/errors/client-error-reporter.ts`, chiamata dal `GlobalErrorHandler` dopo il toast e senza mai interromperlo): solo con utente autenticato e solo per errori JavaScript (non per gli errori HTTP, già noti al server). Invia nome, messaggio (300 caratteri) e prime 10 righe dello stack (300 caratteri ciascuna, prima riga ricostruita col messaggio troncato, frammenti tra virgolette oltre 20 caratteri sostituiti da `"…"`), route come pattern della configurazione del router, versione dell'app (dalla sola `version` di `package.json`, il resto del file non entra nel bundle) e ora. Deduplica per 60 secondi, massimo 10 invii per caricamento di pagina; un invio fallito va solo in console.
 - **Monitor** (`features/activity-log/`, voce "Registro attività", permesso `activityLog:read`): tabella con data, categoria, azione tradotta, esito, attore (solo il ruolo per lo staff nascosto dal server), request id; filtri nell'URL (categoria ed errori solo per il PSA, esito, azione, periodo, request id, attore, gruppo corrente per PSA e dealer), paginazione a cursore, quattro stati; dettaglio in un dialog con cambi prima/dopo (valori oscurati indicati come tali), metadata e, per gli errori, nome, messaggio e stack resi come testo.
+
+### 11.10 Dealer (passo 4A, richiesta dell'utente del 2026-11-06)
+- Voce di menu "Dealer" solo per il PSA (`dealers:read`); route lazy `/dealers`, `/dealers/new` (anche `dealers:create` e `users:create`), `/dealers/:dealerId`.
+- **Elenco**: ragione sociale, P.IVA, comune, utente D collegato con il suo stato; ricerca, ordinamento e paginazione a cursore nell'URL.
+- **Nuovo dealer**: un unico form con la ragione sociale (validazioni italiane come il backend, codici in maiuscolo) e l'utente di accesso con ruolo D (username con verifica di disponibilità, password provvisoria con generatore); un solo `POST /v1/dealers` crea entrambi.
+- **Scheda**: modifica dei soli dati anagrafici (campi cambiati, indirizzo con merge parziale), riepilogo dell'utente D collegato, origine e date; per eliminare un dealer si elimina l'utente D dal cestino degli utenti di piattaforma.
