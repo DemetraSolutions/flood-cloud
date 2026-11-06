@@ -85,6 +85,18 @@ describe('ensureIndexes (real MongoDB)', () => {
     assert.ok((sessionsInfo as { options?: { validator?: unknown } }).options?.validator !== undefined);
   });
 
+  it('drops, after the replacements exist, the obsolete indexes of a collection (and ignores the ones already gone)', async () => {
+    const things = ctx.databases.common().collection('obsoleteThings');
+    await things.createIndexes([{ key: { a: 1 }, name: 'a_1' }]);
+    const registry: CollectionRegistry = {
+      common: { obsoleteThings: { ownership: 'new', indexes: [{ name: 'a_1_b_1', key: { a: 1, b: 1 } }], obsoleteIndexes: ['a_1', 'never_existed'] } },
+      group: {},
+    };
+    await ensureIndexes(ctx.databases, registry, quietLogger);
+    await ensureIndexes(ctx.databases, registry, quietLogger);
+    assert.deepEqual((await things.indexes()).map((index) => index.name).sort(), ['_id_', 'a_1_b_1']);
+  });
+
   it('refuses a registry that breaks the coexistence rules, before touching the database', async () => {
     const legacyUnique: CollectionRegistry = {
       common: { legacyProbe: { ownership: 'legacy-read', indexes: [{ name: 'u', key: { userName: 1 }, unique: true }] } },

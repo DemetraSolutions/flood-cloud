@@ -1,4 +1,5 @@
-import type { Document, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
+import type { Document } from 'mongodb';
 
 /** A group as the reference list shows it. */
 export interface GroupReference {
@@ -6,6 +7,9 @@ export interface GroupReference {
   readonly name: string;
   readonly status: 'active' | 'suspended';
   readonly trashed: boolean;
+  /** Id of the dealer's `D` user, `null` when the group has none (or the stored value is not an id). */
+  readonly dealerId: string | null;
+  readonly demo: boolean;
 }
 
 /** A company as the reference list shows it. */
@@ -28,7 +32,7 @@ export interface PlaceReference {
 const nameOf = (document: Document): string => (typeof document['name'] === 'string' ? document['name'] : '');
 
 /** Projection of the group list: the only stored fields ever read. */
-export const GROUP_PROJECTION = Object.freeze({ name: 1, status: 1, trash: 1 } as const);
+export const GROUP_PROJECTION = Object.freeze({ name: 1, status: 1, trash: 1, dealerId: 1, demo: 1 } as const);
 
 /** Projection of the company list: the only stored fields ever read. */
 export const COMPANY_PROJECTION = Object.freeze({ name: 1, trash: 1 } as const);
@@ -38,7 +42,7 @@ export const PLACE_PROJECTION = Object.freeze({ name: 1, trash: 1, companyId: 1 
 
 /**
  * Maps a stored group to its reference representation, field by field (allowlist): `status` is
- * `active` only when the stored value is `true`.
+ * `active` only when the stored value is `true`, `demo` is on only when `true`, `dealerId` is the id of the dealer or `null`.
  *
  * @param document The projected group document.
  */
@@ -48,6 +52,8 @@ export function toGroupReference(document: Document): GroupReference {
     name: nameOf(document),
     status: document['status'] === true ? 'active' : 'suspended',
     trashed: document['trash'] === true,
+    dealerId: document['dealerId'] instanceof ObjectId ? document['dealerId'].toHexString() : null,
+    demo: document['demo'] === true,
   };
 }
 

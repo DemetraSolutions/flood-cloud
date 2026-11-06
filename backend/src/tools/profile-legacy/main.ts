@@ -7,6 +7,7 @@ import { closeClusters, createClusterClients } from '../../db/clusters.ts';
 import type { ClusterRegistry } from '../../db/clusters.ts';
 import { createDatabases } from '../../db/databases.ts';
 import { profileLegacy } from './profile.ts';
+import { profileSubobjects } from './subobjects.ts';
 
 /** Everything {@link main} needs from the process, injectable for tests. */
 export interface MainDeps {
@@ -28,13 +29,15 @@ export interface MainDeps {
   readonly createClient?: typeof createMongoClient;
 }
 
-const USAGE = 'Usage: node src/tools/profile-legacy/cli.ts [--env development|production] [--out <report.json>]';
+const USAGE = 'Usage: node src/tools/profile-legacy/cli.ts [--env development|production] [--out <report.json>] [--focus subobjects]';
 
 /** The validated command line. */
 interface Args {
   /** Environment the operator asked for; `development` unless `--env` says otherwise. */
   env: AppEnv;
   out?: string;
+  /** `true` for `--focus subobjects`: the targeted sub-object profile instead of the full one. */
+  subobjects: boolean;
 }
 
 /**
@@ -45,6 +48,7 @@ interface Args {
 function parseArgs(argv: readonly string[]): Args | undefined {
   let out: string | undefined;
   let env: AppEnv = 'development';
+  let subobjects = false;
   const seen = new Set<string>();
   for (let index = 0; index < argv.length; index += 2) {
     const flag = argv[index] as string;
@@ -57,11 +61,13 @@ function parseArgs(argv: readonly string[]): Args | undefined {
       out = value;
     } else if (flag === '--env' && (APP_ENVS as readonly string[]).includes(value)) {
       env = value as AppEnv;
+    } else if (flag === '--focus' && value === 'subobjects') {
+      subobjects = true;
     } else {
       return undefined;
     }
   }
-  return out === undefined ? { env } : { env, out };
+  return out === undefined ? { env, subobjects } : { env, subobjects, out };
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -99,15 +105,15 @@ interface Destination {
 /**
  * Chooses the report path. Inside the repository only `backend/reports/` is allowed (it is git-ignored);
  * outside the repository any path is. Without `--out` the report goes to
- * `backend/reports/legacy-profile-<env>-<timestamp>.json`.
+ * `backend/reports/legacy-profile-<env>-<timestamp>.json` (`legacy-subobjects-…` with `--focus subobjects`).
  *
  * @returns The destination, or an error message.
  */
-async function chooseDestination(requested: string | undefined, cwd: string, env: AppEnv): Promise<Destination | string> {
+async function chooseDestination(requested: string | undefined, cwd: string, env: AppEnv, kind: string): Promise<Destination | string> {
   const root = await findRepoRoot(cwd);
   const reportsDir = root === undefined ? resolve(cwd, 'reports') : join(root, 'backend', 'reports');
   const stamp = new Date().toISOString().split(/[-:.]/).join('');
-  const out = resolve(cwd, requested ?? join(reportsDir, `legacy-profile-${env}-${stamp}.json`));
+  const out = resolve(cwd, requested ?? join(reportsDir, `legacy-${kind}-${env}-${stamp}.json`));
   const inReports = isInside(out, reportsDir);
   if (root !== undefined && isInside(out, root) && !inReports) {
     return 'Refusing to write the report inside the repository: use backend/reports/ or a path outside the repository';
@@ -177,7 +183,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
   }
   const secrets = [...config.clusters.values()].flatMap((cluster) => [cluster.uri.reveal(), ...(cluster.analyticsUri === null ? [] : [cluster.analyticsUri.reveal()])]);
 
-  const destination = await chooseDestination(parsed.out, deps.cwd, config.appEnv);
+  const destination = await chooseDestination(parsed.out, deps.cwd, config.appEnv, parsed.subobjects ? 'subobjects' : 'profile');
   if (typeof destination === 'string') {
     deps.error(destination);
     return 1;
@@ -197,16 +203,22 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     registry = createClusterClients(config, (clientConfig, options) => createClient(clientConfig, { readPreference: 'secondaryPreferred', ...options }));
     await Promise.all([...registry.clusters.values()].map((clients) => clients.main.connect()));
     const databases = createDatabases(registry, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
-    let found = 0;
-    for (const clusterId of databases.clusterIds) {
-      found += (await databases.listGroupIds(clusterId)).length;
+    let report: unknown;
+    if (parsed.subobjects) {
+      deps.error(`Profiling sub-objects of ${config.appEnv}: common users and groups, read-only`);
+      report = await profileSubobjects(databases.common(), { appEnv: config.appEnv });
+    } else {
+      let found = 0;
+      for (const clusterId of databases.clusterIds) {
+        found += (await databases.listGroupIds(clusterId)).length;
+      }
+      deps.error(`Profiling ${config.appEnv}: ${found} group databases found on ${databases.clusterIds.length} cluster(s), read-only`);
+      report = await profileLegacy(databases, {
+        appEnv: config.appEnv,
+        ...(deps.progressEvery === undefined ? {} : { progressEvery: deps.progressEvery }),
+        onProgress: (done, total) => deps.error(`profiled ${done}/${total} group databases`),
+      });
     }
-    deps.error(`Profiling ${config.appEnv}: ${found} group databases found on ${databases.clusterIds.length} cluster(s), read-only`);
-    const report = await profileLegacy(databases, {
-      appEnv: config.appEnv,
-      ...(deps.progressEvery === undefined ? {} : { progressEvery: deps.progressEvery }),
-      onProgress: (done, total) => deps.error(`profiled ${done}/${total} group databases`),
-    });
     if (destination.createFolder) {
       await mkdir(dirname(out), { recursive: true });
     }

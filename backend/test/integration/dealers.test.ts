@@ -8,6 +8,7 @@ import type { DealersRepository } from '../../src/modules/dealers/dealers.reposi
 import { createDealersService } from '../../src/modules/dealers/dealers.service.ts';
 import { createCredentialsRepository } from '../../src/modules/users/credentials.repository.ts';
 import { createGroupDirectoryRepository } from '../../src/modules/users/group-directory.repository.ts';
+import { groupReaders } from '../helpers/user-deps.ts';
 import { createUsersRepository } from '../../src/modules/users/users.repository.ts';
 import { createUsersService } from '../../src/modules/users/users.service.ts';
 import { createSessionsRepository } from '../../src/modules/sessions/sessions.repository.ts';
@@ -95,18 +96,12 @@ describe('who reaches the dealer registry', () => {
     assert.equal((await as.call(psa(), 'GET', '/dealers')).status, 200);
   });
 
-  it('refuses a PSA whose matrix lacks groups.w, and a PSA without users:create', async () => {
-    const reader = await addUser(ctx, office, { role: 'PSA', groupId: null, dealerId: null, permissions: { status: false, groups: { r: true, w: false }, users: { r: true, w: true } } });
-    const writer = await addUser(ctx, office, { role: 'PSA', groupId: null, dealerId: null, permissions: { status: false, groups: { r: true, w: true }, users: { r: true, w: false } } });
+  it('lets a PSA whose matrix lacks groups.w or users.w work on the registry: he holds the whole ceiling of his role (D-10)', async () => {
+    const reader = await addUser(ctx, office, { role: 'PSA', groupId: null, dealerId: null, permissions: { status: false, groups: { r: true, w: false }, users: { r: true, w: false } } });
     const asReader = (await office.tokens(reader.name)).accessToken;
-    const asWriter = (await office.tokens(writer.name)).accessToken;
     assert.equal((await send(office, 'GET', '/dealers', asReader)).status, 200);
-    assert.equal((await send(office, 'POST', '/dealers', asReader, body())).status, 403);
-    assert.equal((await send(office, 'PATCH', `/dealers/${hex(new ObjectId())}`, asReader, { businessName: 'X' })).status, 403);
-    // dealers:create is there, users:create is not: the service refuses before anything is written.
-    const before = await users().countDocuments();
-    assert.deepEqual(failure(await send(office, 'POST', '/dealers', asWriter, body())), denied);
-    assert.equal(await users().countDocuments(), before);
+    assert.equal((await send(office, 'PATCH', `/dealers/${hex(new ObjectId())}`, asReader, { businessName: 'X' })).status, 404);
+    assert.equal((await send(office, 'POST', '/dealers', asReader, body())).status, 201);
   });
 });
 
@@ -234,6 +229,7 @@ describe('creating a dealer is all or nothing', () => {
       credentials: createCredentialsRepository(ctx.databases),
       sessions: createSessionsRepository(ctx.databases),
       directory: createGroupDirectoryRepository(ctx.databases),
+        ...groupReaders(ctx.databases),
       dealers: repository,
       activityLog,
       transaction: (work) => ctx.databases.transaction(work),

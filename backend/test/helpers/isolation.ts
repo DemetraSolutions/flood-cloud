@@ -12,7 +12,7 @@ import { groupDatabaseFor } from '../../src/shared/security/scope/group-access.t
 import { createGroupsRepository } from '../../src/shared/security/scope/groups.repository.ts';
 import type { GroupsRepository } from '../../src/shared/security/scope/groups.repository.ts';
 import { placesScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
-import { fixtureId, legacyUser, seedLegacyCluster } from './legacy-fixtures.ts';
+import { LEGACY_MODULE_NAMES, fixtureId, legacyPermissions, legacyUser, seedLegacyCluster } from './legacy-fixtures.ts';
 import { principalFromLegacyUser } from './principal.ts';
 
 /** Header the test authenticator reads: the hex id of the legacy user to act as. */
@@ -56,12 +56,10 @@ export async function seedIsolationCluster(databases: Databases): Promise<Isolat
   const dealerB = fixtureId('user', 500);
   await databases.common().collection('users').insertOne(legacyUser(500, { role: 'D' }));
   await databases.common().collection('groups').updateMany({ _id: { $in: seeded.groupIds.slice(2) } }, { $set: { dealerId: dealerB } });
-  // The fixtures carry no core module in their matrix: give everybody full legacy permissions (the role ceiling still applies).
+  // Give everybody the whole legacy matrix (the role ceiling still applies); the POS block is complete, with every grant off.
   const full = { r: true, w: true };
-  await databases
-    .common()
-    .collection('users')
-    .updateMany({}, { $set: { permissions: { status: true, groups: full, users: full, companies: full, places: full, logs: full } } });
+  const modules = Object.fromEntries(LEGACY_MODULE_NAMES.map((name) => [name, name === 'logs' ? { r: true } : full]));
+  await databases.common().collection('users').updateMany({}, { $set: { permissions: legacyPermissions({ status: true, modules }) } });
   const groups = seeded.groupIds.map((groupId, index): IsolationGroup => ({
     groupId,
     dealerId: index < 2 ? seeded.dealerId : dealerB,

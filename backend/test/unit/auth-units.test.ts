@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ObjectId } from 'mongodb';
+import { emptyPos } from '../../src/modules/users/pos.catalog.ts';
+import { emptyShiftTime } from '../../src/modules/users/shift-time.ts';
 import { createAuthService } from '../../src/modules/auth/auth.service.ts';
 import type { AuthServiceDeps } from '../../src/modules/auth/auth.service.ts';
 import { checkAccount } from '../../src/modules/auth/account-state.ts';
@@ -49,7 +51,13 @@ const user = (overrides: Partial<User> = {}): User => ({
   trashed: false,
   language: 'it',
   hiddenInStats: false,
+  description: null,
+  hasAvatar: false,
+  pinSet: false,
+  serviceIds: [],
   permissions: { status: true, modules: {}, canManagePermissions: true },
+  pos: emptyPos(),
+  shiftTime: emptyShiftTime(),
   createdAt: null,
   updatedAt: null,
   ...overrides,

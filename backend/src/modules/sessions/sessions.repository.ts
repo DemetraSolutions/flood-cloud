@@ -127,6 +127,16 @@ export interface SessionsRepository {
    */
   revokeAllOfUser(userId: ObjectId, reason: string, now: Date, except?: ObjectId, session?: ClientSession): Promise<number>;
   /**
+   * Revokes every active session of several users at once (the whole group of a suspended or trashed group, in batches).
+   *
+   * @param userIds Owners, at most one batch.
+   * @param reason Reason code.
+   * @param now Revocation time.
+   * @param session Transaction the write belongs to (a batch commits whole or not at all).
+   * @returns How many sessions were revoked.
+   */
+  revokeAllOfUsers(userIds: readonly ObjectId[], reason: string, now: Date, session: ClientSession): Promise<number>;
+  /**
    * Deletes every session document of a user, revoked or not (permanent deletion of the user).
    *
    * @param userId Owner.
@@ -269,6 +279,15 @@ export function createSessionsRepository(databases: Databases): SessionsReposito
         { userId, ...active, ...(except === undefined ? {} : { _id: { $ne: except } }) },
         { $set: { revokedAt: now, revokeReason: reason } },
         session === undefined ? {} : { session },
+      );
+      return result.modifiedCount;
+    },
+
+    revokeAllOfUsers: async (userIds, reason, now, session) => {
+      const result = await sessions().updateMany(
+        { userId: { $in: [...userIds] }, ...active },
+        { $set: { revokedAt: now, revokeReason: reason } },
+        { session },
       );
       return result.modifiedCount;
     },

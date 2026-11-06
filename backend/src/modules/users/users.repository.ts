@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { ClientSession, Collection, Document, Filter } from 'mongodb';
-import { COLLECTIONS } from '../../db/collections.ts';
+import { COLLECTIONS, USERS_OWNED_TREES } from '../../db/collections.ts';
 import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS, escapeRegExp, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
 import type { ListParams } from '../../shared/http/list.ts';
@@ -8,6 +8,7 @@ import type { PageInfo } from '../../shared/http/envelope.ts';
 import { legacyScopeIds } from '../../shared/security/scope/legacy-scope.ts';
 import { withScope } from '../../shared/security/scope/scope-filters.ts';
 import { normalizeUsername } from '../../shared/security/username.ts';
+import { READ_ONLY_MODULE } from '../../shared/security/rbac/permission-matrix.ts';
 import { OWNED_PERMISSION_MODULES, fromLegacy } from './user.mapper.ts';
 import type { StoredUser } from '../../shared/security/scope/principal.ts';
 import { USERS_LIST } from './users.list.ts';
@@ -16,43 +17,64 @@ import type { AuthRecord, LegacyUserDocument, LegacyUserUpdate, LoginRecord, Map
 /** Candidates read when looking a username up without regard to case: more than this is not a real situation. */
 const MAX_USERNAME_CANDIDATES = 20;
 
+/** A projection value: an inclusion flag or a computed expression. */
+type Projection = Readonly<Record<string, 1 | Document>>;
+
 /**
- * Fields read to build a {@link MappedUser}: the profile, status, scope and the core permission
- * flags. `password`, `pin`, `tokens`, `avatar`, `servicesId`, `shiftTime` and `permissions.apps`
- * are not in the list, so they are never loaded.
+ * Computed fields that tell whether the picture and the PIN are set without loading them: the PIN is never read, and the lists
+ * never load the picture (a picture is up to 200 KB, and 100 rows would carry 20 MB).
  */
-const USER_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
+const PRESENCE: Projection = Object.freeze({
+  __hasAvatar: { $and: [{ $eq: [{ $type: '$avatar' }, 'string'] }, { $ne: ['$avatar', ''] }] },
+  __pinSet: { $and: [{ $eq: [{ $type: '$pin' }, 'string'] }, { $ne: ['$pin', ''] }] },
+});
+
+/**
+ * Fields read to build a {@link MappedUser}: the profile, status, scope, the flags of every module of the matrix, the POS data
+ * (`permissions.apps`), the shifts, the service ids and the computed `__hasAvatar` and `__pinSet`. `password`, `pin`, `tokens`
+ * and `avatar` are not in the list, so they are never loaded.
+ */
+const USER_PROJECTION: Projection = Object.freeze({
   userName: 1,
   username: 1,
   name: 1,
   surname: 1,
   email: 1,
   telephone: 1,
+  description: 1,
   role: 1,
   dealerId: 1,
   groupId: 1,
   companyId: 1,
   placeId: 1,
   placesId: 1,
+  servicesId: 1,
   status: 1,
   trash: 1,
   'settings.language': 1,
   'settings.hiddenInStats': 1,
   'permissions.status': 1,
-  ...Object.fromEntries(OWNED_PERMISSION_MODULES.flatMap((module) => [[`permissions.${module}.r`, 1], [`permissions.${module}.w`, 1]])),
+  'permissions.hiddenInStats': 1,
+  ...Object.fromEntries(OWNED_PERMISSION_MODULES.flatMap((module) => (module === READ_ONLY_MODULE ? [[`permissions.${module}.r`, 1]] : [[`permissions.${module}.r`, 1], [`permissions.${module}.w`, 1]]))),
+  'permissions.apps': 1,
+  shiftTime: 1,
   insertDate: 1,
   updateDate: 1,
+  ...PRESENCE,
 });
 
+/** What the detail of a user needs on top of {@link USER_PROJECTION}: the picture. */
+const DETAIL_PROJECTION: Projection = Object.freeze({ ...USER_PROJECTION, avatar: 1 });
+
 /** What the login needs on top of {@link USER_PROJECTION}: the legacy hash, for the verifier only. */
-const LOGIN_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({ ...USER_PROJECTION, password: 1 });
+const LOGIN_PROJECTION: Projection = Object.freeze({ ...USER_PROJECTION, password: 1 });
 
 /**
  * What authenticating a request needs, read on every request: identity, role, status, scope and the
  * whole stored permission matrix (its non-core modules limit what the user can grant). No personal
  * data, no password, no token.
  */
-const AUTH_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
+const AUTH_PROJECTION: Projection = Object.freeze({
   userName: 1,
   username: 1,
   role: 1,
@@ -67,11 +89,11 @@ const AUTH_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
 });
 
 /**
- * What managing a user needs: the profile fields of {@link USER_PROJECTION} and, whole, the stored
- * permission matrix (its non-core modules limit what the actor may grant). No password, PIN, token or picture.
+ * What managing a user needs: the detail of {@link DETAIL_PROJECTION} and, whole, the stored permission matrix
+ * (its non-core modules limit what the actor may grant). No password, PIN or token.
  */
-const MANAGE_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
-  ...Object.fromEntries(Object.keys(USER_PROJECTION).filter((key) => !key.startsWith('permissions.')).map((key) => [key, 1 as const])),
+const MANAGE_PROJECTION: Projection = Object.freeze({
+  ...Object.fromEntries(Object.entries(DETAIL_PROJECTION).filter(([key]) => !key.startsWith('permissions.'))),
   permissions: 1,
 });
 
@@ -89,6 +111,12 @@ function leafPaths(value: Document, prefix = ''): string[] {
       : [`${prefix}${key}`],
   );
 }
+
+/** Whether a path may be written: an owned field, or anything below one of the owned maps. */
+const isOwnedPath = (owned: ReadonlySet<string>, path: string): boolean => owned.has(path) || USERS_OWNED_TREES.some((tree) => path.startsWith(`${tree}.`));
+
+/** The containers of the POS and of the shifts. */
+const REPAIRABLE = /^(shiftTime|permissions\.apps)(\.|$)/;
 
 /** The part of a user that other modules show next to their own data. */
 export interface UserSummary {
@@ -199,6 +227,24 @@ export interface UsersRepository {
    * @returns `false` when the user does not exist.
    */
   clearLegacyTokens(id: ObjectId, session?: ClientSession): Promise<boolean>;
+  /**
+   * Empties the legacy `tokens[]` of several users at once (D-11), for the operations that end the sessions of a whole group.
+   *
+   * @param ids Ids of the users, at most one batch.
+   * @param session Transaction the write belongs to (a batch commits whole or not at all).
+   * @returns How many users matched.
+   */
+  clearLegacyTokensOfMany(ids: readonly ObjectId[], session: ClientSession): Promise<number>;
+  /**
+   * Reads, in the order of their ids, a batch of the ids of the users of a group (every role, trashed ones included), to walk
+   * a large group without loading it whole.
+   *
+   * @param groupId The group.
+   * @param after The last id of the previous batch, `null` for the first.
+   * @param limit Size of the batch.
+   * @returns At most `limit` ids; an empty list when there are no more.
+   */
+  findIdsOfGroup(groupId: ObjectId, after: ObjectId | null, limit: number): Promise<ObjectId[]>;
 }
 
 /**
@@ -209,6 +255,29 @@ export interface UsersRepository {
 export function createUsersRepository(databases: Databases): UsersRepository {
   const users = (): Collection<Document> => databases.common().collection('users');
   const owned = new Set(COLLECTIONS.common.users.ownedFields);
+
+  /**
+   * A `$set` of a path below `shiftTime` or `permissions.apps` fails when a parent exists but is not an object (a legacy `shiftTime: null` or `0`).
+   * Before the update, each such parent is replaced by an empty object: nothing else of it could be kept, and a parent that is missing is created
+   * by the update itself.
+   */
+  const repairParents = async (id: ObjectId, paths: readonly string[], session: ClientSession | undefined): Promise<void> => {
+    const ancestors = paths.flatMap((path) => path.split('.').slice(0, -1).map((_segment, index, parts) => parts.slice(0, index + 1).join('.')));
+    const parents = [...new Set(ancestors)].filter((path) => REPAIRABLE.test(path));
+    if (parents.length === 0) {
+      return;
+    }
+    const broken = (path: string): Document => ({ [path]: { $exists: true, $not: { $type: 'object' } } });
+    const options = session === undefined ? {} : { session };
+    // The common case is a document without a broken parent: one cheap query says so.
+    if ((await users().findOne({ _id: id, $or: parents.map(broken) }, { projection: { _id: 1 }, ...options })) === null) {
+      return;
+    }
+    // From the outermost, so that a parent replaced by an object never hides a broken child.
+    for (const path of parents.sort((a, b) => a.split('.').length - b.split('.').length)) {
+      await users().updateOne({ _id: id, ...broken(path) }, { $set: { [path]: {} } }, options);
+    }
+  };
 
   const toLoginRecord = (document: Document): LoginRecord => ({
     ...fromLegacy(document as LegacyUserDocument),
@@ -237,7 +306,7 @@ export function createUsersRepository(databases: Databases): UsersRepository {
 
   return {
     findById: async (id) => {
-      const document = await users().findOne({ _id: id }, { projection: USER_PROJECTION });
+      const document = await users().findOne({ _id: id }, { projection: DETAIL_PROJECTION });
       return document === null ? null : fromLegacy(document as LegacyUserDocument);
     },
 
@@ -267,11 +336,11 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       const match = withScope(scopeFilter, { $and: [filter, listSearch(params, USERS_LIST)] });
       const documents = await users().aggregate(listPipeline(match, params, USERS_LIST, USER_PROJECTION), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
       const { items, page } = pageOf(documents, params);
-      return { users: items.map((document) => fromLegacy(document as LegacyUserDocument)), page };
+      return { users: items.map((document) => fromLegacy(document as LegacyUserDocument, { summary: true })), page };
     },
 
     insert: async (document, session) => {
-      const foreign = leafPaths(document).filter((path) => path !== '_id' && !owned.has(path));
+      const foreign = leafPaths(document).filter((path) => path !== '_id' && !isOwnedPath(owned, path));
       if (foreign.length > 0) {
         throw new Error(`Refusing to write fields the backend does not own: ${foreign.join(', ')}`);
       }
@@ -324,6 +393,7 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       if (foreign.length > 0) {
         throw new Error(`Refusing to write fields the backend does not own: ${foreign.join(', ')}`);
       }
+      await repairParents(id, fields, session);
       const result = await users().updateOne(
         { _id: id },
         { $set: { ...update.$set }, ...(update.$unset === undefined ? {} : { $unset: { ...update.$unset } }) },
@@ -335,6 +405,18 @@ export function createUsersRepository(databases: Databases): UsersRepository {
     clearLegacyTokens: async (id, session) => {
       const result = await users().updateOne({ _id: id }, { $set: { tokens: [] } }, session === undefined ? {} : { session });
       return result.matchedCount === 1;
+    },
+
+    clearLegacyTokensOfMany: async (ids, session) => {
+      const result = await users().updateMany({ _id: { $in: [...ids] } }, { $set: { tokens: [] } }, { session });
+      return result.matchedCount;
+    },
+
+    findIdsOfGroup: async (groupId, after, limit) => {
+      const documents = await users()
+        .find({ groupId, ...(after === null ? {} : { _id: { $gt: after } }) }, { projection: { _id: 1 }, sort: { _id: 1 }, limit, maxTimeMS: LIST_MAX_TIME_MS })
+        .toArray();
+      return documents.map((document) => document._id);
     },
   };
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
+import { featuresOf } from '../../src/modules/groups/features.ts';
 import { createGroupSummaryRepository } from '../../src/modules/me/group-summary.repository.ts';
 import { createRateLimiter } from '../../src/shared/security/rate-limit/rate-limiter.ts';
 import { ALL_PERMISSIONS, PERMISSIONS } from '../../src/shared/security/rbac/permissions.ts';
@@ -55,12 +56,12 @@ const profileOf = async (response: Response): Promise<Profile> => {
 describe('GET /v1/me', () => {
   it('returns the profile, the effective permissions, the scope summary and the group, and no secret', async () => {
     const group = office.cluster.groups[0]!;
-    const sentinels = ['PIN-SENTINEL-93', 'TOKEN-SENTINEL-93', 'AVATAR-SENTINEL-93', 'CASH-SENTINEL-93', 'GROUPKEY-SENTINEL-93', 'SMTP-SENTINEL-93'];
+    const sentinels = ['PIN-SENTINEL-93', 'TOKEN-SENTINEL-93', 'RESIDUE-SENTINEL-93', 'CASH-SENTINEL-93', 'GROUPKEY-SENTINEL-93', 'SMTP-SENTINEL-93'];
     const { id, name } = await addUser({
       pin: sentinels[0],
       tokens: [{ token: sentinels[1] }],
-      avatar: sentinels[2],
-      permissions: { status: true, groups: { r: true, w: true }, users: { r: true, w: true }, companies: { r: true, w: true }, places: { r: true, w: true }, logs: { r: true, w: true }, apps: { cash: { status: true, note: sentinels[3] } } },
+      avatar: 'data:image/png;base64,iVBORw0KGgo=',
+      permissions: { status: true, groups: { r: true, w: true }, users: { r: true, w: true }, companies: { r: true, w: true }, places: { r: true, w: true }, fidelity: { r: true, w: true }, products: { r: true, w: true }, logs: { r: true, w: true }, apps: { cash: { status: true, note: sentinels[3], sub: { productsStatus: sentinels[2] }, options: { service: sentinels[2] } } } },
     });
     await ctx.databases.common().collection('groups').updateOne({ _id: group.groupId }, { $set: { apiKey: sentinels[4], 'settings.email.password': sentinels[5] } });
     const own = await office.tokens(name);
@@ -71,7 +72,7 @@ describe('GET /v1/me', () => {
     }
     const profile = await profileOf(response);
     assert.deepEqual(Object.keys(profile).sort(), [
-      'canManagePermissions', 'companyIds', 'createdAt', 'dealer', 'dealerId', 'email', 'firstName', 'group', 'groupId', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'placeIds', 'role', 'scope', 'status', 'trashed', 'updatedAt', 'username',
+      'avatar', 'canManagePermissions', 'companyIds', 'createdAt', 'dealer', 'dealerId', 'description', 'email', 'firstName', 'group', 'groupFeatures', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'scope', 'serviceIds', 'shiftTime', 'status', 'trashed', 'updatedAt', 'username',
     ]);
     assert.equal(profile['id'], id.toHexString());
     assert.equal(profile['username'], name);
@@ -379,7 +380,7 @@ describe('group summary repository', () => {
   it('reads only the id and the name, and answers null for a group that does not exist', async () => {
     const repository = createGroupSummaryRepository(ctx.databases);
     const group = office.cluster.groups[0]!;
-    assert.deepEqual(await repository.find(group.groupId), { id: group.groupId.toHexString(), name: 'group-001' });
+    assert.deepEqual(await repository.find(group.groupId), { id: group.groupId.toHexString(), name: 'group-001', features: featuresOf({ warehouse: true, cash: true }) });
     assert.equal(await repository.find(new ObjectId()), null);
   });
 });

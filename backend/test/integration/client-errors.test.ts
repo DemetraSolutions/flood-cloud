@@ -162,7 +162,7 @@ describe('what is stored of a report (real activity log)', () => {
     assert.equal(reply.status, 202);
     const log = createActivityLog({ databases: ctx.databases, logger: memoryLogger().logger, retentionDays: 365, errorRetentionDays: 90 });
     await log.record(last());
-    const stored = await ctx.databases.common().collection('activityLog').find({ action: 'client.error', 'actor.id': g0().sa }).sort({ at: -1 }).limit(1).next();
+    const stored = await ctx.databases.common().collection('activityEvents').find({ action: 'client.error', 'actor.id': g0().sa }).sort({ at: -1 }).limit(1).next();
     const text = JSON.stringify(stored);
     for (const secret of [token, uri, 'secret@']) {
       assert.ok(!text.includes(secret), secret);

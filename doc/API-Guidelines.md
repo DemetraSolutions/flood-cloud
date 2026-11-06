@@ -40,14 +40,17 @@
 |---|---|---|
 | `400` | JSON malformato | `MALFORMED_JSON` |
 | `400` | richiesta malformata (percorso, dimensione o protocollo) | `BAD_REQUEST` |
+| `304` | rivalidazione riuscita (`If-None-Match` corrisponde all'`ETag`), senza body; oggi solo `GET /v1/groups/{groupId}` | — |
 | `401` | credenziale assente, non valida, scaduta, revocata | `UNAUTHENTICATED`, `TOKEN_EXPIRED`, `CLOCK_SKEW` |
 | `401` | credenziali di login errate o account non ammesso (risposta identica per ogni caso) | `INVALID_CREDENTIALS` |
 | `403` | autenticato ma senza permesso | `FORBIDDEN` |
 | `403` | password provvisoria da cambiare (consentite solo profilo, cambio password e logout) | `PASSWORD_CHANGE_REQUIRED` |
+| `403` | il gruppo non ha acceso il modulo a cui appartiene la route (vale per ogni ruolo, PSA e D compresi; dopo il controllo di gruppo e permesso) | `FEATURE_DISABLED` |
 | `404` | inesistente **o fuori scope** | `NOT_FOUND` |
 | `405` | metodo non supportato sulla risorsa (+ `Allow`) | `METHOD_NOT_ALLOWED` |
 | `409` | conflitto, duplicato, stato incompatibile | `CONFLICT` |
 | `409` | unicità violata, con `details: [{ "field": "username", "issue": "taken" }]` | `CONFLICT` |
+| `409` | eliminazione rifiutata: elemento predefinito o ultimo (`default`, `last`) o ancora usato da altri elementi (`referenced`, un `details` per elemento che lo usa) | `CONFLICT` |
 | `412` | `If-Match` non corrispondente | `PRECONDITION_FAILED` |
 | `413` | payload troppo grande | `PAYLOAD_TOO_LARGE` |
 | `415` | content type non supportato | `UNSUPPORTED_MEDIA_TYPE` |
@@ -59,7 +62,7 @@
 { "error": { "code": "VALIDATION_ERROR", "message": "Invalid request", "details": [{ "field": "price", "issue": "minimum" }] } }
 ```
 
-`issue` possibili nei `details` dei `422`: `required`, `type`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `enum`, `unknown`, `forbiddenKey`, `format`, `tooDeep`, `tooMany`, `incorrect`, `reused`, `immutable`; `taken` compare invece nei `details` dei `409` di unicità.
+`issue` possibili nei `details` dei `422`: `required`, `type`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `enum`, `unknown`, `forbiddenKey`, `format`, `tooDeep`, `tooMany` (anche un elenco o un documento oltre il limite), `incorrect` (valore o riferimento non valido; anche un elemento ripetuto in un elenco di elementi univoci), `reused`, `immutable`, `notAllowed` (il campo non è consentito in quel contesto: anche nei `details` dei `403` quando un ruolo invia un campo che non può dare); `taken` compare invece nei `details` dei `409` di unicità, e `default`, `last`, `referenced` in quelli dei `409` di eliminazione rifiutata.
 
 ## 6. Idempotenza e concorrenza
 - **`Idempotency-Key`** (UUID) obbligatoria sulle scritture della superficie store e sulle creazioni sensibili ai doppioni (vendite, documenti, pagamenti): stessa chiave e stesso body ⇒ stessa risposta; stessa chiave e body diverso ⇒ `409`.

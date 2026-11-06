@@ -3,6 +3,8 @@ import type { Db } from 'mongodb';
 import type { Request, RequestHandler } from 'express';
 import type { ClusterId } from '../../../config.ts';
 import type { Databases } from '../../../db/databases.ts';
+import { featuresOf } from '../../../modules/groups/features.ts';
+import type { FeatureFlags } from '../../../modules/groups/features.ts';
 import { AppError } from '../../http/errors.ts';
 import type { PermissionDecisionHook } from '../rbac/require-permission.ts';
 import type { GroupsRepository } from './groups.repository.ts';
@@ -15,6 +17,8 @@ export interface GroupAccess {
   readonly clusterId: ClusterId;
   /** True when the caller is PSA or D, whose access to a group is audited. */
   readonly crossGroup: boolean;
+  /** The features of the group, read in the same query as its state; a route that declares a `feature` is refused when it is off. */
+  readonly features: FeatureFlags;
 }
 
 const GROUP_ID_PATTERN = /^[0-9a-f]{24}$/;
@@ -59,9 +63,9 @@ function checkPerimeter(principal: AuthPrincipal, rawGroupId: string): Perimeter
   return { groupId: ObjectId.createFromHexString(rawGroupId), crossGroup };
 }
 
-/** Issues a verified access for a perimeter and the cluster of the group. */
-function issueGroupAccess(perimeter: Perimeter, clusterId: ClusterId): GroupAccess {
-  const access: GroupAccess = Object.freeze({ ...perimeter, clusterId });
+/** Issues a verified access for a perimeter, the cluster and the features of the group. */
+function issueGroupAccess(perimeter: Perimeter, clusterId: ClusterId, features: FeatureFlags): GroupAccess {
+  const access: GroupAccess = Object.freeze({ ...perimeter, clusterId, features });
   issued.add(access);
   return access;
 }
@@ -91,8 +95,8 @@ export interface GroupAccessDeps {
  * declaring `group: true`). It verifies the group against the principal's scope and against
  * `common.groups`: a group that does not exist is `404` for everybody; a suspended or trashed
  * group is reachable only by PSA and `404` for everybody else. A group declared on a cluster that is not
- * configured fails with `UnknownClusterError` (`503`). The result, which carries the group's cluster,
- * goes in `res.locals.groupAccess`.
+ * configured fails with `UnknownClusterError` (`503`). The result, which carries the group's cluster and
+ * features, goes in `res.locals.groupAccess`.
  *
  * @param groups Group lookup.
  * @returns The handler: `401 UNAUTHENTICATED` without principal, `404 NOT_FOUND` otherwise when not reachable.
@@ -113,7 +117,7 @@ export function requireGroupAccess(groups: Pick<GroupsRepository, 'findAccess' |
     }
     // The cluster is resolved only now: a suspended or trashed group is already a uniform 404 for non-PSA,
     // whatever its (possibly broken) dataCluster says.
-    res.locals.groupAccess = issueGroupAccess(perimeter, groups.resolveCluster(found.group));
+    res.locals.groupAccess = issueGroupAccess(perimeter, groups.resolveCluster(found.group), featuresOf(found.group.settings));
     next();
   };
 }

@@ -110,6 +110,14 @@ describe('mountRoutes with user routes', () => {
     mountRoutes(express.Router(), [route()], { allowedAuth: ['anonymous'], ...withLimit });
   });
 
+  it('accepts a feature only on a group route and only from the catalog', () => {
+    const both = { ...options, groupAccess };
+    const grouped = (feature: unknown) => ({ kind: 'user', permission: 'places:read', group: true, feature });
+    mountRoutes(express.Router(), [userRoute({ path: '/groups/:groupId/places', auth: grouped('cash') })], both);
+    assert.match(mountMessage([userRoute({ path: '/groups/:groupId/places', auth: grouped('teleport') })], both), /unknown feature/);
+    assert.match(mountMessage([userRoute({ path: '/places', auth: { kind: 'user', permission: 'places:read', feature: 'cash' } })], both), /a feature can only be required by a route declaring group: true/);
+  });
+
   it('rejects a permission outside the catalog', () => {
     for (const permission of ['places:delete', '', undefined, 5]) {
       assert.match(mountMessage([userRoute({ auth: { kind: 'user', permission } })], options), /unknown permission/);

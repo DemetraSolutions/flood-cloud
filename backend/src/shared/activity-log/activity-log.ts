@@ -266,7 +266,7 @@ function loggable(document: ActivityLogDocument): Record<string, unknown> {
 }
 
 /**
- * Creates the activity log service over `common.activityLog`.
+ * Creates the activity log service over `common.activityEvents`.
  *
  * @param deps Database accessor, logger, retention and clock.
  * @returns The service.
@@ -288,7 +288,7 @@ export function createActivityLog(deps: ActivityLogDeps): ActivityLog {
         return;
       }
       try {
-        await deps.databases.common().collection<ActivityLogDocument>('activityLog').insertOne(document);
+        await deps.databases.common().collection<ActivityLogDocument>('activityEvents').insertOne(document);
       } catch (error) {
         deps.logger.error('activity log write failed', { entry: loggable(document), error });
       }

@@ -6,6 +6,7 @@ import type { Document } from 'mongodb';
 import { createCredentialsRepository } from '../../src/modules/users/credentials.repository.ts';
 import { createDealersRepository } from '../../src/modules/dealers/dealers.repository.ts';
 import { createGroupDirectoryRepository } from '../../src/modules/users/group-directory.repository.ts';
+import { groupReaders } from '../helpers/user-deps.ts';
 import { createUsersRepository } from '../../src/modules/users/users.repository.ts';
 import { createSessionsRepository } from '../../src/modules/sessions/sessions.repository.ts';
 import { createUsersService } from '../../src/modules/users/users.service.ts';
@@ -27,7 +28,7 @@ let as: ReturnType<typeof actors>;
 
 const PASSWORD = `Prov-${randomBytes(8).toString('hex')}-pass`;
 const EXTRA = { r: true, w: false };
-const FULL = { status: true, groups: { r: true, w: true }, users: { r: true, w: true }, companies: { r: true, w: true }, places: { r: true, w: true }, logs: { r: true, w: true }, products: EXTRA, apps: { cash: { status: true, sub: { discounts: true } } } };
+const FULL = { status: true, groups: { r: true, w: true }, users: { r: true, w: true }, companies: { r: true, w: true }, places: { r: true, w: true }, logs: { r: true, w: true }, stats: EXTRA, apps: { cash: { status: true, sub: { discounts: true } } } };
 const users = () => ctx.databases.common().collection('users');
 const credentials = () => ctx.databases.common().collection('userCredentials');
 const sessions = () => ctx.databases.common().collection('sessions');
@@ -136,7 +137,7 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
 
   it('refuses fields it does not own, in particular the password, the group and the trash', async () => {
     const id = await freshPa();
-    for (const field of ['password', 'groupId', 'dealerId', 'trashed', 'trash', 'tokens', 'pin', 'apps', '_id', 'createdAt', 'hiddenInStats']) {
+    for (const field of ['password', 'groupId', 'dealerId', 'trashed', 'trash', 'tokens', 'apps', '_id', 'createdAt', 'userName']) {
       assert.deepEqual(failure(await as.call(g0().sa, 'PATCH', path(id), { [field]: field === 'tokens' ? [] : 'x' })), invalid([field, 'unknown']), field);
     }
     assert.deepEqual(failure(await as.call(g0().sa, 'PATCH', path(id), { '$set': { role: 'PSA' } })), invalid(['(key)', 'forbiddenKey']));
@@ -172,7 +173,7 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
     const reply = await as.call(g0().sa, 'PATCH', path(id), { permissions: { canManagePermissions: false } });
     assert.equal(reply.body.data.permissions.canManagePermissions, false);
     const permissions = (await stored(id))['permissions'] as Document;
-    assert.deepEqual([permissions['status'], permissions['users'], permissions['products']], [false, { r: true, w: true }, EXTRA]);
+    assert.deepEqual([permissions['status'], permissions['users'], permissions['stats']], [false, { r: true, w: true }, EXTRA]);
     assert.deepEqual(events(from), ['user.updated', 'user.permissionsChanged']);
   });
 
@@ -260,13 +261,13 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
     const id = await freshPa();
     const token = await loggedIn(id);
     const from = mark();
-    const reply = await as.call(g0().sa, 'PATCH', path(id), { permissions: { canManagePermissions: false, modules: { users: { w: false }, logs: { r: false, w: false } } } });
+    const reply = await as.call(g0().sa, 'PATCH', path(id), { permissions: { canManagePermissions: false, modules: { users: { w: false }, logs: { r: false } } } });
     assert.equal(reply.status, 200, JSON.stringify(reply.body));
     assert.deepEqual(reply.body.data.permissions.modules.users, { r: true, w: false });
-    assert.deepEqual(reply.body.data.permissions.modules.logs, { r: false, w: false });
+    assert.deepEqual(reply.body.data.permissions.modules.logs, { r: false });
     assert.equal(reply.body.data.permissions.canManagePermissions, false);
     const permissions = (await stored(id))['permissions'] as Document;
-    assert.deepEqual([permissions['status'], permissions['users'], permissions['logs'], permissions['places'], permissions['products']], [false, { r: true, w: false }, { r: false, w: false }, { r: true, w: true }, EXTRA]);
+    assert.deepEqual([permissions['status'], permissions['users'], permissions['logs'], permissions['places'], permissions['stats']], [false, { r: true, w: false }, { r: false, w: true }, { r: true, w: true }, EXTRA]);
     assert.deepEqual(permissions['apps'], { cash: { status: true, sub: { discounts: true } } });
     assert.deepEqual(events(from), ['user.updated', 'user.permissionsChanged', 'session.revoked:permissionsChanged']);
     assert.equal(await works(token), false);
@@ -359,6 +360,7 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
         credentials: createCredentialsRepository(ctx.databases),
         sessions: createSessionsRepository(ctx.databases),
         directory: createGroupDirectoryRepository(ctx.databases),
+        ...groupReaders(ctx.databases),
       dealers: createDealersRepository(ctx.databases),
         activityLog: memoryActivityLog(),
         transaction: (work) => ctx.databases.transaction(work),
@@ -664,7 +666,7 @@ describe('nobody takes down an account stronger than his own', () => {
     // He cannot change the account in any way: not the role, the permissions, the username, nor a telephone number.
     for (const patch of [
       { role: 'E', placeIds: [hex(place(1))] },
-      { permissions: { modules: { users: { r: false, w: false }, places: { r: false, w: false }, companies: { r: false, w: false }, groups: { r: false, w: false }, logs: { r: false, w: false } } } },
+      { permissions: { modules: { users: { r: false, w: false }, places: { r: false, w: false }, companies: { r: false, w: false }, groups: { r: false, w: false }, logs: { r: false } } } },
       { username: 'taken.over' },
       { phone: '+39 06 000' },
       { firstName: 'Still not allowed' },
@@ -676,18 +678,15 @@ describe('nobody takes down an account stronger than his own', () => {
     assert.equal((await as.call(g0().sa, 'PATCH', path(strong), { phone: '+39 06 111' })).status, 200);
   });
 
-  it('refuses a PSA without the right to manage permissions the lock-out of one who has it', async () => {
+  it('lets a PSA whose document says he cannot manage permissions lock out one who can: a PSA holds everything (D-10)', async () => {
     const weakPsa = await fresh({ role: 'PSA', groupId: null, dealerId: null, permissions: { ...FULL, status: false } });
     const strongPsa = await fresh({ role: 'PSA', groupId: null, dealerId: null });
-    for (const [method, url, body] of [
-      ['PUT', `/users/${hex(strongPsa)}/password`, { password: PASSWORD }],
-      ['PATCH', `/users/${hex(strongPsa)}`, { status: 'disabled' }],
-      ['POST', `/users/${hex(strongPsa)}/trash`, undefined],
-    ] as const) {
-      assert.deepEqual(failure(await as.call(weakPsa, method, url, body)), denied, `${method} ${url}`);
-    }
-    // The other way round it is allowed: the weak one holds less than the strong one.
-    assert.equal((await as.call(strongPsa, 'POST', `/users/${hex(weakPsa)}/trash`)).status, 200);
+    assert.equal((await as.call(weakPsa, 'PATCH', `/users/${hex(strongPsa)}`, { status: 'disabled' })).status, 200);
+    assert.equal((await as.call(weakPsa, 'PUT', `/users/${hex(strongPsa)}/password`, { password: PASSWORD })).status, 204);
+    assert.equal((await as.call(weakPsa, 'POST', `/users/${hex(strongPsa)}/trash`)).status, 200);
+    // The stored matrix of the weak one is left as it is, and his answers show what he really holds.
+    const detail = await as.call(weakPsa, 'GET', '/me');
+    assert.deepEqual([detail.body.data.canManagePermissions, detail.body.data.permissions.includes('users:delete')], [true, true]);
   });
 
   it('refuses a restricted CA the lock-out of a full CA of the same company', async () => {
@@ -730,6 +729,7 @@ describe('permanent deletion: dealers with groups, and the race with a restore',
       credentials: createCredentialsRepository(ctx.databases),
       sessions: createSessionsRepository(ctx.databases),
       directory: createGroupDirectoryRepository(ctx.databases),
+        ...groupReaders(ctx.databases),
       dealers: createDealersRepository(ctx.databases),
       activityLog: memoryActivityLog(),
       transaction: (work) => ctx.databases.transaction(work),
@@ -750,6 +750,7 @@ describe('permanent deletion: dealers with groups, and the race with a restore',
       credentials: createCredentialsRepository(ctx.databases),
       sessions: createSessionsRepository(ctx.databases),
       directory: createGroupDirectoryRepository(ctx.databases),
+        ...groupReaders(ctx.databases),
       dealers: createDealersRepository(ctx.databases),
       activityLog: memoryActivityLog(),
       transaction: (work) => ctx.databases.transaction(work),

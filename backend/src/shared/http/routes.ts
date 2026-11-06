@@ -1,5 +1,7 @@
 import express from 'express';
 import type { RequestHandler, Router } from 'express';
+import { isFeature } from '../../modules/groups/features.ts';
+import type { Feature } from '../../modules/groups/features.ts';
 import { isPermission } from '../security/rbac/permissions.ts';
 import type { Permission } from '../security/rbac/permissions.ts';
 import { requirePermission } from '../security/rbac/require-permission.ts';
@@ -7,6 +9,7 @@ import { guardAuthentication, rateLimit } from '../security/rate-limit/rate-limi
 import type { RateLimitMount, RateLimitRule } from '../security/rate-limit/rate-limit.ts';
 import { reportCrossGroupAccess, requireGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
+import { requireFeature } from '../security/scope/require-feature.ts';
 import { AppError } from './errors.ts';
 
 /** HTTP methods a route may declare. */
@@ -35,6 +38,11 @@ export interface UserAuth {
    * group's state before the permission check. Must be `true` exactly when the path contains `:groupId`.
    */
   readonly group?: boolean;
+  /**
+   * The feature of the group the route belongs to (D-13): once the group and the permission are checked, a group that
+   * does not have it turned on gets `403 FEATURE_DISABLED`, whatever the role. Allowed only with `group: true`.
+   */
+  readonly feature?: Feature;
   /**
    * `true` on the few routes a user who still has to replace a provisional password may call (his
    * profile, the password change, the logout). Every other `user` route answers `403 PASSWORD_CHANGE_REQUIRED` to him.
@@ -119,7 +127,7 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     if (typeof route.path !== 'string' || !route.path.startsWith('/')) {
       problems.push(`${label}: path must be a string starting with "/"`);
     }
-    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; group?: unknown; allowWithPendingPasswordChange?: unknown } | undefined;
+    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown } | undefined;
     if (auth === undefined || auth === null) {
       problems.push(`${label}: missing auth declaration`);
     } else if (auth.kind === 'anonymous') {
@@ -141,6 +149,13 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
         problems.push(`${label}: the path has :groupId exactly when the auth declares group: true`);
       } else if (auth.group === true && options.groupAccess === undefined) {
         problems.push(`${label}: group route needs the groupAccess dependencies`);
+      }
+      if (auth.feature !== undefined) {
+        if (!isFeature(auth.feature)) {
+          problems.push(`${label}: unknown feature`);
+        } else if (auth.group !== true) {
+          problems.push(`${label}: a feature can only be required by a route declaring group: true`);
+        }
       }
       if (auth.allowWithPendingPasswordChange !== undefined && auth.allowWithPendingPasswordChange !== true) {
         problems.push(`${label}: allowWithPendingPasswordChange can only be true`);
@@ -249,7 +264,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * methods plus a catch-all answering 405 with the `Allow` header. `GET` implies `HEAD`.
  * The chain of a `user` route is: `authenticate` (guarded by the per-IP limit on failed authentications), the rate limit (the per-user API rule, then the
  * declared rules), the refusal of a user with a provisional password (unless the route allows it), the group check (when `group: true`), `requirePermission` (which reports PSA and D
- * group requests with their outcome), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser,
+ * group requests with their outcome), the feature check (when the route declares a `feature`), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser,
  * then the declared rules that read the body (`needsBody`), then the route `middleware` (validation), then the handler. An anonymous route runs
  * its declared rules, the guard and parser, the body rules, the handler. `/health` declares none.
  *
@@ -257,7 +272,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * @param routes Route declarations.
  * @param options The `authenticate` middleware and the rate limit dependencies, needed by `user` routes.
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
- * empty reason, unknown permission, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
+ * empty reason, unknown permission, unknown feature or a feature without `group: true`, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
  * malformed rate limit rules, malformed `middleware` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
  * auth kind not allowed on the surface, disallowed method,
  * bad path, duplicate method and path).
@@ -299,6 +314,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         ...(route.auth.allowWithPendingPasswordChange === true ? [] : [refusePendingPasswordChange]),
         ...(grouped ? [requireGroupAccess(groupAccess!.groups)] : []),
         requirePermission(route.auth.permission, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
+        ...(route.auth.feature === undefined ? [] : [requireFeature(route.auth.feature)]),
       );
     } else {
       middleware.push(...beforeBody);

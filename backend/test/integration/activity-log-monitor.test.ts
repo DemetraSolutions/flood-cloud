@@ -69,7 +69,7 @@ before(async () => {
       expiresAt: new Date(Date.now() + 365 * DAY),
     };
   });
-  await ctx.databases.common().collection('activityLog').insertMany(documents);
+  await ctx.databases.common().collection('activityEvents').insertMany(documents);
 });
 after(async () => {
   await office.close();
@@ -205,7 +205,7 @@ describe('GET /v1/activity-log actors above the viewer', () => {
       mk({ kind: 'user', id: office.cluster.dealerA, role: 'D' }, '198.51.100.2', 2),
       mk({ kind: 'user', id: g0.sa, role: 'SA' }, '198.51.100.3', 3),
     ];
-    await ctx.databases.common().collection('activityLog').insertMany(entries);
+    await ctx.databases.common().collection('activityEvents').insertMany(entries);
     const seen = async (viewer: ObjectId) => {
       const reply = await get(viewer, '?action=place.created');
       return reply.body.data.map((item: { actor: { id: string | null; role: string; username: string | null }; ip: string | null }) => [item.actor.role, item.actor.id !== null, item.actor.username !== null, item.ip !== null]);
@@ -214,7 +214,7 @@ describe('GET /v1/activity-log actors above the viewer', () => {
     assert.deepEqual(await seen(office.cluster.psa), [['SA', true, true, true], ['D', true, true, true], ['PSA', true, true, true]]);
     assert.deepEqual(await seen(office.cluster.dealerA), [['SA', true, true, true], ['D', true, true, true], ['PSA', false, false, false]]);
     assert.deepEqual(await seen(g0.sa), [['SA', true, true, true], ['D', false, false, false], ['PSA', false, false, false]]);
-    await ctx.databases.common().collection('activityLog').deleteMany({ _id: { $in: entries.map((entry) => entry['_id'] as ObjectId) } });
+    await ctx.databases.common().collection('activityEvents').deleteMany({ _id: { $in: entries.map((entry) => entry['_id'] as ObjectId) } });
   });
 });
 
@@ -252,7 +252,7 @@ describe('GET /v1/activity-log queries use the indexes', () => {
     for (const [name, who, filter] of cases) {
       const params = { limit: 50, sort: '-at', q: null, cursor: null };
       const { match, options } = activityLogPageQuery(who as never, filter, params);
-      const plan = await ctx.databases.common().collection('activityLog').find(match, options).explain('queryPlanner');
+      const plan = await ctx.databases.common().collection('activityEvents').find(match, options).explain('queryPlanner');
       assert.ok(!blocking(plan.queryPlanner.winningPlan), `${name}: ${JSON.stringify(plan.queryPlanner.winningPlan)}`);
     }
   });
@@ -291,10 +291,10 @@ describe('GET /v1/activity-log actors without a user name', () => {
     const nameless = new ObjectId();
     const entry = new ObjectId();
     await ctx.databases.common().collection('users').insertOne({ _id: nameless, userName: 7, role: 'SA' });
-    await ctx.databases.common().collection('activityLog').insertOne({ _id: entry, at: new Date(T0 + 900_000), category: 'data', action: 'user.updated', outcome: 'success', actor: { kind: 'user', id: nameless, role: 'SA' }, expiresAt: new Date(Date.now() + 365 * DAY) });
+    await ctx.databases.common().collection('activityEvents').insertOne({ _id: entry, at: new Date(T0 + 900_000), category: 'data', action: 'user.updated', outcome: 'success', actor: { kind: 'user', id: nameless, role: 'SA' }, expiresAt: new Date(Date.now() + 365 * DAY) });
     const reply = await get(office.cluster.psa, '?action=user.updated');
     assert.deepEqual(reply.body.data.map((item: { id: string; actor: { username: null } }) => [item.id, item.actor.username]), [[hex(entry), null]]);
-    await ctx.databases.common().collection('activityLog').deleteOne({ _id: entry });
+    await ctx.databases.common().collection('activityEvents').deleteOne({ _id: entry });
     await ctx.databases.common().collection('users').deleteOne({ _id: nameless });
     assert.deepEqual(labels(await get(office.cluster.psa, '?action=session.revoked')), ['k-system']);
   });
@@ -314,7 +314,7 @@ describe('GET /v1/activity-log pagination', () => {
       requestId: `req-tied-${String(i)}`,
       expiresAt: new Date(Date.now() + 365 * DAY),
     }));
-    await ctx.databases.common().collection('activityLog').insertMany(tied);
+    await ctx.databases.common().collection('activityEvents').insertMany(tied);
     const seen: string[] = [];
     let cursor: string | null = null;
     let pages = 0;
@@ -337,7 +337,7 @@ describe('GET /v1/activity-log pagination', () => {
     } while (next !== null);
     assert.equal(new Set(everything).size, everything.length);
     assert.ok(everything.length >= ALL_NEWEST_FIRST.length + tied.length);
-    await ctx.databases.common().collection('activityLog').deleteMany({ _id: { $in: tied.map((entry) => entry._id) } });
+    await ctx.databases.common().collection('activityEvents').deleteMany({ _id: { $in: tied.map((entry) => entry._id) } });
   });
 
   it('keeps the cursor inside the caller scope and answers an empty page to a cursor without a date', async () => {

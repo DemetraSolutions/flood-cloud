@@ -200,10 +200,10 @@ export function listSearch(params: ListParams, config: ListConfig): Filter<Docum
  * @param match The filter of the request, already combined with the scope through `withScope`.
  * @param params The list parameters.
  * @param config The resource's list description.
- * @param projection Fields to return (inclusion projection); the sort key is always returned.
+ * @param projection Fields to return (inclusion projection, with computed fields as expressions); the sort key is always returned.
  * @returns The pipeline, reading `limit + 1` documents.
  */
-export function listPipeline(match: Filter<Document>, params: ListParams, config: ListConfig, projection: Readonly<Record<string, 1>>): Document[] {
+export function listPipeline(match: Filter<Document>, params: ListParams, config: ListConfig, projection: Readonly<Record<string, 1 | Document>>): Document[] {
   const { spec, direction } = sortOf(params.sort, config);
   const stored = '$' + spec.field;
   const key =

@@ -3,7 +3,7 @@ import { clientContextOf } from '../../shared/http/client-context.ts';
 import { sendData } from '../../shared/http/envelope.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
 import type { ObjectId } from 'mongodb';
-import type { ChangePasswordBody, PatchMeBody } from './me.schemas.ts';
+import type { ChangePasswordBody, ChangePinBody, PatchMeBody } from './me.schemas.ts';
 import type { MeService } from './me.service.ts';
 
 /** HTTP handlers of the `/v1/me` routes. */
@@ -11,6 +11,7 @@ export interface MeController {
   get: RequestHandler;
   patch: RequestHandler;
   changePassword: RequestHandler;
+  changePin: RequestHandler;
   listSessions: RequestHandler;
   revokeSession: RequestHandler;
 }
@@ -30,6 +31,10 @@ export function createMeController(service: MeService): MeController {
     },
     changePassword: async (req, res) => {
       await service.changePassword(res.locals.auth!, res.locals.sessionId!, inputOf<ChangePasswordBody>(res, 'body'), clientContextOf(req, res));
+      res.status(204).end();
+    },
+    changePin: async (req, res) => {
+      await service.changePin(res.locals.auth!, inputOf<ChangePinBody>(res, 'body'), clientContextOf(req, res));
       res.status(204).end();
     },
     listSessions: async (_req, res) => {

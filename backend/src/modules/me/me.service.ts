@@ -11,11 +11,14 @@ import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import type { DealersRepository } from '../dealers/dealers.repository.ts';
 import type { CredentialsRepository } from '../users/credentials.repository.ts';
 import { toLegacyUpdate } from '../users/user.mapper.ts';
-import type { User } from '../users/user.types.ts';
+import { avatarFingerprint } from '../users/avatar.ts';
+import { optionReferenceIssues, referencesGroupLists } from '../users/group-options.ts';
+import type { GroupOptionsReader } from '../users/group-options.ts';
+import type { LoginRecord, User } from '../users/user.types.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import { auditSessionsRevoked } from '../sessions/session-audit.ts';
 import type { Session, SessionsRepository } from '../sessions/sessions.repository.ts';
-import type { ChangePasswordBody, PatchMeBody } from './me.schemas.ts';
+import type { ChangePasswordBody, ChangePinBody, PatchMeBody } from './me.schemas.ts';
 import type { GroupSummaryRepository } from './group-summary.repository.ts';
 import { toProfile } from './profile.ts';
 import type { Profile } from './profile.ts';
@@ -63,6 +66,17 @@ export interface MeService {
    */
   changePassword(principal: AuthPrincipal, sessionId: ObjectId, input: ChangePasswordBody, client: ClientContext): Promise<void>;
   /**
+   * Sets or removes the PIN of the user. The current password confirms who asks, with the same check as the password change (a wrong one is logged
+   * as `auth.passwordCheckFailed`, on a route with the same dedicated rate limit). The PIN is not a session credential, so no session is ended; it is
+   * written as the POS needs it and never returned or logged: the activity log records only whether it is set.
+   *
+   * @param principal The authenticated user.
+   * @param input Current password and the new PIN (`null` removes it).
+   * @param client Request context.
+   * @throws {AppError} `VALIDATION_ERROR` with `currentPassword`/`incorrect`; `NOT_FOUND` if the user disappeared.
+   */
+  changePin(principal: AuthPrincipal, input: ChangePinBody, client: ClientContext): Promise<void>;
+  /**
    * Lists the user's active sessions.
    *
    * @param principal The authenticated user.
@@ -87,6 +101,8 @@ export interface MeServiceDeps {
   readonly credentials: CredentialsRepository;
   readonly sessions: SessionsRepository;
   readonly groups: GroupSummaryRepository;
+  /** The favorites lists of the group, to verify the POS preferences. */
+  readonly groupOptions: GroupOptionsReader;
   /** The dealer registry, for the profile of a `D` user. */
   readonly dealers: Pick<DealersRepository, 'findSummary'>;
   readonly activityLog: ActivityLog;
@@ -94,8 +110,17 @@ export interface MeServiceDeps {
   readonly now: () => number;
 }
 
-/** The fields `PATCH /v1/me` can change, as recorded in the activity log. */
-const editable = (user: Pick<User, 'firstName' | 'lastName' | 'email' | 'phone' | 'language'>) => ({ firstName: user.firstName, lastName: user.lastName, email: user.email, phone: user.phone, language: user.language });
+/** The fields `PATCH /v1/me` can change, as recorded in the activity log: the picture only as whether there is one and a short fingerprint of it. */
+const editable = (user: Pick<User, 'firstName' | 'lastName' | 'email' | 'phone' | 'language' | 'hasAvatar' | 'avatar'> & { readonly pos: Pick<User['pos'], 'options'> }) => ({
+  firstName: user.firstName,
+  lastName: user.lastName,
+  email: user.email,
+  phone: user.phone,
+  language: user.language,
+  hasAvatar: user.hasAvatar,
+  avatarHash: user.avatar === undefined || user.avatar === null ? null : avatarFingerprint(user.avatar),
+  posOptions: user.pos.options,
+});
 
 const toSessionView = (session: Session, currentSessionId: ObjectId): SessionView => ({
   id: session.id.toHexString(),
@@ -112,7 +137,7 @@ const toSessionView = (session: Session, currentSessionId: ObjectId): SessionVie
  * @param deps Repositories, configuration, activity log and clock.
  */
 export function createMeService(deps: MeServiceDeps): MeService {
-  const { config, users, credentials, sessions, groups, dealers, activityLog } = deps;
+  const { config, users, credentials, sessions, groups, groupOptions, dealers, activityLog } = deps;
   const date = (): Date => new Date(deps.now());
 
   const load = async (principal: AuthPrincipal): Promise<Profile> => {
@@ -126,6 +151,35 @@ export function createMeService(deps: MeServiceDeps): MeService {
     return toProfile(mapped.user, principal, groupId === null ? null : await groups.find(groupId), dealer, stored?.mustChangePassword === true);
   };
 
+  /** Checks the current password of the authenticated user, logging a wrong one; returns his login record. */
+  const confirmPassword = async (principal: AuthPrincipal, password: string, client: ClientContext): Promise<LoginRecord> => {
+    const record = await users.findLoginRecordById(principal.userId);
+    if (record === null) {
+      throw new AppError('NOT_FOUND');
+    }
+    const stored = await credentials.find(principal.userId);
+    const verification = await verifyUserPassword({
+      password,
+      legacyHash: record.legacyPasswordHash,
+      credentials: stored?.passwordHash ? { passwordHash: stored.passwordHash, legacyHashFingerprint: stored.legacyHashFingerprint } : null,
+      pepper: config.legacyPasswordPepper,
+    });
+    if (!verification.ok) {
+      await activityLog.record({
+        category: 'security',
+        action: 'auth.passwordCheckFailed',
+        outcome: 'failure',
+        actor: actorOf(principal),
+        ...(principal.groupId === null ? {} : { groupId: principal.groupId }),
+        resource: { type: 'user', id: principal.userId.toHexString() },
+        requestId: client.requestId,
+        ...(client.ip === null ? {} : { ip: client.ip }),
+      });
+      throw new AppError('VALIDATION_ERROR', { details: [{ field: 'currentPassword', issue: 'incorrect' }] });
+    }
+    return record;
+  };
+
   return {
     getProfile: load,
 
@@ -134,7 +188,15 @@ export function createMeService(deps: MeServiceDeps): MeService {
         throw new AppError('VALIDATION_ERROR', { details: [{ field: '(body)', issue: 'required' }] });
       }
       const before = await users.findById(principal.userId);
-      if (before === null || !(await users.updateOwned(principal.userId, toLegacyUpdate(changes, date())))) {
+      if (before === null) {
+        throw new AppError('NOT_FOUND');
+      }
+      const options = changes.pos?.options;
+      const issues = optionReferenceIssues(options, before.user.pos.options, referencesGroupLists(options) && principal.groupId !== null ? await groupOptions.read(principal.groupId) : null);
+      if (issues.length > 0) {
+        throw new AppError('VALIDATION_ERROR', { details: issues });
+      }
+      if (!(await users.updateOwned(principal.userId, toLegacyUpdate(changes, date())))) {
         throw new AppError('NOT_FOUND');
       }
       const profile = await load(principal);
@@ -152,30 +214,7 @@ export function createMeService(deps: MeServiceDeps): MeService {
     },
 
     changePassword: async (principal, sessionId, { currentPassword, newPassword }, client) => {
-      const record = await users.findLoginRecordById(principal.userId);
-      if (record === null) {
-        throw new AppError('NOT_FOUND');
-      }
-      const stored = await credentials.find(principal.userId);
-      const verification = await verifyUserPassword({
-        password: currentPassword,
-        legacyHash: record.legacyPasswordHash,
-        credentials: stored?.passwordHash ? { passwordHash: stored.passwordHash, legacyHashFingerprint: stored.legacyHashFingerprint } : null,
-        pepper: config.legacyPasswordPepper,
-      });
-      if (!verification.ok) {
-        await activityLog.record({
-          category: 'security',
-          action: 'auth.passwordCheckFailed',
-          outcome: 'failure',
-          actor: actorOf(principal),
-          ...(principal.groupId === null ? {} : { groupId: principal.groupId }),
-          resource: { type: 'user', id: principal.userId.toHexString() },
-          requestId: client.requestId,
-          ...(client.ip === null ? {} : { ip: client.ip }),
-        });
-        throw new AppError('VALIDATION_ERROR', { details: [{ field: 'currentPassword', issue: 'incorrect' }] });
-      }
+      const record = await confirmPassword(principal, currentPassword, client);
       if (newPassword.normalize('NFC') === currentPassword.normalize('NFC')) {
         throw new AppError('VALIDATION_ERROR', { details: [{ field: 'newPassword', issue: 'reused' }] });
       }
@@ -208,6 +247,23 @@ export function createMeService(deps: MeServiceDeps): MeService {
       if (revoked > 0) {
         await auditSessionsRevoked(activityLog, { actor: actorOf(principal), groupId: principal.groupId, reason: 'passwordChanged', client });
       }
+    },
+
+    changePin: async (principal, { currentPassword, pin }, client) => {
+      const record = await confirmPassword(principal, currentPassword, client);
+      if (!(await users.updateOwned(principal.userId, toLegacyUpdate({ pin }, date())))) {
+        throw new AppError('NOT_FOUND');
+      }
+      await recordDataChange(activityLog, {
+        actor: actorOf(principal),
+        ...(principal.groupId === null ? {} : { groupId: principal.groupId }),
+        resource: { type: 'user', id: principal.userId.toHexString() },
+        action: 'user.updated',
+        before: { pinSet: record.user.pinSet },
+        after: { pinSet: pin !== null, pinChange: pin === null ? 'removed' : 'set' },
+        requestId: client.requestId,
+        ...(client.ip === null ? {} : { ip: client.ip }),
+      });
     },
 
     listSessions: async (principal, currentSessionId) =>

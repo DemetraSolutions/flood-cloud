@@ -2,6 +2,7 @@ import { listQueryShape } from '../../shared/http/list.ts';
 import { SUPPORTED_LANGUAGES } from '../me/me.schemas.ts';
 import { array, boolean, email, enumOf, nullable, object, objectId, optional, personName, phone, string } from '../../shared/validation/schema.ts';
 import type { Infer } from '../../shared/validation/schema.ts';
+import { MAX_SERVICE_IDS, avatarSchema, descriptionSchema, pinSchema, posSchema, shiftTimeSchema } from './user-fields.schemas.ts';
 import { USERS_LIST } from './users.list.ts';
 
 /** Roles of the users that belong to a group: the ones `/v1/groups/{groupId}/users` creates and lists. */
@@ -33,20 +34,44 @@ const name = () => nullable(personName(100));
 
 const moduleFlags = () => object({ r: optional(boolean()), w: optional(boolean()) });
 
-/** The core permission modules (the keys of `CORE_MODULES`), one optional pair of flags each. */
+/** The modules of the legacy matrix (`LEGACY_MODULES`), one optional pair of flags each; `logs` has only the read flag. */
 const modulesSchema = () =>
   object({
     groups: optional(moduleFlags()),
     users: optional(moduleFlags()),
     companies: optional(moduleFlags()),
     places: optional(moduleFlags()),
-    logs: optional(moduleFlags()),
+    documents: optional(moduleFlags()),
+    products: optional(moduleFlags()),
+    calendar: optional(moduleFlags()),
+    warehouse: optional(moduleFlags()),
+    contacts: optional(moduleFlags()),
+    fidelity: optional(moduleFlags()),
+    settings: optional(moduleFlags()),
+    stats: optional(moduleFlags()),
+    logs: optional(object({ r: optional(boolean()) })),
   });
 
 /** The permission matrix of a user in a request: core module flags and the right to manage other matrices. */
 const permissionsSchema = () => object({ modules: optional(modulesSchema()), canManagePermissions: optional(boolean()) });
 
 const scopeIds = () => array(objectId(), { max: MAX_SCOPE_IDS });
+
+/**
+ * The fields of a user's own data beyond identity and scope, the same in a creation and a modification: the notes, the picture, the PIN,
+ * the statistics switch, the POS data and the shifts. `null` clears a nullable value.
+ */
+const dataFields = () => ({
+  description: optional(nullable(descriptionSchema())),
+  avatar: optional(nullable(avatarSchema())),
+  pin: optional(nullable(pinSchema())),
+  hiddenInStats: optional(boolean()),
+  pos: optional(posSchema()),
+  shiftTime: optional(shiftTimeSchema()),
+});
+
+/** The services a user of a group can provide. */
+const serviceFields = () => ({ serviceIds: optional(array(objectId(), { max: MAX_SERVICE_IDS })) });
 
 /**
  * Body of the creation of a group user (`POST /v1/groups/{groupId}/users`). The group comes from the
@@ -66,6 +91,8 @@ export const createGroupUserBody = object({
   placeIds: optional(scopeIds()),
   status: optional(enumOf(['active', 'disabled'] as const)),
   permissions: optional(permissionsSchema()),
+  ...dataFields(),
+  ...serviceFields(),
 });
 
 /** Validated body of the creation of a group user. */
@@ -83,6 +110,7 @@ export const createPlatformUserBody = object({
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
   status: optional(enumOf(['active', 'disabled'] as const)),
   permissions: optional(permissionsSchema()),
+  ...dataFields(),
 });
 
 /** Validated body of the creation of a platform user. */
@@ -101,6 +129,8 @@ export const patchGroupUserBody = object({
   placeIds: optional(scopeIds()),
   status: optional(enumOf(['active', 'disabled'] as const)),
   permissions: optional(permissionsSchema()),
+  ...dataFields(),
+  ...serviceFields(),
 });
 
 /** Validated body of the modification of a group user. */
@@ -117,6 +147,7 @@ export const patchPlatformUserBody = object({
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
   status: optional(enumOf(['active', 'disabled'] as const)),
   permissions: optional(permissionsSchema()),
+  ...dataFields(),
 });
 
 /** Validated body of the modification of a platform user. */

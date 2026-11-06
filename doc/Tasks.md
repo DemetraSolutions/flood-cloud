@@ -6,7 +6,7 @@
 > - Un task si spunta solo quando il codice funziona, i test sono al 100% con typecheck verde, la documentazione è aggiornata (skill `docs-sync-checklist`) e l'utente ha confermato (`GEMINI.md` §1).
 > - Le decisioni `D-nn` (§0.4) vanno prese **prima** dei task che le citano.
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
-> - Stato al 2026-11-05: aree 1, 2 e 3 completate (resta 2.3.4, con l'area 4).
+> - Stato al 2026-11-06: aree 1, 2 e 3 completate; area 4 (gruppi): backend realizzato (passi 4B, 4B-bis, 4U), restano 4.3.2, 4.4.2 e il backoffice (4C).
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -102,6 +102,12 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
   - **login di un utente:** il refresh scade dopo 7 giorni di inattività o 30 di durata massima, quindi il negozio resta bloccato dopo un lungo offline; la password resta salvata sul server del negozio; gli utenti `E` non sono ammessi;
   - **credenziale di dispositivo per punto vendita**, accettata dalle stesse route con scope fisso sul punto vendita.
 - [x] **D-25** Multicluster MongoDB: più cluster, ciascuno con connessione di lettura/scrittura e analytics; login e dati comuni sempre sul cluster comune; ogni gruppo indica il proprio cluster con `groups.dataCluster` (solo l'id; assente ⇒ cluster di default). Finché il legacy è attivo i gruppi restano sul cluster comune; nessuna transazione tra cluster (per i gruppi su altri cluster la copia di companies e places si affida alla riconciliazione). Dettagli in `doc/Architecture.md` §3.2.1. Decisione dell'utente del 2026-11-06, realizzata.
+
+- [x] **D-26** Modello completo delle entità: ogni entità gestita ha **da subito** il modello completo e compatibile col legacy, con tutti i campi visibili e modificabili ("deve valere per ogni entity che gestiamo, man mano il modello delle entity deve essere già completo e compatibile"). Le scritture avvengono per percorso, le chiavi sconosciute si conservano; i campi nullable si svuotano davvero con `null` e gli array con `[]`, diversamente dal legacy. Decisione dell'utente del 2026-11-06, realizzata nei passi 4B-bis e 4U.
+- [x] **D-27** Utente (modello completo): PIN impostabile e mai mostrato (in chiaro in `users.pin` per il POS legacy, hash con il dominio cassa; il proprio PIN con `PUT /v1/me/pin` e password attuale); avatar data URL PNG/JPEG/WebP verificato dai magic bytes, ≤ 200 KB (avatar legacy non mostrabili ⇒ `avatar: null` con `hasAvatar: true`); `servicesId` con lettura compatta dei servizi del gruppo; turni senza vincolo di feature; dal proprio profilo solo le preferenze della cassa (non i listini né `defaultPriceListId`), i listini utilizzabili si cambiano dalla scheda dell'utente; permessi della cassa: serve "Gestione permessi", PSA, D e SA li danno liberamente, CA e PA solo ciò che hanno e senza alzare il tetto di sconto; un cambio di `pos.enabled` o `pos.grants` è un cambio di permessi (evento di sicurezza `user.permissionsChanged`, revoca delle sessioni, `tokens[]` legacy svuotati); default per ruolo = tabella del form legacy (`setDefaultPermissions`) su 13 moduli. Decisione dell'utente del 2026-11-06, realizzata nel passo 4U.
+- [x] **D-28** PSA e D hanno tutto (estende D-10): i loro permessi effettivi sono l'intero tetto del ruolo, senza la matrice legacy del loro documento, e `canManagePermissions` è sempre vero; le risposte mostrano i valori effettivi; nessuna modifica ai documenti. Decisione dell'utente del 2026-11-06.
+- [x] **D-29** Gruppo (modello completo): perimetro "tutto" (scheda gruppo, fidelity, preferiti e promozioni come sotto-risorse); `apiKey` delle integrazioni solo impostabili (`apiKeySet`), `groups.apiKey` mai gestita; `databaseHost` e `filesHost` non gestiti; `places[]` derivato, non esposto; fidelity con permesso `fidelity`, preferiti e promozioni con `products`, scrivibili anche da CA e PA se la loro matrice lo concede; CA e PA limitati al proprio perimetro di punti vendita su promozioni e tipi di carta (lista vuota = tutto il gruppo ⇒ vietata a CA/PA); eliminazione di elementi referenziati rifiutata con `409` (il legacy la permetteva); budget del documento del gruppo 8 MiB. Decisione dell'utente del 2026-11-06, realizzata nel passo 4B-bis.
+- [x] **D-30** Profilazione mirata dei sotto-oggetti di `users` e `groups` in produzione (`npm run profile:legacy -- --focus subobjects`), in sola lettura, eseguita il 2026-11-06: ha fornito le frequenze reali delle chiavi per i modelli completi.
 
 ### 0.4.1 Esiti della profilazione (1.3.6, 2026-11-01)
 Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'utente, di `production_*` (MongoDB 8.0.34). Dati aggregati, senza valori. Servono a prendere le decisioni aperte, non le sostituiscono.
@@ -200,7 +206,7 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
   - risponde `422` con dettagli per campo.
 - [x] **1.5.2** Parametri delle liste: `limit` (default 50, massimo 200), `cursor` opaco, `sort` in allowlist, ricerca `q` con escape della regex lato server e lunghezza limitata.
 - [x] **1.5.3** Paginazione a cursore con ordinamento stabile (spareggio su `_id`), ordinamento applicato **prima** della pagina (nel legacy i punti vendita erano ordinati solo dentro la pagina).
-- [ ] **1.5.4** Supporto a `ETag` e `If-None-Match` (`304`) per le liste compatte usate come cache dal backoffice.
+- [ ] **1.5.4** Supporto a `ETag` e `If-None-Match` (`304`) per le liste compatte usate come cache dal backoffice. *Realizzato (helper `shared/http/etag.ts`) solo per il dettaglio del gruppo (4.3.1); restano le liste compatte.*
 
 ### 1.6 Infrastruttura di test del backend
 - [x] **1.6.1** MongoDB locale usa e getta (docker compose, replica set a un nodo per le transazioni), database `test_<casuale>` con pulizia.
@@ -244,7 +250,7 @@ Passi decisi dall'utente il 2026-11-02: **2A** = 2.1 e 2.2; **2B** = 2.3 e 2.4; 
 - [x] **2.3.1** Catalogo dei permessi `risorsa:azione` dei domini core: `users`, `groups`, `companies`, `places`, `sessions`, `auditLog`.
 - [x] **2.3.2** Policy centralizzata ruolo → permessi; ogni route dichiara il permesso richiesto; test della matrice completa ruolo × permesso.
 - [x] **2.3.3** Restrizioni per utente (D-06): mappatura delle chiavi legacy `permissions.<modulo>.{r,w}` e calcolo dei permessi effettivi.
-- [ ] **2.3.4** *(rinviato all'area 4: dipende dai feature flag, D-13)* Requisito di feature del gruppo dichiarabile sulla route (4.2.2): una route di un modulo spento risponde `403`.
+- [x] **2.3.4** *(realizzato con l'area 4, D-13)* Requisito di feature del gruppo dichiarabile sulla route (4.2.2): una route di un modulo spento risponde `403`.
 
 ### 2.4 Scope e isolamento dei tenant
 - [x] **2.4.1** Calcolo dello scope alla verifica della credenziale:
@@ -307,15 +313,17 @@ Modello di dominio ↔ documento legacy `<env>_common.users` (D-03):
 | `status` | `active` \| `disabled` | `status` (booleano) | |
 | `trashed` | boolean | `trash` (booleano) | cestino |
 | `language` | string | `settings.language` | oggi solo `it` |
-| `hiddenInStats` | boolean | `settings.hiddenInStats` | |
-| `permissions` | restrizioni per modulo | `permissions.<modulo>.{r,w}`, `permissions.status` | D-06 |
+| `hiddenInStats` | boolean | `settings.hiddenInStats` | in lettura anche il residuo `permissions.hiddenInStats` |
+| `description` | string \| null | `description` | passo 4U |
+| `avatar`, `hasAvatar` | string \| null, boolean | `avatar` | data URL PNG/JPEG/WebP ≤ 200 KB; solo nel dettaglio (D-27) |
+| `pinSet` | boolean | `pin` | il PIN non è mai mostrato (D-27) |
+| `serviceIds` | string[] | `servicesId` | servizi del gruppo (D-27) |
+| `permissions` | restrizioni per 13 moduli | `permissions.<modulo>.{r,w}`, `permissions.status` | D-06; PSA e D mostrano i valori effettivi (D-28) |
+| `pos` | `{ enabled, grants, options }` | `permissions.apps.cash` | permessi e preferenze della cassa (D-27) |
+| `shiftTime` | turni | `shiftTime` | D-27 |
 | `createdAt`, `updatedAt` | Date | `insertDate`, `updateDate` | |
 
-- **Conservati e mai esposti su `/v1`:**
-  - `password`, `pin`, `tokens[]`;
-  - `permissions.apps.cash.*` (dominio cassa);
-  - `servicesId`, `shiftTime` (calendario);
-  - `avatar` (oggi un data URL nel documento; dominio file).
+- **Conservati e mai esposti su `/v1`:** `password` e `tokens[]` (e il valore del PIN, di cui si mostra solo `pinSet`). Dal passo 4U (D-27) sono invece **gestiti**: `pin`, `permissions.apps.cash.*`, `servicesId`, `shiftTime` e `avatar`; restano conservate e non esposte solo le chiavi residue (`sub.productsStatus`, `sub.deleteTableProductReason`, `options.service`, `permissions.hiddenInStats`).
 - **Collection nuova `userCredentials`** (D-03, permanente): `_id` = `userId`, `passwordHash` (scrypt), `legacyHashFingerprint` (impronta dell'hash legacy da cui deriva, 2.2.2), `passwordChangedAt`, `failedLogins`, `lockedUntil`, `lastLoginAt`, `createdAt`, `updatedAt`.
 
 Task:
@@ -341,7 +349,7 @@ Task:
 - [x] **3.2.7** Middleware Bearer di `/v1`:
   - distingue `TOKEN_EXPIRED` da `UNAUTHENTICATED`;
   - a ogni richiesta ricontrolla lo stato di utente e gruppo, con proiezione minima: disattivato ⇒ `401` immediato, come nel legacy.
-- [ ] **3.2.8** Revoca delle sessioni a cambio password, cambio di ruolo o scope, disattivazione dell'utente e sospensione del gruppo; svuotamento di `users.tokens[]` legacy (D-11).
+- [x] **3.2.8** Revoca delle sessioni a cambio password, cambio di ruolo o scope, disattivazione dell'utente e sospensione del gruppo; svuotamento di `users.tokens[]` legacy (D-11).
 
 ### 3.3 Profilo e avvio della sessione
 - [x] **3.3.1** `GET /v1/me`, riletto a ogni avvio del backoffice. Restituisce:
@@ -349,7 +357,7 @@ Task:
   - per SA, CA e PA anche il contesto del gruppo (4.3).
 
   **Mai segreti**: il legacy restituiva l'intero gruppo con le API key e il PIN dell'utente.
-- [x] **3.3.2** `PATCH /v1/me`: nome, cognome, email, telefono, lingua.
+- [x] **3.3.2** `PATCH /v1/me`: nome, cognome, email, telefono, lingua e, dal passo 4U, avatar e preferenze della cassa (`pos.options`).
 - [x] **3.3.3** Cambio della propria password: richiede la password attuale, revoca le altre sessioni, scrive secondo D-04.
 - [x] **3.3.4** Elenco e revoca delle proprie sessioni (dispositivo, IP, ultimo uso). Route del profilo con i permessi `profile:read` e `profile:update` (decisione dell'utente del 2026-11-04); con coesistenza spenta il cambio password rimuove `users.password`.
 
@@ -372,6 +380,9 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
 - [x] **3.4.7** Cestino e ripristino (`trash` legacy); eliminazione definitiva dal cestino secondo D-14 (PSA, D, SA), con credenziali e sessioni.
 - [x] **3.4.8** Verifica della disponibilità dello username, con rate limit (sostituisce il controllo a ogni tasto del legacy).
 - [x] **3.4.9** Test di isolamento (2.4.5) e di escalation su ogni endpoint.
+- [x] **3.4.10** Modello completo dell'utente (passo 4U, D-26, D-27, D-28): 13 moduli della matrice, PIN mai mostrato, avatar, descrizione, servizi, turni, permessi e preferenze della cassa con le regole per CA e PA, creazione con il documento legacy completo e i default del form, scritture per percorso, PSA e D con tutti i permessi.
+- [x] **3.4.11** `GET /v1/groups/{groupId}/services`: lettura compatta dei servizi del gruppo (feature `services`), e verifica dei `serviceIds` di un utente.
+- [x] **3.4.12** `PUT /v1/me/pin`: cambio del proprio PIN con la password attuale.
 
 ### 3.5 Backoffice
 - [x] **3.5.1** Pagina di login (Signal Forms, errori accessibili, messaggio di rate limit).
@@ -417,48 +428,50 @@ Modello di dominio ↔ documento legacy `<env>_common.groups`:
 | `features` | `Record<Feature, boolean>` | `settings.<flag>` | default `false` (D-13) |
 | `languages` | string[] | `settings.languages` (`"it;en"`) | codici ISO 639-1 |
 | `statsSettings` | `{ openingTime, compressProductsCategories, timeSlots[] }` | `settings.stats` | |
-| `integrations` | `Record<Provider, { enabled }>` | `settings.integrations.<p>.status` | le chiavi non sono mai esposte |
+| `integrations` | `Record<Provider, { enabled, apiKeySet }>` | `settings.integrations.<p>.status` | le chiavi sono solo impostabili (D-29), mai esposte |
+| `priceLists`, `taxes`, `currencies`, `measureUnits`, `warehouseRules`, `fidelityCardRules` | cataloghi della scheda gruppo | omonimi | sotto-risorse REST (D-29, 4.4.8) |
+| fidelity (`cardTypes`, `pointsCollections`, `prizeCatalogues`), `productFavorites`, `promotions` | cataloghi del gruppo | `fidelity.*`, `productsFavorites`, `promotions` | solo nelle sotto-risorse (4.4.9) |
 | `createdAt`, `updatedAt` | Date | `insertDate`, `updateDate` | |
 
 - **Feature:** `cash`, `rooms`, `ordering`, `warehouse`, `tobaccosGamesMonopoly`, `productsVariants`, `services`, `appointments`, `customersApp`, `media`, `email`, `scales`, `delivery`, `autoDepartments`, `advancedProducts`.
-- **Solo legacy, conservati e mai esposti:**
+- **Solo legacy, conservati e mai gestiti né esposti:**
   - `apiKey`, `databaseHost`, `filesHost`;
   - `type`, `plan`, `expirationDate`;
-  - `places[]`, mantenuto dal legacy per le statistiche;
-  - `settings.integrations.*.apiKey`.
-- **Dei domini successivi:**
-  - `priceLists`, `taxes`, `currencies`, `measureUnits` (catalogo e fiscale);
-  - `warehouseRules` (magazzino);
-  - `fidelityCardRules`, `fidelity`, `promotions`, `productsFavorites`.
+  - `places[]`, mantenuto dal legacy per le statistiche (derivato, D-29).
+- **Impostabili ma mai letti:** `settings.integrations.*.apiKey` (si espone solo `apiKeySet`).
+- **Cataloghi** (`priceLists`, `taxes`, `currencies`, `measureUnits`, `warehouseRules`, `fidelityCardRules`, `fidelity`, `promotions`, `productsFavorites`): gestiti dal passo 4B-bis come sotto-risorse; restano nel documento del gruppo.
 
 Task:
-- [ ] **4.1.1** Tipi `Group` e `LegacyGroupDocument`; mapper nei due versi con raccolta delle anomalie.
-- [ ] **4.1.2** Catalogo delle feature con significato e default; validazione delle lingue.
-- [ ] **4.1.3** Mapper di risposta senza campi solo legacy né segreti; test che lo verifica su un documento legacy completo.
+- [x] **4.1.1** Tipi `Group` e `LegacyGroupDocument`; mapper nei due versi con raccolta delle anomalie.
+- [x] **4.1.2** Catalogo delle feature con significato e default; validazione delle lingue.
+- [x] **4.1.3** Mapper di risposta senza campi solo legacy né segreti; test che lo verifica su un documento legacy completo.
 
 ### 4.2 Feature flag
-- [ ] **4.2.1** Elenco confermato (D-13) con descrizione di cosa abilita ogni flag.
-- [ ] **4.2.2** Applicazione lato server: le route dei moduli dichiarano la feature richiesta (2.3.4); comportamento per PSA e D secondo D-13.
+- [x] **4.2.1** Elenco confermato (D-13) con descrizione di cosa abilita ogni flag.
+- [x] **4.2.2** Applicazione lato server: le route dei moduli dichiarano la feature richiesta (2.3.4); comportamento per PSA e D secondo D-13.
 
 ### 4.3 Contesto del gruppo
-- [ ] **4.3.1** `GET /v1/groups/{groupId}` con anagrafica, feature, lingue e impostazioni statistiche; `ETag` e `If-None-Match`.
+- [x] **4.3.1** `GET /v1/groups/{groupId}` con anagrafica, feature, lingue e impostazioni statistiche; `ETag` e `If-None-Match`.
 - [ ] **4.3.2** Contesto riletto a ogni avvio e a ogni cambio di gruppo. Nel legacy era una fotografia scattata al login: i flag cambiati da PSA o D arrivavano solo al login successivo.
 
 ### 4.4 Gestione gruppi (backend, PSA e D)
-- [ ] **4.4.1** Elenco:
+- [x] **4.4.1** Elenco:
   - un D vede solo il proprio `dealerId`;
   - filtri per dealer (solo PSA), stato, demo, ricerca sul nome;
   - paginazione a cursore.
 - [ ] **4.4.2** Conteggi di aziende, punti vendita e utenti per gruppo, letti dal common (dopo l'area 5).
-- [ ] **4.4.3** Modifica parziale. Chi modifica cosa (D-13):
+- [x] **4.4.3** Modifica parziale (campi scalari delle impostazioni comprese). Chi modifica cosa (D-13):
   - nome e descrizione;
   - feature e integrazioni abilitate: PSA e D;
   - `demo`: PSA;
   - lingue e impostazioni statistiche.
-- [ ] **4.4.4** Sospensione e riattivazione (solo PSA, decisione del 2026-11-02): revoca di tutte le sessioni del gruppo, `status` legacy aggiornato (il legacy lo legge a ogni richiesta), audit.
-- [ ] **4.4.5** Cestino e ripristino, solo PSA (decisione del 2026-11-02, D-14). `groups:update` di D e SA non può toccare `status` né `trash` (allowlist dei campi).
+- [x] **4.4.4** Sospensione e riattivazione (solo PSA, decisione del 2026-11-02): revoca di tutte le sessioni del gruppo, `status` legacy aggiornato (il legacy lo legge a ogni richiesta), audit.
+- [x] **4.4.5** Cestino e ripristino, solo PSA (decisione del 2026-11-02, D-14). `groups:update` di D e SA non può toccare `status` né `trash` (allowlist dei campi).
 - [x] **4.4.6** Elenco dei dealer per il filtro di PSA: `GET /v1/dealers` con l'utente D collegato (passo 4A).
-- [ ] **4.4.7** Test di isolamento: un D non vede né modifica gruppi di un altro dealer (nel legacy poteva farlo con `?groupId=`).
+- [x] **4.4.7** Test di isolamento: un D non vede né modifica gruppi di un altro dealer (nel legacy poteva farlo con `?groupId=`).
+- [x] **4.4.8** Cataloghi della scheda gruppo come sotto-risorse REST (D-26, D-29): `price-lists`, `taxes`, `currencies`, `measure-units`, `warehouse-rules`, `fidelity-card-rules`, in forma legacy esatta, con integrità (predefinito, ultimo, referenziati), concorrenza ottimistica e permessi `groups:*`.
+- [x] **4.4.9** Fidelity (`card-types`, `points-collections`, `prize-catalogues`), preferiti (`product-favorites`) e promozioni (`promotions`) come sotto-risorse, con verifica dei riferimenti, permessi `fidelity:*` e `products:*` e perimetro dei punti vendita per CA e PA.
+- [x] **4.4.10** Chiavi delle integrazioni impostabili (`apiKey` nel `PATCH` del gruppo, `apiKeySet` nelle risposte), mai lette né registrate.
 
 ### 4.5 Backoffice
 - [x] **4.5.1** Selettore del gruppo per PSA e D, con il gruppo nell'URL `/groups/:groupId/...` (D-10), voce "Tutti i gruppi" e vista trasversale degli utenti (passo 3D e richiesta dell'utente del 2026-11-06).
@@ -472,7 +485,7 @@ Task:
 - [ ] **4.5.5** Dettaglio e modifica del gruppo con la scheda delle feature; pagina "Account › Gruppo" per il SA.
 
 ### 4.6 Chiusura
-- [ ] **4.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`groups`).
+- [ ] **4.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`groups`). *Aggiornati per il backend (passi 4B, 4B-bis, 4U); restano le pagine del backoffice (4C).*
 - [ ] **4.6.2** Revisione del `security_expert`; conferma dell'utente.
 
 ---
@@ -683,14 +696,14 @@ Specifica in `doc/Security-Model.md` §6–7.
 ## 10. Aree successive (da dettagliare)
 Ogni area parte con l'analisi del `legacy_analyst` (skill `legacy-module-analysis`) e si dettaglia in task prima di iniziare. Il server di punto vendita è un'applicazione separata, fuori da questo progetto (D-22), e usa le API del backoffice (D-23).
 - **Accesso dell'app del server di punto vendita alle API `/v1`:** credenziale da decidere (D-24).
-- **Catalogo:** prodotti, categorie (albero, da aggiungere allo store dei dati di riferimento), reparti, brand, attributi, varianti, preferiti, promozioni, listini, aliquote, unità di misura, import/export, TGM.
+- **Catalogo:** prodotti, categorie (albero, da aggiungere allo store dei dati di riferimento), reparti, brand, attributi, varianti, import/export, TGM. *(Listini, aliquote, unità di misura, preferiti e promozioni sono già gestiti come cataloghi del gruppo, passo 4B-bis.)*
 - **Magazzino:** depositi del punto vendita, causali, movimenti, giacenze.
 - **Dispositivi del punto vendita:** casse, palmari, stampanti fiscali, casse automatiche (credenziali cifrate), bilance, display.
 - **Ristorazione:** sale e tavoli, postazioni comanda, centri di produzione, prenotazioni dei tavoli.
 - **Vendite e cassa:** chiusure, turni, checkout, permessi e preferenze dell'app di cassa (`permissions.apps.cash`), operatori `E` e PIN (`doc/Security-Model.md` §12.2), modalità UM e `sType`.
 - **Documenti fiscali:** fatture, scontrini, sezionali, coda e-fatture Aruba, Fiskaly, allarmi dei documenti in errore.
 - **Clienti e fedeltà:** contatti, gruppi di contatti, carte, raccolte punti, template e-mail.
-- **Calendario e appuntamenti:** servizi e turni degli utenti.
+- **Calendario e appuntamenti:** servizi e turni degli utenti *(i turni e l'elenco dei servizi di un utente sono già nel suo modello, passo 4U)*.
 - **Media e file:** upload sicuro, avatar, immagini.
 - **Statistiche e report**, log, cestino, diagnostica.
 - **Integrazioni:** pagamenti (Satispay, Dojo, Flood Pay), canali (EasyAppear, Yellgo, LeggiMenu, Plateform, Cooperto, Qodeup), Reserve with Google, gestionali alberghieri, Cerved.

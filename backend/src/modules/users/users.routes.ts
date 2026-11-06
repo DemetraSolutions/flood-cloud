@@ -16,8 +16,8 @@ import {
   usernameParams,
 } from './users.schemas.ts';
 
-/** Body limit of the user writes: a user is a few hundred bytes, the matrix a few more. */
-const USERS_BODY_LIMIT = '16kb';
+/** Body limit of the user writes: the data of a user are some kilobytes (POS grants, shifts) and the picture can be 200 KB, a third more in base64. */
+const USERS_BODY_LIMIT = '512kb';
 
 /**
  * The user management routes (`doc/Tasks.md` 3.4). Users of a group live under `/groups/{groupId}/users`,

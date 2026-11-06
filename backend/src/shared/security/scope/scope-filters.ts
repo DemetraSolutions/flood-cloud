@@ -125,7 +125,7 @@ export function placesScopeFilter(scope: Scope): Filter<Document> {
 }
 
 /**
- * Filter restricting `common.activityLog` to the entries a principal may read. A PSA reads everything; a
+ * Filter restricting `common.activityEvents` to the entries a principal may read. A PSA reads everything; a
  * dealer the entries of his groups, a group administrator those of his group; a company or place
  * administrator only his own actions. Entries of the `error` category are the PSA's alone, so for every
  * other role they are excluded here. Combine with {@link withScope}.

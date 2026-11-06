@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import type { ObjectId } from 'mongodb';
 import { UnknownClusterError } from '../../src/db/databases.ts';
+import { featuresOf } from '../../src/modules/groups/features.ts';
 import { errorHandler } from '../../src/shared/http/error-handler.ts';
 import { requirePermission } from '../../src/shared/security/rbac/require-permission.ts';
 import { groupDatabaseFor, reportCrossGroupAccess, requireGroupAccess } from '../../src/shared/security/scope/group-access.ts';
@@ -86,7 +87,7 @@ describe('groupDatabaseFor', () => {
   });
 
   it('refuses an access it did not issue, even a look-alike', async () => {
-    const forged: GroupAccess = { groupId: g1, clusterId: C0, crossGroup: false };
+    const forged: GroupAccess = { groupId: g1, clusterId: C0, crossGroup: false, features: featuresOf(undefined) };
     assert.throws(() => groupDatabaseFor(sa, forged, databases), /verified group access/);
     const copy = { ...(await accessFor(psa, hex(g1)))! };
     assert.throws(() => groupDatabaseFor(psa, copy, databases), /verified group access/);

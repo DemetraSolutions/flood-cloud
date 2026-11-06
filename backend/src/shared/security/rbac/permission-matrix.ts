@@ -31,6 +31,9 @@ export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze(
   users: { read: [P.USERS_READ], write: [P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH, P.USERS_DELETE] },
   companies: { read: [P.COMPANIES_READ], write: [P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH] },
   places: { read: [P.PLACES_READ], write: [P.PLACES_CREATE, P.PLACES_UPDATE, P.PLACES_TRASH] },
+  // Group-wide loyalty and catalog data kept in the group document (card types, points collections, prize catalogues; favorites and promotions): the legacy menus are governed by these two modules.
+  fidelity: { read: [P.FIDELITY_READ], write: [P.FIDELITY_UPDATE] },
+  products: { read: [P.PRODUCTS_READ], write: [P.PRODUCTS_UPDATE] },
   logs: { read: [P.ACTIVITY_LOG_READ], write: [] },
 });
 
@@ -107,26 +110,73 @@ export function matricesEqual(a: PermissionMatrix, b: PermissionMatrix): boolean
 
 const RW: ModuleFlags = { r: true, w: true };
 const R: ModuleFlags = { r: true, w: false };
+const NONE: ModuleFlags = { r: false, w: false };
 
 /**
- * Default matrix of a role, from the legacy defaults: PSA, D and SA get groups, users,
- * companies, places (read and write) and logs (read); CA the same without groups; PA users and
- * places and logs; E nothing. `status` (permission management) is always false.
+ * Every module of the legacy matrix, in the order of the legacy form: the core ones (see {@link CORE_MODULES}) produce permissions, the others
+ * (`documents`, `calendar`, `warehouse`, `contacts`, `settings`, `stats`) are data of the matrix that this backend stores and shows but that no
+ * permission of the catalog follows yet. `logs` has only the read flag in the legacy documents.
+ */
+export const LEGACY_MODULES: readonly string[] = Object.freeze([
+  'groups',
+  'users',
+  'companies',
+  'places',
+  'documents',
+  'products',
+  'calendar',
+  'warehouse',
+  'contacts',
+  'fidelity',
+  'settings',
+  'stats',
+  'logs',
+]);
+
+/** The one module of the legacy matrix without a write flag. */
+export const READ_ONLY_MODULE = 'logs';
+
+/** Default flags of a module, by role: `[PSA and D, SA, CA, PA, E]`, as the legacy form (`setDefaultPermissions`) sets them when the role is chosen. */
+const MODULE_DEFAULTS: Readonly<Record<string, readonly [ModuleFlags, ModuleFlags, ModuleFlags, ModuleFlags, ModuleFlags]>> = Object.freeze({
+  groups: [RW, RW, NONE, NONE, NONE],
+  users: [RW, RW, RW, RW, NONE],
+  companies: [RW, RW, RW, NONE, NONE],
+  places: [RW, RW, RW, RW, R],
+  documents: [NONE, RW, RW, RW, NONE],
+  products: [NONE, RW, RW, RW, R],
+  calendar: [NONE, RW, RW, RW, NONE],
+  warehouse: [NONE, RW, RW, RW, NONE],
+  contacts: [NONE, RW, RW, RW, RW],
+  fidelity: [NONE, RW, NONE, NONE, NONE],
+  settings: [NONE, RW, NONE, NONE, NONE],
+  stats: [NONE, R, R, R, NONE],
+  logs: [R, R, R, R, NONE],
+});
+
+/**
+ * Default matrix of a role, from the legacy form (`setDefaultPermissions`, A3 of the legacy analysis). Every module of
+ * {@link LEGACY_MODULES} is present. `status` (permission management) is always false. `stats.w` is never on, and `logs` has only
+ * the read flag.
+ *
+ * | Module | PSA, D | SA | CA | PA | E |
+ * |---|---|---|---|---|---|
+ * | groups | rw | rw | - | - | - |
+ * | users | rw | rw | rw | rw | - |
+ * | companies | rw | rw | rw | - | - |
+ * | places | rw | rw | rw | rw | r |
+ * | documents, calendar, warehouse | - | rw | rw | rw | - |
+ * | products | - | rw | rw | rw | r |
+ * | contacts | - | rw | rw | rw | rw |
+ * | fidelity, settings | - | rw | - | - | - |
+ * | stats | - | r | r | r | - |
+ * | logs | r | r | r | r | - |
  *
  * @param role Role of the user; an invalid role gets nothing.
  */
 export function defaultMatrix(role: Role): PermissionMatrix {
-  if (!isRole(role) || role === 'E') {
+  if (!isRole(role)) {
     return EMPTY_MATRIX;
   }
-  const modules: Array<[string, ModuleFlags]> = [];
-  if (role === 'PSA' || role === 'D' || role === 'SA') {
-    modules.push(['groups', RW]);
-  }
-  modules.push(['users', RW]);
-  if (role !== 'PA') {
-    modules.push(['companies', RW]);
-  }
-  modules.push(['places', RW], ['logs', R]);
-  return Object.freeze({ status: false, modules: freezeModules(modules) });
+  const column = role === 'PSA' || role === 'D' ? 0 : role === 'SA' ? 1 : role === 'CA' ? 2 : role === 'PA' ? 3 : 4;
+  return Object.freeze({ status: false, modules: freezeModules(LEGACY_MODULES.map((name): [string, ModuleFlags] => [name, MODULE_DEFAULTS[name]![column]!])) });
 }

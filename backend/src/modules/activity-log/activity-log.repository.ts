@@ -7,7 +7,7 @@ import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { activityLogScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
 import { ACTIVITY_LOG_PROJECTION } from './activity-log.mapper.ts';
 
-/** Reads of `common.activityLog` and of the user names of its actors; nothing is ever written here. */
+/** Reads of `common.activityEvents` and of the user names of its actors; nothing is ever written here. */
 export interface ActivityLogRepository {
   /**
    * A page of entries, newest first, inside the caller's perimeter.
@@ -85,7 +85,7 @@ export function createActivityLogRepository(databases: Databases): ActivityLogRe
   return {
     list: async (principal, filter, params) => {
       const { match, options } = activityLogPageQuery(principal, filter, params);
-      const documents = await databases.common().collection('activityLog').find(match, options).toArray();
+      const documents = await databases.common().collection('activityEvents').find(match, options).toArray();
       return pageOf(
         documents.map((document) => ({ ...document, [SORT_KEY]: document['at'] as Date })),
         params,

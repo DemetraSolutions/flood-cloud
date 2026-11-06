@@ -192,6 +192,7 @@ describe('checkUserChange: rank, perimeter, self', () => {
     assert.deepEqual(checkUserChange(sa, defaultView('PA', {}, { groupId: g2 }), defaultView('PA', {}, { groupId: g1 })), ['outOfScope']);
     assert.deepEqual(checkUserChange(ca, defaultView('PA'), defaultView('PA', {}, { placeIds: [p1, p2] })), ['outOfScope']);
     assert.deepEqual(checkUserChange(actors.PA, defaultView('E'), defaultView('E', {}, { placeIds: [p1, p2] })), ['outOfScope']);
+    // A D holds every flag of the matrix (D-10): only the perimeter is reported.
     assert.deepEqual(checkUserChange(actors.D, null, defaultView('SA', {}, { groupId: g2 })), ['outOfScope']);
   });
 
@@ -244,23 +245,49 @@ describe('checkUserChange: permissions and matrix', () => {
     assert.deepEqual(checkUserChange(sa, null, defaultView('PA', { logs: { r: true, w: true } })), ['permissionNotHeld']);
   });
 
+  it('requires the actor to hold every flag that turns on: the fidelity and products modules', () => {
+    for (const module of ['fidelity', 'products'] as const) {
+      const [read, write] = module === 'fidelity' ? (['fidelity:read', 'fidelity:update'] as const) : (['products:read', 'products:update'] as const);
+      // An actor without the module cannot hand it out, in read or in write; one with read only cannot hand out the write.
+      const without = actorWithout('SA', [read, write]);
+      assert.deepEqual(checkUserChange(without, null, defaultView('PA', { [module]: { r: true, w: false } })), ['permissionNotHeld'], module);
+      const readOnly = actorWithout('CA', [write]);
+      assert.deepEqual(checkUserChange(readOnly, null, defaultView('PA', { [module]: { r: true, w: false } })), [], module);
+      assert.deepEqual(checkUserChange(readOnly, null, defaultView('PA', { [module]: { r: true, w: true } })), ['permissionNotHeld'], module);
+      // The holder can, and the permissions then become effective for the role.
+      const view = defaultView('PA', { [module]: { r: true, w: true } });
+      assert.deepEqual(checkUserChange(actors.PA, null, view), []);
+      assert.equal([read, write].every((permission) => view.permissions.has(permission)), true, module);
+    }
+    // The defaults of the legacy form: products for SA, CA and PA; fidelity for the SA alone.
+    const RW = { r: true, w: true };
+    const NONE = { r: false, w: false };
+    const expected = { PSA: [NONE, NONE], D: [NONE, NONE], SA: [RW, RW], CA: [NONE, RW], PA: [NONE, RW] } as const;
+    for (const role of ['PSA', 'D', 'SA', 'CA', 'PA'] as const) {
+      assert.deepEqual([flagsOf(defaultMatrix(role), 'fidelity'), flagsOf(defaultMatrix(role), 'products')], expected[role], role);
+    }
+  });
+
   it('requires the actor to hold every flag that turns on: non-core modules use his raw flag', () => {
-    const products = defaultView('PA', { products: { r: true, w: false } });
-    assert.deepEqual(checkUserChange(sa, null, products), ['permissionNotHeld']);
-    const holder = principalOf('SA', { groupId: g1, matrix: normalizeMatrix({ ...legacyOf('SA'), products: { r: true, w: false } }) });
-    assert.deepEqual(checkUserChange(holder, null, products), []);
+    const stats = defaultView('PA', { stats: { r: true, w: true } });
+    // The default SA holds stats read only (the legacy form never gives the write flag).
+    assert.deepEqual(checkUserChange(sa, null, stats), ['permissionNotHeld']);
+    const holder = principalOf('SA', { groupId: g1, matrix: normalizeMatrix({ ...legacyOf('SA'), stats: { r: true, w: true } }) });
+    assert.deepEqual(checkUserChange(holder, null, stats), []);
     // The raw flag is read and write apart.
-    assert.deepEqual(checkUserChange(holder, null, defaultView('PA', { products: { r: true, w: true } })), ['permissionNotHeld']);
+    const readOnly = principalOf('SA', { groupId: g1, matrix: normalizeMatrix({ ...legacyOf('SA'), settings: { r: true, w: false } }) });
+    assert.deepEqual(checkUserChange(readOnly, null, defaultView('PA', { settings: { r: true, w: true } })), ['permissionNotHeld']);
+    assert.deepEqual(checkUserChange(readOnly, null, defaultView('PA', { settings: { r: true, w: false } })), []);
     // Keeping a flag the actor lacks is fine: only flags that turn on count.
-    const before = defaultView('PA', { products: { r: true, w: false } });
+    const before = defaultView('PA', { stats: { r: true, w: true } });
     assert.deepEqual(checkUserChange(sa, before, { ...before }), []);
   });
 
   it('changing the stored matrix, non-core modules and status included, needs canManagePermissions', () => {
     const noManage = { ...sa, canManagePermissions: false };
-    const before = defaultView('PA', { products: { r: true, w: true } });
+    const before = defaultView('PA', { stats: { r: true, w: true } });
     // Effective permissions do not change at all, but the stored matrix does.
-    const changed = defaultView('PA', { products: { r: false, w: true } }, { userId: before.userId });
+    const changed = defaultView('PA', { stats: { r: false, w: true } }, { userId: before.userId });
     assert.deepEqual(checkUserChange(noManage, before, changed), ['cannotManagePermissions']);
     assert.deepEqual(checkUserChange(sa, before, changed), []);
     const dropped = defaultView('PA', {}, { userId: before.userId });
@@ -268,7 +295,7 @@ describe('checkUserChange: permissions and matrix', () => {
     // An unchanged matrix needs nothing.
     assert.deepEqual(checkUserChange(noManage, before, { ...before }), []);
     // A core flag turned off is a change too.
-    const narrower = defaultView('PA', { places: { r: true, w: false }, products: { r: true, w: true } }, { userId: before.userId });
+    const narrower = defaultView('PA', { places: { r: true, w: false }, stats: { r: true, w: true } }, { userId: before.userId });
     assert.deepEqual(checkUserChange(noManage, before, narrower), ['cannotManagePermissions']);
   });
 
@@ -290,7 +317,7 @@ describe('checkUserChange: permissions and matrix', () => {
     assert.deepEqual(checkUserChange(noManage, null, defaultView('PA')), []);
     assert.deepEqual(checkUserChange(noManage, null, defaultView('E')), []);
     assert.deepEqual(checkUserChange(noManage, null, defaultView('PA', { places: { r: true, w: false } })), ['cannotManagePermissions']);
-    assert.deepEqual(checkUserChange(noManage, null, defaultView('PA', { products: { r: true } })).sort(), ['cannotManagePermissions', 'permissionNotHeld']);
+    assert.deepEqual(checkUserChange(noManage, null, defaultView('PA', { stats: { r: true, w: true } })).sort(), ['cannotManagePermissions', 'permissionNotHeld']);
     // The actor lacks places write: the default is limited, and the limited matrix is what is allowed.
     const noPlacesWrite = { ...actorWithout('SA', ['places:create', 'places:update', 'places:trash']), canManagePermissions: false };
     assert.deepEqual(checkUserChange(noPlacesWrite, null, defaultView('PA', { places: { r: true, w: false } })), []);
@@ -331,20 +358,25 @@ describe('checkUserChange on views produced by effectivePermissions', () => {
 
 describe('the dealers:* permissions ride on the groups module but belong to the PSA alone', () => {
   it('a D with groups r/w creates an SA who inherits groups.r and groups.w, with no violation', () => {
+    const inherited = inheritedMatrix(actors.D, 'SA');
+    const view = realView('SA', { status: false, ...Object.fromEntries(Object.entries(inherited.modules).map(([name, flags]) => [name, { r: flags.r, w: flags.w }])) });
+    assert.deepEqual(checkUserChange(actors.D, null, view), []);
+    assert.deepEqual(flagsOf(inherited, 'groups'), { r: true, w: true });
+    // A D holds every flag of the matrix (D-10), the operational modules included: the whole default of the role is inherited.
+    assert.deepEqual(flagsOf(inherited, 'documents'), { r: true, w: true });
+    assert.deepEqual(inherited.modules, defaultMatrix('SA').modules);
     assert.deepEqual(checkUserChange(actors.D, null, defaultView('SA')), []);
-    assert.deepEqual(flagsOf(inheritedMatrix(actors.D, 'SA'), 'groups'), { r: true, w: true });
   });
 
   it('inheritedMatrix(D, SA) holds groups.r', () => {
     assert.equal(flagsOf(inheritedMatrix(actors.D, 'SA'), 'groups').r, true);
   });
 
-  it('a PSA with groups.r but without groups.w cannot turn groups.w on for another PSA', () => {
-    const writes = new Set<Permission>(['groups:create', 'groups:update', 'groups:suspend', 'groups:trash', 'dealers:create', 'dealers:update']);
-    const reader = principalOf('PSA', { permissions: new Set([...ROLE_CEILING.PSA].filter((permission) => !writes.has(permission))) });
+  it('a PSA holds every flag whatever his own matrix (D-10): he turns groups.w on for another PSA, whose permissions do not change', () => {
     const before = defaultView('PSA', { groups: { r: true, w: false } });
     const after = { ...realView('PSA', legacyOf('PSA', { groups: { r: true, w: true } })), userId: before.userId };
-    assert.ok(checkUserChange(reader, before, after).includes('permissionNotHeld'));
+    assert.deepEqual(checkUserChange(actors.PSA, before, after), []);
+    assert.deepEqual([...after.permissions].sort(), [...before.permissions].sort());
   });
 
   it('an SA who turns groups.w on for an SA grants groups:update only, never a dealers:* permission', () => {

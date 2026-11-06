@@ -20,11 +20,11 @@ export interface ReferencePage<T> {
 export interface ReferenceService {
   /**
    * Lists the groups of the caller's perimeter. Only a PSA may look at suspended or trashed groups
-   * (a dealer or a group administrator reaches only active, untrashed ones).
+   * (a dealer or a group administrator reaches only active, untrashed ones) and filter by dealer; `demo` is open to everybody.
    *
    * @param principal The authenticated caller.
    * @param query Validated query.
-   * @throws {AppError} `FORBIDDEN` when a caller who is not a PSA asks for the `status` filter or for trashed groups.
+   * @throws {AppError} `FORBIDDEN` when a caller who is not a PSA asks for the `status` or `dealerId` filter or for trashed groups.
    */
   listGroups(principal: AuthPrincipal, query: GroupsQuery): Promise<ReferencePage<GroupReference>>;
   /**
@@ -57,7 +57,7 @@ const trashFilter = (trashed: string | undefined): Filter<Document> => (trashed 
 export function createReferenceService(repository: ReferenceRepository): ReferenceService {
   return {
     listGroups: async (principal, query) => {
-      if (principal.scope.kind !== 'platform' && (query.status !== undefined || query.trashed === 'true')) {
+      if (principal.scope.kind !== 'platform' && (query.status !== undefined || query.trashed === 'true' || query.dealerId !== undefined)) {
         throw new AppError('FORBIDDEN');
       }
       const conditions: Filter<Document>[] = [trashFilter(query.trashed)];
@@ -67,6 +67,12 @@ export function createReferenceService(repository: ReferenceRepository): Referen
       }
       if (query.status !== undefined) {
         conditions.push({ status: query.status === 'active' ? true : { $ne: true } });
+      }
+      if (query.dealerId !== undefined) {
+        conditions.push({ dealerId: query.dealerId });
+      }
+      if (query.demo !== undefined) {
+        conditions.push({ demo: query.demo === 'true' ? true : { $ne: true } });
       }
       const { items, page } = await repository.listGroups(principal, { $and: conditions }, listParamsOf(query, REFERENCE_LIST));
       return { items: items.map(toGroupReference), page };

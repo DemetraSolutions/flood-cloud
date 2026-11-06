@@ -11,12 +11,11 @@ const SESSIONS: Permission[] = ['clientErrors:create', 'profile:read', 'profile:
 
 describe('effectivePermissions (D-06)', () => {
   it('maps r to read and w to every write action, plus own sessions', () => {
-    const result = effectivePermissions('PSA', { status: true, groups: { r: true, w: true }, users: { r: true, w: false }, companies: { r: false, w: true }, places: { r: true }, logs: { r: true, w: true } });
+    const result = effectivePermissions('SA', { status: true, groups: { r: true, w: true }, users: { r: true, w: false }, companies: { r: false, w: true }, places: { r: true }, logs: { r: true, w: true } });
     assert.deepEqual(
       sorted(result.permissions),
       [
-        'groups:read', 'groups:create', 'groups:update', 'groups:suspend', 'groups:trash',
-        'dealers:read', 'dealers:create', 'dealers:update',
+        'groups:read', 'groups:update',
         'users:read',
         'companies:create', 'companies:update', 'companies:trash',
         'places:read',
@@ -27,17 +26,26 @@ describe('effectivePermissions (D-06)', () => {
     assert.equal(result.canManagePermissions, true);
   });
 
+  it('gives the PSA and the dealers the whole ceiling of their role whatever their matrix (D-10), and the management of permissions', () => {
+    for (const role of ['PSA', 'D'] as const) {
+      for (const matrix of [undefined, {}, { groups: { r: false, w: false }, users: { r: true, w: false } }]) {
+        assert.deepEqual(sorted(effectivePermissions(role, matrix).permissions), sorted(ROLE_CEILING[role]), role);
+        assert.equal(effectivePermissions(role, matrix).canManagePermissions, true);
+      }
+    }
+  });
+
   it('grants nothing but the own sessions for a missing, malformed or non-boolean matrix', () => {
-    const bad: unknown[] = [undefined, null, 'x', 5, true, [], [{ r: true }], {}, { groups: null }, { groups: 'rw' }, { groups: [true] }, { groups: { r: 'true', w: 1 } }, { groups: { r: 1 } }, { products: { r: true, w: true } }, { apps: { cash: { status: true } } }];
+    const bad: unknown[] = [undefined, null, 'x', 5, true, [], [{ r: true }], {}, { groups: null }, { groups: 'rw' }, { groups: [true] }, { groups: { r: 'true', w: 1 } }, { groups: { r: 1 } }, { stats: { r: true, w: true } }, { apps: { cash: { status: true } } }];
     for (const value of bad) {
-      const result = effectivePermissions('PSA', value);
+      const result = effectivePermissions('SA', value);
       assert.deepEqual(sorted(result.permissions), SESSIONS, JSON.stringify(value));
       assert.equal(result.canManagePermissions, false);
     }
   });
 
   it('keeps the modules as data it does not turn into permissions', () => {
-    const result = effectivePermissions('SA', { products: { r: true, w: true }, documents: { r: true } });
+    const result = effectivePermissions('SA', { stats: { r: true, w: true }, documents: { r: true } });
     assert.deepEqual(sorted(result.permissions), SESSIONS);
   });
 
@@ -58,7 +66,8 @@ describe('effectivePermissions (D-06)', () => {
     const write = { users: { r: true, w: true } };
     for (const role of ROLES) {
       assert.equal(effectivePermissions(role, write).permissions.has('users:delete'), ['PSA', 'D', 'SA'].includes(role), role);
-      assert.equal(effectivePermissions(role, { users: { r: true, w: false } }).permissions.has('users:delete'), false, role);
+      // The PSA and the dealers hold their whole ceiling (D-10), whatever the flag.
+      assert.equal(effectivePermissions(role, { users: { r: true, w: false } }).permissions.has('users:delete'), ['PSA', 'D'].includes(role), role);
     }
   });
 
@@ -104,7 +113,7 @@ describe('effectivePermissions (D-06)', () => {
         w: true,
       },
     };
-    const result = effectivePermissions('PSA', matrix);
+    const result = effectivePermissions('SA', matrix);
     assert.equal(calls, 0);
     assert.equal(result.canManagePermissions, false);
     assert.deepEqual(sorted(result.permissions), ['clientErrors:create', 'profile:read', 'profile:update', 'sessions:read', 'sessions:revoke', 'users:create', 'users:delete', 'users:trash', 'users:update']);
@@ -120,7 +129,7 @@ describe('effectivePermissions (D-06)', () => {
 
   it('ignores inherited properties of the matrix', () => {
     const inherited = Object.create({ status: true, groups: { r: true } }) as unknown;
-    const result = effectivePermissions('PSA', inherited);
+    const result = effectivePermissions('SA', inherited);
     assert.equal(result.canManagePermissions, false);
     assert.equal(result.permissions.has(PERMISSIONS.GROUPS_READ), false);
   });

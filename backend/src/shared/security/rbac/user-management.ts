@@ -1,4 +1,4 @@
-import { isAlwaysGranted } from './effective-permissions.ts';
+import { hasWholeCeiling, isAlwaysGranted } from './effective-permissions.ts';
 import type { ReadOnlySet } from '../frozen.ts';
 import type { ObjectId } from 'mongodb';
 import type { AuthPrincipal, UserScopeView } from '../scope/principal.ts';
@@ -89,11 +89,15 @@ export function holdsEverythingOf(actor: AuthPrincipal, target: UserChangeView):
 }
 
 /**
- * Whether the actor holds a flag of a module. Core modules: the corresponding effective
+ * Whether the actor holds a flag of a module. PSA and D: every flag (D-10). Core modules: the corresponding effective
  * permissions the actor's role can have (`r` the read ones, `w` the write ones; at least one).
  * Other modules: the actor's own raw flag.
  */
 function actorHolds(actor: AuthPrincipal, module: string, flag: 'r' | 'w'): boolean {
+  // D-10: the PSA and the dealers hold every flag of the legacy matrix, the operational modules included.
+  if (hasWholeCeiling(actor.role)) {
+    return true;
+  }
   if (!Object.hasOwn(CORE_MODULES, module)) {
     return flagsOf(actor.matrix, module)[flag];
   }

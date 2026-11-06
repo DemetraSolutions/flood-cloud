@@ -1,14 +1,29 @@
 import { ObjectId } from 'mongodb';
-import { effectivePermissionsOf } from '../../shared/security/rbac/effective-permissions.ts';
-import { CORE_MODULES, flagsOf, normalizeMatrix } from '../../shared/security/rbac/permission-matrix.ts';
+import { effectivePermissionsOf, hasWholeCeiling } from '../../shared/security/rbac/effective-permissions.ts';
+import { LEGACY_MODULES, READ_ONLY_MODULE, flagsOf, normalizeMatrix } from '../../shared/security/rbac/permission-matrix.ts';
 import type { ModuleFlags } from '../../shared/security/rbac/permission-matrix.ts';
 import { isRole } from '../../shared/security/rbac/permissions.ts';
 import { legacyScopeIds } from '../../shared/security/scope/legacy-scope.ts';
+import { isDisplayableAvatar } from './avatar.ts';
+import { posDocument, posSetPaths, readPos } from './pos.mapper.ts';
+import { readShiftTime, shiftTimeSetPaths, toLegacyShiftTime } from './shift-time.ts';
 import { INVALID_ROLE } from './user.types.ts';
-import type { LegacyUserDocument, LegacyUserUpdate, MappedUser, NewUser, User, UserAnomaly, UserChanges, UserPermissions, UserResponse, UserRole } from './user.types.ts';
+import type {
+  LegacyUserDocument,
+  LegacyUserUpdate,
+  MappedUser,
+  ModuleFlagsResponse,
+  NewUser,
+  User,
+  UserAnomaly,
+  UserChanges,
+  UserPermissions,
+  UserResponse,
+  UserRole,
+} from './user.types.ts';
 
-/** Names of the permission modules this backend maps and may write (`permissions.<module>.r|w`). */
-export const OWNED_PERMISSION_MODULES: readonly string[] = Object.freeze(Object.keys(CORE_MODULES));
+/** Names of the permission modules this backend maps and may write (`permissions.<module>.r|w`): the whole legacy matrix. */
+export const OWNED_PERMISSION_MODULES: readonly string[] = LEGACY_MODULES;
 
 /** Language of a user without one. */
 export const DEFAULT_LANGUAGE = 'it';
@@ -73,14 +88,52 @@ function readDate(raw: unknown): Date | null {
   return raw instanceof Date ? raw : null;
 }
 
-/** Reads the core modules of the stored matrix into the domain permissions, with every core module present. */
-function readPermissions(raw: unknown, role: UserRole): UserPermissions {
+/**
+ * Reads the stored matrix into the domain permissions with every module of the legacy matrix present. A flag that is missing or not a
+ * boolean (`fidelity` is missing in about 950 production users, `stats.w` in 33) counts as `false` and is reported. For a PSA or a dealer
+ * the values are the effective ones (D-10): every flag, `status` and `canManagePermissions` true, whatever the document stores (it is
+ * left as it is, and the anomalies of the stored flags are still reported).
+ */
+function readPermissions(raw: unknown, role: UserRole, anomalies: UserAnomaly[]): UserPermissions {
   const matrix = normalizeMatrix(raw);
+  // D-10: what a PSA or a dealer holds is everything, so that is what is shown, not the stored matrix that limits nothing.
+  const whole = isRole(role) && hasWholeCeiling(role);
+  const stored = isRecord(raw) ? raw : {};
   const modules: Record<string, ModuleFlags> = {};
   for (const name of OWNED_PERMISSION_MODULES) {
-    modules[name] = { ...flagsOf(matrix, name) };
+    const entry = stored[name];
+    for (const flag of name === READ_ONLY_MODULE ? (['r'] as const) : (['r', 'w'] as const)) {
+      if (!isRecord(entry) || typeof entry[flag] !== 'boolean') {
+        anomalies.push({ kind: 'invalidPermission', field: `permissions.${name}.${flag}` });
+      }
+    }
+    // `logs` has no write flag in the legacy: whatever a document holds there, the domain has none.
+    modules[name] = whole ? { r: true, w: name !== READ_ONLY_MODULE } : name === READ_ONLY_MODULE ? { r: flagsOf(matrix, name).r, w: false } : { ...flagsOf(matrix, name) };
   }
-  return { status: matrix.status, modules, canManagePermissions: isRole(role) && effectivePermissionsOf(role, matrix).canManagePermissions };
+  return { status: whole || matrix.status, modules, canManagePermissions: isRole(role) && effectivePermissionsOf(role, matrix).canManagePermissions };
+}
+
+/** The service ids of a user, as hexadecimal strings without duplicates; what is not an ObjectId is reported and left out. */
+function readServiceIds(raw: unknown, anomalies: UserAnomaly[]): string[] {
+  if (raw === undefined || raw === null) {
+    return [];
+  }
+  const ids = Array.isArray(raw) ? (raw as unknown[]) : [];
+  if (!Array.isArray(raw) || ids.some((id) => !(id instanceof ObjectId))) {
+    anomalies.push({ kind: 'invalidReference', field: 'servicesId' });
+  }
+  return [...new Set(ids.filter((id): id is ObjectId => id instanceof ObjectId).map((id) => id.toHexString()))];
+}
+
+/** The free text of the user; a non-string value is reported and read as none. */
+function readDescription(raw: unknown, anomalies: UserAnomaly[]): string | null {
+  if (typeof raw === 'string') {
+    return raw === '' ? null : raw;
+  }
+  if (raw !== undefined && raw !== null) {
+    anomalies.push({ kind: 'invalidType', field: 'description' });
+  }
+  return null;
 }
 
 /**
@@ -93,12 +146,17 @@ function readPermissions(raw: unknown, role: UserRole): UserPermissions {
  * - `status` and `trash` are booleans in the legacy; a non-boolean `status` means `disabled`.
  * - Scope ids follow D-08. References that are not ObjectIds are reported and ignored.
  * - Personal data are in clear (D-05); values in the legacy encrypted format become `null` with an anomaly.
- * - `password`, `pin`, `tokens`, `avatar`, `servicesId`, `shiftTime` and `permissions.apps` are never mapped.
+ * - Every module of the legacy matrix is read; a missing or non-boolean flag is `false` and reported.
+ * - The POS data (`permissions.apps.cash`), the shifts (`shiftTime`, with the older `ststus` and `weekGeneric` spellings), `servicesId` and the
+ *   free text are read; the PIN is not: only whether it is set (`pinSet`). The picture is read unless `summary` is set (the lists never load it)
+ *   and only when it is a PNG, JPEG or WebP data URL (anything else is `null` and reported); `hasAvatar` tells whether one is stored in any case.
+ * - `password` and `tokens` are never mapped.
  *
  * @param document The stored document.
+ * @param options `summary`: the document was read for a list, without the picture.
  * @returns The user and the anomalies found.
  */
-export function fromLegacy(document: LegacyUserDocument): MappedUser {
+export function fromLegacy(document: LegacyUserDocument, options: { readonly summary?: boolean } = {}): MappedUser {
   const raw: Readonly<Record<string, unknown>> = document;
   const anomalies: UserAnomaly[] = [];
 
@@ -133,6 +191,15 @@ export function fromLegacy(document: LegacyUserDocument): MappedUser {
   if (hiddenInStats !== undefined && typeof hiddenInStats !== 'boolean') {
     anomalies.push({ kind: 'invalidType', field: 'settings.hiddenInStats' });
   }
+  // The leftover of the old form: used only when the current setting is missing.
+  const leftoverHidden = isRecord(raw['permissions']) ? raw['permissions']['hiddenInStats'] : undefined;
+  const avatar = raw['avatar'];
+  const hasAvatar = raw['__hasAvatar'] === true || (typeof avatar === 'string' && avatar !== '');
+  // A stored picture that is not a PNG, JPEG or WebP data URL (the legacy validated nothing) is never returned: it stays stored and is reported.
+  const shownAvatar = typeof avatar === 'string' && isDisplayableAvatar(avatar) ? avatar : null;
+  if (avatar !== undefined && avatar !== null && (typeof avatar !== 'string' || (avatar !== '' && shownAvatar === null))) {
+    anomalies.push({ kind: 'invalidType', field: 'avatar' });
+  }
 
   const user: User = {
     id: document._id.toHexString(),
@@ -149,8 +216,15 @@ export function fromLegacy(document: LegacyUserDocument): MappedUser {
     status: status === true ? 'active' : 'disabled',
     trashed: trash === true,
     language: nonEmptyString(settings['language']) ?? DEFAULT_LANGUAGE,
-    hiddenInStats: hiddenInStats === true,
-    permissions: readPermissions(raw['permissions'], role),
+    hiddenInStats: typeof hiddenInStats === 'boolean' ? hiddenInStats : leftoverHidden === true,
+    description: readDescription(raw['description'], anomalies),
+    ...(options.summary === true ? {} : { avatar: shownAvatar }),
+    hasAvatar,
+    pinSet: raw['__pinSet'] === true || (typeof raw['pin'] === 'string' && raw['pin'] !== ''),
+    serviceIds: readServiceIds(raw['servicesId'], anomalies),
+    permissions: readPermissions(raw['permissions'], role, anomalies),
+    pos: readPos(raw['permissions'], anomalies),
+    shiftTime: readShiftTime(raw['shiftTime'], anomalies),
     createdAt: readDate(raw['insertDate']),
     updatedAt: readDate(raw['updateDate']),
   };
@@ -168,15 +242,16 @@ function toObjectId(id: string): ObjectId {
  * set. The legacy field names are `name`, `surname`, `telephone`, `settings.language`,
  * `settings.hiddenInStats`, `status` and `trash` (booleans), `userName`; the scope follows D-08
  * (`companyId` = first company or `null`, `placeId` = first place or `null`, `placesId` = all places);
- * the matrix is written with targeted `permissions.<module>.r|w` and `permissions.status`, so
- * `permissions.apps` is never touched. A null personal value removes the field (most documents do
- * not have it).
+ * the matrix is written with targeted `permissions.<module>.r|w` and `permissions.status`, the POS with one path per value
+ * (`permissions.apps.cash.sub.discount`…) and the shifts with `shiftTime.status|weeksGeneric|daySpecial`, so the keys of those objects that the
+ * backend does not manage stay. A null personal value removes the field (most documents do not have it); a null `description`, `avatar` or `pin` is
+ * written as `null`, as the legacy form does.
  *
  * @param changes What to change; absent fields are left alone.
  * @param now Value of `updateDate`.
  * @returns The update document.
  * @throws {Error} For a role that is not one of the six (`API` included), a permission module outside
- * the core allowlist, or an id that is not hexadecimal: callers validate input first, so these are bugs.
+ * the legacy matrix, a write flag of `logs`, or an id that is not hexadecimal: callers validate input first, so these are bugs.
  */
 export function toLegacyUpdate(changes: UserChanges, now: Date = new Date()): LegacyUserUpdate {
   const set: Record<string, unknown> = {};
@@ -226,6 +301,20 @@ export function toLegacyUpdate(changes: UserChanges, now: Date = new Date()): Le
   if (changes.hiddenInStats !== undefined) {
     set['settings.hiddenInStats'] = changes.hiddenInStats;
   }
+  for (const field of ['description', 'avatar', 'pin'] as const) {
+    if (changes[field] !== undefined) {
+      set[field] = changes[field];
+    }
+  }
+  if (changes.serviceIds !== undefined) {
+    set['servicesId'] = changes.serviceIds.map(toObjectId);
+  }
+  if (changes.pos !== undefined) {
+    Object.assign(set, posSetPaths(changes.pos));
+  }
+  if (changes.shiftTime !== undefined) {
+    Object.assign(set, shiftTimeSetPaths(changes.shiftTime));
+  }
   if (changes.password === null) {
     unset['password'] = '';
   } else if (changes.password !== undefined) {
@@ -236,7 +325,10 @@ export function toLegacyUpdate(changes: UserChanges, now: Date = new Date()): Le
   }
   for (const [module, flags] of Object.entries(changes.permissions?.modules ?? {})) {
     if (!OWNED_PERMISSION_MODULES.includes(module)) {
-      throw new Error(`Refusing to write the permission module "${module}": not in the core allowlist`);
+      throw new Error(`Refusing to write the permission module "${module}": not in the legacy matrix`);
+    }
+    if (module === READ_ONLY_MODULE && flags.w !== undefined) {
+      throw new Error(`Refusing to write permissions.${module}.w: the module has no write flag`);
     }
     for (const flag of ['r', 'w'] as const) {
       if (flags[flag] !== undefined) {
@@ -249,18 +341,17 @@ export function toLegacyUpdate(changes: UserChanges, now: Date = new Date()): Le
 }
 
 /**
- * Builds the legacy `users` document of a new user: the fields the backend owns, in the types the
- * legacy writes (`status` and `trash` booleans, ObjectId references, `settings.language`, the
- * `permissions.<module>.{r,w}` matrix and `permissions.status`, an empty `tokens[]`). Personal values
- * that are `null` are left out, as in most legacy documents; scope follows D-08 (`companyId` = first
- * company or `null`, `placeId` = first place or `null`, `placesId` = all places); `password` is present
- * only while the legacy coexists. Never `apps`, `pin`, `avatar`, `servicesId` or `shiftTime`.
+ * Builds the complete legacy `users` document of a new user, with every key the legacy form emits (`prepareData`), so that a user created here is
+ * indistinguishable from one created by the old backoffice: the personal values (`null` when empty), `description`, `avatar`, `pin`, the scope
+ * (`companyId` = first company or `null`, `placeId` = first place or `null`, `placesId` = all places, D-08), `servicesId`, the whole matrix
+ * (`permissions.status`, every module, `logs` with the read flag only), the POS data (`permissions.apps.cash`, every grant and every device flag
+ * present, off or `null`), `settings`, `shiftTime`, an empty `tokens[]` and the dates. `password` is present only while the legacy coexists.
  *
  * @param user The new user.
  * @param now Value of `insertDate` and `updateDate`.
  * @returns The document to insert, with `_id`.
  * @throws {Error} For a role that is not one of the six (`API` included), a permission module outside
- * the core allowlist, or an id that is not hexadecimal: callers validate input first, so these are bugs.
+ * the legacy matrix, or an id that is not hexadecimal: callers validate input first, so these are bugs.
  */
 export function toLegacyDocument(user: NewUser, now: Date): Record<string, unknown> {
   if (!isRole(user.role)) {
@@ -269,27 +360,32 @@ export function toLegacyDocument(user: NewUser, now: Date): Record<string, unkno
   const permissions: Record<string, unknown> = { status: user.permissions.status };
   for (const [module, flags] of Object.entries(user.permissions.modules)) {
     if (!OWNED_PERMISSION_MODULES.includes(module)) {
-      throw new Error(`Refusing to write the permission module "${module}": not in the core allowlist`);
+      throw new Error(`Refusing to write the permission module "${module}": not in the legacy matrix`);
     }
-    permissions[module] = { r: flags.r, w: flags.w };
+    permissions[module] = module === READ_ONLY_MODULE ? { r: flags.r } : { r: flags.r, w: flags.w };
   }
-  const personal = (field: string, value: string | null): Record<string, string> => (value === null ? {} : { [field]: value });
+  permissions['apps'] = { cash: posDocument(user.pos) };
   return {
     _id: user.id,
+    avatar: user.avatar,
     userName: user.username,
-    ...personal('name', user.firstName),
-    ...personal('surname', user.lastName),
-    ...personal('email', user.email),
-    ...personal('telephone', user.phone),
     ...(user.legacyPasswordHash === null ? {} : { password: user.legacyPasswordHash }),
+    name: user.firstName,
+    surname: user.lastName,
+    email: user.email,
+    telephone: user.phone,
+    description: user.description,
+    pin: user.pin,
     role: user.role,
     groupId: user.groupId === null ? null : toObjectId(user.groupId),
     dealerId: user.dealerId === null ? null : toObjectId(user.dealerId),
     companyId: user.companyIds[0] === undefined ? null : toObjectId(user.companyIds[0]),
     placeId: user.placeIds[0] === undefined ? null : toObjectId(user.placeIds[0]),
     placesId: user.placeIds.map(toObjectId),
+    servicesId: user.serviceIds.map(toObjectId),
     permissions,
-    settings: { language: user.language, hiddenInStats: false },
+    settings: { language: user.language, hiddenInStats: user.hiddenInStats },
+    shiftTime: toLegacyShiftTime(user.shiftTime),
     status: user.status === 'active',
     trash: false,
     tokens: [],
@@ -300,15 +396,16 @@ export function toLegacyDocument(user: NewUser, now: Date): Record<string, unkno
 
 /**
  * The representation of a user on `/v1`: an explicit allowlist of fields. Nothing of the legacy
- * document (password, PIN, tokens, cash permissions, picture…) can appear, because the {@link User}
- * does not hold it, and dates are ISO 8601 strings.
+ * document (password, PIN, tokens…) can appear, because the {@link User} does not hold it: the PIN is only
+ * `pinSet`. The picture is there when it was loaded (the detail), never in a list. Dates are ISO 8601 strings. The permissions of a PSA or
+ * a dealer are the effective ones, all granted (D-10), not the stored matrix.
  *
  * @param user The user.
  */
 export function toResponse(user: User): UserResponse {
-  const modules: Record<string, ModuleFlags> = {};
+  const modules: Record<string, ModuleFlagsResponse> = {};
   for (const [name, flags] of Object.entries(user.permissions.modules)) {
-    modules[name] = { r: flags.r, w: flags.w };
+    modules[name] = name === READ_ONLY_MODULE ? { r: flags.r } : { r: flags.r, w: flags.w };
   }
   return {
     id: user.id,
@@ -326,7 +423,22 @@ export function toResponse(user: User): UserResponse {
     trashed: user.trashed,
     language: user.language,
     hiddenInStats: user.hiddenInStats,
+    description: user.description,
+    ...(user.avatar === undefined ? {} : { avatar: user.avatar }),
+    hasAvatar: user.hasAvatar,
+    pinSet: user.pinSet,
+    serviceIds: [...user.serviceIds],
     permissions: { status: user.permissions.status, modules, canManagePermissions: user.permissions.canManagePermissions },
+    pos: { enabled: user.pos.enabled, grants: structuredClone(user.pos.grants), options: structuredClone(user.pos.options) },
+    shiftTime: {
+      enabled: user.shiftTime.enabled,
+      weeks: user.shiftTime.weeks.map((week) => ({
+        from: week.from === null ? null : week.from.toISOString(),
+        to: week.to === null ? null : week.to.toISOString(),
+        days: structuredClone(week.days),
+      })),
+      specialDays: structuredClone(user.shiftTime.specialDays),
+    },
     createdAt: user.createdAt === null ? null : user.createdAt.toISOString(),
     updatedAt: user.updatedAt === null ? null : user.updatedAt.toISOString(),
   };

@@ -1,10 +1,11 @@
 import type { DealerSummary } from '../dealers/dealer.types.ts';
+import type { FeatureFlags } from '../groups/features.ts';
 import { toResponse } from '../users/user.mapper.ts';
 import type { User, UserResponse } from '../users/user.types.ts';
 import { ALL_PERMISSIONS } from '../../shared/security/rbac/permissions.ts';
 import { hasPermission } from '../../shared/security/rbac/policy.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
-import type { GroupSummary } from './group-summary.repository.ts';
+import type { GroupContext, GroupSummary } from './group-summary.repository.ts';
 
 /** Most dealer group ids listed in the profile; the total is always given. */
 export const MAX_SCOPE_SUMMARY_IDS = 100;
@@ -26,6 +27,8 @@ export type Profile = Omit<UserResponse, 'permissions'> & {
   readonly scope: ScopeSummary;
   /** Id and name of the group for SA, CA and PA; `null` otherwise. */
   readonly group: GroupSummary | null;
+  /** Features of the group for SA, CA and PA (the menus and routes of the backoffice follow them); `null` for the others, who read them from the group they work in. */
+  readonly groupFeatures: FeatureFlags | null;
   /** Id and company name of the dealer for a `D` user (`null` for the other roles, and for a `D` user with no registry document yet). */
   readonly dealer: DealerSummary | null;
   /** Whether the password was set by an administrator and must be replaced before anything else. */
@@ -59,17 +62,18 @@ export function summarizeScope({ scope }: AuthPrincipal): ScopeSummary {
  *
  * @param user The stored user.
  * @param principal The authenticated principal (permissions and scope recomputed on this request).
- * @param group Summary of the user's group, or `null`.
+ * @param group The user's group with its features, or `null`.
  * @param dealer Summary of the dealer for a `D` user, or `null`.
  * @param passwordChangeRequired Whether a provisional password is still to be replaced.
  */
-export function toProfile(user: User, principal: AuthPrincipal, group: GroupSummary | null, dealer: DealerSummary | null, passwordChangeRequired: boolean): Profile {
+export function toProfile(user: User, principal: AuthPrincipal, group: GroupContext | null, dealer: DealerSummary | null, passwordChangeRequired: boolean): Profile {
   return {
     ...toResponse(user),
     permissions: [...ALL_PERMISSIONS].filter((permission) => hasPermission(principal, permission)).sort(),
     canManagePermissions: principal.canManagePermissions,
     scope: summarizeScope(principal),
-    group,
+    group: group === null ? null : { id: group.id, name: group.name },
+    groupFeatures: group === null ? null : { ...group.features },
     dealer,
     passwordChangeRequired,
   };

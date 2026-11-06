@@ -10,18 +10,18 @@ describe('normalizeMatrix', () => {
     const matrix = normalizeMatrix({
       status: true,
       groups: { r: true, w: false },
-      products: { r: true, w: true },
+      stats: { r: true, w: true },
       documents: { r: 'true', w: 1 },
       apps: { cash: { status: true, sub: { discounts: true } } },
       logs: { w: true },
     });
     assert.equal(matrix.status, true);
-    assert.deepEqual(Object.keys(matrix.modules).sort(), ['groups', 'logs', 'products']);
+    assert.deepEqual(Object.keys(matrix.modules).sort(), ['groups', 'logs', 'stats']);
     // A module with an explicit false flag is represented too, so true -> false is never invisible.
     const explicit = normalizeMatrix({ users: { r: false, w: false }, places: { r: false } });
     assert.deepEqual(Object.keys(explicit.modules).sort(), ['places', 'users']);
     assert.deepEqual(explicit.modules['users'], { r: false, w: false });
-    assert.deepEqual(flagsOf(matrix, 'products'), { r: true, w: true });
+    assert.deepEqual(flagsOf(matrix, 'stats'), { r: true, w: true });
     assert.deepEqual(flagsOf(matrix, 'groups'), { r: true, w: false });
     assert.deepEqual(flagsOf(matrix, 'documents'), { r: false, w: false });
   });
@@ -51,32 +51,43 @@ describe('matricesEqual', () => {
     assert.equal(matricesEqual(normalizeMatrix({ users: { r: true } }), normalizeMatrix({ users: { w: true } })), false);
     assert.equal(matricesEqual(normalizeMatrix({ users: { r: true } }), normalizeMatrix({ users: { r: true, w: true } })), false);
     assert.equal(matricesEqual(normalizeMatrix({ users: { r: true } }), EMPTY_MATRIX), false);
-    assert.equal(matricesEqual(EMPTY_MATRIX, normalizeMatrix({ products: { r: true } })), false);
+    assert.equal(matricesEqual(EMPTY_MATRIX, normalizeMatrix({ stats: { r: true } })), false);
     assert.equal(matricesEqual(normalizeMatrix({ status: true }), EMPTY_MATRIX), false);
     assert.equal(matricesEqual(EMPTY_MATRIX, normalizeMatrix({})), true);
   });
 });
 
 describe('defaultMatrix', () => {
-  const names = (role: (typeof ROLES)[number]): string[] => Object.keys(defaultMatrix(role).modules).sort();
+  /** The table A3 of the legacy analysis, written by hand: `rw`, `r` or `-` for PSA and D, SA, CA, PA, E. */
+  const TABLE: Record<string, string[]> = {
+    groups: ['rw', 'rw', '-', '-', '-'],
+    users: ['rw', 'rw', 'rw', 'rw', '-'],
+    companies: ['rw', 'rw', 'rw', '-', '-'],
+    places: ['rw', 'rw', 'rw', 'rw', 'r'],
+    documents: ['-', 'rw', 'rw', 'rw', '-'],
+    products: ['-', 'rw', 'rw', 'rw', 'r'],
+    calendar: ['-', 'rw', 'rw', 'rw', '-'],
+    warehouse: ['-', 'rw', 'rw', 'rw', '-'],
+    contacts: ['-', 'rw', 'rw', 'rw', 'rw'],
+    fidelity: ['-', 'rw', '-', '-', '-'],
+    settings: ['-', 'rw', '-', '-', '-'],
+    stats: ['-', 'r', 'r', 'r', '-'],
+    logs: ['r', 'r', 'r', 'r', '-'],
+  };
+  const COLUMNS = ['PSA', 'SA', 'CA', 'PA', 'E'] as const;
 
-  it('follows the legacy defaults of each role', () => {
-    for (const role of ['PSA', 'D', 'SA'] as const) {
-      assert.deepEqual(names(role), ['companies', 'groups', 'logs', 'places', 'users'], role);
+  it('follows the legacy form for every module and role', () => {
+    for (const [index, role] of [...COLUMNS].entries()) {
+      for (const role2 of role === 'PSA' ? (['PSA', 'D'] as const) : [role]) {
+        const matrix = defaultMatrix(role2);
+        assert.equal(matrix.status, false);
+        assert.deepEqual(Object.keys(matrix.modules).sort(), Object.keys(TABLE).sort());
+        for (const [module, cells] of Object.entries(TABLE)) {
+          const cell = cells[index]!;
+          assert.deepEqual(flagsOf(matrix, module), { r: cell !== '-', w: cell === 'rw' }, `${role2} ${module}`);
+        }
+      }
     }
-    assert.deepEqual(names('CA'), ['companies', 'logs', 'places', 'users']);
-    assert.deepEqual(names('PA'), ['logs', 'places', 'users']);
-    assert.deepEqual(names('E'), []);
-  });
-
-  it('gives read and write on the modules, read only on logs, and never status', () => {
-    for (const role of ['PSA', 'D', 'SA', 'CA', 'PA'] as const) {
-      const matrix = defaultMatrix(role);
-      assert.equal(matrix.status, false);
-      assert.deepEqual(flagsOf(matrix, 'logs'), { r: true, w: false });
-      assert.deepEqual(flagsOf(matrix, 'places'), { r: true, w: true });
-    }
-    assert.equal(defaultMatrix('E'), EMPTY_MATRIX);
   });
 
   it('gives nothing to a value that is not a role', () => {

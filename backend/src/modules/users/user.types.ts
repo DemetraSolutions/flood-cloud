@@ -2,6 +2,8 @@ import type { ObjectId } from 'mongodb';
 import type { ModuleFlags } from '../../shared/security/rbac/permission-matrix.ts';
 import type { Role } from '../../shared/security/rbac/permissions.ts';
 import type { StoredUser } from '../../shared/security/scope/principal.ts';
+import type { Pos, PosPatch } from './pos.catalog.ts';
+import type { ShiftSlot, ShiftTime, ShiftTimePatch } from './shift-time.ts';
 
 /** Marker of a stored role that is not one of the six roles (including the retired `API`): the user gets no access. */
 export const INVALID_ROLE = 'invalid';
@@ -12,11 +14,11 @@ export type UserRole = Role | typeof INVALID_ROLE;
 /** Whether a user may sign in. */
 export type UserStatus = 'active' | 'disabled';
 
-/** The user's own permission matrix in the domain: the core modules only, plus the right to manage other matrices. */
+/** The user's own permission matrix in the domain: every module of the legacy matrix, plus the right to manage other matrices. */
 export interface UserPermissions {
   /** Legacy `permissions.status`: may manage other users' matrix. */
   readonly status: boolean;
-  /** Flags of every core module (`groups`, `users`, `companies`, `places`, `logs`), absent ones as `false`. */
+  /** Flags of every module of the legacy matrix (`LEGACY_MODULES`), absent ones as `false`. */
   readonly modules: Readonly<Record<string, ModuleFlags>>;
   /** Whether the user may change other users' permission matrix (never for `E` or an invalid role). */
   readonly canManagePermissions: boolean;
@@ -44,8 +46,23 @@ export interface User {
   /** Whether the user is in the trash. */
   readonly trashed: boolean;
   readonly language: string;
+  /** `settings.hiddenInStats`; when that is missing, the leftover `permissions.hiddenInStats`. */
   readonly hiddenInStats: boolean;
+  /** Free notes (`description`). */
+  readonly description: string | null;
+  /** The picture as a data URL; `undefined` when the user was read for a list, which never loads it (see `hasAvatar`). */
+  readonly avatar?: string | null;
+  /** Whether the user has a picture. */
+  readonly hasAvatar: boolean;
+  /** Whether a PIN is set. The PIN itself is never read into the domain. */
+  readonly pinSet: boolean;
+  /** Services the user can provide (`servicesId`), products of the group. */
+  readonly serviceIds: readonly string[];
   readonly permissions: UserPermissions;
+  /** The point-of-sale data (`permissions.apps.cash`). */
+  readonly pos: Pos;
+  /** The shifts of the user (`shiftTime`). */
+  readonly shiftTime: ShiftTime;
   /** `insertDate`, `null` when the document has none (it happens in production). */
   readonly createdAt: Date | null;
   /** `updateDate`, `null` when the document has none. */
@@ -60,6 +77,7 @@ export type UserAnomalyKind =
   | 'encryptedPersonalData'
   | 'invalidType'
   | 'invalidReference'
+  | 'invalidPermission'
   | 'missingScope';
 
 /** One anomaly of a legacy user document. */
@@ -82,8 +100,9 @@ export type LegacyToken = string | { readonly token?: string; readonly ip?: stri
 /**
  * A document of `<env>_common.users` as the legacy platform writes it. Every field except `_id` is
  * optional because production data is irregular; the types are the ones the 2026-11-01 profiling
- * found. `password`, `pin`, `tokens`, `permissions.apps`, `servicesId`, `shiftTime` and `avatar` are
- * part of the type because they exist in the documents, but they are never mapped to a {@link User}.
+ * found. `password` and `tokens` are part of the type because they exist in the documents, but they are
+ * never mapped to a {@link User}; `pin` is only reported as set or not, never read into the domain.
+ * The `__`-prefixed fields are computed by the read projection, so that the picture and the PIN need not be loaded.
  */
 export type LegacyUserDocument = {
   readonly _id: ObjectId;
@@ -97,7 +116,7 @@ export type LegacyUserDocument = {
   readonly description?: string | null;
   /** HMAC-SHA512 hex hash; never mapped. */
   readonly password?: string | null;
-  /** Plain-text PIN; never mapped. */
+  /** Plain-text PIN; only whether it is set is mapped. */
   readonly pin?: string | null;
   /** One of the six roles, or an irregular value. */
   readonly role?: string | null;
@@ -107,16 +126,21 @@ export type LegacyUserDocument = {
   readonly placeId?: ObjectId | null;
   readonly placesId?: readonly ObjectId[] | null;
   readonly servicesId?: readonly ObjectId[] | null;
-  /** `status`, the `{ r, w }` flags of each module and `apps` (cash domain, never mapped); read defensively. */
+  /** `status`, the `{ r, w }` flags of each module and `apps.cash`; read defensively. */
   readonly permissions?: Readonly<Record<string, unknown>> | null;
   readonly settings?: { readonly language?: string; readonly hiddenInStats?: boolean } | null;
-  readonly shiftTime?: number | null;
+  /** `status`, `weeksGeneric` and `daySpecial` (older documents: `ststus` and `weekGeneric`); a number or `null` in irregular documents. */
+  readonly shiftTime?: Readonly<Record<string, unknown>> | number | null;
   readonly status?: boolean;
   readonly trash?: boolean;
   /** Legacy sessions; never mapped. */
   readonly tokens?: readonly LegacyToken[] | null;
-  /** Data URL of the picture; never mapped. */
+  /** Data URL of the picture. */
   readonly avatar?: string | null;
+  /** Computed by the list projection: whether `avatar` is a non-empty string. */
+  readonly __hasAvatar?: boolean;
+  /** Computed by the projections: whether `pin` is a non-empty string. */
+  readonly __pinSet?: boolean;
   readonly insertDate?: Date;
   readonly updateDate?: Date;
 };
@@ -154,13 +178,23 @@ export interface UserChanges {
   readonly trashed?: boolean;
   readonly language?: string;
   readonly hiddenInStats?: boolean;
+  readonly description?: string | null;
+  /** The picture as a data URL (already validated); `null` removes it. */
+  readonly avatar?: string | null;
+  /** The PIN, written as the POS needs it; `null` removes it. */
+  readonly pin?: string | null;
+  readonly serviceIds?: readonly string[];
   /** The legacy password hash (HMAC-SHA512) to write while the legacy coexists; `null` removes it. */
   readonly password?: string | null;
   readonly permissions?: {
     readonly status?: boolean;
-    /** Core modules only; any other name is refused. */
+    /** Modules of the legacy matrix only; any other name is refused. */
     readonly modules?: Readonly<Record<string, PermissionChange>>;
   };
+  /** POS values to write, each at its own path. */
+  readonly pos?: PosPatch;
+  /** Shifts to write: `status`, the list of weeks and the map of special days, each at its own path. */
+  readonly shiftTime?: ShiftTimePatch;
 }
 
 /** Everything {@link toLegacyDocument} needs to build the document of a new user. */
@@ -179,8 +213,15 @@ export interface NewUser {
   readonly placeIds: readonly string[];
   readonly status: UserStatus;
   readonly language: string;
-  /** Flags of every core module and the right to manage other matrices. */
+  readonly hiddenInStats: boolean;
+  readonly description: string | null;
+  readonly avatar: string | null;
+  readonly pin: string | null;
+  readonly serviceIds: readonly string[];
+  /** Flags of every module of the legacy matrix and the right to manage other matrices. */
   readonly permissions: { readonly status: boolean; readonly modules: Readonly<Record<string, ModuleFlags>> };
+  readonly pos: Pos;
+  readonly shiftTime: ShiftTime;
   /** The legacy password hash while the legacy coexists, `null` otherwise. */
   readonly legacyPasswordHash: string | null;
 }
@@ -189,6 +230,26 @@ export interface NewUser {
 export interface LegacyUserUpdate {
   readonly $set: Readonly<Record<string, unknown>>;
   readonly $unset?: Readonly<Record<string, ''>>;
+}
+
+/** Flags of a module in a response: `logs` has only the read flag. */
+export interface ModuleFlagsResponse {
+  readonly r: boolean;
+  readonly w?: boolean;
+}
+
+/** A week block in a response, with the dates as ISO 8601 instants. */
+export interface ShiftWeekResponse {
+  readonly from: string | null;
+  readonly to: string | null;
+  readonly days: Readonly<Record<string, { readonly active: boolean; readonly slots: readonly ShiftSlot[] }>>;
+}
+
+/** The shifts of a user in a response. */
+export interface ShiftTimeResponse {
+  readonly enabled: boolean;
+  readonly weeks: readonly ShiftWeekResponse[];
+  readonly specialDays: ShiftTime['specialDays'];
 }
 
 /** Result of the response mapper: what `/v1` shows of a user, dates in ISO 8601. */
@@ -208,7 +269,16 @@ export interface UserResponse {
   readonly trashed: boolean;
   readonly language: string;
   readonly hiddenInStats: boolean;
-  readonly permissions: { readonly status: boolean; readonly modules: Readonly<Record<string, ModuleFlags>>; readonly canManagePermissions: boolean };
+  readonly description: string | null;
+  /** The picture; present on the detail of a user, absent from the lists (use `hasAvatar`). */
+  readonly avatar?: string | null;
+  readonly hasAvatar: boolean;
+  /** Whether a PIN is set; the PIN itself is never returned. */
+  readonly pinSet: boolean;
+  readonly serviceIds: readonly string[];
+  readonly permissions: { readonly status: boolean; readonly modules: Readonly<Record<string, ModuleFlagsResponse>>; readonly canManagePermissions: boolean };
+  readonly pos: Pos;
+  readonly shiftTime: ShiftTimeResponse;
   readonly createdAt: string | null;
   readonly updatedAt: string | null;
 }

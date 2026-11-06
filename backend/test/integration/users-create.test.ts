@@ -6,6 +6,7 @@ import type { Document } from 'mongodb';
 import { createCredentialsRepository } from '../../src/modules/users/credentials.repository.ts';
 import { createDealersRepository } from '../../src/modules/dealers/dealers.repository.ts';
 import { createGroupDirectoryRepository } from '../../src/modules/users/group-directory.repository.ts';
+import { groupReaders } from '../helpers/user-deps.ts';
 import { fromLegacy } from '../../src/modules/users/user.mapper.ts';
 import type { LegacyUserDocument } from '../../src/modules/users/user.types.ts';
 import { createUsersRepository } from '../../src/modules/users/users.repository.ts';
@@ -16,7 +17,7 @@ import { Secret } from '../../src/shared/security/secret.ts';
 import { TEST_PEPPER, addUser as addBackofficeUser, startBackoffice } from '../helpers/backoffice.ts';
 import type { Backoffice } from '../helpers/backoffice.ts';
 import { memoryActivityLog } from '../helpers/activity.ts';
-import { fixtureId, legacyUser } from '../helpers/legacy-fixtures.ts';
+import { LEGACY_MODULE_NAMES, fixtureId, legacyUser } from '../helpers/legacy-fixtures.ts';
 import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalOf } from '../helpers/principal.ts';
@@ -45,6 +46,9 @@ const actor = async (overrides: Document = {}) => (await addBackofficeUser(ctx, 
 const body = (overrides: Document = {}): Document => ({ username: name(), password: PASSWORD, role: 'E', placeIds: [hex(place(1))], ...overrides });
 const failure = (reply: Awaited<ReturnType<typeof as.call>>) => as.failure(reply);
 const invalid = (...details: Array<[string, string]>) => ({ status: 422, code: 'VALIDATION_ERROR', details: details.map(([field, issue]) => ({ field, issue })) });
+/** The modules of a response with every flag off except the given ones (`logs` has the read flag only). */
+const modulesOf = (on: Record<string, { r: boolean; w: boolean }>) =>
+  Object.fromEntries(LEGACY_MODULE_NAMES.map((module) => [module, on[module] ?? (module === 'logs' ? { r: false } : { r: false, w: false })]));
 const denied = { status: 403, code: 'FORBIDDEN', details: undefined };
 
 before(async () => {
@@ -86,7 +90,7 @@ describe('POST /v1/groups/{groupId}/users: a new user', () => {
       const document = await stored(id);
       assert.deepEqual(fromLegacy(document as LegacyUserDocument).anomalies, []);
       assert.deepEqual(Object.keys(document).sort(), [
-        '_id', 'companyId', 'dealerId', 'email', 'groupId', 'insertDate', 'name', 'password', 'permissions', 'placeId', 'placesId', 'role', 'settings', 'status', 'surname', 'telephone', 'tokens', 'trash', 'updateDate', 'userName',
+        '_id', 'avatar', 'companyId', 'dealerId', 'description', 'email', 'groupId', 'insertDate', 'name', 'password', 'permissions', 'pin', 'placeId', 'placesId', 'role', 'servicesId', 'settings', 'shiftTime', 'status', 'surname', 'telephone', 'tokens', 'trash', 'updateDate', 'userName',
       ]);
       assert.equal(document['status'], true);
       assert.equal(document['trash'], false);
@@ -100,8 +104,8 @@ describe('POST /v1/groups/{groupId}/users: a new user', () => {
       const expectedCompany = (scope['companyIds'] as string[])[0];
       assert.equal(document['companyId'] === null ? undefined : hex(document['companyId'] as ObjectId), expectedCompany);
       assert.deepEqual((document['placesId'] as ObjectId[]).map(hex), scope['placeIds']);
-      assert.deepEqual(Object.keys(document['permissions'] as Document).sort(), ['companies', 'groups', 'logs', 'places', 'status', 'users']);
-      assert.ok(!('apps' in (document['permissions'] as Document)) && !('pin' in document) && !('avatar' in document));
+      assert.deepEqual(Object.keys(document['permissions'] as Document).sort(), [...LEGACY_MODULE_NAMES, 'apps', 'status'].sort());
+      assert.deepEqual([document['pin'], document['avatar'], document['description'], document['servicesId']], [null, null, null, []]);
 
       const creds = (await credentials().findOne({ _id: id }))!;
       assert.match(creds['passwordHash'] as string, /^scrypt\$/);
@@ -173,14 +177,14 @@ describe('POST /v1/groups/{groupId}/users: the request is validated', () => {
   });
 
   it('refuses fields it does not own, operators and prototype keys, with the field and never the value', async () => {
-    for (const [field, value] of [['groupId', hex(g1().groupId)], ['dealerId', hex(office.cluster.dealerA)], ['pin', '1234'], ['tokens', []], ['apps', {}], ['_id', hex(new ObjectId())], ['trash', true], ['hiddenInStats', true]] as const) {
+    for (const [field, value] of [['groupId', hex(g1().groupId)], ['dealerId', hex(office.cluster.dealerA)], ['tokens', []], ['apps', {}], ['_id', hex(new ObjectId())], ['trash', true], ['password2', 'x']] as const) {
       const result = await post(body({ [field]: value }));
       assert.deepEqual(result, invalid([field, 'unknown']), field);
     }
     assert.deepEqual(await post(body({ '$set': 1 })), invalid(['(key)', 'forbiddenKey']));
     assert.deepEqual(await post(body({ 'a.b': 1 })), invalid(['(key)', 'forbiddenKey']));
     assert.deepEqual(await post(body({ permissions: { apps: { cash: { status: true } } } })), invalid(['permissions.apps', 'unknown']));
-    assert.deepEqual(await post(body({ permissions: { modules: { products: { r: true } } } })), invalid(['permissions.modules.products', 'unknown']));
+    assert.deepEqual(await post(body({ permissions: { modules: { reports: { r: true } } } })), invalid(['permissions.modules.reports', 'unknown']));
     assert.deepEqual(await post(body({ permissions: { modules: { users: { x: true } } } })), invalid(['permissions.modules.users.x', 'unknown']));
     assert.deepEqual(await post(body({ permissions: { modules: { users: { r: 'yes' } } } })), invalid(['permissions.modules.users.r', 'type']));
     assert.deepEqual(await post(body({ permissions: { canManagePermissions: 1 } })), invalid(['permissions.canManagePermissions', 'type']));
@@ -278,7 +282,7 @@ describe('POST /v1/groups/{groupId}/users: the request is validated', () => {
 
   it('refuses a body over the limit with 413 and another content type with 415', async () => {
     const token = await as.tokenOf(g0().sa);
-    const big = await send(office, 'POST', path(), token, body({ firstName: 'x'.repeat(20_000) }));
+    const big = await send(office, 'POST', path(), token, body({ firstName: 'x'.repeat(600_000) }));
     assert.equal(big.status, 413);
     const text = await fetch(`${office.app.baseUrl}/v1${path()}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'text/plain' }, body: 'x' });
     assert.equal(text.status, 415);
@@ -336,10 +340,10 @@ describe('POST /v1/groups/{groupId}/users: who may create whom', () => {
     assert.deepEqual(created.body.data.permissions, {
       status: false,
       canManagePermissions: false,
-      modules: { groups: { r: false, w: false }, users: { r: true, w: true }, companies: { r: true, w: false }, places: { r: true, w: true }, logs: { r: false, w: false } },
+      modules: modulesOf({ users: { r: true, w: true }, companies: { r: true, w: false }, places: { r: true, w: true } }),
     });
     const stored1 = (await stored(idOf(created)))['permissions'] as Document;
-    assert.deepEqual([stored1['status'], stored1['logs'], stored1['companies']], [false, { r: false, w: false }, { r: true, w: false }]);
+    assert.deepEqual([stored1['status'], stored1['logs'], stored1['companies']], [false, { r: false }, { r: true, w: false }]);
     // Without canManagePermissions he cannot choose a matrix at all, not even the same one.
     assert.deepEqual(failure(await as.call(limited, 'POST', path(), body({ permissions: { modules: { users: { r: true } } } }))), denied);
     assert.deepEqual(failure(await as.call(limited, 'POST', path(), body({ permissions: { canManagePermissions: true } }))), denied);
@@ -352,7 +356,7 @@ describe('POST /v1/groups/{groupId}/users: who may create whom', () => {
     assert.deepEqual(chosen.body.data.permissions, {
       status: true,
       canManagePermissions: true,
-      modules: { groups: { r: false, w: false }, users: { r: true, w: true }, companies: { r: true, w: false }, places: { r: false, w: false }, logs: { r: false, w: false } },
+      modules: modulesOf({ users: { r: true, w: true }, companies: { r: true, w: false } }),
     });
     assert.deepEqual(failure(await as.call(manager, 'POST', path(), body({ permissions: { modules: { logs: { r: true } } } }))), denied);
     assert.deepEqual(failure(await as.call(manager, 'POST', path(), body({ role: 'SA', placeIds: undefined, permissions: { modules: { groups: { w: true } } } }))), denied);
@@ -390,6 +394,7 @@ describe('creating a user is all or nothing', () => {
         config: { legacyPasswordPepper: new Secret(TEST_PEPPER), legacyPasswordCoexistence: true },
         ...repositories,
         directory: createGroupDirectoryRepository(ctx.databases),
+        ...groupReaders(ctx.databases),
         dealers: createDealersRepository(ctx.databases),
         activityLog,
         transaction: (work) => ctx.databases.transaction(work),

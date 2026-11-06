@@ -7,9 +7,9 @@ const _id = fixtureId('group', 1);
 
 describe('reference mapper', () => {
   it('maps a group by allowlist: only a true status is active, only a true trash is trashed', () => {
-    assert.deepEqual(toGroupReference({ _id, name: 'G', status: true, trash: false, apiKey: 'secret' }), { id: _id.toHexString(), name: 'G', status: 'active', trashed: false });
-    assert.deepEqual(toGroupReference({ _id, name: 5, status: 'true', trash: 'yes' }), { id: _id.toHexString(), name: '', status: 'suspended', trashed: false });
-    assert.deepEqual(toGroupReference({ _id, status: false, trash: true }), { id: _id.toHexString(), name: '', status: 'suspended', trashed: true });
+    assert.deepEqual(toGroupReference({ _id, name: 'G', status: true, trash: false, apiKey: 'secret' }), { id: _id.toHexString(), name: 'G', status: 'active', trashed: false, dealerId: null, demo: false });
+    assert.deepEqual(toGroupReference({ _id, name: 5, status: 'true', trash: 'yes' }), { id: _id.toHexString(), name: '', status: 'suspended', trashed: false, dealerId: null, demo: false });
+    assert.deepEqual(toGroupReference({ _id, status: false, trash: true }), { id: _id.toHexString(), name: '', status: 'suspended', trashed: true, dealerId: null, demo: false });
   });
 
   it('maps a company', () => {

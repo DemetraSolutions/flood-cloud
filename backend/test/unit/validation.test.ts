@@ -15,6 +15,7 @@ import {
   isForbiddenKey,
   isoDate,
   nullable,
+  number,
   object,
   objectId,
   optional,
@@ -70,6 +71,18 @@ describe('string', () => {
     assert.equal(validate(string({ max: 5, pattern: /^[a-z]+$/ }), 'ab', 'v'), 'ab');
     assert.equal(one(string({ max: 5 }), 'a\ud800'), 'format');
     assert.equal(one(string({ max: 5 }), '\udc00b'), 'format');
+  });
+});
+
+describe('number', () => {
+  it('accepts finite numbers inside the range and refuses everything else', () => {
+    assert.equal(validate(number(), 1.5, 'v'), 1.5);
+    assert.equal(validate(number({ min: 0, max: 100 }), 100, 'v'), 100);
+    for (const value of ['5', NaN, Infinity, null, true, [5]]) {
+      assert.equal(one(number(), value), 'type', String(value));
+    }
+    assert.equal(one(number({ min: 0 }), -0.1), 'minimum');
+    assert.equal(one(number({ max: 1 }), 1.1), 'maximum');
   });
 });
 
@@ -206,6 +219,13 @@ describe('nullable, optional, array', () => {
     // Elements of a too long array are never visited.
     assert.deepEqual(problems(array({ optional: false, parse: () => assert.fail('visited') }, { max: 1 }), [1, 2]), [{ field: '(body)', issue: 'tooMany' }]);
   });
+
+  it('rejects a repeated element only when the array must have unique ones', () => {
+    const list = array(string({ max: 2 }), { max: 4, unique: true });
+    assert.deepEqual(validate(list, ['a', 'b'], 'v'), ['a', 'b']);
+    assert.deepEqual(problems(list, ['a', 'b', 'a', 'b'], 'v'), [{ field: '2', issue: 'incorrect' }, { field: '3', issue: 'incorrect' }]);
+    assert.deepEqual(validate(array(string({ max: 2 }), { max: 4 }), ['a', 'a'], 'v'), ['a', 'a']);
+  });
 });
 
 describe('object', () => {
@@ -314,7 +334,7 @@ describe('validate', () => {
   });
 
   it('exposes the closed list of issues and the INVALID marker', () => {
-    assert.deepEqual([...VALIDATION_ISSUES], ['required', 'type', 'minLength', 'maxLength', 'pattern', 'minimum', 'maximum', 'enum', 'unknown', 'forbiddenKey', 'format', 'tooDeep', 'tooMany', 'incorrect', 'taken', 'reused', 'immutable']);
+    assert.deepEqual([...VALIDATION_ISSUES], ['required', 'type', 'minLength', 'maxLength', 'pattern', 'minimum', 'maximum', 'enum', 'unknown', 'forbiddenKey', 'format', 'tooDeep', 'tooMany', 'incorrect', 'taken', 'reused', 'immutable', 'notAllowed']);
     assert.equal(typeof INVALID, 'symbol');
     assert.ok(Object.isFrozen(string({ max: 1 })));
   });

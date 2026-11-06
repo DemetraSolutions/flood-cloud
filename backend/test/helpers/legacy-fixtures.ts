@@ -82,6 +82,82 @@ export function dirtyScope(role: 'SA' | 'E' | 'PA' | 'CA', ids: { companyId: Obj
   }
 }
 
+/** The legacy keys of the boolean grants of `permissions.apps.cash.sub`, typos included, written out by hand (the independent copy the tests check the catalog against). */
+export const LEGACY_SUB_FLAGS: readonly string[] = [
+  'posClosure', 'discount', 'discountReason', 'prices', 'onlyHigherPrice', 'invoices', 'freeSale', 'contacts', 'bypassAutomaticCash', 'deleteUserShiftDetail',
+  'receiptCancellation', 'selectUserSale', 'manageService', 'preblling', 'receipt', 'tableCheckoutActiveDesk', 'deleteTable', 'deleteTableReason', 'deleteTableProduct',
+  'deleteTableProductReasonNotSent', 'deleteTableProductReasonSent', 'tablePrebillingActions', 'roomsTableViewQuickTotals', 'roomsRoomsViewPrices', 'roomsTableViewPrices',
+  'roomsOnlyHigherSeatsQunatity', 'editQuantitySentWeightProduct', 'advancedReport', 'advancedReportPin', 'reworkSale', 'sentProducts', 'notSentProducts', 'lockProducts',
+  'tableEngage', 'tableMerge', 'tableSepare', 'tableClose', 'checkoutPartition', 'checkoutSeparation', 'moveProducts', 'unlockTable', 'resendProducts', 'searchProducts', 'rider',
+];
+
+/** The flags of each automatic cash device, as the legacy names them. */
+export const LEGACY_AUTOMATIC_CASH: Readonly<Record<string, readonly string[]>> = {
+  glory: ['withdrawal', 'deposit', 'archive', 'archiveAll', 'unlockNote', 'unlockCoin', 'collectVerify'],
+  cashMatic: ['withdrawal', 'deposit', 'change', 'refill', 'archive', 'archiveAll'],
+  vne: ['withdrawal', 'refill', 'archive', 'archiveAll', 'tools'],
+  azkoyen: ['withdrawal', 'deposit', 'backoffice', 'status'],
+  cashSystem: ['withdrawal'],
+};
+
+/** The boolean options of `permissions.apps.cash.options`. */
+export const LEGACY_BOOLEAN_OPTIONS: readonly string[] = [
+  'extendedCart', 'noSeparator', 'skipCheckoutButton', 'showLastSaleValue', 'quickPriceList', 'advancedDiscount', 'productsPagination', 'productsShortName', 'invertedCart',
+  'deskPrintOrderDefault', 'deliveryTakeawayCompletedDefault', 'deliveryTakeawayShowOrderDetailOnSave', 'deliveryTakeawayShowProduction', 'reducedProducts', 'reducedProductsTable',
+  'reducedTables', 'enlargedCategories', 'tableCartPriority', 'sendOrderRemainButton', 'viewTableStatus', 'viewTableUser', 'viewTableCustomer', 'viewTableStartDate',
+  'genericProductPriceFocus', 'roomsGridActive', 'roomsGridActionbarOpened', 'removeFiltersProductSelect', 'removeFiltersOnSearch', 'darkMode', 'departmentsDialog',
+  'skipFiscalReceiptTypeRequest',
+];
+
+/** The thirteen modules of the legacy matrix; `logs` has only the read flag. */
+export const LEGACY_MODULE_NAMES: readonly string[] = ['groups', 'users', 'companies', 'places', 'documents', 'products', 'calendar', 'warehouse', 'contacts', 'fidelity', 'settings', 'stats', 'logs'];
+
+/**
+ * A complete legacy `permissions` object as the legacy form writes it: every module (all flags off unless `modules` says otherwise), every POS grant and
+ * option, plus two keys the backend does not manage (`sub.productsStatus`, `options.service`) and the leftover `hiddenInStats`, to check that they survive.
+ *
+ * @param overrides `status`, the flags of some `modules`, and the `sub` and `options` values to change.
+ */
+export function legacyPermissions(overrides: { status?: boolean; modules?: Record<string, Document>; sub?: Document; options?: Document; cashStatus?: boolean } = {}): Document {
+  const modules = Object.fromEntries(LEGACY_MODULE_NAMES.map((name) => [name, name === 'logs' ? { r: false } : { r: false, w: false }]));
+  return {
+    status: overrides.status ?? false,
+    hiddenInStats: false,
+    ...modules,
+    ...overrides.modules,
+    apps: {
+      cash: {
+        status: overrides.cashStatus ?? true,
+        sub: {
+          ...Object.fromEntries(LEGACY_SUB_FLAGS.map((key) => [key, false])),
+          discountMaxPercentage: null,
+          service: null,
+          automaticCash: Object.fromEntries(Object.entries(LEGACY_AUTOMATIC_CASH).map(([device, keys]) => [device, Object.fromEntries(keys.map((key) => [key, false]))])),
+          productsStatus: false,
+          ...overrides.sub,
+        },
+        options: {
+          ...Object.fromEntries(LEGACY_BOOLEAN_OPTIONS.map((key) => [key, false])),
+          favoritesId: null,
+          side: 'dx',
+          sideRooms: 'dx',
+          virtualKeyboard: '',
+          template: 'material-whitepurple-light',
+          productsFontSize: 's',
+          productsShortNameFontSize: 's',
+          roomsTablesColumns: null,
+          roomsTablesColumnsHandheld: null,
+          roomsGridZoomHandheld: 2,
+          quickDiscount: null,
+          priceLists: {},
+          service: null,
+          ...overrides.options,
+        },
+      },
+    },
+  };
+}
+
 /**
  * A legacy user in its normal shape (HMAC password, plain PIN, plain personal data, ObjectId references).
  *
@@ -106,9 +182,9 @@ export function legacyUser(n: number, overrides: Document = {}): Document {
     placeId: null,
     placesId: [],
     servicesId: [],
-    permissions: { status: true, products: { r: true, w: false }, apps: { cash: { status: true, sub: { discounts: true }, options: { receipts: false } } } },
+    permissions: legacyPermissions({ status: true, modules: { stats: { r: true, w: false } }, sub: { discounts: true }, options: { receipts: false } }),
     settings: { language: 'it', hiddenInStats: false },
-    shiftTime: 0,
+    shiftTime: { status: false, weeksGeneric: [], daySpecial: {} },
     status: true,
     trash: false,
     tokens: [{ token: `token-${pad(n)}`, ip: '127.0.0.1', ips: ['127.0.0.1'], userAgent: 'fixture', date: DATE }],
@@ -156,11 +232,24 @@ export function legacyGroup(n: number, overrides: Document = {}): Document {
       stats: { daily: true },
       integrations: { satispay: { status: true, apiKey: 'integration-key' } },
     },
-    priceLists: { [fixtureId('group', 900 + n).toHexString()]: { name: 'list' } },
-    taxes: [{ id: 1, value: 22 }],
-    currencies: ['EUR'],
-    measureUnits: ['kg'],
-    warehouseRules: { [fixtureId('group', 800 + n).toHexString()]: { type: 'D', cashD: true, cashL: false } },
+    priceLists: { [fixtureId('group', 900 + n).toHexString()]: { id: fixtureId('group', 900 + n).toHexString(), name: 'Listino 1', status: true, default: true } },
+    taxes: [{ id: `tax-${pad(n)}`, value: 22, department: 1, description: null, natura: null }],
+    currencies: { EUR: { code: 'EUR', symbol: '&euro;' } },
+    measureUnits: { [`unit-${pad(n)}`]: { id: `unit-${pad(n)}`, value: 'pz' } },
+    warehouseRules: {
+      [fixtureId('group', 800 + n).toHexString()]: {
+        id: fixtureId('group', 800 + n).toHexString(),
+        type: 'D',
+        name: 'Scarico clienti',
+        quantity: '-',
+        value: '-',
+        useLoadUnit: false,
+        counterpart: 'customers',
+        default: true,
+        cashD: true,
+      },
+    },
+    fidelityCardRules: { EUR: { code: 'EUR', value: null, discountPercentage: null } },
     places: [],
     insertDate: DATE,
     updateDate: DATE,

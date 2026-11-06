@@ -6,6 +6,7 @@ import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import { recordDataChange } from '../../shared/activity-log/data-change.ts';
 import type { PageInfo } from '../../shared/http/envelope.ts';
 import { AppError } from '../../shared/http/errors.ts';
+import type { ErrorDetail } from '../../shared/http/errors.ts';
 import type { ClientContext } from '../../shared/http/client-context.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
 import { companyOf, minimalCompany, toNewDocument } from '../dealers/dealer.mapper.ts';
@@ -21,8 +22,17 @@ import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { usersScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
 import { auditSessionsRevoked } from '../sessions/session-audit.ts';
 import type { SessionsRepository } from '../sessions/sessions.repository.ts';
+import type { ServicesRepository } from '../group-services/services.repository.ts';
 import type { CredentialsRepository } from './credentials.repository.ts';
 import type { GroupDirectoryRepository } from './group-directory.repository.ts';
+import { avatarFingerprint } from './avatar.ts';
+import { defaultPriceLists, optionReferenceIssues, referencesGroupLists } from './group-options.ts';
+import type { GroupOptionLists, GroupOptionsReader } from './group-options.ts';
+import { inheritedPos, isPosLimited, posAccessError, posPermissionsChanged } from './pos-access.ts';
+import type { PosActor } from './pos-access.ts';
+import { applyPosPatch, diffPos } from './pos.mapper.ts';
+import type { Pos } from './pos.catalog.ts';
+import { applyShiftTime, diffShiftTime, emptyShiftTime, shiftTimeIssues } from './shift-time.ts';
 import { applyPermissions, changeViewOf, permissionChanges, scopeReferenceIssues, scopeShapeIssues, storedChangeView, violationError } from './user-access.ts';
 import { DEFAULT_LANGUAGE, OWNED_PERMISSION_MODULES, toLegacyDocument, toLegacyUpdate, toResponse } from './user.mapper.ts';
 import type { User, UserChanges, UserResponse } from './user.types.ts';
@@ -93,7 +103,7 @@ export interface UsersService {
    */
   create(principal: AuthPrincipal, area: UserArea, body: CreateUserBody, client: ClientContext, alongside?: AlongsideWrite): Promise<UserResponse>;
   /**
-   * Modifies a user (JSON Merge Patch). A change of role, scope, status or permissions ends his sessions (D-11).
+   * Modifies a user (JSON Merge Patch). A change of role, scope, status or permissions (the POS app switch and grants included, not the POS options) ends his sessions and empties his legacy tokens (D-11).
    *
    * @throws {AppError} `NOT_FOUND`, `FORBIDDEN` (himself, rank, permissions), `VALIDATION_ERROR`, `CONFLICT` (username taken).
    */
@@ -139,6 +149,10 @@ export interface UsersServiceDeps {
   readonly directory: GroupDirectoryRepository;
   /** The dealer registry: a user `D` is created and deleted together with his document. */
   readonly dealers: Pick<DealersRepository, 'insert' | 'deleteById'>;
+  /** The services of a group, to verify the `serviceIds` of a user. */
+  readonly services: Pick<ServicesRepository, 'existing'>;
+  /** The price lists and favorites lists of a group, to verify and default the POS options of a user. */
+  readonly groupOptions: GroupOptionsReader;
   readonly activityLog: ActivityLog;
   /**
    * Runs the operations in a transaction on the common database: they commit together or not at all
@@ -170,7 +184,10 @@ function uniqueIds(ids: readonly ObjectId[]): ObjectId[] {
 
 const hexes = (ids: readonly ObjectId[]): string[] => ids.map((id) => id.toHexString());
 
-/** What the activity log records of a user: no secret, no legacy-only field. */
+/**
+ * What the activity log records of a user: no secret and no legacy-only field. The PIN is never there, only whether it is set; the picture is
+ * replaced by whether there is one and a short fingerprint of it, so a change of picture shows without storing it.
+ */
 function snapshot(user: User): Record<string, unknown> {
   return {
     username: user.username,
@@ -182,10 +199,26 @@ function snapshot(user: User): Record<string, unknown> {
     status: user.status,
     trashed: user.trashed,
     language: user.language,
+    hiddenInStats: user.hiddenInStats,
+    description: user.description,
+    hasAvatar: user.hasAvatar,
+    avatarHash: user.avatar === undefined || user.avatar === null ? null : avatarFingerprint(user.avatar),
+    pinSet: user.pinSet,
+    serviceIds: user.serviceIds,
     companyIds: user.companyIds,
     placeIds: user.placeIds,
     permissions: { status: user.permissions.status, modules: user.permissions.modules },
+    pos: user.pos,
+    shiftTime: user.shiftTime,
   };
+}
+
+/** The roles whose users can provide services. */
+const SERVICE_ROLES: readonly string[] = ['SA', 'CA', 'PA'];
+
+/** The extra fields of the group bodies: the services the user provides. */
+interface ServiceFields {
+  readonly serviceIds?: ObjectId[];
 }
 
 function conflictUsernameTaken(): AppError {
@@ -204,7 +237,7 @@ function validationError(details: ReadonlyArray<{ field: string; issue: string }
  * @param deps Repositories, directory, transaction runner, activity log and clock.
  */
 export function createUsersService(deps: UsersServiceDeps): UsersService {
-  const { config, users, credentials, sessions, directory, dealers, activityLog, transaction } = deps;
+  const { config, users, credentials, sessions, directory, dealers, services, groupOptions, activityLog, transaction } = deps;
   const date = (): Date => new Date(deps.now());
 
   const groupIdOf = (area: UserArea): ObjectId | null => (area.kind === 'group' ? area.access.groupId : null);
@@ -311,6 +344,54 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
     return change;
   };
 
+  /** The one who gives the POS permissions; his own POS data are read once, and only if the rules need them. */
+  const posActorOf = (principal: AuthPrincipal): PosActor => {
+    let own: Promise<Pos> | undefined;
+    return {
+      role: principal.role,
+      canManagePermissions: principal.canManagePermissions,
+      // The caller was read by the authentication a moment ago: if he is gone, the request fails as the unexpected thing it is.
+      pos: () => (own ??= users.findById(principal.userId).then((mapped) => mapped!.user.pos)),
+    };
+  };
+
+  /** The lists of the group a user is in, which his POS options refer to; `null` for a platform user. */
+  const groupListsOf = async (area: UserArea): Promise<GroupOptionLists | null> => (area.kind === 'group' ? groupOptions.read(area.access.groupId) : null);
+
+  /**
+   * The problems of the services a user would provide. Only the ids he does not already have are checked; they must be services of the group
+   * (not products of another kind, not in the trash, not of another group), and they can be set only for SA, CA and PA of a group that has the
+   * `services` feature on, as in the legacy form. Clearing the list is always allowed. A feature that is off is a `422 notAllowed` on the field,
+   * not a `403 FEATURE_DISABLED`: the route itself is available and only this optional field is refused, so the rest of the request is still reported.
+   */
+  const serviceIssues = async (principal: AuthPrincipal, area: UserArea, role: Role, requested: readonly ObjectId[] | undefined, known: ReadonlySet<string>): Promise<ErrorDetail[]> => {
+    if (requested === undefined) {
+      return [];
+    }
+    const issues: ErrorDetail[] = [];
+    const seen = new Set<string>();
+    requested.forEach((id, index) => {
+      if (seen.has(id.toHexString())) {
+        issues.push({ field: `serviceIds.${String(index)}`, issue: 'incorrect' });
+      }
+      seen.add(id.toHexString());
+    });
+    const fresh = uniqueIds(requested).filter((id) => !known.has(id.toHexString()));
+    if (fresh.length === 0) {
+      return issues;
+    }
+    if (area.kind !== 'group' || !SERVICE_ROLES.includes(role) || !area.access.features.services) {
+      return [...issues, { field: 'serviceIds', issue: 'notAllowed' }];
+    }
+    const found = await services.existing(principal, area.access, fresh);
+    requested.forEach((id, index) => {
+      if (!known.has(id.toHexString()) && !found.has(id.toHexString())) {
+        issues.push({ field: `serviceIds.${String(index)}`, issue: 'incorrect' });
+      }
+    });
+    return issues;
+  };
+
   return {
     listGroup: (principal, access, query) =>
       listing(withScope(usersScopeFilter(principal), { groupId: access.groupId, role: { $in: GROUP_ROLE_FILTER } }), requestFilter(query), query),
@@ -350,6 +431,25 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       if (denied !== null) {
         throw denied;
       }
+      // The POS data: the default of the role (limited to what a CA or PA creator holds), the price lists of the group, then what the request sets.
+      const actor = posActorOf(principal);
+      const group = await groupListsOf(area);
+      const started = inheritedPos(isPosLimited(principal.role) ? await actor.pos() : null, role);
+      const pos = applyPosPatch({ ...started, options: { ...started.options, priceLists: defaultPriceLists(group) } }, body.pos);
+      const posDenied = await posAccessError(actor, role, null, pos);
+      if (posDenied !== null) {
+        throw posDenied;
+      }
+      const requestedServices = (body as ServiceFields).serviceIds;
+      const shiftTime = applyShiftTime(emptyShiftTime(), body.shiftTime);
+      const dataIssues = [
+        ...optionReferenceIssues(body.pos?.options, null, group),
+        ...(await serviceIssues(principal, area, role, requestedServices, new Set())),
+        ...(body.shiftTime === undefined ? [] : shiftTimeIssues(shiftTime)),
+      ];
+      if (dataIssues.length > 0) {
+        throw validationError(dataIssues);
+      }
       // The policy first: a weak password must not be a way to find out which usernames exist.
       const policy = checkPasswordPolicy(body.password, { username: body.username });
       if (!policy.ok) {
@@ -377,7 +477,14 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
           placeIds: hexes(placeIds),
           status: body.status ?? 'active',
           language: body.language ?? DEFAULT_LANGUAGE,
+          hiddenInStats: body.hiddenInStats ?? false,
+          description: body.description ?? null,
+          avatar: body.avatar ?? null,
+          pin: body.pin ?? null,
+          serviceIds: requestedServices === undefined ? [] : hexes(uniqueIds(requestedServices)),
           permissions: { status: matrix.status, modules: Object.fromEntries(OWNED_PERMISSION_MODULES.map((name) => [name, flagsOf(matrix, name)])) },
+          pos,
+          shiftTime,
           legacyPasswordHash: change.legacyHash,
         },
         now,
@@ -455,12 +562,30 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       if (denied !== null) {
         throw denied;
       }
+      const pos = applyPosPatch(before.pos, patch.pos);
+      const posDenied = await posAccessError(posActorOf(principal), role, before.pos, pos);
+      if (posDenied !== null) {
+        throw posDenied;
+      }
+      const requestedServices = (patch as ServiceFields).serviceIds;
+      const shiftTime = applyShiftTime(before.shiftTime, patch.shiftTime);
+      const dataIssues = [
+        ...optionReferenceIssues(patch.pos?.options, before.pos.options, referencesGroupLists(patch.pos?.options) ? await groupListsOf(area) : null),
+        ...(await serviceIssues(principal, area, role, requestedServices, new Set(before.serviceIds))),
+        ...(patch.shiftTime === undefined ? [] : shiftTimeIssues(shiftTime)),
+      ];
+      if (dataIssues.length > 0) {
+        throw validationError(dataIssues);
+      }
       if (patch.username !== undefined && patch.username !== before.username && (await users.isUsernameTaken(patch.username, userId))) {
         throw conflictUsernameTaken();
       }
 
       const differs = <T>(next: T | undefined, current: T): next is T => next !== undefined && next !== current;
       const permissionDiff = permissionChanges(view.matrix, matrix);
+      const posDiff = diffPos(before.pos, pos);
+      const shiftDiff = diffShiftTime(before.shiftTime, shiftTime);
+      const serviceIds = requestedServices === undefined ? undefined : hexes(uniqueIds(requestedServices));
       const changes: UserChanges = {
         ...(differs(patch.username, before.username) ? { username: patch.username } : {}),
         ...(differs(patch.firstName, before.firstName) ? { firstName: patch.firstName } : {}),
@@ -472,13 +597,24 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         ...(differs(patch.status, before.status) ? { status: patch.status } : {}),
         ...(scopeChanged ? { companyIds: hexes(companyIds), placeIds: hexes(placeIds) } : {}),
         ...(permissionDiff === undefined ? {} : { permissions: permissionDiff }),
+        ...(differs(patch.hiddenInStats, before.hiddenInStats) ? { hiddenInStats: patch.hiddenInStats } : {}),
+        ...(differs(patch.description, before.description) ? { description: patch.description } : {}),
+        // A stored picture that cannot be shown reads as none, yet `null` must still remove it.
+        ...(differs(patch.avatar, before.avatar ?? null) || (patch.avatar === null && before.hasAvatar) ? { avatar: patch.avatar } : {}),
+        // The stored PIN is never read, so a PIN in the request is always written.
+        ...(patch.pin === undefined ? {} : { pin: patch.pin }),
+        ...(serviceIds === undefined || sameIds(serviceIds, before.serviceIds) ? {} : { serviceIds }),
+        ...(posDiff === undefined ? {} : { pos: posDiff }),
+        ...(shiftDiff === undefined ? {} : { shiftTime: shiftDiff }),
       };
       if (Object.keys(changes).length === 0) {
         return toResponse(before);
       }
 
       const now = date();
-      const revocation = changes.role !== undefined ? 'roleChanged' : scopeChanged ? 'scopeChanged' : changes.status !== undefined ? 'statusChanged' : permissionDiff !== undefined ? 'permissionsChanged' : null;
+      // The POS app switch and grants are permissions too; the POS options are not.
+      const permissionsChanged = permissionDiff !== undefined || posPermissionsChanged(before.pos, pos);
+      const revocation = changes.role !== undefined ? 'roleChanged' : scopeChanged ? 'scopeChanged' : changes.status !== undefined ? 'statusChanged' : permissionsChanged ? 'permissionsChanged' : null;
       const revoked = await transaction(async (session) => {
         if (!(await users.updateOwned(userId, toLegacyUpdate(changes, now), session))) {
           return null;
@@ -495,7 +631,8 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         resource: { type: 'user', id: userId.toHexString() },
         action: 'user.updated',
         before: snapshot(before),
-        after: snapshot(updated.user),
+        // The PIN is never read, so a change of it is told by a marker; the value is nowhere.
+        after: { ...snapshot(updated.user), ...(patch.pin === undefined ? {} : { pinChange: patch.pin === null ? 'removed' : 'set' }) },
       });
       if (changes.role !== undefined) {
         await securityEvent(principal, area, client, 'user.roleChanged', userId, { from: before.role, to: role });
@@ -506,7 +643,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       if (changes.status !== undefined) {
         await securityEvent(principal, area, client, 'user.statusChanged', userId, { from: before.status, to: updated.user.status });
       }
-      if (permissionDiff !== undefined) {
+      if (permissionsChanged) {
         await securityEvent(principal, area, client, 'user.permissionsChanged', userId);
       }
       await reportRevoked(principal, area, client, revocation ?? '', revoked);

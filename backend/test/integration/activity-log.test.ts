@@ -11,6 +11,7 @@ import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { quietLogger } from '../helpers/indexes.ts';
 import { COLLECTIONS } from '../../src/db/collections.ts';
+import { ACTION_CATALOG, ACTIVITY_ACTION_NAMES } from '../../src/shared/activity-log/catalog.ts';
 
 let ctx: TestDatabases;
 before(async () => {
@@ -23,7 +24,7 @@ after(async () => {
 const DAY = 86_400_000;
 // Anchored at the real time: documents with a TTL must never be born expired.
 const NOW = Date.now();
-const log = () => ctx.databases.common().collection<ActivityLogDocument>('activityLog');
+const log = () => ctx.databases.common().collection<ActivityLogDocument>('activityEvents');
 const make = (logger = memoryLogger().logger, databases: Databases = ctx.databases) =>
   createActivityLog({ databases, logger, retentionDays: 365, errorRetentionDays: 90, now: () => NOW });
 const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
@@ -37,60 +38,61 @@ const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
   ...overrides,
 });
 
-describe('activityLog collection (real MongoDB)', () => {
-  it('creates the collection, validator and indexes idempotently (two startups)', async () => {
+describe('activityEvents collection (real MongoDB)', () => {
+  it('is created without validator, with the expected indexes, idempotently (two startups)', async () => {
     await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
     await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
-    const [info] = await ctx.databases.common().listCollections({ name: 'activityLog' }).toArray();
-    const options = (info as unknown as { options: { validator: { $jsonSchema: { required: string[] } }; validationLevel: string; validationAction: string } }).options;
-    assert.deepEqual(options.validator.$jsonSchema.required, ['at', 'category', 'action', 'outcome', 'actor', 'expiresAt']);
-    assert.deepEqual([options.validationLevel, options.validationAction], ['strict', 'error']);
+    const [info] = await ctx.databases.common().listCollections({ name: 'activityEvents' }).toArray();
+    assert.ok(info !== undefined);
+    const options = (info as unknown as { options?: Record<string, unknown> }).options ?? {};
+    assert.equal(options['validator'], undefined);
+    assert.equal(options['validationLevel'], undefined);
+    assert.equal(options['validationAction'], undefined);
     const indexes = new Map((await log().indexes()).map((index) => [index.name, index]));
     assert.deepEqual([...indexes.keys()].sort(), ['_id_', 'actor.id_1_at_-1__id_-1', 'at_-1__id_-1', 'category_1_at_-1__id_-1', 'expiresAt_1', 'groupId_1_at_-1__id_-1', 'requestId_1']);
     assert.equal(indexes.get('expiresAt_1')?.expireAfterSeconds, 0);
     assert.deepEqual(indexes.get('groupId_1_at_-1__id_-1')?.key, { groupId: 1, at: -1, _id: -1 });
   });
 
-  it('replaces the indexes of earlier versions by the current ones, idempotently', async () => {
-    await log().createIndexes([
-      { key: { groupId: 1, at: -1 }, name: 'groupId_1_at_-1' },
-      { key: { 'actor.id': 1, at: -1 }, name: 'actor.id_1_at_-1' },
-      { key: { category: 1, at: -1 }, name: 'category_1_at_-1' },
-    ]);
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
-    const names = (await log().indexes()).map((index) => index.name);
-    assert.deepEqual(names.sort(), ['_id_', 'actor.id_1_at_-1__id_-1', 'at_-1__id_-1', 'category_1_at_-1__id_-1', 'expiresAt_1', 'groupId_1_at_-1__id_-1', 'requestId_1']);
+  it('never touches the legacy activityLog collection', async () => {
+    const names = (await ctx.databases.common().listCollections({ name: 'activityLog' }).toArray()).map((info) => info.name);
+    assert.deepEqual(names, []);
   });
 
-  it('updates an outdated validator in place on the next startup', async () => {
-    await ctx.databases.common().command({ collMod: 'activityLog', validator: {} });
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
-    const [info] = await ctx.databases.common().listCollections({ name: 'activityLog' }).toArray();
-    assert.ok((info as unknown as { options: { validator: { $jsonSchema?: unknown } } }).options.validator.$jsonSchema !== undefined);
-  });
-
-  it('rejects documents that break the schema', async () => {
-    const valid = { at: new Date(NOW), category: 'data', action: 'user.created', outcome: 'success', actor: { kind: 'anonymous' }, expiresAt: new Date(NOW + DAY) };
-    await log().insertOne(valid as never);
-    const invalid: Array<Record<string, unknown>> = [
-      { ...valid, extra: 1 },
-      { ...valid, category: 'other' },
-      { ...valid, action: 'not.in.catalog' },
-      { ...valid, outcome: 'maybe' },
-      { ...valid, actor: { kind: 'robot' } },
-      { ...valid, actor: { kind: 'user', id: 'not-an-object-id' } },
-      { ...valid, groupId: 'x' },
-      { ...valid, resource: { type: 'x'.repeat(33) } },
-      { ...valid, expiresAt: 'tomorrow' },
-      { ...valid, changes: [{ nofield: 1 }] },
-    ];
-    for (const document of invalid) {
-      await assert.rejects(log().insertOne(document as never), (error: { code?: number }) => error.code === 121);
+  it('stores every action of the catalog, whatever the database knows about the catalog', async () => {
+    assert.ok(ACTIVITY_ACTION_NAMES.length >= 75);
+    const probe = ACTIVITY_ACTION_NAMES.map((action, index) => ({ action, requestId: `req-catalog-${index}` }));
+    for (const { action, requestId } of probe) {
+      const definition = ACTION_CATALOG.get(action);
+      assert.ok(definition !== undefined, action);
+      const category = definition.categories[0] as ActivityEntry['category'];
+      await make().record(entry({ action: action as ActivityEntry['action'], category, requestId, actor: { kind: 'system' }, ...(definition.hasErrorDetails === true ? { outcome: 'failure' as const } : {}) }));
     }
-    const { expiresAt: _omitted, ...missing } = valid;
-    void _omitted;
-    await assert.rejects(log().insertOne(missing as never), (error: { code?: number }) => error.code === 121);
+    assert.equal(await log().countDocuments({ requestId: /^req-catalog-/ }), probe.length);
+  });
+
+  it('rejects in the application, and does not store, an unknown action, category, outcome, actor role or an oversized entry', async () => {
+    const { logger, lines } = memoryLogger();
+    const service = make(logger);
+    const bad: Array<[string, unknown]> = [
+      ['unknown action', { action: 'not.in.catalog' }],
+      ['unknown category', { category: 'other' }],
+      ['unknown outcome', { outcome: 'maybe' }],
+      ['unknown actor role', { actor: { kind: 'user', id: new ObjectId(), role: 'X' } }],
+      ['unknown actor kind', { actor: { kind: 'robot' } }],
+      ['user actor without id', { actor: { kind: 'user' } }],
+      ['nested metadata', { metadata: { nested: { a: 1 } } }],
+      ['array metadata', { metadata: { list: [1] } }],
+      ['too many metadata keys', { metadata: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, 1])) }],
+      ['too many changes', { changes: Array.from({ length: 201 }, () => ({ field: 'a' })) }],
+      ['long resource type', { resource: { type: 'x'.repeat(33) } }],
+      ['groupId not an ObjectId', { groupId: 'x' }],
+    ];
+    for (const [label, override] of bad) {
+      await service.record({ ...entry({ requestId: 'req-rejected' }), ...(override as object) } as never);
+      assert.equal(await log().countDocuments({ requestId: 'req-rejected' }), 0, label);
+    }
+    assert.equal(lines.filter((line) => line.includes('activity log entry rejected')).length, bad.length);
   });
 });
 
@@ -236,18 +238,5 @@ describe('ActivityLog.record (real MongoDB)', () => {
     await make().record(entry({ requestId: 'req-scalar', action: 'user.statusChanged', metadata: { from: true, to: null } }));
     await make().record(entry({ requestId: 'req-scalar-2', action: 'request.failed', category: 'error', outcome: 'failure', metadata: { errorCode: 5 } }));
     assert.deepEqual((await log().findOne({ requestId: 'req-scalar' }))?.metadata, { from: true, to: null });
-  });
-
-  it('has a validator that also bounds the metadata and requires the id of a user actor', async () => {
-    const base = { at: new Date(NOW), category: 'security', action: 'rateLimit.exceeded', outcome: 'denied', expiresAt: new Date(NOW + DAY) };
-    const code121 = (error: { code?: number }) => error.code === 121;
-    await log().insertOne({ ...base, actor: { kind: 'user', id: new ObjectId() }, metadata: { bucket: 'x', n: 1, ok: true, none: null, f: 1.5 } } as never);
-    await log().insertOne({ ...base, actor: { kind: 'system' } } as never);
-    await assert.rejects(log().insertOne({ ...base, actor: { kind: 'user' } } as never), code121);
-    await assert.rejects(log().insertOne({ ...base, actor: { kind: 'anonymous' }, metadata: { nested: { a: 1 } } } as never), code121);
-    await assert.rejects(log().insertOne({ ...base, actor: { kind: 'anonymous' }, metadata: { list: [1] } } as never), code121);
-    await assert.rejects(log().insertOne({ ...base, actor: { kind: 'anonymous' }, metadata: { long: 'x'.repeat(257) } } as never), code121);
-    await assert.rejects(log().insertOne({ ...base, actor: { kind: 'anonymous' }, metadata: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, 1])) } as never), code121);
-    await log().insertOne({ ...base, actor: { kind: 'anonymous' }, metadata: { long: 'x'.repeat(256) } } as never);
   });
 });

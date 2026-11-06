@@ -1,5 +1,9 @@
-import { CORE_MODULES } from '../shared/security/rbac/permission-matrix.ts';
-import { ACTIVITY_LOG_INDEXES, ACTIVITY_LOG_OBSOLETE_INDEXES, ACTIVITY_LOG_VALIDATOR } from './activity-log-schema.ts';
+import { FEATURES } from '../modules/groups/features.ts';
+import { PROVIDERS } from '../modules/groups/group.types.ts';
+import { LEGACY_MODULES, READ_ONLY_MODULE } from '../shared/security/rbac/permission-matrix.ts';
+import { POS_OWNED_FIELDS, POS_PRICE_LISTS_PATH } from '../modules/users/pos.catalog.ts';
+import { SHIFT_SPECIAL_PATH, SHIFT_TIME_OWNED_FIELDS } from '../modules/users/shift-time.ts';
+import { ACTIVITY_EVENTS_INDEXES } from './activity-events-schema.ts';
 import { DEALERS_INDEXES, DEALERS_VALIDATOR } from './dealers-schema.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
@@ -42,10 +46,12 @@ export type DatabaseKind = 'common' | 'group';
 export type CollectionRegistry = Readonly<Record<DatabaseKind, Readonly<Record<string, CollectionSpec>>>>;
 
 /**
- * Fields of the shared legacy `users` documents this backend may write (`$set`/`$unset` only):
- * profile, status, scope, `permissions.<core module>.r|w`, `permissions.status` and, for the
- * legacy coexistence, `password`, `tokens` and `userName`. Everything else (`pin`, `avatar`,
- * `permissions.apps`, `servicesId`, `shiftTime`…) belongs to the legacy.
+ * Fields of the shared legacy `users` documents this backend may write (`$set`/`$unset` only): profile
+ * (`description`, `avatar`, `pin`, `servicesId` included), status, scope, `permissions.<module>.r|w` of every module of the
+ * legacy matrix (`logs` has only `r`), `permissions.status`, the POS values `permissions.apps.cash.*` one by one, the shifts
+ * (`shiftTime.status|weeksGeneric|daySpecial`) and, for the legacy coexistence, `password`, `tokens` and `userName`. The
+ * containers (`permissions`, `permissions.apps`, `shiftTime`…) are never replaced as a whole, so the keys the backend does
+ * not manage (`sub.productsStatus`, `options.service`, `permissions.hiddenInStats`…) stay.
  */
 export const USERS_OWNED_FIELDS: readonly string[] = Object.freeze([
   'name',
@@ -62,12 +68,64 @@ export const USERS_OWNED_FIELDS: readonly string[] = Object.freeze([
   'companyId',
   'placeId',
   'placesId',
-  ...Object.keys(CORE_MODULES).flatMap((module) => [`permissions.${module}.r`, `permissions.${module}.w`]),
+  'description',
+  'avatar',
+  'pin',
+  'servicesId',
+  ...LEGACY_MODULES.flatMap((module) => (module === READ_ONLY_MODULE ? [`permissions.${module}.r`] : [`permissions.${module}.r`, `permissions.${module}.w`])),
   'permissions.status',
+  ...POS_OWNED_FIELDS,
+  ...SHIFT_TIME_OWNED_FIELDS,
   'password',
   'tokens',
   'userName',
   'insertDate',
+  'updateDate',
+]);
+
+/**
+ * The maps of the `users` documents whose keys are made at run time (price list ids, dates): the backend owns every path
+ * below them, so a new document can carry them.
+ */
+export const USERS_OWNED_TREES: readonly string[] = Object.freeze([POS_PRICE_LISTS_PATH, SHIFT_SPECIAL_PATH]);
+
+/**
+ * The catalogs of the `groups` documents the backend owns as a whole: every path below one of them (`priceLists.<id>.name`,
+ * `fidelity.cardsTypes`…) may be written, because the keys of the maps are ids made at run time.
+ */
+export const GROUPS_OWNED_CATALOGS: readonly string[] = Object.freeze([
+  'priceLists',
+  'taxes',
+  'currencies',
+  'measureUnits',
+  'warehouseRules',
+  'fidelityCardRules',
+  'fidelity.cardsTypes',
+  'fidelity.pointsCollections',
+  'fidelity.prizeCatalogues',
+  'productsFavorites',
+  'promotions',
+]);
+
+/**
+ * Fields of the shared legacy `groups` documents this backend may write (`$set`/`$unset` only): name, description,
+ * the state flags (`demo`, `status`, `trash`), the feature flags, the languages, the statistics settings, the
+ * enabled state and the key (set only, never read back) of each integration, the catalogs of {@link GROUPS_OWNED_CATALOGS} and
+ * `updateDate`. Everything else (`apiKey`, `databaseHost`, `filesHost`, `type`, `plan`, `expirationDate`, `places`) belongs to the legacy.
+ */
+export const GROUPS_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'name',
+  'description',
+  'demo',
+  'status',
+  'trash',
+  ...FEATURES.map((feature) => `settings.${feature}`),
+  'settings.languages',
+  'settings.stats.openingTime',
+  'settings.stats.compressProductsCategories',
+  'settings.stats.timeSlots',
+  ...PROVIDERS.flatMap((provider) => [`settings.integrations.${provider}.status`, `settings.integrations.${provider}.apiKey`]),
+  ...GROUPS_OWNED_CATALOGS,
   'updateDate',
 ]);
 
@@ -86,10 +144,10 @@ export const COLLECTIONS = {
         { name: 'dealerId_1', key: { dealerId: 1 } },
       ],
     },
-    groups: { ownership: 'legacy-read' },
+    groups: { ownership: 'legacy-write', ownedFields: GROUPS_OWNED_FIELDS },
     countries: { ownership: 'legacy-read' },
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
-    activityLog: { ownership: 'new', indexes: ACTIVITY_LOG_INDEXES, obsoleteIndexes: ACTIVITY_LOG_OBSOLETE_INDEXES, validator: ACTIVITY_LOG_VALIDATOR },
+    activityEvents: { ownership: 'new', indexes: ACTIVITY_EVENTS_INDEXES },
     dealers: { ownership: 'new', indexes: DEALERS_INDEXES, validator: DEALERS_VALIDATOR },
     userCredentials: { ownership: 'new', validator: USER_CREDENTIALS_VALIDATOR },
     sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
@@ -97,6 +155,11 @@ export const COLLECTIONS = {
   group: {
     companies: { ownership: 'legacy-read' },
     places: { ownership: 'legacy-read' },
+    // Read only, to check that the ids a catalog of the group refers to exist.
+    products: { ownership: 'legacy-read' },
+    products_categories: { ownership: 'legacy-read' },
+    contacts: { ownership: 'legacy-read' },
+    contacts_groups: { ownership: 'legacy-read' },
   },
 } as const satisfies CollectionRegistry;
 

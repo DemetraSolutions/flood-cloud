@@ -2,7 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ObjectId } from 'mongodb';
 import { createMeService } from '../../src/modules/me/me.service.ts';
+import { featuresOf } from '../../src/modules/groups/features.ts';
 import type { MeServiceDeps } from '../../src/modules/me/me.service.ts';
+import type { GroupSummaryRepository } from '../../src/modules/me/group-summary.repository.ts';
 import { MAX_SCOPE_SUMMARY_IDS, summarizeScope } from '../../src/modules/me/profile.ts';
 import type { UsersRepository } from '../../src/modules/users/users.repository.ts';
 import type { MappedUser } from '../../src/modules/users/user.types.ts';
@@ -19,7 +21,7 @@ const principal = principalOf('SA');
 
 const mapped = (): MappedUser => fromLegacy(legacyUser(900, { role: 'SA', groupId: fixtureId('group', 1) }) as LegacyUserDocument);
 
-function build(users: Partial<UsersRepository>, groupFind: () => Promise<{ id: string; name: string | null } | null> = () => Promise.resolve(null)) {
+function build(users: Partial<UsersRepository>, groupFind: GroupSummaryRepository['find'] = () => Promise.resolve(null)) {
   const activityLog = memoryActivityLog();
   const unexpected = new Proxy(users, {
     get: (target, property) => (property in target ? (target as Record<string | symbol, unknown>)[property] : () => Promise.reject(new Error(`unexpected call: ${String(property)}`))),
@@ -30,6 +32,7 @@ function build(users: Partial<UsersRepository>, groupFind: () => Promise<{ id: s
     credentials: { find: () => Promise.resolve(null), recordFailure: () => Promise.reject(new Error('unexpected')), recordSuccess: () => Promise.reject(new Error('unexpected')), upsertPassword: () => Promise.reject(new Error('unexpected')), isPasswordChangeRequired: () => Promise.resolve(false), clearLock: () => Promise.reject(new Error('unexpected')), delete: () => Promise.reject(new Error('unexpected')) },
     sessions: {} as MeServiceDeps['sessions'],
     groups: { find: groupFind },
+    groupOptions: { read: () => Promise.resolve(null) },
     dealers: { findSummary: () => Promise.resolve(null) },
     activityLog,
     now: () => Date.parse('2026-11-04T10:00:00.000Z'),
@@ -58,13 +61,17 @@ describe('MeService: requests without a client address', () => {
   });
 
   it('records the group when the summary finds it', async () => {
-    const { service } = build({ findById: () => Promise.resolve(mapped()) }, () => Promise.resolve({ id: fixtureId('group', 1).toHexString(), name: 'Acme' }));
-    assert.deepEqual((await service.getProfile(principal)).group, { id: fixtureId('group', 1).toHexString(), name: 'Acme' });
+    const { service } = build({ findById: () => Promise.resolve(mapped()) }, () => Promise.resolve({ id: fixtureId('group', 1).toHexString(), name: 'Acme', features: featuresOf({ cash: true }) }));
+    const profile = await service.getProfile(principal);
+    assert.deepEqual(profile.group, { id: fixtureId('group', 1).toHexString(), name: 'Acme' });
+    assert.equal(profile.groupFeatures?.cash, true);
+    assert.equal(profile.groupFeatures?.rooms, false);
   });
 
   it('gives no group to a user whose scope has none', async () => {
     const { service } = build({ findById: () => Promise.resolve(mapped()) }, () => Promise.reject(new Error('must not look up a group')));
-    assert.equal((await service.getProfile(principalOf('PSA'))).group, null);
+    const profile = await service.getProfile(principalOf('PSA'));
+    assert.deepEqual([profile.group, profile.groupFeatures], [null, null]);
   });
 });
 
@@ -84,6 +91,7 @@ describe('MeService: password change without a client address', () => {
       credentials: { find: () => Promise.resolve(null), upsertPassword: () => Promise.resolve(void writes.push('credentials')) } as unknown as MeServiceDeps['credentials'],
       sessions: { revokeAllOfUser: () => Promise.resolve(0) } as unknown as MeServiceDeps['sessions'],
       groups: { find: () => Promise.resolve(null) },
+      groupOptions: { read: () => Promise.resolve(null) },
       dealers: { findSummary: () => Promise.resolve(null) },
       activityLog,
       now: () => Date.now(),
@@ -128,11 +136,42 @@ describe('MeService: a new password equal to the current one after NFC', () => {
         credentials: { find: () => Promise.resolve(null) } as unknown as MeServiceDeps['credentials'],
         sessions: {} as MeServiceDeps['sessions'],
         groups: { find: () => Promise.resolve(null) },
+        groupOptions: { read: () => Promise.resolve(null) },
         dealers: { findSummary: () => Promise.resolve(null) },
         activityLog: memoryActivityLog(),
         now: () => Date.now(),
       });
       await assert.rejects(service.changePassword(principal, new ObjectId(), { currentPassword: current!, newPassword: next! }, CLIENT), { code: 'VALIDATION_ERROR', details: [{ field: 'newPassword', issue: 'reused' }] });
     }
+  });
+});
+
+describe('MeService: the PIN of a user without a group and without a client address', () => {
+  it('records the change without group and address, and the marker of the change but never the PIN', async () => {
+    const pepper = new Secret('unit-test-pepper');
+    const activityLog = memoryActivityLog();
+    const writes: Array<Record<string, unknown>> = [];
+    const service = createMeService({
+      config: { legacyPasswordPepper: pepper, legacyPasswordCoexistence: true },
+      users: {
+        findLoginRecordById: () => Promise.resolve({ ...mapped(), legacyPasswordHash: legacyPasswordHash('the current passphrase', pepper) }),
+        updateOwned: (_id: unknown, update: { $set: Record<string, unknown> }) => Promise.resolve(writes.push(update.$set) === 1),
+      } as unknown as UsersRepository,
+      credentials: { find: () => Promise.resolve(null) } as unknown as MeServiceDeps['credentials'],
+      sessions: {} as MeServiceDeps['sessions'],
+      groups: { find: () => Promise.resolve(null) },
+      groupOptions: { read: () => Promise.resolve(null) },
+      dealers: { findSummary: () => Promise.resolve(null) },
+      activityLog,
+      now: () => Date.parse('2026-11-04T10:00:00.000Z'),
+    });
+    await service.changePin(principalOf('PSA'), { currentPassword: 'the current passphrase', pin: '4321' }, { requestId: 'req-12345678', ip: null, userAgent: null });
+    assert.equal(writes[0]!['pin'], '4321');
+    const entry = activityLog.entries[0]!;
+    assert.deepEqual([entry.action, 'ip' in entry, 'groupId' in entry], ['user.updated', false, false]);
+    assert.ok(!JSON.stringify(entry).includes('4321'));
+    // The user disappeared between the password check and the write: nothing is recorded as done.
+    await assert.rejects(service.changePin(principalOf('PSA'), { currentPassword: 'the current passphrase', pin: '9876' }, { requestId: 'req-12345679', ip: null, userAgent: null }), { code: 'NOT_FOUND' });
+    assert.equal(activityLog.entries.length, 1);
   });
 });

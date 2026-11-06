@@ -67,7 +67,7 @@ describe('GET /v1/groups', () => {
     assert.deepEqual(reply.body.page, { limit: 200, next: null });
     const byId = new Map(reply.body.data.map((item: { id: string }) => [item.id, item]));
     for (const g of office.cluster.groups) {
-      assert.deepEqual(Object.keys(byId.get(hex(g.groupId)) as object).sort(), ['id', 'name', 'status', 'trashed']);
+      assert.deepEqual(Object.keys(byId.get(hex(g.groupId)) as object).sort(), ['dealerId', 'demo', 'id', 'name', 'status', 'trashed']);
     }
     assert.ok(!byId.has(hex(fixtureId('group', 101))), 'trashed groups are hidden by default');
     assert.equal((byId.get(hex(fixtureId('group', 100))) as { status: string }).status, 'suspended');

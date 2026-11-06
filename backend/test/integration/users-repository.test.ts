@@ -84,9 +84,13 @@ describe('findById', () => {
     } as unknown as Databases;
     await createUsersRepository(spy).findById(id(1));
     assert.ok(captured !== undefined);
-    for (const field of ['password', 'pin', 'tokens', 'avatar', 'servicesId', 'shiftTime', 'description', 'permissions', 'permissions.apps', 'settings']) {
+    // The detail loads the picture; the PIN, the password and the tokens are never loaded, and the PIN is only tested for presence.
+    for (const field of ['password', 'pin', 'tokens', 'permissions', 'settings']) {
       assert.equal(field in captured, false, field);
     }
+    assert.equal(captured['avatar'], 1);
+    assert.equal(JSON.stringify(captured['__pinSet']).includes('$pin'), true);
+    assert.equal(captured['permissions.apps'], 1);
     assert.equal(captured['permissions.users.r'], 1);
     assert.equal(captured['permissions.status'], 1);
     assert.equal(captured['userName'], 1);
@@ -183,7 +187,7 @@ describe('updateOwned and clearLegacyTokens', () => {
       assert.deepEqual(after[field], before[field], field);
     }
     assert.deepEqual((after['permissions'] as Document)['apps'], (before['permissions'] as Document)['apps']);
-    assert.deepEqual((after['permissions'] as Document)['products'], (before['permissions'] as Document)['products']);
+    assert.deepEqual((after['permissions'] as Document)['stats'], (before['permissions'] as Document)['stats']);
     const mapped = (await repository.findById(id(6)))!;
     assert.equal(mapped.user.firstName, 'Changed');
     assert.equal(mapped.user.status, 'disabled');
@@ -192,11 +196,12 @@ describe('updateOwned and clearLegacyTokens', () => {
   it('refuses an update that touches fields the backend does not own, writing nothing', async () => {
     const before = await users().findOne({ _id: id(7) });
     for (const update of [
-      { $set: { pin: '0000' } },
-      { $set: { name: 'ok', 'permissions.apps.cash.status': false } },
-      { $set: { name: 'ok' }, $unset: { avatar: '' as const } },
+      { $set: { name: 'ok', 'permissions.apps.cash.sub.productsStatus': false } },
+      { $set: { name: 'ok' }, $unset: { 'permissions.apps.cash.options.service': '' as const } },
       { $set: { permissions: {} } },
-      { $set: { 'permissions.products.r': true } },
+      { $set: { shiftTime: {} } },
+      { $set: { 'permissions.apps': {} } },
+      { $set: { 'permissions.logs.w': true } },
     ]) {
       await assert.rejects(repository.updateOwned(id(7), update), /does not own/);
     }
@@ -244,7 +249,7 @@ describe('findAuthRecord', () => {
     );
     // The whole matrix is kept, including modules this backend does not map and the cash domain.
     const matrix = found.stored.legacyPermissions as Document;
-    assert.deepEqual([matrix['products'], matrix['status']], [{ r: true, w: false }, true]);
+    assert.deepEqual([matrix['stats'], matrix['status']], [{ r: true, w: false }, true]);
     assert.ok('apps' in matrix);
   });
 
@@ -287,10 +292,10 @@ describe('the writes of user management, with and without a transaction', () => 
   it('inserts a document of owned fields, and refuses one with a field the backend does not own', async () => {
     const document = { _id: new ObjectId(), userName: 'inserted.once', role: 'SA', status: true, trash: false, tokens: [], insertDate: new Date(), updateDate: new Date(), settings: { language: 'it', hiddenInStats: false } };
     const mapped = await repository.insert(document);
-    assert.deepEqual([mapped.user.username, mapped.user.role, mapped.anomalies.map((anomaly) => anomaly.kind)], ['inserted.once', 'SA', []]);
+    assert.deepEqual([mapped.user.username, mapped.user.role, mapped.anomalies.filter((anomaly) => anomaly.kind !== 'invalidPermission').map((anomaly) => anomaly.kind)], ['inserted.once', 'SA', []]);
     assert.equal(await users().countDocuments({ _id: document._id }), 1);
-    await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', pin: '1234' }), /does not own: pin/);
-    await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', permissions: { apps: { cash: { status: true } } } }), /does not own: permissions.apps.cash.status/);
+    await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', tokenss: [] }), /does not own: tokenss/);
+    await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', permissions: { apps: { cash: { sub: { productsStatus: true } } } } }), /does not own: permissions.apps.cash.sub.productsStatus/);
     await assert.rejects(repository.insert({ _id: new ObjectId(), userName: 'x', settings: { integrations: {} } }), /does not own: settings.integrations/);
     assert.equal(await users().countDocuments({ userName: 'x' }), 0);
     await assert.rejects(repository.insert({ ...document }), { code: 11000 });

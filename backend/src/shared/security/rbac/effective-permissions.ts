@@ -18,8 +18,19 @@ export interface EffectivePermissions {
 export const ALWAYS_GRANTED_PERMISSIONS: readonly Permission[] = [P.SESSIONS_READ, P.SESSIONS_REVOKE, P.PROFILE_READ, P.PROFILE_UPDATE, P.CLIENT_ERRORS_CREATE];
 
 /**
+ * Whether a role holds the whole ceiling of its role regardless of its own matrix: the PSA and the dealers (D-10, decision of the user of
+ * 2026-11-06), who maintain the groups and work in their operational modules. They always manage the other users' permissions too.
+ * Their matrix stays stored as it is, but limits nothing, `permissions.status` included.
+ *
+ * @param role Any role.
+ */
+export function hasWholeCeiling(role: Role): boolean {
+  return role === 'PSA' || role === 'D';
+}
+
+/**
  * Computes what a user may do (D-06) from an already normalized matrix: the ceiling of the role
- * limited by the matrix. `r` grants `read`; `w` grants every write action of the resource;
+ * limited by the matrix; the PSA and the dealers get the whole ceiling and the management of permissions (see {@link hasWholeCeiling}). `r` grants `read`; `w` grants every write action of the resource;
  * non-core modules produce no permission; the user's own sessions are always allowed within the
  * ceiling.
  *
@@ -31,6 +42,10 @@ export function effectivePermissionsOf(role: Role, matrix: PermissionMatrix): Ef
     return { permissions: frozenSet(), canManagePermissions: false };
   }
   const ceiling = ceilingOf(role);
+  // D-10: the PSA and the dealers hold the whole ceiling of their role and manage permissions, whatever their own matrix says.
+  if (hasWholeCeiling(role)) {
+    return { permissions: ceiling, canManagePermissions: true };
+  }
   const granted = new Set<Permission>();
   const grant = (permissions: readonly Permission[]): void => {
     for (const permission of permissions) {

@@ -1,5 +1,6 @@
 import { email, enumOf, nullable, object, objectId, optional, personName, phone, string } from '../../shared/validation/schema.ts';
 import type { Infer } from '../../shared/validation/schema.ts';
+import { avatarSchema, personalPosSchema, pinSchema } from '../users/user-fields.schemas.ts';
 
 /** Interface languages the platform supports; only Italian for now (`doc/Tasks.md` 3.1). */
 export const SUPPORTED_LANGUAGES = ['it'] as const;
@@ -7,8 +8,9 @@ export const SUPPORTED_LANGUAGES = ['it'] as const;
 const name = () => nullable(personName(100));
 
 /**
- * Body of `PATCH /v1/me` (JSON Merge Patch): an absent field is left alone, `null` clears the
- * personal fields. `role`, `groupId`, `permissions`, `status` and anything else are rejected as unknown.
+ * Body of `PATCH /v1/me` (JSON Merge Patch): an absent field is left alone, `null` clears the personal fields and the picture. Besides the
+ * personal data the user can change his picture and his POS preferences (`pos.options`, without the price lists). The PIN has its own route.
+ * `role`, `groupId`, `permissions`, `status` and anything else are rejected as unknown.
  */
 export const patchMeBody = object({
   firstName: optional(name()),
@@ -16,6 +18,8 @@ export const patchMeBody = object({
   email: optional(nullable(email())),
   phone: optional(nullable(phone())),
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
+  avatar: optional(nullable(avatarSchema())),
+  pos: optional(personalPosSchema()),
 });
 
 /** Validated body of `PATCH /v1/me`. */
@@ -32,6 +36,15 @@ export const changePasswordBody = object({
 
 /** Validated body of `PUT /v1/me/password`. */
 export type ChangePasswordBody = Infer<typeof changePasswordBody>;
+
+/** Body of `PUT /v1/me/pin`: the current password confirms who asks, the PIN is 3 to 6 digits or `null` to remove it. */
+export const changePinBody = object({
+  currentPassword: string({ min: 1, max: MAX_PASSWORD_LENGTH, normalize: false }),
+  pin: nullable(pinSchema()),
+});
+
+/** Validated body of `PUT /v1/me/pin`. */
+export type ChangePinBody = Infer<typeof changePinBody>;
 
 /** Path parameters of `DELETE /v1/me/sessions/{sessionId}`. */
 export const sessionParams = object({ sessionId: objectId() });

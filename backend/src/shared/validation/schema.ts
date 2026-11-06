@@ -20,6 +20,7 @@ export const VALIDATION_ISSUES = Object.freeze([
   'taken',
   'reused',
   'immutable',
+  'notAllowed',
 ] as const);
 
 /** A reason a field was rejected. */
@@ -186,6 +187,34 @@ export function integer(options: IntegerOptions = {}): Schema<number, false> {
   });
 }
 
+/** Options of {@link number}. */
+export interface NumberOptions {
+  readonly min?: number;
+  readonly max?: number;
+}
+
+/**
+ * A finite number, integer or not (no coercion from strings). `NaN` and the infinities do not exist in JSON and are a `type` problem;
+ * out of range gives `minimum` or `maximum`.
+ *
+ * @param options Inclusive bounds.
+ */
+export function number(options: NumberOptions = {}): Schema<number, false> {
+  const { min = -Number.MAX_VALUE, max = Number.MAX_VALUE } = options;
+  return schemaOf(false, (value, path, context) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return context.report(path, 'type');
+    }
+    if (value < min) {
+      return context.report(path, 'minimum');
+    }
+    if (value > max) {
+      return context.report(path, 'maximum');
+    }
+    return value;
+  });
+}
+
 /**
  * A safe non-negative integer written as decimal digits in a query string (`limit=50`), converted
  * explicitly. Anything else is a `type` problem, and so is a repeated parameter (an array); a value out of range
@@ -335,6 +364,8 @@ export interface ArrayOptions {
   readonly min?: number;
   /** Maximum number of elements, reported as `tooMany` without looking at the elements. Mandatory. */
   readonly max: number;
+  /** Every element must differ from the ones before it (compared with `===`, so for scalars): a repeated one is `incorrect`, with its index in the field. */
+  readonly unique?: boolean;
 }
 
 /**
@@ -345,7 +376,7 @@ export interface ArrayOptions {
  * @param options Size bounds.
  */
 export function array<T>(item: Schema<T>, options: ArrayOptions): Schema<T[], false> {
-  const { min = 0, max } = options;
+  const { min = 0, max, unique = false } = options;
   return schemaOf(false, (value, path, context, depth) => {
     if (!Array.isArray(value)) {
       return context.report(path, 'type');
@@ -360,12 +391,17 @@ export function array<T>(item: Schema<T>, options: ArrayOptions): Schema<T[], fa
       return context.report(path, 'minLength');
     }
     const items: T[] = [];
+    const seen = new Set<T>();
     let valid = true;
     value.forEach((element: unknown, index) => {
       const parsed = item.parse(element, join(path, String(index)), context, depth + 1);
       if (parsed === INVALID) {
         valid = false;
+      } else if (unique && seen.has(parsed)) {
+        valid = false;
+        context.report(join(path, String(index)), 'incorrect');
       } else {
+        seen.add(parsed);
         items.push(parsed);
       }
     });

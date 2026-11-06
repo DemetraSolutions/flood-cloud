@@ -5,16 +5,37 @@
 
 Convenzioni: nomi in camelCase inglese; date `Date` in UTC; riferimenti `ObjectId`; `createdAt`/`updatedAt` su ogni documento; cancellazione logica con `deletedAt` dove serve conservare lo storico. Campi segreti (hash) mai restituiti dalle API.
 
-## groups — tenant
-| Campo | Tipo | Note |
+## groups — tenant (collection legacy condivisa, D-03)
+Realizzata (passi 4B e 4B-bis) come **lettura e scrittura compatibile con il legacy**: il documento resta nel formato legacy e la traduzione nel modello di dominio avviene nel repository (`backend/src/modules/groups/`). In produzione 1271 gruppi (2026-11-06). Il modello è completo: tutti i campi della scheda del gruppo sono visibili e modificabili (D-26, D-29).
+| Campo legacy | Dominio | Note |
 |---|---|---|
-| `_id` | ObjectId | anche suffisso del nome del database del gruppo |
-| `name` | string | |
-| `dealerId` | ObjectId \| null | dealer che ha creato il gruppo |
-| `status` | `active` \| `suspended` | sospeso ⇒ tutte le credenziali del gruppo rifiutate |
-| `dataCluster` | string \| assente | id del cluster MongoDB con il database del gruppo (decisione del 2026-11-06); assente ⇒ cluster di default dei gruppi; letto dal nuovo backend, scritto dalla creazione dei gruppi (area 4) |
-| `createdAt`, `updatedAt`, `deletedAt` | Date | |
-Indici: `dealerId`, `status`.
+| `_id` | `id` | ObjectId; anche suffisso del nome del database del gruppo |
+| `name`, `description` | `name`, `description` | |
+| `dealerId` | `dealerId` | `_id` dell'utente D (D-09) |
+| `status` (booleano) | `status` (`active`/`suspended`) | `active` solo se `true`; sospeso ⇒ tutte le credenziali del gruppo rifiutate |
+| `trash` | `trashed` | solo `true` vale cestino |
+| `demo` | `demo` | |
+| `settings.<feature>` | `features.<feature>` | 15 flag booleani (`cash`, `rooms`, `ordering`, `warehouse`, `tobaccosGamesMonopoly`, `productsVariants`, `services`, `appointments`, `customersApp`, `media`, `email`, `scales`, `delivery`, `autoDepartments`, `advancedProducts`); assente o non booleano ⇒ `false` |
+| `settings.languages` (`"it;en"`) | `languages` | codici ISO 639-1 |
+| `settings.stats.{openingTime, compressProductsCategories, timeSlots[{start,end}]}` | `statsSettings` | `start`/`end` interi, ore intere, `end` è l'ora che chiude (`{9,12}` ⇄ `09:00`–`13:00`) |
+| `settings.integrations.<provider>.status` | `integrations.<provider>.enabled` | provider: `easyappear` (legge anche `easyAppear` se manca, mai riscritto), `yellgo`, `leggimenu`, `plateform`, `cooperto`, `qodeup`, `statmanager` |
+| `settings.integrations.<provider>.apiKey` | `integrations.<provider>.apiKeySet` | **solo impostabile**, mai letta in memoria né restituita né registrata (calcolata dal database) |
+| `priceLists.<id>` `{id, name, status, default}` | `priceLists[]` `{id, name, enabled, isDefault}` | mappa per id; esattamente uno `default` |
+| `taxes[]` `{id, value, department, description, natura}` | `taxes[]` `{id, rate, department, description, vatNature}` | array; `{}` letto come lista vuota |
+| `currencies.<code>` `{code, symbol}` | `currencies[]` `{code, symbol}` | simbolo legacy come entità HTML (`&euro;`), nel dominio il carattere |
+| `measureUnits.<id>` `{id, value}` | `measureUnits[]` | mappa per id |
+| `warehouseRules.<id>` `{id, type L/D, name, quantity, value, useLoadUnit, counterpart, default, cashL, cashD, …}` | `warehouseRules[]` `{type load/unload, …, isDefault, cashLoad, cashUnload}` | mappa per id; chiavi non gestite (`priceType`…) conservate |
+| `fidelityCardRules.<code>` `{code, value, discountPercentage}` | `fidelityCardRules[]` `{currency, pointValue, discountPercentage}` | una per valuta |
+| `fidelity.cardsTypes[]` `{id, status, name, discountPercentage, priceListId, prepaid{status,type,taxPercentage}, pointsCollect{status,collectionIds}, placesAvailability[ObjectId]}` | `cardTypes` | array; `placesAvailability` ⇄ `placeIds` |
+| `fidelity.pointsCollections[]` `{id, status, name, pointConversion, minAmount, dateFrom, dateTo, pointsExpirationDate (Date), prizesCatalogId}` | `pointsCollections` | `prizesCatalogId` ⇄ `prizeCatalogueId` |
+| `fidelity.prizeCatalogues[]` `{id, status, name, prizes[{id, status, name, description, pointsValue, extraPrice, redemptionConditions, medias.images.main}]}` | `prizeCatalogues` | `medias` conservato, esposto come `imageSet`, non scrivibile |
+| `productsFavorites[]` `{id, name, favorites[{_id ObjectId, position}]}` | `productFavorites` `{id, name, products[{productId, position}]}` | chiavi non gestite (`count`) conservate |
+| `promotions[]` `{id, status, name, description, code, conditions{placesIds, startDate, endDate (stringhe ISO), customersIds, contactsGroupsIds, useForUsers, totalAvailableNumber, minAmount, currency, amountTax, seatExcluded, serviceExcluded, tipExcluded, deliveryExcluded, products{type,n,qt,ids}, categories{type,n,ids}}, actions{discountType, discountValue, discountValueType, productsIds, categoriesIds, freeShipping}}` | `promotions` | nomi di dominio in `doc/API.md`; id interni stringa (22 caratteri, CSPRNG) |
+| `dataCluster` | `dataCluster` | id del cluster MongoDB con il database del gruppo (decisione del 2026-11-06); assente ⇒ cluster di default; letto dal nuovo backend, scritto dalla creazione dei gruppi (area 8); esposto solo al PSA |
+| `insertDate`, `updateDate` | `createdAt`, `updatedAt` | `updateDate` è anche la versione per la concorrenza ottimistica delle scritture dei cataloghi |
+- **Campi posseduti** (`GROUPS_OWNED_FIELDS` e `GROUPS_OWNED_CATALOGS` in `backend/src/db/collections.ts`, solo `$set`/`$unset`): `name`, `description`, `demo`, `status`, `trash`, `settings.<feature>`, `settings.languages`, `settings.stats.openingTime|compressProductsCategories|timeSlots`, `settings.integrations.<provider>.status|apiKey`, `updateDate` e ogni percorso sotto `priceLists`, `taxes`, `currencies`, `measureUnits`, `warehouseRules`, `fidelityCardRules`, `fidelity.cardsTypes`, `fidelity.pointsCollections`, `fidelity.prizeCatalogues`, `productsFavorites`, `promotions`. Mai la sostituzione di `settings` o del documento.
+- **Non gestiti** (restano nel documento, mai letti né scritti): `apiKey` del gruppo, `databaseHost`, `filesHost`, `type`, `plan`, `expirationDate` (deprecati, D-13), `places[]` (derivato dal dominio dei punti vendita, non esposto), i provider di integrazione sconosciuti, ogni altra chiave non elencata (anche dentro gli elementi dei cataloghi). Un documento può superare i 16 MiB solo per scritture altrui: il nuovo backend rifiuta scritture che lo portano oltre 8 MiB.
+- Indici: il nuovo backend non ne aggiunge (sulle collection legacy sono vietati indici univoci e TTL).
 
 ## users — utenti (collection legacy condivisa, D-03)
 Realizzata come **lettura e scrittura compatibile con il legacy** (passo 3A): il documento resta nel formato legacy, la traduzione nel modello di dominio avviene nel repository (`backend/src/modules/users/`). Campi legacy principali e loro significato nel dominio:
@@ -28,14 +49,50 @@ Realizzata come **lettura e scrittura compatibile con il legacy** (passo 3A): il
 | `companyId` | `companyIds` | lista nel dominio, scritta come primo elemento (D-08) |
 | `placeId`, `placesId` | `placeIds` | unione in lettura; in scrittura `placeId` = primo, `placesId` = tutti (D-08) |
 | `status`, `trash` | `status` (`active`/`disabled`), `trashed` | booleani legacy |
-| `settings.language`, `settings.hiddenInStats` | `language`, `hiddenInStats` | |
-| `permissions.<modulo>.{r,w}`, `permissions.status` | matrice dei permessi, `canManagePermissions` | D-06; `permissions.apps.*` conservato, mai scritto né esposto |
+| `settings.language`, `settings.hiddenInStats` | `language`, `hiddenInStats` | in lettura, se manca `settings.hiddenInStats`, vale il residuo `permissions.hiddenInStats` |
+| `description` | `description` | testo libero fino a 1000 caratteri; `null` lo svuota |
+| `permissions.<modulo>.{r,w}`, `permissions.status` | `permissions.modules`, `canManagePermissions` | D-06; tutti i 13 moduli (`logs` solo `r`); PSA e D mostrano i valori effettivi, tutto vero (D-28); `permissions.apps.cash` ⇄ `pos` (sotto) |
 | `password` | — | hash legacy HMAC-SHA512 (D-04); al cambio password scritto se la coesistenza è attiva, rimosso se è spenta |
 | `tokens` | — | JWT legacy; svuotato a revoca, cambio password, disattivazione (D-11) |
-| `pin`, `servicesId`, `shiftTime`, `avatar` | — | conservati, mai esposti su `/v1` |
+| `pin` | `pinSet` | 3–6 cifre **in chiaro** (lo richiede il POS legacy, che lo confronta lato client); **mai restituito né registrato**, l'hash arriverà con il dominio cassa; non revoca sessioni |
+| `avatar` | `avatar`, `hasAvatar` | data URL PNG/JPEG/WebP verificato dai magic bytes, ≤ 200 KB; solo nel dettaglio; un valore legacy non mostrabile ⇒ `avatar: null`, `hasAvatar: true` |
+| `servicesId` | `serviceIds` | ObjectId di prodotti del gruppo con `type: 'service'`; ≤ 200 |
+| `shiftTime` | `shiftTime` | turni, sotto |
+| `permissions.apps.cash` | `pos` | dati della cassa, sotto |
 | `insertDate`, `updateDate` | `createdAt`, `updatedAt` | |
-- Scrittura solo con `$set`/`$unset` dei campi posseduti (elenco nel registro delle collection del backend), mai sostituzione del documento.
+- Scrittura solo con `$set`/`$unset` dei campi posseduti (elenco nel registro delle collection del backend: `USERS_OWNED_FIELDS`, ora con `description`, `avatar`, `pin`, `servicesId`, i flag di tutti i 13 moduli, `permissions.status`, i percorsi di `permissions.apps.cash.*` uno per uno e `shiftTime.status|weeksGeneric|daySpecial`; `USERS_OWNED_TREES` per le mappe a chiavi dinamiche `permissions.apps.cash.options.priceLists.<id>` e `shiftTime.daySpecial.<data>`), mai sostituzione del documento né di `permissions`, `settings`, `shiftTime`. Le chiavi residue non gestite (`sub.productsStatus`, `sub.deleteTableProductReason`, `options.service`, `permissions.hiddenInStats`) restano. I campi nullable si svuotano davvero con `null`.
 - Indici aggiunti dal nuovo backend (non univoci): `groupId_1_role_1`, `dealerId_1`.
+- **Moduli della matrice** (13, ordine del form legacy): `groups`, `users`, `companies`, `places`, `documents`, `products`, `calendar`, `warehouse`, `contacts`, `fidelity`, `settings`, `stats`, `logs` (solo `r`). Assente o non booleano ⇒ `false` con anomalia (in produzione `fidelity` manca in ~950 utenti, `stats.w` in 33). Moduli del nucleo (producono permessi): `groups`, `users`, `companies`, `places`, `fidelity`, `products`, `logs`. Default per ruolo (form legacy): tabella in `doc/Technical-Guide.md` §6.
+
+### users.permissions.apps.cash ⇄ `pos`
+Struttura `permissions.apps.cash = { status, sub, options }` ⇄ `pos = { enabled, grants, options }`. Presente in tutti gli 8750 utenti di produzione. Un utente nuovo ha tutte le chiavi (flag falsi o `null`).
+- `status` ⇄ `pos.enabled`. **Default** per ruolo: PSA e D spenta e nessun flag; SA, CA, PA, E cassa abilitata con `discount`, `priceChange`, `invoices`, `freeSale`.
+- **`sub` ⇄ `pos.grants`** (permessi): 44 flag booleani. Stesso nome nel dominio e nel legacy per 32 di essi: `discount`, `discountReason`, `onlyHigherPrice`, `invoices`, `freeSale`, `contacts`, `bypassAutomaticCash`, `deleteUserShiftDetail`, `receiptCancellation`, `manageService`, `tableCheckoutActiveDesk`, `deleteTable`, `deleteTableReason`, `deleteTableProduct`, `deleteTableProductReasonNotSent`, `deleteTableProductReasonSent`, `advancedReport`, `advancedReportPin`, `reworkSale`, `sentProducts`, `notSentProducts`, `lockProducts`, `tableEngage`, `tableMerge`, `tableClose`, `checkoutPartition`, `checkoutSeparation`, `moveProducts`, `unlockTable`, `resendProducts`, `searchProducts`, `rider`. I 12 con nome diverso:
+  | Dominio | Chiave legacy |
+  |---|---|
+  | `fiscalClosure` | `posClosure` |
+  | `priceChange` | `prices` |
+  | `selectSaleUser` | `selectUserSale` |
+  | `printPrebill` | `preblling` (refuso legacy conservato) |
+  | `printReceipt` | `receipt` |
+  | `tablePrebillActions` | `tablePrebillingActions` |
+  | `roomsTableQuickTotals` | `roomsTableViewQuickTotals` |
+  | `roomsRoomsPrices` | `roomsRoomsViewPrices` |
+  | `roomsTablePrices` | `roomsTableViewPrices` |
+  | `roomsOnlyHigherSeatsQuantity` | `roomsOnlyHigherSeatsQunatity` (refuso legacy conservato) |
+  | `editSentWeightQuantity` | `editQuantitySentWeightProduct` |
+  | `tableSplit` | `tableSepare` |
+  In più: `discountMaxPercentage` ⇄ `sub.discountMaxPercentage` (0–100, `null` = nessun tetto), `servicePercentage` ⇄ `sub.service` (0–100 o `null`), `automaticCash.<dispositivo>.<flag>` ⇄ `sub.automaticCash.…` con `glory` (`withdrawal`, `deposit`, `archive`, `archiveAll`, `unlockNote`, `unlockCoin`, `collectVerify`), `cashMatic` (`withdrawal`, `deposit`, `change`, `refill`, `archive`, `archiveAll`), `vne` (`withdrawal`, `refill`, `archive`, `archiveAll`, `tools`), `azkoyen` (`withdrawal`, `deposit`, `backoffice`, `status`), `cashSystem` (`withdrawal`).
+- **`options` ⇄ `pos.options`** (preferenze, non permessi), stesse chiavi: 31 booleani (`extendedCart`, `noSeparator`, `skipCheckoutButton`, `showLastSaleValue`, `quickPriceList`, `advancedDiscount`, `productsPagination`, `productsShortName`, `invertedCart`, `deskPrintOrderDefault`, `deliveryTakeawayCompletedDefault`, `deliveryTakeawayShowOrderDetailOnSave`, `deliveryTakeawayShowProduction`, `reducedProducts`, `reducedProductsTable`, `reducedTables`, `enlargedCategories`, `tableCartPriority`, `sendOrderRemainButton`, `viewTableStatus`, `viewTableUser`, `viewTableCustomer`, `viewTableStartDate`, `genericProductPriceFocus`, `roomsGridActive`, `roomsGridActionbarOpened`, `removeFiltersProductSelect`, `removeFiltersOnSearch`, `darkMode`, `departmentsDialog`, `skipFiscalReceiptTypeRequest`) più: `favoritesId` (id di `groups.productsFavorites[]` del gruppo o `null`), `side` e `sideRooms` (`dx`, `sx`), `virtualKeyboard` (`''`, `pb`, `p`, `mb`, `m`), `template` (4 temi `material-tealwhite|whitepurple-light|dark` o `null`), `productsFontSize` e `productsShortNameFontSize` (`s`, `m`, `l`; in lettura anche maiuscolo), `roomsTablesColumns` (4, 5, 6, 8, `null`; in lettura anche stringa numerica), `roomsTablesColumnsHandheld` (2, 3, 4, `null`), `roomsGridZoomHandheld` (1, 1.5, 2, 2.5, 3), `quickDiscount` (0–100 o `null`), `defaultPriceListId` (listino con cui il POS è partito, lo scrive il POS), `priceLists` ⇄ mappa legacy `{ <priceListId>: { status, selected } }` (`[{ priceListId, enabled, isDefault }]`). Default del form: `side`/`sideRooms` `dx`, `virtualKeyboard` `''`, `template` `material-whitepurple-light`, font `s`, zoom 2, `priceLists` = tutti i listini del gruppo con `status: true` e `selected` il predefinito.
+- Chiavi legacy non gestite, conservate: `sub.productsStatus`, `sub.deleteTableProductReason`, `options.service`, `permissions.hiddenInStats`.
+
+### users.shiftTime ⇄ `shiftTime`
+| Legacy | Dominio | Note |
+|---|---|---|
+| `shiftTime.status` (in lettura anche `ststus`, 64 documenti) | `enabled` | |
+| `shiftTime.weeksGeneric[]` `{start, end, days{"0".."6"{active, values[{start,end}]}}}` (in lettura anche `weekGeneric`, 20 documenti, un blocco senza date) | `weeks[]` `{from, to, days{"0".."6"{active, slots[{start,end}]}}}` | `start`/`end` del blocco sono date (`Date`); senza date = blocco predefinito (uno solo) |
+| `shiftTime.daySpecial.<YYYY-MM-DD>` `{free, values[]}` | `specialDays[]` `{date, dayOff, slots}` | mappa per data |
+Orari `HH:mm`. Limiti: 20 blocchi, 10 fasce per giorno, 366 giorni speciali. `0` è la domenica.
 
 ## dealers — anagrafica dei dealer
 Realizzata (passo 4A, D-09, decisione dell'utente del 2026-11-06): una ragione sociale per ogni dealer. **`_id` = `_id` dell'utente D collegato**, così `groups.dealerId` (id dell'utente D) resta valido.
@@ -104,8 +161,8 @@ Realizzata (passo 3A): un documento per famiglia di sessione. `_id` (id esposto 
 ## apiUsage — conteggio d'uso delle API pubbliche
 `groupId`, `apiKeyId`, `day` (YYYY-MM-DD), `route`, `count`, `errorCount`. Indice univoco `apiKeyId + day + route`.
 
-## activityLog — registro delle attività (sostituisce `auditLog`)
-Realizzata (passo 2C, decisione dell'utente del 2026-11-01): un'unica collection per scritture sui dati, eventi di sicurezza ed errori. La collection `logs` del legacy resta intatta.
+## activityEvents — registro delle attività (sostituisce `auditLog`)
+Realizzata (passo 2C, decisione dell'utente del 2026-11-01; rinominata `activityEvents`, senza validatore `$jsonSchema`, la vecchia `activityLog` è abbandonata): un'unica collection per scritture sui dati, eventi di sicurezza ed errori. La collection `logs` del legacy resta intatta.
 | Campo | Tipo | Note |
 |---|---|---|
 | `at` | Date | |
@@ -121,6 +178,16 @@ Realizzata (passo 2C, decisione dell'utente del 2026-11-01): un'unica collection
 | `error` | `{ name, message, stack }` | solo per `client.error` (errori JavaScript del backoffice): messaggio fino a 300 caratteri, prime 10 righe dello stack di massimo 300 caratteri, redatti |
 | `expiresAt` | Date | TTL: 365 giorni per `data` e `security`, 90 per `error` |
 Validazione `$jsonSchema`. Indici: `at_-1__id_-1`, `groupId_1_at_-1__id_-1`, `actor.id_1_at_-1__id_-1`, `category_1_at_-1__id_-1` (ordinamento del monitor senza ordinamento in memoria), `requestId_1`, TTL `expiresAt_1`. Gli indici precedenti senza `_id` vengono rimossi all'avvio dopo la creazione dei nuovi.
+
+## Collection dei database di gruppo lette dal nuovo backend
+Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul cluster del gruppo:
+| Collection | Perché | Campi usati |
+|---|---|---|
+| `companies`, `places` | scope di CA e PA, selettori, verifica di `placeIds` dei cataloghi e delle promozioni | `_id`, `name`, `trash`, `companyId` |
+| `products` | esistenza degli id di preferiti e promozioni; servizi del gruppo e verifica di `serviceIds` | `_id`, `trash`, `type` (`'service'`), `name` (oggetto per lingua) |
+| `products_categories` | esistenza delle categorie nelle promozioni | `_id`, `trash` |
+| `contacts` | esistenza dei clienti nelle promozioni | `_id`, `trash` |
+| `contacts_groups` | esistenza dei gruppi di contatti nelle promozioni | `_id` (nessun flag di cestino) |
 
 ## Domande aperte
 1. `groups.dealerId`: nel legacy riferisce l'`_id` dell'utente `D` o un'anagrafica dealer separata? Un dealer può avere più utenti?

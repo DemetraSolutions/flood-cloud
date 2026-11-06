@@ -23,10 +23,10 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes and validators', () => {
-    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityLog', 'countries', 'dealers', 'groups', 'rateLimits', 'sessions', 'userCredentials', 'users']);
-    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'places']);
+    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'countries', 'dealers', 'groups', 'rateLimits', 'sessions', 'userCredentials', 'users']);
+    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'places', 'products', 'products_categories']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
-      const expected = ['activityLog', 'dealers', 'rateLimits', 'sessions', 'userCredentials'].includes(name) ? 'new' : name === 'users' ? 'legacy-write' : 'legacy-read';
+      const expected = ['activityEvents', 'dealers', 'rateLimits', 'sessions', 'userCredentials'].includes(name) ? 'new' : name === 'users' || name === 'groups' ? 'legacy-write' : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
     }
     assert.deepEqual(
@@ -37,15 +37,16 @@ describe('collection registry', () => {
       assert.equal('unique' in index || 'expireAfterSeconds' in index, false, index.name);
     }
     assert.deepEqual([...COLLECTIONS.common.users.ownedFields].sort(), [...USERS_OWNED_FIELDS].sort());
-    for (const field of ['name', 'surname', 'email', 'telephone', 'settings.language', 'settings.hiddenInStats', 'status', 'trash', 'role', 'groupId', 'dealerId', 'companyId', 'placeId', 'placesId', 'permissions.status', 'permissions.users.r', 'permissions.users.w', 'permissions.logs.r', 'permissions.logs.w', 'password', 'tokens', 'userName', 'insertDate', 'updateDate']) {
+    for (const field of ['name', 'surname', 'email', 'telephone', 'settings.language', 'settings.hiddenInStats', 'status', 'trash', 'role', 'groupId', 'dealerId', 'companyId', 'placeId', 'placesId', 'permissions.status', 'permissions.users.r', 'permissions.users.w', 'permissions.logs.r', 'permissions.stats.r', 'permissions.documents.w', 'description', 'avatar', 'pin', 'servicesId', 'shiftTime.status', 'shiftTime.weeksGeneric', 'shiftTime.daySpecial', 'permissions.apps.cash.status', 'permissions.apps.cash.sub.preblling', 'permissions.apps.cash.sub.automaticCash.glory.withdrawal', 'permissions.apps.cash.options.priceLists', 'password', 'tokens', 'userName', 'insertDate', 'updateDate']) {
       assert.ok(COLLECTIONS.common.users.ownedFields.includes(field), field);
     }
-    for (const field of ['pin', 'avatar', 'servicesId', 'shiftTime', 'permissions.apps', 'permissions.apps.cash.status', 'permissions.products.r']) {
+    // Containers are never replaced as a whole, `logs` has no write flag, and the keys the backend does not manage stay the legacy's.
+    for (const field of ['shiftTime', 'permissions', 'permissions.apps', 'permissions.apps.cash', 'permissions.apps.cash.sub', 'permissions.logs.w', 'permissions.apps.cash.sub.productsStatus', 'permissions.apps.cash.options.service', 'permissions.hiddenInStats']) {
       assert.equal(COLLECTIONS.common.users.ownedFields.includes(field), false, field);
     }
     assert.equal(COLLECTIONS.common.userCredentials.validator, USER_CREDENTIALS_VALIDATOR);
     assert.deepEqual(
-      COLLECTIONS.common.activityLog.indexes.map((index) => index.name),
+      COLLECTIONS.common.activityEvents.indexes.map((index) => index.name),
       ['at_-1__id_-1', 'groupId_1_at_-1__id_-1', 'actor.id_1_at_-1__id_-1', 'category_1_at_-1__id_-1', 'requestId_1', 'expiresAt_1'],
     );
     assert.deepEqual(COLLECTIONS.common.rateLimits.indexes, [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }]);
@@ -58,7 +59,7 @@ describe('collection registry', () => {
       [['accessTokenHash_1', true, null], ['refreshTokenHash_1', true, null], ['previousRefreshHashes_1', false, null], ['userId_1_revokedAt_1', false, null], ['expiresAt_1', false, 0]],
     );
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityLog', 'companies', 'countries', 'dealers', 'groups', 'places', 'rateLimits', 'sessions', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'groups', 'places', 'products', 'products_categories', 'rateLimits', 'sessions', 'userCredentials', 'users']);
   });
 
   it('accepts valid new, legacy-read and legacy-write entries', () => {

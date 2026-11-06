@@ -46,8 +46,32 @@ export const DATA_RESOURCES = Object.freeze(['user', 'group', 'dealer', 'company
 /** Verbs of a data action. */
 export const DATA_VERBS = Object.freeze(['created', 'updated', 'trashed', 'restored', 'deleted'] as const);
 
-/** A data action: `<resource>.<verb>`, for example `user.created`. */
-export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}`;
+/** The catalogs kept in the document of a group, as the part of the action name between `group.` and the verb (`group.priceList.created`). */
+export const GROUP_CATALOG_NAMES = Object.freeze([
+  'priceList',
+  'tax',
+  'currency',
+  'measureUnit',
+  'warehouseRule',
+  'fidelityCardRule',
+  'cardType',
+  'pointsCollection',
+  'prizeCatalogue',
+  'productFavorite',
+  'promotion',
+] as const);
+
+/** A catalog kept in the document of a group. */
+export type GroupCatalogName = (typeof GROUP_CATALOG_NAMES)[number];
+
+/** Verbs of the actions on the elements of a group catalog (an element is never trashed). */
+export const GROUP_CATALOG_VERBS = Object.freeze(['created', 'updated', 'deleted'] as const);
+
+/** An action on an element of a group catalog: `group.<catalog>.<verb>`, for example `group.priceList.created`. */
+export type GroupCatalogAction = `group.${GroupCatalogName}.${(typeof GROUP_CATALOG_VERBS)[number]}`;
+
+/** A data action: `<resource>.<verb>`, for example `user.created`, or an action on a catalog of a group. */
+export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}` | GroupCatalogAction;
 
 /** Error actions: a server error that became a `500`, and a JavaScript error reported by the backoffice in the browser. */
 export const ERROR_ACTIONS = Object.freeze(['request.failed', 'client.error'] as const);
@@ -55,7 +79,10 @@ export const ERROR_ACTIONS = Object.freeze(['request.failed', 'client.error'] as
 /** Every action the log accepts. */
 export type ActivityAction = (typeof SECURITY_ACTIONS)[number] | DataAction | (typeof ERROR_ACTIONS)[number];
 
-const DATA_ACTIONS: readonly DataAction[] = DATA_RESOURCES.flatMap((resource) => DATA_VERBS.map((verb) => `${resource}.${verb}` as DataAction));
+const DATA_ACTIONS: readonly DataAction[] = [
+  ...DATA_RESOURCES.flatMap((resource) => DATA_VERBS.map((verb) => `${resource}.${verb}` as DataAction)),
+  ...GROUP_CATALOG_NAMES.flatMap((name) => GROUP_CATALOG_VERBS.map((verb) => `group.${name}.${verb}` as DataAction)),
+];
 
 const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], readonly string[]>> = {
   'auth.loginSucceeded': [],

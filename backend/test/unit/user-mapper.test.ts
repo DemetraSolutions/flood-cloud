@@ -2,10 +2,14 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { BSON, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
-import { COLLECTIONS } from '../../src/db/collections.ts';
+import { COLLECTIONS, USERS_OWNED_TREES } from '../../src/db/collections.ts';
+import { defaultPos } from '../../src/modules/users/pos.catalog.ts';
+import { emptyShiftTime } from '../../src/modules/users/shift-time.ts';
+import { emptyPos } from '../../src/modules/users/pos.catalog.ts';
+import { applyPosPatch } from '../../src/modules/users/pos.mapper.ts';
 import { OWNED_PERMISSION_MODULES, fromLegacy, toLegacyDocument, toLegacyUpdate, toResponse } from '../../src/modules/users/user.mapper.ts';
 import type { LegacyUserDocument, UserChanges } from '../../src/modules/users/user.types.ts';
-import { dirtyScope, encryptLegacy, fixtureId, legacyEncryptionKey, legacyUser } from '../helpers/legacy-fixtures.ts';
+import { LEGACY_MODULE_NAMES, dirtyScope, encryptLegacy, fixtureId, legacyEncryptionKey, legacyUser } from '../helpers/legacy-fixtures.ts';
 
 /** A legacy user with the SA role (no scope needed), unless the test says otherwise. */
 const doc = (n: number, overrides: Document = {}): Document => legacyUser(n, { role: 'SA', ...overrides });
@@ -44,7 +48,8 @@ describe('fromLegacy: a regular document', () => {
     const document = doc(5, { role: 'CA', groupId: group, dealerId: dealer, companyId: company });
     const { user, anomalies } = read(document);
     assert.deepEqual(anomalies, []);
-    assert.deepEqual(user, {
+    const { pos, shiftTime, permissions, ...rest } = user;
+    assert.deepEqual(rest, {
       id: fixtureId('user', 5).toHexString(),
       username: 'user-005',
       firstName: 'Name005',
@@ -60,24 +65,41 @@ describe('fromLegacy: a regular document', () => {
       trashed: false,
       language: 'it',
       hiddenInStats: false,
-      permissions: {
-        status: true,
-        modules: { groups: { r: false, w: false }, users: { r: false, w: false }, companies: { r: false, w: false }, places: { r: false, w: false }, logs: { r: false, w: false } },
-        canManagePermissions: true,
-      },
+      description: 'Fixture user 005',
+      avatar: null,
+      hasAvatar: false,
+      pinSet: true,
+      serviceIds: [],
       createdAt: new Date('2024-01-15T10:00:00.000Z'),
       updatedAt: new Date('2024-01-15T10:00:00.000Z'),
     });
+    assert.equal(permissions.status, true);
+    assert.equal(permissions.canManagePermissions, true);
+    assert.deepEqual(Object.keys(permissions.modules).sort(), [...LEGACY_MODULE_NAMES].sort());
+    assert.deepEqual(permissions.modules['stats'], { r: true, w: false });
+    assert.equal(pos.enabled, true);
+    assert.deepEqual(shiftTime, { enabled: false, weeks: [], specialDays: [] });
   });
 
-  it('keeps the core module flags, drops the other modules and never maps cash permissions', () => {
-    const { user } = read(doc(1, { role: 'PSA', permissions: { status: false, users: { r: true, w: true }, logs: { r: true }, products: { r: true, w: true }, apps: { cash: { status: true } } } }));
+  it('keeps the flags of every module and shows the POS data, with the module that is missing as off', () => {
+    const { user } = read(doc(1, { role: 'SA', permissions: { status: false, users: { r: true, w: true }, logs: { r: true }, stats: { r: true, w: true }, apps: { cash: { status: true } } } }));
     assert.deepEqual(Object.keys(user.permissions.modules).sort(), [...OWNED_PERMISSION_MODULES].sort());
+    assert.deepEqual(user.permissions.modules['stats'], { r: true, w: true });
     assert.deepEqual(user.permissions.modules['users'], { r: true, w: true });
     assert.deepEqual(user.permissions.modules['logs'], { r: true, w: false });
     assert.equal(user.permissions.status, false);
     assert.equal(user.permissions.canManagePermissions, false);
-    assert.equal(JSON.stringify(user).includes('apps'), false);
+    assert.equal(user.pos.enabled, true);
+    assert.deepEqual(user.permissions.modules['fidelity'], { r: false, w: false });
+  });
+
+  it('shows the effective permissions of a PSA or a dealer, all granted (D-10), not the stored matrix, which is still checked', () => {
+    for (const role of ['PSA', 'D']) {
+      const { user, anomalies } = read(doc(1, { role, permissions: { status: false, users: { r: true, w: false }, logs: { r: false } } }));
+      assert.deepEqual(user.permissions.modules, Object.fromEntries(OWNED_PERMISSION_MODULES.map((name) => [name, { r: true, w: name !== 'logs' }])), role);
+      assert.deepEqual([user.permissions.status, user.permissions.canManagePermissions], [true, true], role);
+      assert.ok(anomalies.some((anomaly) => anomaly.field === 'permissions.fidelity.r'), role);
+    }
   });
 
   it('is not able to manage permissions when the role is E or invalid, whatever the matrix says', () => {
@@ -237,24 +259,69 @@ describe('fromLegacy: personal data (D-05)', () => {
   });
 });
 
+describe('fromLegacy: notes, picture, PIN and services', () => {
+  it('reads the notes, the picture, the PIN flag and the services, and reports what is irregular', () => {
+    const service = fixtureId('user', 9);
+    const { user, anomalies } = read(doc(1, { description: 'Notes', avatar: 'data:image/png;base64,iVBORw0KGgo=', pin: '1234', servicesId: [service, service] }));
+    assert.deepEqual([user.description, user.avatar, user.hasAvatar, user.pinSet, user.serviceIds], ['Notes', 'data:image/png;base64,iVBORw0KGgo=', true, true, [service.toHexString()]]);
+    assert.deepEqual(anomalies, []);
+    const empty = read(doc(1, { description: '', avatar: '', pin: '', servicesId: undefined })).user;
+    assert.deepEqual([empty.description, empty.avatar, empty.hasAvatar, empty.pinSet, empty.serviceIds], [null, null, false, false, []]);
+    const bad = read(doc(1, { description: 5, avatar: 7, pin: 1234, servicesId: ['x', service] }));
+    assert.deepEqual([bad.user.description, bad.user.avatar, bad.user.hasAvatar, bad.user.pinSet, bad.user.serviceIds], [null, null, false, false, [service.toHexString()]]);
+    assert.deepEqual(bad.anomalies.map((anomaly) => `${anomaly.kind}:${anomaly.field}`), ['invalidType:avatar', 'invalidType:description', 'invalidReference:servicesId']);
+    assert.deepEqual(kinds(doc(1, { servicesId: 'x' })).includes('invalidReference:servicesId'), true);
+    assert.deepEqual(read(doc(1, { servicesId: null })).user.serviceIds, []);
+  });
+
+  it('never returns a stored picture that is not a PNG, JPEG or WebP data URL: it is stored, reported and read as none', () => {
+    const svg = `data:image/svg+xml;base64,${Buffer.from('<svg onload="alert(1)"/>').toString('base64')}`;
+    for (const avatar of [svg, 'javascript:alert(1)', 'data:image/png;base64,AAAA', 'data:image/png;base64,iVBORw0KGgo', 'data:image/png;base64,iVBO*w0KGgo=', 'data:image/jpeg;base64,iVBORw0KGgo=']) {
+      const { user, anomalies } = read(doc(1, { avatar }));
+      assert.deepEqual([user.avatar, user.hasAvatar, anomalies.map((anomaly) => `${anomaly.kind}:${anomaly.field}`)], [null, true, ['invalidType:avatar']], avatar);
+    }
+    const webp = `data:image/webp;base64,${Buffer.concat([Buffer.from('RIFF'), Buffer.from([1, 2, 3, 4]), Buffer.from('WEBP'), Buffer.alloc(300 * 1024)]).toString('base64')}`;
+    assert.equal(read(doc(1, { avatar: webp })).user.avatar, webp, 'a legacy picture larger than the limit of a new one still shows');
+    assert.equal(read(doc(1, { avatar: null })).anomalies.length, 0);
+  });
+
+  it('does not load the picture for a list, but still says whether there is one', () => {
+    const listed = fromLegacy(doc(1, { avatar: undefined, __hasAvatar: true, __pinSet: true }) as LegacyUserDocument, { summary: true }).user;
+    assert.deepEqual([listed.avatar, listed.hasAvatar, listed.pinSet], [undefined, true, true]);
+    assert.equal('avatar' in listed, false);
+  });
+
+  it('reads the leftover hiddenInStats of the old form only when the current setting is missing', () => {
+    assert.equal(read(doc(1, { settings: { language: 'it' }, permissions: { hiddenInStats: true } })).user.hiddenInStats, true);
+    assert.equal(read(doc(1, { settings: { hiddenInStats: false }, permissions: { hiddenInStats: true } })).user.hiddenInStats, false);
+    assert.equal(read(doc(1, { settings: {}, permissions: 'x' })).user.hiddenInStats, false);
+  });
+
+  it('reports a missing or irregular flag of the matrix as off, once per flag', () => {
+    const { user, anomalies } = read(doc(1, { permissions: { users: { r: true }, fidelity: 'x', stats: { r: true, w: 'yes' }, logs: { r: true } } }));
+    assert.deepEqual(user.permissions.modules['users'], { r: true, w: false });
+    assert.equal(anomalies.filter((anomaly) => anomaly.kind === 'invalidPermission').length, 25 - 3);
+    assert.deepEqual(anomalies.filter((anomaly) => ['permissions.users.w', 'permissions.fidelity.r', 'permissions.stats.w', 'permissions.logs.r'].includes(anomaly.field!)).map((anomaly) => anomaly.field), ['permissions.users.w', 'permissions.fidelity.r', 'permissions.stats.w']);
+    assert.deepEqual(user.permissions.modules['logs'], { r: true, w: false });
+  });
+});
+
 describe('fromLegacy: secrets never come out', () => {
-  it('maps nothing of password, pin, tokens, apps, services, shift time or avatar, whatever their values', () => {
+  it('maps nothing of password, pin and tokens, whatever their values; the pin is only "set"', () => {
     const sentinel = 'SENTINEL-SECRET-VALUE';
     const document = doc(1, {
       password: sentinel,
       pin: sentinel,
       tokens: [sentinel, { token: sentinel }],
-      avatar: `data:image/png;base64,${sentinel}`,
-      servicesId: [fixtureId('user', 9)],
       shiftTime: 99,
-      description: sentinel,
       permissions: { status: true, users: { r: true, w: true }, apps: { cash: { status: sentinel, sub: sentinel } } },
     });
     const { user, anomalies } = read(document);
+    assert.equal(user.pinSet, true);
     assert.equal(JSON.stringify(user).includes(sentinel), false);
     assert.equal(JSON.stringify(anomalies).includes(sentinel), false);
     assert.equal(JSON.stringify(toResponse(user)).includes(sentinel), false);
-    for (const field of ['password', 'pin', 'tokens', 'avatar', 'servicesId', 'shiftTime', 'description', 'apps']) {
+    for (const field of ['password', 'pin', 'tokens']) {
       assert.equal(JSON.stringify(user).includes(`"${field}"`), false, field);
     }
   });
@@ -319,10 +386,11 @@ describe('toLegacyUpdate', () => {
     assert.deepEqual(toLegacyUpdate({ permissions: { modules: { users: {} } } }, NOW).$set, { updateDate: NOW });
   });
 
-  it('refuses permission modules outside the core allowlist, apps included', () => {
-    for (const module of ['apps', 'products', '__proto__', 'constructor', 'apps.cash']) {
-      assert.throws(() => toLegacyUpdate({ permissions: { modules: { [module]: { r: true } } } }, NOW), /not in the core allowlist/, module);
+  it('refuses permission modules outside the legacy matrix, apps included, and a write flag of logs', () => {
+    for (const module of ['apps', 'reports', '__proto__', 'constructor', 'apps.cash']) {
+      assert.throws(() => toLegacyUpdate({ permissions: { modules: { [module]: { r: true } } } }, NOW), /not in the legacy matrix/, module);
     }
+    assert.throws(() => toLegacyUpdate({ permissions: { modules: { logs: { w: true } } } }, NOW), /no write flag/);
   });
 
   it('never writes the API role or any other that is not one of the six', () => {
@@ -340,7 +408,10 @@ describe('toLegacyUpdate', () => {
     const everything: UserChanges = {
       username: 'u', firstName: 'a', lastName: 'b', email: 'e@x.it', phone: '1', role: 'SA', groupId: group.toHexString(), dealerId: dealer.toHexString(),
       companyIds: [company.toHexString()], placeIds: [place.toHexString()], status: 'active', trashed: false, language: 'it', hiddenInStats: false,
-      permissions: { status: true, modules: Object.fromEntries(OWNED_PERMISSION_MODULES.map((module) => [module, { r: true, w: true }])) },
+      permissions: { status: true, modules: Object.fromEntries(OWNED_PERMISSION_MODULES.map((module) => [module, module === 'logs' ? { r: true } : { r: true, w: true }])) },
+      description: 'd', avatar: null, pin: '1234', serviceIds: [fixtureId('user', 9).toHexString()],
+      pos: applyPosPatch(emptyPos(), { enabled: true, grants: { discount: true, discountMaxPercentage: 5, servicePercentage: null, automaticCash: { glory: { deposit: true } } }, options: { darkMode: true, side: 'sx', priceLists: [{ priceListId: 'a1', enabled: true, isDefault: true }], defaultPriceListId: 'a1' } }),
+      shiftTime: { enabled: true, weeks: [{ from: null, to: null, days: {} }], specialDays: [{ date: '2026-12-25', dayOff: true, slots: [] }] },
     };
     const owned = new Set(COLLECTIONS.common.users.ownedFields);
     for (const changes of [everything, { firstName: null, lastName: null, email: null, phone: null }, {}]) {
@@ -383,7 +454,7 @@ describe('toLegacyUpdate', () => {
       assert.deepEqual(written[field], document[field], field);
     }
     assert.deepEqual((written['permissions'] as Document)['apps'], (document['permissions'] as Document)['apps']);
-    assert.deepEqual((written['permissions'] as Document)['products'], { r: true, w: false });
+    assert.deepEqual((written['permissions'] as Document)['stats'], { r: true, w: false });
     assert.equal(written['name'], 'Changed');
     assert.equal('telephone' in written, false);
   });
@@ -394,8 +465,11 @@ describe('toResponse', () => {
     const { user } = read(doc(3, { role: 'PA', groupId: group, dealerId: dealer, placesId: [place] }));
     const response = toResponse(user);
     assert.deepEqual(Object.keys(response).sort(), [
-      'companyIds', 'createdAt', 'dealerId', 'email', 'firstName', 'groupId', 'hiddenInStats', 'id', 'language', 'lastName', 'permissions', 'phone', 'placeIds', 'role', 'status', 'trashed', 'updatedAt', 'username',
+      'avatar', 'companyIds', 'createdAt', 'dealerId', 'description', 'email', 'firstName', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'serviceIds',
+      'shiftTime', 'status', 'trashed', 'updatedAt', 'username',
     ]);
+    // Read for a list, the picture is not loaded and not shown.
+    assert.equal('avatar' in toResponse(fromLegacy(doc(3) as LegacyUserDocument, { summary: true }).user), false);
     assert.deepEqual(Object.keys(response.permissions).sort(), ['canManagePermissions', 'modules', 'status']);
     assert.equal(response.createdAt, '2024-01-15T10:00:00.000Z');
     assert.equal(response.id, fixtureId('user', 3).toHexString());
@@ -421,7 +495,7 @@ describe('toResponse', () => {
 
 describe('toLegacyDocument', () => {
   const NOW = new Date('2026-11-05T09:00:00.000Z');
-  const modules = { groups: { r: false, w: false }, users: { r: true, w: true }, companies: { r: true, w: false }, places: { r: true, w: true }, logs: { r: true, w: false } };
+  const modules = Object.fromEntries(OWNED_PERMISSION_MODULES.map((name) => [name, { r: false, w: false }]));
   const base = {
     id: fixtureId('user', 700),
     username: 'new.user',
@@ -436,53 +510,62 @@ describe('toLegacyDocument', () => {
     placeIds: [place.toHexString(), place2.toHexString()],
     status: 'active' as const,
     language: 'it',
-    permissions: { status: true, modules },
+    hiddenInStats: false,
+    description: null,
+    avatar: null,
+    pin: null,
+    serviceIds: [] as string[],
+    permissions: { status: true, modules: { ...modules, users: { r: true, w: true }, companies: { r: true, w: false }, logs: { r: true, w: false } } },
+    pos: defaultPos('CA'),
+    shiftTime: emptyShiftTime(),
     legacyPasswordHash: 'a'.repeat(128),
   };
 
-  it('builds a complete legacy document of the owned fields, with the types the legacy writes', () => {
-    const document = toLegacyDocument(base, NOW);
+  it('builds the complete legacy document of the form, with the types the legacy writes and no key the backend does not own', () => {
+    const document = toLegacyDocument({ ...base, description: 'Notes', pin: '1234', serviceIds: [fixtureId('user', 5).toHexString()] }, NOW);
     assert.deepEqual(Object.keys(document).sort(), [
-      '_id', 'companyId', 'dealerId', 'groupId', 'insertDate', 'name', 'password', 'permissions', 'placeId', 'placesId', 'role', 'settings', 'status', 'telephone', 'tokens', 'trash', 'updateDate', 'userName',
+      '_id', 'avatar', 'companyId', 'dealerId', 'description', 'email', 'groupId', 'insertDate', 'name', 'password', 'permissions', 'pin', 'placeId', 'placesId', 'role', 'servicesId',
+      'settings', 'shiftTime', 'status', 'surname', 'telephone', 'tokens', 'trash', 'updateDate', 'userName',
     ]);
-    assert.deepEqual(document, {
-      _id: base.id,
-      userName: 'new.user',
-      name: 'Ada',
-      telephone: '+39 06 1234',
-      password: 'a'.repeat(128),
-      role: 'CA',
-      groupId: group,
-      dealerId: dealer,
-      companyId: company,
-      placeId: place,
-      placesId: [place, place2],
-      permissions: { status: true, groups: { r: false, w: false }, users: { r: true, w: true }, companies: { r: true, w: false }, places: { r: true, w: true }, logs: { r: true, w: false } },
-      settings: { language: 'it', hiddenInStats: false },
-      status: true,
-      trash: false,
-      tokens: [],
-      insertDate: NOW,
-      updateDate: NOW,
-    });
+    assert.deepEqual(
+      [document['_id'], document['userName'], document['name'], document['surname'], document['email'], document['telephone'], document['avatar'], document['description'], document['pin']],
+      [base.id, 'new.user', 'Ada', null, null, '+39 06 1234', null, 'Notes', '1234'],
+    );
+    assert.deepEqual(
+      [document['password'], document['role'], document['groupId'], document['dealerId'], document['companyId'], document['placeId'], document['placesId'], document['servicesId']],
+      ['a'.repeat(128), 'CA', group, dealer, company, place, [place, place2], [fixtureId('user', 5)]],
+    );
+    assert.deepEqual([document['settings'], document['shiftTime'], document['status'], document['trash'], document['tokens'], document['insertDate'], document['updateDate']], [
+      { language: 'it', hiddenInStats: false },
+      { status: false, weeksGeneric: [], daySpecial: {} },
+      true,
+      false,
+      [],
+      NOW,
+      NOW,
+    ]);
+    const permissions = document['permissions'] as Document;
+    assert.deepEqual(Object.keys(permissions).sort(), [...LEGACY_MODULE_NAMES, 'apps', 'status'].sort());
+    assert.deepEqual([permissions['status'], permissions['users'], permissions['logs'], permissions['stats']], [true, { r: true, w: true }, { r: true }, { r: false, w: false }]);
     const owned = new Set(COLLECTIONS.common.users.ownedFields);
     const leaves = (value: Document, prefix = ''): string[] =>
-      Object.entries(value).flatMap(([key, item]) => (item !== null && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype ? leaves(item as Document, `${prefix}${key}.`) : [`${prefix}${key}`]));
-    assert.deepEqual(leaves(document).filter((path) => path !== '_id' && !owned.has(path)), []);
+      Object.entries(value).flatMap(([key, item]) => (item !== null && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype && Object.keys(item).length > 0 ? leaves(item as Document, `${prefix}${key}.`) : [`${prefix}${key}`]));
+    assert.deepEqual(leaves(document).filter((path) => path !== '_id' && !owned.has(path) && !USERS_OWNED_TREES.some((tree) => path.startsWith(`${tree}.`))), []);
     assert.deepEqual(read(document).anomalies, []);
   });
 
-  it('leaves out the null personal values and the legacy hash when there is none, and writes null scope references', () => {
+  it('writes the null personal values as null, as the form does, and leaves out the legacy hash when there is none', () => {
     const document = toLegacyDocument({ ...base, firstName: null, phone: null, legacyPasswordHash: null, role: 'SA', companyIds: [], placeIds: [], groupId: null, dealerId: null, status: 'disabled' }, NOW);
-    for (const field of ['name', 'surname', 'email', 'telephone', 'password']) {
-      assert.ok(!(field in document), field);
+    assert.ok(!('password' in document));
+    for (const field of ['name', 'surname', 'email', 'telephone', 'avatar', 'pin', 'description']) {
+      assert.equal(document[field], null, field);
     }
     assert.deepEqual([document['companyId'], document['placeId'], document['placesId'], document['groupId'], document['dealerId'], document['status']], [null, null, [], null, null, false]);
   });
 
-  it('refuses a role that is not one of the six, a module outside the core and an id that is not hexadecimal', () => {
+  it('refuses a role that is not one of the six, a module outside the legacy matrix and an id that is not hexadecimal', () => {
     assert.throws(() => toLegacyDocument({ ...base, role: 'API' as never }, NOW), /not one of the six roles/);
-    assert.throws(() => toLegacyDocument({ ...base, permissions: { status: false, modules: { products: { r: true, w: true } } } }, NOW), /not in the core allowlist/);
+    assert.throws(() => toLegacyDocument({ ...base, permissions: { status: false, modules: { reports: { r: true, w: true } } } }, NOW), /not in the legacy matrix/);
     assert.throws(() => toLegacyDocument({ ...base, groupId: 'zz' }, NOW));
   });
 });
