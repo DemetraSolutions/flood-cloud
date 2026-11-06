@@ -102,6 +102,13 @@ export const routes: Routes = [
             loadComponent: () =>
               import('./features/groups/group-chooser').then((m) => m.GroupChooser),
           },
+          {
+            path: 'users',
+            canMatch: [role('PSA', 'D'), permission('users:read')],
+            title: 'USERS.TITLE',
+            data: { scope: 'all' },
+            loadComponent: () => import('./features/users/users-list').then((m) => m.UsersList),
+          },
           ...userRoutes('groups/:groupId/users', [permission('users:read')]),
           ...userRoutes('platform/users', [role('PSA'), permission('users:read')]),
           {

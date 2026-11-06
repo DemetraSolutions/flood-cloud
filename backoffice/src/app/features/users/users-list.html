@@ -1,6 +1,8 @@
 <header class="page-header">
   <h1>{{ (isPlatform() ? 'USERS.PLATFORM_TITLE' : 'USERS.TITLE') | t }}</h1>
-  <a *fcCan="'users:create'" class="new" [routerLink]="newRoute()">{{ 'USERS.NEW' | t }}</a>
+  @if (newRoute(); as route) {
+    <a *fcCan="'users:create'" class="new" [routerLink]="route">{{ 'USERS.NEW' | t }}</a>
+  }
 </header>
 
 <form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
@@ -83,7 +85,14 @@
     [emptyMessage]="'USERS.EMPTY_MESSAGE' | t"
     (sortChange)="onSort($event)"
   >
-    <a *fcCan="'users:create'" fcEmptyAction [routerLink]="newRoute()">{{ 'USERS.NEW' | t }}</a>
+    @if (newRoute(); as route) {
+      <a *fcCan="'users:create'" fcEmptyAction [routerLink]="route">{{ 'USERS.NEW' | t }}</a>
+    }
+    <ng-template fcCell="groupId" let-row>
+      @if (row.groupId) {
+        <a [routerLink]="['/groups', row.groupId, 'users']">{{ abbreviate(row.groupId) }}</a>
+      }
+    </ng-template>
     <ng-template fcCell="select" let-row>
       @if (!isSelf(row)) {
         <input

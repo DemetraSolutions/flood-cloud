@@ -45,3 +45,14 @@ li.more {
   padding: var(--space-2) var(--space-3);
   color: var(--color-text-muted);
 }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.row .control {
+  flex: 1;
+  min-inline-size: 0;
+}

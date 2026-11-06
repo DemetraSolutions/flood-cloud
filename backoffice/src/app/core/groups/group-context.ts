@@ -73,6 +73,13 @@ export class GroupContext {
     }
   }
 
+  /** Forgets the working group ("all groups"), including the stored preference. */
+  clear(): void {
+    this.chosen.set(null);
+    removeSessionStorage(LAST_GROUP_ID_KEY);
+    removeSessionStorage(LAST_GROUP_NAME_KEY);
+  }
+
   /** Remembers the group chosen with the selector. */
   choose(group: WorkingGroup): void {
     if (!OBJECT_ID.test(group.id)) {

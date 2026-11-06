@@ -1,32 +1,51 @@
 <div class="field">
   <label class="label" [for]="inputId">{{ 'GROUP_SELECTOR.LABEL' | t }}</label>
-  <input
-    class="control"
-    type="text"
-    role="combobox"
-    autocomplete="off"
-    aria-autocomplete="list"
-    [id]="inputId"
-    [value]="inputValue()"
-    [placeholder]="'GROUP_SELECTOR.PLACEHOLDER' | t"
-    [attr.aria-expanded]="open()"
-    [attr.aria-controls]="listId"
-    [attr.aria-activedescendant]="activeId()"
-    (focus)="show()"
-    (click)="show()"
-    (input)="onInput($event)"
-    (keydown)="onKeydown($event)"
-  />
+  <div class="row">
+    <input
+      class="control"
+      type="text"
+      role="combobox"
+      autocomplete="off"
+      aria-autocomplete="list"
+      [id]="inputId"
+      [value]="inputValue()"
+      [placeholder]="'GROUP_SELECTOR.PLACEHOLDER' | t"
+      [attr.aria-expanded]="open()"
+      [attr.aria-controls]="listId"
+      [attr.aria-activedescendant]="activeId()"
+      (focus)="show()"
+      (click)="show()"
+      (input)="onInput($event)"
+      (keydown)="onKeydown($event)"
+    />
+    @if (context.groupId() !== null) {
+      <button
+        fc-icon-button
+        icon="close"
+        [label]="'GROUP_SELECTOR.CLEAR' | t"
+        (click)="clear()"
+      ></button>
+    }
+  </div>
   @if (open()) {
     <div class="popup" (mousedown)="$event.preventDefault()">
       <ul [id]="listId" role="listbox" [attr.aria-label]="'GROUP_SELECTOR.LABEL' | t">
+        <li
+          role="option"
+          [id]="optionId(0)"
+          [class.active]="active() === 0"
+          [attr.aria-selected]="context.groupId() === null"
+          (click)="activate(0)"
+        >
+          {{ 'GROUP_SELECTOR.ALL' | t }}
+        </li>
         @for (item of items(); track item.id; let i = $index) {
           <li
             role="option"
-            [id]="optionId(i)"
-            [class.active]="i === active()"
+            [id]="optionId(i + 1)"
+            [class.active]="i + 1 === active()"
             [attr.aria-selected]="item.id === context.groupId()"
-            (click)="activate(i)"
+            (click)="activate(i + 1)"
           >
             {{ item.name }}
           </li>
@@ -35,10 +54,10 @@
           <li
             role="option"
             class="more"
-            [id]="optionId(items().length)"
-            [class.active]="items().length === active()"
+            [id]="optionId(items().length + 1)"
+            [class.active]="items().length + 1 === active()"
             aria-selected="false"
-            (click)="activate(items().length)"
+            (click)="activate(items().length + 1)"
           >
             {{ 'GROUP_SELECTOR.MORE' | t }}
           </li>

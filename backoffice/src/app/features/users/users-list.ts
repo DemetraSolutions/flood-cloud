@@ -32,6 +32,7 @@ import { Select } from '../../shared/ui/select/select';
 import { StatusBadge } from '../../shared/ui/status-badge/status-badge';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { createDebouncer } from '../../shared/util/debouncer';
+import { abbreviateId } from '../activity-log/activity-log.types';
 import { apiErrorOf } from '../profile/sessions';
 import { fullName, userRoute, UserRecord } from './user.types';
 import { UserActions } from './user-actions';
@@ -39,6 +40,7 @@ import { UserActions } from './user-actions';
 /** Page sizes offered by the list. */
 export const USER_PAGE_SIZES = [10, 25, 50, 100] as const;
 const DEFAULT_LIMIT = 25;
+const OBJECT_ID = /^[0-9a-f]{24}$/;
 const SORT_KEYS = ['username', 'lastName', 'createdAt'] as const;
 const GROUP_ROLES: readonly Role[] = ['SA', 'CA', 'PA', 'E'];
 const PLATFORM_FILTER_ROLES: readonly Role[] = ['PSA', 'D', 'SA', 'CA', 'PA', 'E'];
@@ -93,10 +95,31 @@ export class UsersList {
   readonly limit = input<string>();
   readonly cursor = input<string>();
 
-  protected readonly isPlatform = computed(() => this.groupId() === undefined);
-  protected readonly newRoute = computed(() =>
-    this.isPlatform() ? ['/platform', 'users', 'new'] : ['/groups', this.groupId(), 'users', 'new'],
-  );
+  /** Dealers' filter by dealer (the cross-group view for a PSA). */
+  readonly dealerId = input<string>();
+  /** Route data: `all` for the cross-group view (`/users`), where `groupId` is a query filter. */
+  readonly scope = input<string>();
+
+  /** `group` (path parameter), `all` (every group of the perimeter) or `platform`. */
+  protected readonly mode = computed<'group' | 'all' | 'platform'>(() => {
+    if (this.scope() === 'all') {
+      return 'all';
+    }
+    return this.groupId() === undefined ? 'platform' : 'group';
+  });
+  protected readonly isPlatform = computed(() => this.mode() === 'platform');
+  protected readonly isAll = computed(() => this.mode() === 'all');
+  /** Where "new user" leads; the cross-group view has no group to create in. */
+  protected readonly newRoute = computed(() => {
+    switch (this.mode()) {
+      case 'platform':
+        return ['/platform', 'users', 'new'];
+      case 'group':
+        return ['/groups', this.groupId(), 'users', 'new'];
+      case 'all':
+        return null;
+    }
+  });
 
   protected readonly sortValue = computed(() => {
     const value = this.sort() ?? '';
@@ -113,7 +136,10 @@ export class UsersList {
     return (USER_PAGE_SIZES as readonly number[]).includes(value) ? value : DEFAULT_LIMIT;
   });
   protected readonly roleOptions = computed(() =>
-    (this.isPlatform() ? PLATFORM_FILTER_ROLES : GROUP_ROLES).map((role) => ({
+    (this.isPlatform() || (this.isAll() && this.session.me()?.role === 'PSA')
+      ? PLATFORM_FILTER_ROLES
+      : GROUP_ROLES
+    ).map((role) => ({
       value: role,
       label: this.i18n.t(`ROLE.${role}`),
     })),
@@ -127,7 +153,8 @@ export class UsersList {
   protected readonly cursorStack = signal<readonly (string | null)[]>([]);
 
   protected readonly users = httpResource<ApiPage<UserRecord>>(() => {
-    const groupId = this.groupId();
+    const groupId = this.mode() === 'group' ? this.groupId() : undefined;
+    const crossGroup = this.isAll() && this.groupId() !== undefined ? this.groupId() : undefined;
     const params: Record<string, string | number> = {
       limit: this.pageSize(),
       sort: this.sortValue(),
@@ -142,6 +169,11 @@ export class UsersList {
         : undefined,
       trashed: this.trashed() === 'true' ? 'true' : undefined,
       cursor: this.cursor(),
+      groupId: this.isAll() && OBJECT_ID.test(crossGroup ?? '') ? crossGroup : undefined,
+      dealerId:
+        this.isAll() && this.session.me()?.role === 'PSA' && OBJECT_ID.test(this.dealerId() ?? '')
+          ? this.dealerId()
+          : undefined,
     };
     for (const [name, value] of Object.entries(filters)) {
       if (value) {
@@ -179,6 +211,9 @@ export class UsersList {
 
   protected readonly columns = computed<TableColumn<UserRecord>[]>(() => [
     { key: 'select', header: this.i18n.t('USERS.COLUMN.SELECT'), narrow: true },
+    ...(this.isAll()
+      ? [{ key: 'groupId', header: this.i18n.t('USERS.COLUMN.GROUP'), hideNarrow: true }]
+      : []),
     {
       key: 'username',
       header: this.i18n.t('USERS.COLUMN.USERNAME'),
@@ -206,6 +241,7 @@ export class UsersList {
   ]);
   protected readonly rowKey = (row: UserRecord): string => row.id;
   protected readonly detailRoute = userRoute;
+  protected readonly abbreviate = abbreviateId;
 
   /** Whether the user may do anything to a row (otherwise the actions menu is not offered). */
   protected readonly canAct = computed(
@@ -219,7 +255,7 @@ export class UsersList {
     // The page loaded: the group in the URL becomes the working group of the selector.
     effect(() => {
       const groupId = this.groupId();
-      if (groupId !== undefined && this.users.hasValue()) {
+      if (this.mode() === 'group' && groupId !== undefined && this.users.hasValue()) {
         untracked(() => this.groups.adopt(groupId));
       }
     });

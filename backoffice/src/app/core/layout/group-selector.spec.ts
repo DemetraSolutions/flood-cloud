@@ -37,7 +37,8 @@ async function render() {
   await view(fixture);
   const root = fixture.nativeElement as HTMLElement;
   const input = root.querySelector<HTMLInputElement>('input')!;
-  const options = () => [...root.querySelectorAll<HTMLElement>('[role=option]')];
+  const allOption = () => root.querySelector<HTMLElement>('[role=option]')!;
+  const options = () => [...root.querySelectorAll<HTMLElement>('[role=option]')].slice(1);
   const groupsRequests = () => backend().match((r) => r.url === `${API}/v1/groups`);
   const key = async (name: string) => {
     input.dispatchEvent(
@@ -53,7 +54,7 @@ async function render() {
     await view(fixture);
     return request;
   };
-  return { fixture, root, input, options, key, open, groupsRequests };
+  return { fixture, root, input, options, allOption, key, open, groupsRequests };
 }
 
 afterEach(() => {
@@ -92,6 +93,78 @@ describe('GroupSelector', () => {
     );
   });
 
+  describe('all groups', () => {
+    const chosen = async () => {
+      const ctx = await render();
+      TestBed.inject(GroupContext).choose(G1);
+      return ctx;
+    };
+
+    it('lists "all groups" first, selected while no group is chosen', async () => {
+      const { allOption, open } = await render();
+      await open([G1]);
+      expect(allOption().textContent?.trim()).toBe('GROUP_SELECTOR.ALL');
+      expect(allOption().getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('has a labelled clear button only while a group is chosen', async () => {
+      const { root, fixture } = await render();
+      expect(root.querySelector('button[aria-label]')).toBeNull();
+      TestBed.inject(GroupContext).choose(G1);
+      await view(fixture);
+      const button = root.querySelector<HTMLButtonElement>('button[aria-label]')!;
+      expect(button.getAttribute('aria-label')).toBe('GROUP_SELECTOR.CLEAR');
+    });
+
+    it.each([
+      ['/groups/g1/users', ['/users'], undefined],
+      ['/groups/g1/users/u1', ['/users'], undefined],
+      [
+        '/activity-log?groupId=g1',
+        ['/activity-log'],
+        { queryParams: { groupId: null }, queryParamsHandling: 'merge' },
+      ],
+    ])('clearing from %s goes to the cross-group view', async (url, command, extras) => {
+      const { root, fixture } = await chosen();
+      await view(fixture);
+      const router = TestBed.inject(Router);
+      vi.spyOn(router, 'url', 'get').mockReturnValue(url);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
+      await view(fixture);
+      expect(navigate).toHaveBeenCalledWith(...(extras ? [command, extras] : [command]));
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
+      expect(sessionStorage.getItem(LAST_GROUP_ID_KEY)).toBeNull();
+    });
+
+    it('stays on pages that do not depend on the group', async () => {
+      const { root, fixture } = await chosen();
+      await view(fixture);
+      const router = TestBed.inject(Router);
+      vi.spyOn(router, 'url', 'get').mockReturnValue('/profile');
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
+      await view(fixture);
+      expect(navigate).not.toHaveBeenCalled();
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
+    });
+
+    it('is chosen with a click or the keyboard on the first option', async () => {
+      const { allOption, open, key, input, fixture } = await chosen();
+      await open([G1]);
+      vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+      await key('ArrowUp');
+      await key('Enter');
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
+      expect(input.getAttribute('aria-expanded')).toBe('false');
+      TestBed.inject(GroupContext).choose(G2);
+      input.click();
+      await view(fixture);
+      allOption().click();
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
+    });
+  });
+
   it('does not reload when reopened and ignores repeated opens', async () => {
     const { input, key, open, fixture, groupsRequests } = await render();
     await open([G1]);
@@ -105,15 +178,18 @@ describe('GroupSelector', () => {
   });
 
   it('moves the active option with the arrows and chooses it with Enter', async () => {
-    const { input, options, key, open } = await render();
+    const { input, options, allOption, key, open } = await render();
     await open([G1, G2]);
     await key('ArrowDown');
     expect(options()[1].classList.contains('active')).toBe(true);
     await key('ArrowDown');
     expect(options()[1].classList.contains('active')).toBe(true);
     await key('ArrowUp');
-    await key('ArrowUp');
     expect(options()[0].classList.contains('active')).toBe(true);
+    await key('ArrowUp');
+    await key('ArrowUp');
+    expect(allOption().classList.contains('active')).toBe(true);
+    await key('ArrowDown');
     await key('ArrowDown');
     const router = TestBed.inject(Router);
     const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
@@ -135,8 +211,9 @@ describe('GroupSelector', () => {
     await settle();
     groupsRequests()[0].flush(page([]));
     await view(fixture);
+    // With no group listed the active option is "all groups": Enter chooses it and closes.
     await key('Enter');
-    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(input.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('ignores other keys', async () => {

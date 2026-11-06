@@ -41,7 +41,7 @@ export const MENU: readonly MenuItem[] = [
     id: 'users',
     labelKey: 'MENU.USERS',
     icon: 'users',
-    route: '/groups',
+    route: '/users',
     groupPath: 'users',
     permission: 'users:read',
   },

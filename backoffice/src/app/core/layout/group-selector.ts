@@ -1,5 +1,6 @@
 import { Component, computed, ElementRef, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { failureMessage } from '../../shared/forms/form-errors';
 import { uniqueId } from '../../shared/ui/unique-id';
 import { createDebouncer } from '../../shared/util/debouncer';
@@ -15,7 +16,7 @@ import { GroupRef, ReferenceApi } from '../reference/reference-api';
  */
 @Component({
   selector: 'fc-group-selector',
-  imports: [TPipe],
+  imports: [IconButton, TPipe],
   templateUrl: './group-selector.html',
   styleUrls: ['../../shared/ui/field.css', './group-selector.css'],
   host: { '(focusout)': 'onFocusOut($event)' },
@@ -56,9 +57,9 @@ export class GroupSelector {
   protected readonly activeId = computed(() =>
     this.open() && this.active() >= 0 ? this.optionId(this.active()) : null,
   );
-  /** Number of options, including the "load more" one. */
+  /** Number of options: "all groups" (index 0), the groups, and the "load more" one. */
   private readonly optionCount = computed(
-    () => this.items().length + (this.next() === null ? 0 : 1),
+    () => 1 + this.items().length + (this.next() === null ? 0 : 1),
   );
   protected readonly announcement = computed(() =>
     this.open() && !this.loading() && this.failure() === null
@@ -119,9 +120,16 @@ export class GroupSelector {
     }
   }
 
-  /** Chooses the group at `index`, or loads more when it is the last "load more" option. */
+  /**
+   * Chooses "all groups" (index 0), the group at `index - 1`, or loads more when it is the last
+   * "load more" option.
+   */
   protected activate(index: number): void {
-    const group = this.items()[index];
+    if (index === 0) {
+      this.clear();
+      return;
+    }
+    const group = this.items()[index - 1];
     if (group === undefined) {
       void this.load(false);
       return;
@@ -129,6 +137,24 @@ export class GroupSelector {
     this.context.choose({ id: group.id, name: group.name });
     this.close();
     void this.router.navigate(['/groups', group.id, 'users']);
+  }
+
+  /**
+   * Back to "all groups": forgets the working group and moves to the cross-group view of the
+   * current page (users, activity log); other pages stay where they are.
+   */
+  protected clear(): void {
+    this.context.clear();
+    this.close();
+    const path = this.router.url.split('?')[0];
+    if (/^\/groups\/[^/]+/.test(path)) {
+      void this.router.navigate(['/users']);
+    } else if (path === '/activity-log') {
+      void this.router.navigate(['/activity-log'], {
+        queryParams: { groupId: null },
+        queryParamsHandling: 'merge',
+      });
+    }
   }
 
   protected retry(): void {
@@ -154,7 +180,7 @@ export class GroupSelector {
         this.next.set(page.page.next);
         this.loaded = true;
         if (reset) {
-          this.active.set(page.data.length > 0 ? 0 : -1);
+          this.active.set(page.data.length > 0 ? 1 : 0);
         }
       }
     } catch (error) {

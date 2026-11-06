@@ -146,6 +146,8 @@ describe('routes', () => {
       [`/groups/${GROUP}/users/new`, sa([...READ, 'users:create']), '⟦USERS.FORM.NEW_TITLE⟧'],
       [`/groups/${GROUP}/users/u1`, sa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
       ['/platform/users', psa(), '⟦USERS.PLATFORM_TITLE⟧'],
+      ['/users', psa(), '⟦USERS.TITLE⟧'],
+      ['/users', { ...psa(), role: 'D' as const }, '⟦USERS.TITLE⟧'],
       ['/platform/users/new', psa([...READ, 'users:create']), '⟦USERS.FORM.NEW_TITLE⟧'],
       ['/platform/users/u1', psa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
       ['/groups', psa(), '⟦GROUP_CHOOSER.TITLE⟧'],
@@ -164,6 +166,8 @@ describe('routes', () => {
       [`/groups/${GROUP}/users/new`, sa()],
       ['/groups', sa([])],
       ['/platform/users', sa()],
+      ['/users', sa()],
+      ['/users', psa([])],
       ['/platform/users', { ...psa([]) }],
       ['/activity-log', sa()],
     ])('protects %s', async (url, profile) => {

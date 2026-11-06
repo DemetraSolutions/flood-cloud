@@ -58,7 +58,7 @@
       <fc-checkbox
         [label]="'ACTIVITY.FILTER.CURRENT_GROUP' | t"
         [checked]="groupFilterActive()"
-        [disabled]="!groupFilterActive() && !groups.groupId()"
+        [disabled]="!groups.groupId()"
         (checkedChange)="onGroupFilter($event)"
       />
     }

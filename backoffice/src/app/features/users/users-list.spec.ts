@@ -60,6 +60,7 @@ async function render(
         [
           { path: 'groups/:groupId/users', component: UsersList },
           { path: 'platform/users', component: UsersList },
+          { path: 'users', component: UsersList, data: { scope: 'all' } },
           { path: '**', children: [] },
         ],
         withComponentInputBinding(),
@@ -75,7 +76,7 @@ async function render(
   const root = harness.routeNativeElement as HTMLElement;
   document.body.appendChild(root);
   const router = TestBed.inject(Router);
-  const listUrl = url.startsWith('/platform') ? PLATFORM_LIST : LIST;
+  const listUrl = /^\/(platform\/)?users/.test(url) ? PLATFORM_LIST : LIST;
   const request = () => backend().expectOne((r) => r.url === listUrl);
   // Not `whenStable()`: a request still pending keeps the application unstable.
   const view = async () => {
@@ -186,6 +187,68 @@ describe('UsersList', () => {
       const { flush, root } = await render();
       await flush([]);
       expect(root.querySelector('fc-empty-state')?.textContent).toContain('USERS.EMPTY_MESSAGE');
+    });
+  });
+
+  describe('cross-group view', () => {
+    const PSA = { role: 'PSA' as const, groupId: null, group: null };
+    const OTHER = '665f1c2e9b1d4a0012ab34a9';
+
+    it('lists the users of every group with a group column linking to each group', async () => {
+      sessionStorage.clear();
+      const { flush, root, cells } = await render('/users', PSA);
+      const grouped = fakeUser({ id: '665f1c2e9b1d4a0012ab3411', username: 'g1' });
+      const platformUser = fakeUser({
+        id: '665f1c2e9b1d4a0012ab3412',
+        username: 'p1',
+        groupId: null,
+        role: 'D',
+      });
+      await flush([grouped, platformUser]);
+      expect(root.querySelector('h1')?.textContent).toBe('USERS.TITLE');
+      expect(cells(0)[1]).toBe('…ab34a1');
+      expect(root.querySelector('tbody td a')?.getAttribute('href')).toBe(`/groups/${GROUP}/users`);
+      expect(cells(1)[1]).toBe('');
+      expect(root.querySelectorAll('tbody td a')).toHaveLength(1);
+      expect(root.querySelector('a.new')).toBeNull();
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
+    });
+
+    it('has no new-user link in the empty state either', async () => {
+      const { flush, root } = await render('/users', PSA);
+      await flush([]);
+      expect(root.querySelector('fc-empty-state a')).toBeNull();
+    });
+
+    it('sends the group and dealer filters of the URL, for a PSA only and only if valid', async () => {
+      const psa = await render(`/users?groupId=${OTHER}&dealerId=${OTHER}`, PSA);
+      const { params } = psa.request().request;
+      expect(params.get('groupId')).toBe(OTHER);
+      expect(params.get('dealerId')).toBe(OTHER);
+      document.body.replaceChildren();
+      TestBed.resetTestingModule();
+      const dealer = await render(`/users?groupId=${OTHER}&dealerId=${OTHER}`, {
+        ...PSA,
+        role: 'D',
+      });
+      const sent = dealer.request().request.params;
+      expect(sent.get('groupId')).toBe(OTHER);
+      expect(sent.has('dealerId')).toBe(false);
+      document.body.replaceChildren();
+      TestBed.resetTestingModule();
+      const invalid = await render('/users?groupId=nope&dealerId=nope', PSA);
+      expect(invalid.request().request.params.keys().sort()).toEqual(['limit', 'sort']);
+    });
+
+    it('offers every role to a PSA and the group roles to a dealer', async () => {
+      const psa = await render('/users', PSA);
+      await psa.flush([]);
+      expect(psa.field('USERS.FILTER.ROLE').querySelectorAll('option')).toHaveLength(7);
+      document.body.replaceChildren();
+      TestBed.resetTestingModule();
+      const dealer = await render('/users', { ...PSA, role: 'D' });
+      await dealer.flush([]);
+      expect(dealer.field('USERS.FILTER.ROLE').querySelectorAll('option')).toHaveLength(5);
     });
   });
 

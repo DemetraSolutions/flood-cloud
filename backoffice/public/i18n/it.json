@@ -213,11 +213,13 @@
   },
   "GROUP_SELECTOR": {
     "LABEL": "Gruppo",
-    "PLACEHOLDER": "Cerca un gruppo",
+    "PLACEHOLDER": "Tutti i gruppi",
     "EMPTY": "Nessun gruppo trovato.",
     "MORE": "Carica altri",
     "RESULTS": "{count} gruppi trovati",
-    "BY_ID": "Gruppo …{id}"
+    "BY_ID": "Gruppo …{id}",
+    "ALL": "Tutti i gruppi",
+    "CLEAR": "Mostra tutti i gruppi"
   },
   "GROUP_CHOOSER": {
     "TITLE": "Scegli un gruppo",
@@ -313,7 +315,8 @@
       "NAME": "Nome e cognome",
       "ROLE": "Ruolo",
       "STATUS": "Stato",
-      "CREATED": "Creato il"
+      "CREATED": "Creato il",
+      "GROUP": "Gruppo"
     },
     "ACTION": {
       "RESET_PASSWORD": "Reimposta password",

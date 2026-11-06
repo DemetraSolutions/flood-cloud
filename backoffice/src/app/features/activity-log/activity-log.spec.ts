@@ -7,7 +7,7 @@ import { emulateNativeDialog } from '../../../testing/dialog';
 import { fakeEntry } from '../../../testing/activity';
 import { signIn } from '../../../testing/session';
 import { AppConfig } from '../../core/config/app-config';
-import { GroupContext } from '../../core/groups/group-context';
+import { GroupContext, LAST_GROUP_ID_KEY } from '../../core/groups/group-context';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Profile } from '../../core/session/session.types';
 import { ActivityLogPage, MAX_PERIOD_DAYS } from './activity-log';
@@ -250,6 +250,7 @@ describe('ActivityLogPage', () => {
 
   describe('filters and URL', () => {
     it('reads every filter from the URL, converting the days to instants', async () => {
+      sessionStorage.setItem(LAST_GROUP_ID_KEY, GROUP);
       const { request, params } = await render(
         `/activity-log?category=security&outcome=denied&action=auth.loginFailed&from=2026-10-01&to=2026-10-31&requestId=%20req-1%20&actorId=${ACTOR}&groupId=${GROUP}&limit=50&cursor=abc`,
         { role: 'PSA' },
@@ -397,6 +398,14 @@ describe('ActivityLogPage', () => {
 
   describe('group filter of platform admins and dealers', () => {
     const psa = { role: 'PSA' as const, groupId: null, group: null };
+
+    it('ignores a group in the URL and shows everything while "all groups" is selected', async () => {
+      sessionStorage.clear();
+      const ctx = await render(`/activity-log?groupId=${GROUP}`, psa);
+      const req = await ctx.flush([]);
+      expect(req.request.params.has('groupId')).toBe(false);
+      expect(ctx.field('ACTIVITY.FILTER.CURRENT_GROUP').disabled).toBe(true);
+    });
 
     it('is disabled until a working group is chosen', async () => {
       const ctx = await render('/activity-log', psa);

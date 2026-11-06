@@ -161,7 +161,10 @@ export class ActivityLogPage {
   });
   protected readonly groupFilter = computed(() => {
     const value = this.groupId();
-    return this.groups.canChoose() && value !== undefined && OBJECT_ID.test(value)
+    return this.groups.canChoose() &&
+      this.groups.groupId() !== null &&
+      value !== undefined &&
+      OBJECT_ID.test(value)
       ? value
       : undefined;
   });
