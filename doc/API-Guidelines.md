@@ -59,7 +59,7 @@
 { "error": { "code": "VALIDATION_ERROR", "message": "Invalid request", "details": [{ "field": "price", "issue": "minimum" }] } }
 ```
 
-`issue` possibili nei `details` dei `422`: `required`, `type`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `enum`, `unknown`, `forbiddenKey`, `format`, `tooDeep`, `tooMany`, `incorrect`, `reused`; `taken` compare invece nei `details` dei `409` di unicità.
+`issue` possibili nei `details` dei `422`: `required`, `type`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `enum`, `unknown`, `forbiddenKey`, `format`, `tooDeep`, `tooMany`, `incorrect`, `reused`, `immutable`; `taken` compare invece nei `details` dei `409` di unicità.
 
 ## 6. Idempotenza e concorrenza
 - **`Idempotency-Key`** (UUID) obbligatoria sulle scritture della superficie store e sulle creazioni sensibili ai doppioni (vendite, documenti, pagamenti): stessa chiave e stesso body ⇒ stessa risposta; stessa chiave e body diverso ⇒ `409`.

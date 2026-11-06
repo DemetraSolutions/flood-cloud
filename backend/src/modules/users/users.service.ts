@@ -8,6 +8,8 @@ import type { PageInfo } from '../../shared/http/envelope.ts';
 import { AppError } from '../../shared/http/errors.ts';
 import type { ClientContext } from '../../shared/http/client-context.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
+import { companyOf, minimalCompany, toNewDocument } from '../dealers/dealer.mapper.ts';
+import type { DealersRepository } from '../dealers/dealers.repository.ts';
 import { buildPasswordChange } from '../../shared/security/password-change.ts';
 import { checkPasswordPolicy } from '../../shared/security/password-policy.ts';
 import { flagsOf } from '../../shared/security/rbac/permission-matrix.ts';
@@ -46,6 +48,9 @@ export interface UserListing {
   readonly page: PageInfo;
 }
 
+/** Writes of the transaction that creates a user, run after the user and his credentials were written: it receives the session and the id of the new user. */
+export type AlongsideWrite = (session: ClientSession, userId: ObjectId) => Promise<void>;
+
 /** Body of a creation, group or platform. */
 export type CreateUserBody = CreateGroupUserBody | CreatePlatformUserBody;
 
@@ -80,9 +85,13 @@ export interface UsersService {
   /**
    * Creates a user with a provisional password the user must replace at the first access (not for `E`).
    *
+   * A user `D` always comes with a dealer document of the same id (D-09), written in the same transaction:
+   * the minimal one (company name = user name) unless `alongside` writes the real one.
+   *
+   * @param alongside Extra writes of the same transaction, run after the user and his credentials; used by the dealer registry. It may run more than once.
    * @throws {AppError} `VALIDATION_ERROR` (scope, references, password policy), `FORBIDDEN` (role, permissions), `CONFLICT` (username taken).
    */
-  create(principal: AuthPrincipal, area: UserArea, body: CreateUserBody, client: ClientContext): Promise<UserResponse>;
+  create(principal: AuthPrincipal, area: UserArea, body: CreateUserBody, client: ClientContext, alongside?: AlongsideWrite): Promise<UserResponse>;
   /**
    * Modifies a user (JSON Merge Patch). A change of role, scope, status or permissions ends his sessions (D-11).
    *
@@ -108,7 +117,7 @@ export interface UsersService {
    */
   restore(principal: AuthPrincipal, area: UserArea, userId: ObjectId, client: ClientContext): Promise<UserResponse>;
   /**
-   * Deletes a user for good (D-14): the user, his credentials and all his sessions, together.
+   * Deletes a user for good (D-14): the user, his credentials and all his sessions, together; a dealer's registry document goes with him.
    *
    * @throws {AppError} `NOT_FOUND`, `FORBIDDEN`, `CONFLICT` when he is not in the trash.
    */
@@ -128,6 +137,8 @@ export interface UsersServiceDeps {
   readonly credentials: CredentialsRepository;
   readonly sessions: SessionsRepository;
   readonly directory: GroupDirectoryRepository;
+  /** The dealer registry: a user `D` is created and deleted together with his document. */
+  readonly dealers: Pick<DealersRepository, 'insert' | 'deleteById'>;
   readonly activityLog: ActivityLog;
   /**
    * Runs the operations in a transaction on the common database: they commit together or not at all
@@ -193,7 +204,7 @@ function validationError(details: ReadonlyArray<{ field: string; issue: string }
  * @param deps Repositories, directory, transaction runner, activity log and clock.
  */
 export function createUsersService(deps: UsersServiceDeps): UsersService {
-  const { config, users, credentials, sessions, directory, activityLog, transaction } = deps;
+  const { config, users, credentials, sessions, directory, dealers, activityLog, transaction } = deps;
   const date = (): Date => new Date(deps.now());
 
   const groupIdOf = (area: UserArea): ObjectId | null => (area.kind === 'group' ? area.access.groupId : null);
@@ -317,7 +328,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
 
     get: async (principal, area, userId) => toResponse((await findTarget(principal, area, userId)).user),
 
-    create: async (principal, area, body, client) => {
+    create: async (principal, area, body, client, alongside) => {
       assertPlatformAdmin(principal, area);
       const role: Role = body.role;
       assertManageableRole(principal, role);
@@ -371,6 +382,8 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         },
         now,
       );
+      // A dealer user without the registry's writer gets the minimal document; the registry itself passes the real one.
+      const minimalDealer = role === 'D' && alongside === undefined ? minimalCompany(body.username) : null;
       let created;
       try {
         created = await transaction(async (session) => {
@@ -380,6 +393,10 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
             { passwordHash: change.passwordHash, legacyHashFingerprint: change.legacyHashFingerprint, passwordChanged: true, mustChangePassword: true, now },
             session,
           );
+          if (minimalDealer !== null) {
+            await dealers.insert(toNewDocument(id, minimalDealer, 'user', principal.userId, now), session);
+          }
+          await alongside?.(session, id);
           return inserted;
         });
       } catch (error) {
@@ -393,6 +410,15 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         before: undefined,
         after: { ...snapshot(created.user), password: 'set' },
       });
+      if (minimalDealer !== null) {
+        await recordDataChange(activityLog, {
+          ...context(principal, area, client),
+          resource: { type: 'dealer', id: id.toHexString() },
+          action: 'dealer.created',
+          before: undefined,
+          after: { ...minimalDealer },
+        });
+      }
       return toResponse(created.user);
     },
 
@@ -403,6 +429,10 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       const { record: target, view } = await findManageable(principal, area, userId, { locksOut: true });
       const before = target.user;
       const role: Role = patch.role ?? (before.role as Role);
+      // A dealer is a user and a registry document with the same id: the role never moves to or from `D`.
+      if ((role === 'D') !== (before.role === 'D')) {
+        throw validationError([{ field: 'role', issue: 'immutable' }]);
+      }
       assertManageableRole(principal, role);
       const requested = patch as ScopeFields;
       const companyIds = requested.companyIds === undefined ? view.companyIds : uniqueIds(requested.companyIds);
@@ -557,13 +587,15 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       if (target.user.role === 'D' && (await directory.isDealerOfAnyGroup(userId))) {
         throw new AppError('CONFLICT');
       }
-      await transaction(async (session) => {
+      const dealerRemoved = await transaction(async (session) => {
         // Check and delete are one write: a user restored in the meantime is not deleted.
         if (!(await users.deleteTrashed(userId, session))) {
           throw new AppError('CONFLICT');
         }
         await credentials.delete(userId, session);
         await sessions.deleteAllOfUser(userId, session);
+        // The dealer's registry document has the same id; a `D` user created before the registry may have none.
+        return target.user.role === 'D' ? await dealers.deleteById(userId, session) : null;
       });
       await recordDataChange(activityLog, {
         ...context(principal, area, client),
@@ -573,6 +605,15 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         after: undefined,
         metadata: { role: target.user.role },
       });
+      if (dealerRemoved !== null) {
+        await recordDataChange(activityLog, {
+          ...context(principal, area, client),
+          resource: { type: 'dealer', id: userId.toHexString() },
+          action: 'dealer.deleted',
+          before: { ...companyOf(dealerRemoved) },
+          after: undefined,
+        });
+      }
     },
 
     isUsernameAvailable: async (username) => !(await users.isUsernameTaken(username)),

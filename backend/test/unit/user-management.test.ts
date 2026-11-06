@@ -2,12 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ObjectId } from 'mongodb';
 import { effectivePermissions } from '../../src/shared/security/rbac/effective-permissions.ts';
-import { defaultMatrix, normalizeMatrix } from '../../src/shared/security/rbac/permission-matrix.ts';
+import { defaultMatrix, flagsOf, normalizeMatrix } from '../../src/shared/security/rbac/permission-matrix.ts';
 import type { PermissionMatrix } from '../../src/shared/security/rbac/permission-matrix.ts';
 import type { Permission, Role } from '../../src/shared/security/rbac/permissions.ts';
 import { ROLES } from '../../src/shared/security/rbac/permissions.ts';
 import { ROLE_CEILING } from '../../src/shared/security/rbac/policy.ts';
-import { canManageUser, checkUserChange } from '../../src/shared/security/rbac/user-management.ts';
+import { canManageUser, checkUserChange, inheritedMatrix } from '../../src/shared/security/rbac/user-management.ts';
 import type { UserChangeView } from '../../src/shared/security/rbac/user-management.ts';
 import type { UserScopeView } from '../../src/shared/security/scope/principal.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
@@ -326,5 +326,32 @@ describe('checkUserChange on views produced by effectivePermissions', () => {
     assert.equal(garbage.matrix.status, false);
     assert.deepEqual([...garbage.permissions].sort(), ['clientErrors:create', 'profile:read', 'profile:update', 'sessions:read', 'sessions:revoke']);
     assert.deepEqual(checkUserChange(actors.SA, null, garbage), []);
+  });
+});
+
+describe('the dealers:* permissions ride on the groups module but belong to the PSA alone', () => {
+  it('a D with groups r/w creates an SA who inherits groups.r and groups.w, with no violation', () => {
+    assert.deepEqual(checkUserChange(actors.D, null, defaultView('SA')), []);
+    assert.deepEqual(flagsOf(inheritedMatrix(actors.D, 'SA'), 'groups'), { r: true, w: true });
+  });
+
+  it('inheritedMatrix(D, SA) holds groups.r', () => {
+    assert.equal(flagsOf(inheritedMatrix(actors.D, 'SA'), 'groups').r, true);
+  });
+
+  it('a PSA with groups.r but without groups.w cannot turn groups.w on for another PSA', () => {
+    const writes = new Set<Permission>(['groups:create', 'groups:update', 'groups:suspend', 'groups:trash', 'dealers:create', 'dealers:update']);
+    const reader = principalOf('PSA', { permissions: new Set([...ROLE_CEILING.PSA].filter((permission) => !writes.has(permission))) });
+    const before = defaultView('PSA', { groups: { r: true, w: false } });
+    const after = { ...realView('PSA', legacyOf('PSA', { groups: { r: true, w: true } })), userId: before.userId };
+    assert.ok(checkUserChange(reader, before, after).includes('permissionNotHeld'));
+  });
+
+  it('an SA who turns groups.w on for an SA grants groups:update only, never a dealers:* permission', () => {
+    const before = defaultView('SA', { groups: { r: true, w: false } });
+    const after = { ...realView('SA', legacyOf('SA', { groups: { r: true, w: true } })), userId: before.userId };
+    assert.deepEqual(checkUserChange(actors.SA, before, after), []);
+    assert.deepEqual([...after.permissions].filter((permission) => permission.startsWith('groups:') || permission.startsWith('dealers:')).sort(), ['groups:read', 'groups:update']);
+    assert.deepEqual([...before.permissions].filter((permission) => permission.startsWith('groups:')), ['groups:read']);
   });
 });

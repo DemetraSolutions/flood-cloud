@@ -1,0 +1,42 @@
+import type { RequestHandler } from 'express';
+import type { ObjectId } from 'mongodb';
+import { clientContextOf } from '../../shared/http/client-context.ts';
+import { sendData, sendPage } from '../../shared/http/envelope.ts';
+import { inputOf } from '../../shared/validation/middleware.ts';
+import type { CreateDealerBody, DealersQuery, PatchDealerBody } from './dealers.schemas.ts';
+import type { DealersService } from './dealers.service.ts';
+
+/** HTTP handlers of the dealer routes. */
+export interface DealersController {
+  list: RequestHandler;
+  get: RequestHandler;
+  create: RequestHandler;
+  update: RequestHandler;
+}
+
+const dealerIdOf = (res: Parameters<RequestHandler>[1]): ObjectId => inputOf<{ dealerId: ObjectId }>(res, 'params').dealerId;
+
+/**
+ * Translates HTTP into {@link DealersService} calls.
+ *
+ * @param service The service.
+ */
+export function createDealersController(service: DealersService): DealersController {
+  return {
+    list: async (_req, res) => {
+      const { items, page } = await service.list(inputOf<DealersQuery>(res, 'query'));
+      sendPage(res, items, page);
+    },
+    get: async (_req, res) => {
+      sendData(res, await service.get(dealerIdOf(res)));
+    },
+    create: async (req, res) => {
+      const created = await service.create(res.locals.auth!, inputOf<CreateDealerBody>(res, 'body'), clientContextOf(req, res));
+      res.setHeader('Location', `${req.baseUrl}${req.path.replace(/\/$/, '')}/${created.id}`);
+      sendData(res, created, 201);
+    },
+    update: async (req, res) => {
+      sendData(res, await service.update(res.locals.auth!, dealerIdOf(res), inputOf<PatchDealerBody>(res, 'body'), clientContextOf(req, res)));
+    },
+  };
+}

@@ -47,7 +47,7 @@ describe('database access cannot be bypassed outside src/db', () => {
         assert.ok(mayCreateDatabases(file), `${path} must not call createDatabases`);
       }
     }
-    assert.deepEqual(callers.sort(), ['server.ts', 'tools/profile-legacy/main.ts']);
+    assert.deepEqual(callers.sort(), ['server.ts', 'tools/migrate-dealers/main.ts', 'tools/profile-legacy/main.ts']);
   });
 
   it('creates the cluster clients only from the server and from tool entry points', async () => {
@@ -63,7 +63,7 @@ describe('database access cannot be bypassed outside src/db', () => {
         assert.ok(mayCreateDatabases(file), `${path} must not create database clients`);
       }
     }
-    assert.deepEqual(callers.sort(), ['server.ts', 'tools/profile-legacy/main.ts']);
+    assert.deepEqual(callers.sort(), ['server.ts', 'tools/migrate-dealers/main.ts', 'tools/profile-legacy/main.ts']);
   });
 
   it('keeps the analytics handles unused outside src/db until a report needs them', async () => {

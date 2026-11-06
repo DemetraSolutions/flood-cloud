@@ -19,6 +19,7 @@ export const VALIDATION_ISSUES = Object.freeze([
   'incorrect',
   'taken',
   'reused',
+  'immutable',
 ] as const);
 
 /** A reason a field was rejected. */

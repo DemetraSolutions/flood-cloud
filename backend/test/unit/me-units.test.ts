@@ -30,6 +30,7 @@ function build(users: Partial<UsersRepository>, groupFind: () => Promise<{ id: s
     credentials: { find: () => Promise.resolve(null), recordFailure: () => Promise.reject(new Error('unexpected')), recordSuccess: () => Promise.reject(new Error('unexpected')), upsertPassword: () => Promise.reject(new Error('unexpected')), isPasswordChangeRequired: () => Promise.resolve(false), clearLock: () => Promise.reject(new Error('unexpected')), delete: () => Promise.reject(new Error('unexpected')) },
     sessions: {} as MeServiceDeps['sessions'],
     groups: { find: groupFind },
+    dealers: { findSummary: () => Promise.resolve(null) },
     activityLog,
     now: () => Date.parse('2026-11-04T10:00:00.000Z'),
   });
@@ -83,6 +84,7 @@ describe('MeService: password change without a client address', () => {
       credentials: { find: () => Promise.resolve(null), upsertPassword: () => Promise.resolve(void writes.push('credentials')) } as unknown as MeServiceDeps['credentials'],
       sessions: { revokeAllOfUser: () => Promise.resolve(0) } as unknown as MeServiceDeps['sessions'],
       groups: { find: () => Promise.resolve(null) },
+      dealers: { findSummary: () => Promise.resolve(null) },
       activityLog,
       now: () => Date.now(),
     });
@@ -126,6 +128,7 @@ describe('MeService: a new password equal to the current one after NFC', () => {
         credentials: { find: () => Promise.resolve(null) } as unknown as MeServiceDeps['credentials'],
         sessions: {} as MeServiceDeps['sessions'],
         groups: { find: () => Promise.resolve(null) },
+        dealers: { findSummary: () => Promise.resolve(null) },
         activityLog: memoryActivityLog(),
         now: () => Date.now(),
       });

@@ -11,6 +11,7 @@ import { closeClusters, connectClusters, createClusterClients } from './db/clust
 import type { ClusterClients, ClusterRegistry } from './db/clusters.ts';
 import { createDatabases } from './db/databases.ts';
 import type { Databases } from './db/databases.ts';
+import { COLLECTIONS } from './db/collections.ts';
 import { ensureIndexes } from './db/indexes.ts';
 import { createPingCheck } from './db/ping.ts';
 import { createActivityLog } from './shared/activity-log/activity-log.ts';
@@ -124,7 +125,7 @@ export async function run(
     ({ background: clusterConnections } = await connectClusters(clusters, ({ clusterId, role, errorName }) =>
       logger.error('database cluster not reachable at startup', { clusterId, role, errorName }),
     ));
-    await deps.ensureIndexes(databases);
+    await deps.ensureIndexes(databases, COLLECTIONS, logger);
     await warmUpPasswordVerifier();
   } catch (error) {
     logger.error('database startup failed', { errorName: error instanceof Error ? error.name : typeof error });

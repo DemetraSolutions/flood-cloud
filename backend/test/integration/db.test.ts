@@ -10,6 +10,8 @@ import { Secret } from '../../src/shared/security/secret.ts';
 import { freePort, startApp } from '../helpers/app.ts';
 import { openTestDatabases, singleCluster, TEST_CLUSTER } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { quietLogger } from '../helpers/indexes.ts';
+import { COLLECTIONS } from '../../src/db/collections.ts';
 
 const REGISTRY: CollectionRegistry = {
   common: {
@@ -35,8 +37,8 @@ after(async () => {
 
 describe('ensureIndexes (real MongoDB)', () => {
   it('creates the declared indexes with explicit names, idempotently', async () => {
-    await ensureIndexes(ctx.databases, REGISTRY);
-    await ensureIndexes(ctx.databases, REGISTRY);
+    await ensureIndexes(ctx.databases, REGISTRY, quietLogger);
+    await ensureIndexes(ctx.databases, REGISTRY, quietLogger);
     const indexes = await ctx.databases.common().collection('probes').indexes();
     const byName = new Map(indexes.map((index) => [index.name, index]));
     assert.deepEqual([...byName.keys()].sort(), ['_id_', 'code_unique', 'owner_created', 'ttl_expires']);
@@ -47,7 +49,7 @@ describe('ensureIndexes (real MongoDB)', () => {
   });
 
   it('really enforces the unique index', async () => {
-    await ensureIndexes(ctx.databases, REGISTRY);
+    await ensureIndexes(ctx.databases, REGISTRY, quietLogger);
     const probes = ctx.databases.common().collection('probes');
     await probes.insertOne({ code: 'A' });
     await assert.rejects(probes.insertOne({ code: 'A' }), (error: { code?: number }) => error.code === 11000);
@@ -57,8 +59,8 @@ describe('ensureIndexes (real MongoDB)', () => {
     const users = ctx.databases.common().collection('users');
     // As in production: the legacy unique index on userName already exists before the backend starts.
     await users.createIndex({ userName: 1 }, { name: 'userName_1', unique: true });
-    await ensureIndexes(ctx.databases);
-    await ensureIndexes(ctx.databases);
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
     const byName = new Map((await users.indexes()).map((index) => [index.name, index]));
     assert.deepEqual([...byName.keys()].sort(), ['_id_', 'dealerId_1', 'groupId_1_role_1', 'userName_1']);
     assert.equal(byName.get('userName_1')?.unique, true);
@@ -88,7 +90,7 @@ describe('ensureIndexes (real MongoDB)', () => {
       common: { legacyProbe: { ownership: 'legacy-read', indexes: [{ name: 'u', key: { userName: 1 }, unique: true }] } },
       group: {},
     };
-    await assert.rejects(ensureIndexes(ctx.databases, legacyUnique), /unique and TTL indexes are forbidden/);
+    await assert.rejects(ensureIndexes(ctx.databases, legacyUnique, quietLogger), /unique and TTL indexes are forbidden/);
     const names = (await ctx.databases.common().listCollections({ name: 'legacyProbe' }).toArray()).length;
     assert.equal(names, 0);
   });
@@ -98,7 +100,7 @@ describe('ensureIndexes (real MongoDB)', () => {
       common: {},
       group: { things: { ownership: 'new', indexes: [{ name: 'x', key: { x: 1 } }] } },
     };
-    await assert.rejects(ensureIndexes(ctx.databases, groupIndex), /group\.things: indexes on group databases are not supported yet/);
+    await assert.rejects(ensureIndexes(ctx.databases, groupIndex, quietLogger), /group\.things: indexes on group databases are not supported yet/);
   });
 });
 
@@ -226,5 +228,24 @@ describe('database listing (real MongoDB)', () => {
 
   it('reports the server version', async () => {
     assert.match(await ctx.databases.serverVersion(TEST_CLUSTER), /^\d+\.\d+\.\d+/);
+  });
+});
+
+describe('ensureIndexes on collections that already have the validators (real MongoDB)', () => {
+  it('runs no collMod the second time: the server returns the validators as they were sent', async () => {
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+    const commands: string[] = [];
+    const real = ctx.databases.common();
+    const spy = new Proxy(real, {
+      get: (target, property) =>
+        property === 'command'
+          ? (command: Record<string, unknown>) => {
+              commands.push(Object.keys(command)[0]!);
+              return target.command(command);
+            }
+          : (target as unknown as Record<string | symbol, unknown>)[property],
+    });
+    await ensureIndexes({ ...ctx.databases, common: () => spy } as typeof ctx.databases, COLLECTIONS, quietLogger);
+    assert.deepEqual(commands, []);
   });
 });

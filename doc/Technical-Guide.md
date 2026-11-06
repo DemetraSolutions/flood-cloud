@@ -86,8 +86,10 @@ src/
     sessions/                  # repository e audit delle sessioni
     me/                        # profilo, cambio password, proprie sessioni
     reference/                 # letture compatte di gruppi, aziende e punti vendita per i selettori
+    dealers/                   # anagrafica dei dealer (solo PSA)
     activity-log/              # monitor del registro delle attività (GET /v1/activity-log)
     client-errors/             # ricezione degli errori JavaScript del backoffice
+  tools/migrate-dealers/       # registrazione dei dealer esistenti (npm run migrate:dealers)
   tools/profile-legacy/        # CLI di profilazione in sola lettura (cli.ts → main.ts → profile.ts e analisi)
   shared/
     http/
@@ -199,6 +201,13 @@ Riferimento in `doc/API.md`.
 - **Monitor** (`GET /v1/activity-log`, `activityLog:read`): lista a cursore ordinata per data decrescente (spareggio `_id`), filtri per categoria, azione, esito, attore, gruppo (PSA e dealer), request id e periodo (massimo 400 giorni). Perimetro (decisione dell'utente del 2026-11-05): PSA tutto; dealer le voci dei propri gruppi attivi; SA quelle del proprio gruppo; CA e PA solo le proprie azioni. La categoria `error` (e le sue azioni) è visibile solo al PSA: chiederla da un altro ruolo dà `403`. Per gli attori di ruolo superiore a chi guarda si restituiscono solo il ruolo (id, username e IP nulli). Username risolti in blocco per la pagina; indici con `at` e `_id` e hint sull'indice di perimetro, così l'ordinamento non avviene in memoria.
 - **Errori JavaScript** (`POST /v1/client-errors`, permesso `clientErrors:create` sempre concesso a PSA–PA, ammesso anche con password provvisoria pendente): risposta `202`; voce `error`/`client.error` con nome, messaggio (300 caratteri), prime 10 righe dello stack (300 caratteri ciascuna, la prima ricostruita col messaggio troncato), route come pattern (`/groups/:groupId/users`: rifiutati id, cifre, query), versione dell'app e browser abbreviato, tutto redatto. Limiti: 30 al minuto per utente, lo stesso errore dello stesso utente salvato al massimo una volta ogni 10 minuti, 100 voci al minuto per processo; il resto solo su stdout. La scrittura non fa mai fallire la risposta.
 
+### dealers (passo 4A)
+Anagrafica dei dealer (D-09, decisione dell'utente del 2026-11-06). Riferimento in `doc/API.md`, collection in `doc/Data-Model.md`.
+- Route solo per il PSA: elenco, dettaglio, creazione e modifica dei dati anagrafici. Permessi `dealers:read`, `dealers:create`, `dealers:update` nel solo tetto del PSA, concessi dai flag `groups.r`/`groups.w` della sua matrice. La regola anti-escalation conta solo i permessi che il ruolo dell'attore può avere, così D e SA continuano a concedere `groups.r`/`groups.w` senza poter concedere `dealers:*`.
+- `POST /v1/dealers` crea in transazione l'utente D (stesse regole degli utenti di piattaforma, password provvisoria) e l'anagrafica con lo stesso `_id`. `POST /v1/users` con ruolo D crea anche un'anagrafica minima; l'eliminazione definitiva di un D (solo dal cestino, `409` se ha gruppi) la elimina. Il ruolo D non si assegna né si toglie con una modifica (`422` `role`/`immutable`). P.IVA univoca (`409`). Eventi `dealer.created`, `dealer.updated`, `dealer.deleted` con prima/dopo.
+- `GET /v1/me` per un D include `dealer: { id, businessName }`.
+- **Script** `npm run migrate:dealers -- --env <development|production> [--apply]`: per default solo conteggi senza scritture; con `--apply` crea con `$setOnInsert` (idempotente) un'anagrafica per ogni utente D che non ne ha una, con ragione sociale uguale allo username. Scrive solo su `dealers`, apre solo il cluster comune, `--env` deve coincidere con `APP_ENV`, l'output contiene solo conteggi.
+
 ### reference (passo 3D)
 Letture compatte per i selettori del backoffice (decisione dell'utente del 2026-11-05), estese poi dalle aree 4, 6 e 7. Riferimento in `doc/API.md`.
 - `GET /v1/groups` (`groups:read`): PSA tutti i gruppi con filtri `status` e `trashed`; D i propri gruppi attivi e non cestinati; SA il proprio; per chi non è PSA i filtri `status` e `trashed=true` danno 403 e il filtro aggiunge sempre `status: true` e non cestinato.
@@ -225,7 +234,7 @@ Letture compatte per i selettori del backoffice (decisione dell'utente del 2026-
 | gruppo | `companies`, `places` | legacy, sola lettura |
 Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `legacy-write` (con elenco obbligatorio dei campi posseduti). Sulle collection legacy sono vietati indici univoci e TTL. Un test vieta in `src/` nomi di collection non letterali o non registrati.
 
-**Indici** (`db/indexes.ts`): `ensureIndexes` crea all'avvio, in modo idempotente e con nomi espliciti, gli indici del registro sul database common; rifiuta un registro non valido o indici dichiarati su collection dei gruppi. Crea anche le collection nuove con il loro validatore (`createCollection`, oppure `collMod` se esistono già: all'utente del database serve il privilegio `collMod`); il validatore è vietato sulle collection legacy. Indici creati: `rateLimits` TTL su `expiresAt`; `activityLog` `groupId+at`, `actor.id+at`, `category+at`, `requestId`, TTL su `expiresAt`. Prima del primo rilascio va verificato che nel common legacy non esistano già `rateLimits` o `activityLog`.
+**Indici** (`db/indexes.ts`): `ensureIndexes` crea all'avvio, in modo idempotente e con nomi espliciti, gli indici del registro sul database common; rifiuta un registro non valido o indici dichiarati su collection dei gruppi. Crea anche le collection nuove con il loro validatore (`createCollection`); su una collection esistente il validatore si riapplica con `collMod` solo se è cambiato. L'utente Atlas condiviso con il legacy (`readWriteAnyDatabase`) non ha il privilegio `collMod`: in quel caso l'avvio prosegue con un log `error` che segnala il validatore non aggiornato (la validazione nel codice resta attiva); per aggiornarlo serve dare all'utente il ruolo `dbAdmin` sul database common; il validatore è vietato sulle collection legacy. Indici creati: `rateLimits` TTL su `expiresAt`; `activityLog` `groupId+at`, `actor.id+at`, `category+at`, `requestId`, TTL su `expiresAt`. Prima del primo rilascio va verificato che nel common legacy non esistano già `rateLimits` o `activityLog`.
 
 **Profilazione del legacy** (`tools/profile-legacy/`, Tasks 1.3.6):
 - uso: `npm run profile:legacy -- [--env development|production] [--out <file>]`. Senza `--env` vale `development`; `--env` deve coincidere con `APP_ENV` (per la produzione, senza toccare `.env`: `APP_ENV=production npm run profile:legacy -- --env production`). La produzione è ammessa per decisione dell'utente del 2026-11-01, sempre in sola lettura. Legge solo la configurazione del database (`loadDatabaseConfig`), non i segreti dell'applicazione;
@@ -282,7 +291,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 - `test/integration/`: database reale (guardia, transazione tra common e gruppo, indici, readiness), profilazione e sua CLI (compreso un test che verifica l'assenza nel report di valori sentinella, chiavi di P.IVA, codici fiscali, hex e username), pipeline HTTP completa con `fetch` su porta effimera (`test/helpers/app.ts` monta l'app con route di prova e un logger in memoria), endpoint di salute, `run()` del server con processo simulato, avvio reale di `node src/server.ts` come processo figlio (avvio, `SIGTERM`, configurazione errata).
 - Oltre a `FLOOD_CLOUD_TEST_MONGO_URI` nessuna variabile richiesta: i test costruiscono la configurazione con valori fittizi.
 - **Isolamento** (`test/helpers/isolation.ts`): cluster legacy con due dealer e due gruppi ciascuno e casi standard (altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita, E, gruppo sospeso, cestinato o inesistente) da riusare per ogni endpoint.
-- Stato: 1157 test, coverage 100%.
+- Stato: 1242 test, coverage 100%.
 
 **CI** (`.github/workflows/backend.yml`): **disattivata** per decisione dell'utente del 2026-11-01, parte solo a mano (`workflow_dispatch`); i trigger su `push` e `pull_request` sono commentati nel file. Contenuto: MongoDB `mongo:8.0.34` col compose, Node 24.22.2, `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, `npm audit --audit-level=moderate`, `npm audit signatures`; job separato di secret scanning con gitleaks 8.30.1 (binario verificato con sha256) su tutta la storia del repository. Permessi `contents: read`, action pinnate per SHA.
 
@@ -301,6 +310,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 | 2026-11-05 | Gestione utenti nel backoffice e letture di riferimento (3.5.6–3.5.8) | selettore del gruppo, elenco e form utenti, azioni con conferma, letture compatte di gruppi, aziende e punti vendita |
 | 2026-11-05 | Errori JavaScript e monitor dei log (2.6.6–2.6.7) | ricezione redatta e limitata degli errori del backoffice, monitor del registro con perimetro per ruolo, errori solo al PSA, staff nascosto ai clienti, pagina del monitor con dettaglio dei cambi |
 | 2026-11-06 | Multicluster MongoDB | cluster multipli con connessioni di lettura/scrittura e analytics, cluster comune per login e dati comuni, `dataCluster` del gruppo con default, 503 per cluster non configurato, readiness sul solo cluster comune, profilazione di tutti i cluster |
+| 2026-11-06 | Anagrafica dei dealer (4A) | collection dealers con stesso id dell'utente D, gestione per il PSA, creazione in transazione, ruolo D immutabile, script di registrazione dei dealer esistenti eseguito su development e production, validatori riapplicati solo se cambiati |
 
 ## 11. Backoffice
 SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Realizzati: fondamenta (1.7, 1.8), sessione, login, guard, profilo e proprie sessioni (3.5.1–3.5.5), gestione degli utenti con selettore del gruppo (3.5.6–3.5.8).

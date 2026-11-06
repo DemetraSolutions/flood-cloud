@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { createCredentialsRepository } from '../../src/modules/users/credentials.repository.ts';
+import { createDealersRepository } from '../../src/modules/dealers/dealers.repository.ts';
 import { createGroupDirectoryRepository } from '../../src/modules/users/group-directory.repository.ts';
 import { createUsersRepository } from '../../src/modules/users/users.repository.ts';
 import { createSessionsRepository } from '../../src/modules/sessions/sessions.repository.ts';
@@ -358,6 +359,7 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
         credentials: createCredentialsRepository(ctx.databases),
         sessions: createSessionsRepository(ctx.databases),
         directory: createGroupDirectoryRepository(ctx.databases),
+      dealers: createDealersRepository(ctx.databases),
         activityLog: memoryActivityLog(),
         transaction: (work) => ctx.databases.transaction(work),
         now: () => Date.now(),
@@ -388,8 +390,21 @@ describe('platform users on /v1/users/{userId}', () => {
     assert.deepEqual(failure(await as.call(office.cluster.dealerA, 'PATCH', `/users/${hex(dealer)}`, { firstName: 'x' })), denied);
     assert.deepEqual(failure(await as.call(psa(), 'PATCH', `/users/${hex(dealer)}`, { companyIds: [] })), invalid(['companyIds', 'unknown']));
     assert.deepEqual(failure(await as.call(psa(), 'PATCH', `/users/${hex(dealer)}`, { role: 'SA' })), invalid(['role', 'enum']));
-    const renamed = await as.call(psa(), 'PATCH', `/users/${hex(dealer)}`, { firstName: 'Dea', role: 'PSA' });
-    assert.deepEqual([renamed.status, renamed.body.data.role, renamed.body.data.firstName], [200, 'PSA', 'Dea']);
+    const renamed = await as.call(psa(), 'PATCH', `/users/${hex(dealer)}`, { firstName: 'Dea', role: 'D' });
+    assert.deepEqual([renamed.status, renamed.body.data.role, renamed.body.data.firstName], [200, 'D', 'Dea']);
+  });
+
+  it('never moves a user to or from the role D, and leaves the dealer registry as it was', async () => {
+    const dealers = ctx.databases.common().collection('dealers');
+    const dealer = await platformUser('D');
+    const other = await platformUser('PSA');
+    const before = await dealers.find({}).sort({ _id: 1 }).toArray();
+    const immutable = { status: 422, code: 'VALIDATION_ERROR', details: [{ field: 'role', issue: 'immutable' }] };
+    assert.deepEqual(failure(await as.call(psa(), 'PATCH', `/users/${hex(dealer)}`, { role: 'PSA' })), immutable);
+    assert.deepEqual(failure(await as.call(psa(), 'PATCH', `/users/${hex(other)}`, { role: 'D' })), immutable);
+    assert.deepEqual(await dealers.find({}).sort({ _id: 1 }).toArray(), before);
+    assert.equal((await stored(dealer))['role'], 'D');
+    assert.equal((await stored(other))['role'], 'PSA');
   });
 
   it('resets the password, trashes, restores and deletes a platform user, never the caller himself', async () => {
@@ -715,6 +730,7 @@ describe('permanent deletion: dealers with groups, and the race with a restore',
       credentials: createCredentialsRepository(ctx.databases),
       sessions: createSessionsRepository(ctx.databases),
       directory: createGroupDirectoryRepository(ctx.databases),
+      dealers: createDealersRepository(ctx.databases),
       activityLog: memoryActivityLog(),
       transaction: (work) => ctx.databases.transaction(work),
       now: () => Date.now(),
@@ -734,6 +750,7 @@ describe('permanent deletion: dealers with groups, and the race with a restore',
       credentials: createCredentialsRepository(ctx.databases),
       sessions: createSessionsRepository(ctx.databases),
       directory: createGroupDirectoryRepository(ctx.databases),
+      dealers: createDealersRepository(ctx.databases),
       activityLog: memoryActivityLog(),
       transaction: (work) => ctx.databases.transaction(work),
       now: () => Date.now(),

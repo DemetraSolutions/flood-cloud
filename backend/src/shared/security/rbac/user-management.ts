@@ -90,7 +90,7 @@ export function holdsEverythingOf(actor: AuthPrincipal, target: UserChangeView):
 
 /**
  * Whether the actor holds a flag of a module. Core modules: the corresponding effective
- * permissions (`r` the read one; `w` every write one the actor's role can have, and at least one).
+ * permissions the actor's role can have (`r` the read ones, `w` the write ones; at least one).
  * Other modules: the actor's own raw flag.
  */
 function actorHolds(actor: AuthPrincipal, module: string, flag: 'r' | 'w'): boolean {
@@ -98,7 +98,8 @@ function actorHolds(actor: AuthPrincipal, module: string, flag: 'r' | 'w'): bool
     return flagsOf(actor.matrix, module)[flag];
   }
   const core = CORE_MODULES[module]!;
-  const needed = flag === 'r' ? core.read : core.write.filter((permission) => ceilingOf(actor.role).has(permission));
+  // Only what the actor's role can have counts: the `dealers:*` permissions ride on `groups` but belong to the PSA alone.
+  const needed = (flag === 'r' ? core.read : core.write).filter((permission) => ceilingOf(actor.role).has(permission));
   return needed.length > 0 && needed.every((permission) => hasPermission(actor, permission));
 }
 

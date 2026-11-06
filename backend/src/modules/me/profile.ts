@@ -1,3 +1,4 @@
+import type { DealerSummary } from '../dealers/dealer.types.ts';
 import { toResponse } from '../users/user.mapper.ts';
 import type { User, UserResponse } from '../users/user.types.ts';
 import { ALL_PERMISSIONS } from '../../shared/security/rbac/permissions.ts';
@@ -25,6 +26,8 @@ export type Profile = Omit<UserResponse, 'permissions'> & {
   readonly scope: ScopeSummary;
   /** Id and name of the group for SA, CA and PA; `null` otherwise. */
   readonly group: GroupSummary | null;
+  /** Id and company name of the dealer for a `D` user (`null` for the other roles, and for a `D` user with no registry document yet). */
+  readonly dealer: DealerSummary | null;
   /** Whether the password was set by an administrator and must be replaced before anything else. */
   readonly passwordChangeRequired: boolean;
 };
@@ -57,15 +60,17 @@ export function summarizeScope({ scope }: AuthPrincipal): ScopeSummary {
  * @param user The stored user.
  * @param principal The authenticated principal (permissions and scope recomputed on this request).
  * @param group Summary of the user's group, or `null`.
+ * @param dealer Summary of the dealer for a `D` user, or `null`.
  * @param passwordChangeRequired Whether a provisional password is still to be replaced.
  */
-export function toProfile(user: User, principal: AuthPrincipal, group: GroupSummary | null, passwordChangeRequired: boolean): Profile {
+export function toProfile(user: User, principal: AuthPrincipal, group: GroupSummary | null, dealer: DealerSummary | null, passwordChangeRequired: boolean): Profile {
   return {
     ...toResponse(user),
     permissions: [...ALL_PERMISSIONS].filter((permission) => hasPermission(principal, permission)).sort(),
     canManagePermissions: principal.canManagePermissions,
     scope: summarizeScope(principal),
     group,
+    dealer,
     passwordChangeRequired,
   };
 }

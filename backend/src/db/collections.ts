@@ -1,5 +1,6 @@
 import { CORE_MODULES } from '../shared/security/rbac/permission-matrix.ts';
 import { ACTIVITY_LOG_INDEXES, ACTIVITY_LOG_OBSOLETE_INDEXES, ACTIVITY_LOG_VALIDATOR } from './activity-log-schema.ts';
+import { DEALERS_INDEXES, DEALERS_VALIDATOR } from './dealers-schema.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
 
@@ -16,6 +17,8 @@ export interface IndexSpec {
   readonly unique?: boolean;
   /** TTL in seconds; forbidden on legacy collections. */
   readonly expireAfterSeconds?: number;
+  /** Partial index: only the documents that match this filter are indexed (a unique one then constrains only those). */
+  readonly partialFilterExpression?: Readonly<Record<string, unknown>>;
 }
 
 /** Registry entry of one collection. */
@@ -87,6 +90,7 @@ export const COLLECTIONS = {
     countries: { ownership: 'legacy-read' },
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
     activityLog: { ownership: 'new', indexes: ACTIVITY_LOG_INDEXES, obsoleteIndexes: ACTIVITY_LOG_OBSOLETE_INDEXES, validator: ACTIVITY_LOG_VALIDATOR },
+    dealers: { ownership: 'new', indexes: DEALERS_INDEXES, validator: DEALERS_VALIDATOR },
     userCredentials: { ownership: 'new', validator: USER_CREDENTIALS_VALIDATOR },
     sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
   },

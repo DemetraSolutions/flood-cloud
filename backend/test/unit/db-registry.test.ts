@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { COLLECTIONS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from '../../src/db/sessions-schema.ts';
+import { DEALERS_INDEXES, DEALERS_VALIDATOR } from '../../src/db/dealers-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from '../../src/db/user-credentials-schema.ts';
 import type { CollectionRegistry } from '../../src/db/collections.ts';
 
@@ -22,10 +23,10 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes and validators', () => {
-    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityLog', 'countries', 'groups', 'rateLimits', 'sessions', 'userCredentials', 'users']);
+    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityLog', 'countries', 'dealers', 'groups', 'rateLimits', 'sessions', 'userCredentials', 'users']);
     assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'places']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
-      const expected = ['activityLog', 'rateLimits', 'sessions', 'userCredentials'].includes(name) ? 'new' : name === 'users' ? 'legacy-write' : 'legacy-read';
+      const expected = ['activityLog', 'dealers', 'rateLimits', 'sessions', 'userCredentials'].includes(name) ? 'new' : name === 'users' ? 'legacy-write' : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
     }
     assert.deepEqual(
@@ -49,13 +50,15 @@ describe('collection registry', () => {
     );
     assert.deepEqual(COLLECTIONS.common.rateLimits.indexes, [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }]);
     assert.equal(COLLECTIONS.common.sessions.validator, SESSIONS_VALIDATOR);
+    assert.equal(COLLECTIONS.common.dealers.validator, DEALERS_VALIDATOR);
+    assert.equal(COLLECTIONS.common.dealers.indexes, DEALERS_INDEXES);
     assert.equal(COLLECTIONS.common.sessions.indexes, SESSIONS_INDEXES);
     assert.deepEqual(
       SESSIONS_INDEXES.map(({ name, unique, expireAfterSeconds }) => [name, unique ?? false, expireAfterSeconds ?? null]),
       [['accessTokenHash_1', true, null], ['refreshTokenHash_1', true, null], ['previousRefreshHashes_1', false, null], ['userId_1_revokedAt_1', false, null], ['expiresAt_1', false, 0]],
     );
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityLog', 'companies', 'countries', 'groups', 'places', 'rateLimits', 'sessions', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityLog', 'companies', 'countries', 'dealers', 'groups', 'places', 'rateLimits', 'sessions', 'userCredentials', 'users']);
   });
 
   it('accepts valid new, legacy-read and legacy-write entries', () => {

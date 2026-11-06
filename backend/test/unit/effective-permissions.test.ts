@@ -16,6 +16,7 @@ describe('effectivePermissions (D-06)', () => {
       sorted(result.permissions),
       [
         'groups:read', 'groups:create', 'groups:update', 'groups:suspend', 'groups:trash',
+        'dealers:read', 'dealers:create', 'dealers:update',
         'users:read',
         'companies:create', 'companies:update', 'companies:trash',
         'places:read',

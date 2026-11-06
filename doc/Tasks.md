@@ -83,16 +83,11 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **D-06** Permessi per singolo utente: ogni utente conserva la matrice `permissions.<modulo>.{r,w}` e `permissions.status` del legacy; i permessi effettivi sono quelli dell'utente limitati dal tetto del ruolo (un utente non ottiene mai permessi oltre il proprio ruolo). `permissions.apps.cash.*` resta del dominio cassa: conservato, mai esposto su `/v1`. Decisione dell'utente del 2026-11-02.
 - [x] **D-07** Ruoli: PSA, D, SA, CA, PA, E. Il ruolo `API` si elimina (nessun utente lo usa, §0.4.1): lo sostituiscono le API key pubbliche. `X` e `L` non esistono (correggere `doc/Legacy-Analysis.md`, 0.5.1). Utenti `E` senza accesso al backoffice (`doc/Security-Model.md` §4). Decisione dell'utente del 2026-11-02.
 - [x] **D-08** Scope multipli: nel modello di dominio liste `companyIds[]` (CA) e `placeIds[]` (PA, E), anche con un solo elemento. Lettura dal legacy: `companyId` → `companyIds`; unione di `placeId` e `placesId` → `placeIds`. Finché il legacy è attivo, a ogni scrittura il nuovo backend allinea i campi legacy: `companyId` = prima azienda, `placeId` = primo punto vendita, `placesId` = tutti. Decisione dell'utente del 2026-11-02.
-- [ ] **D-09** Dealer. Oggi il dealer è un utente `D` e `groups.dealerId` è l'`_id` di quell'utente: questo chiude la domanda 1 di `doc/Data-Model.md`. Serve un'anagrafica dealer con più utenti?
+- [x] **D-09** Dealer: anagrafica nella nuova collection `dealers` del common (ragione sociale completa), con `_id` uguale a quello dell'utente D collegato (così `groups.dealerId` resta valido); creare un dealer crea anche il suo utente D nella stessa transazione; il ruolo D non si assegna né si toglie con una modifica. Dealer esistenti registrati con ragione sociale = username (1 in development, 5 in production, 2026-11-06). Decisione dell'utente del 2026-11-06, realizzata nel passo 4A.
 - [x] **D-10** PSA e D nei moduli operativi di un gruppo: **novità rispetto al legacy**, dove PSA e D gestivano solo gruppo, aziende e punti vendita. Selezionato un gruppo, PSA e D accedono anche ai dati operativi (prodotti, magazzino, documenti…) in lettura e scrittura per fare manutenzione. Gruppo nel percorso (`/v1/groups/:groupId/...`), verificato contro lo scope (PSA tutti, D solo i propri gruppi, gli altri ruoli solo il proprio); ogni accesso di PSA e D a un gruppo va nel registro delle attività (2.6); nel backoffice selettore del gruppo con il gruppo nell'URL; nessuna impersonazione. Decisione dell'utente del 2026-11-02.
 - [x] **D-11** Sessioni legacy: il nuovo backend non accetta i JWT del legacy. Disattivazione dell'utente, cambio password e cambio di ruolo o scope fatti dal nuovo backend svuotano anche `users.tokens[]`, così il legacy disconnette subito. Decisione dell'utente del 2026-11-02.
 - [x] **D-12** Refresh token del backoffice nel **body** della risposta (niente cookie), conservato dal backoffice in `sessionStorage` (sopravvive al ricaricamento, per singola scheda); access token solo in memoria. Mitigazioni: CSP stretta con Trusted Types, rotazione a ogni uso con rilevamento del riuso. Riportata in `doc/Security-Model.md` §4 e §12.1. Decisione dell'utente del 2026-11-02.
-- [ ] **D-13** Feature flag del gruppo:
-  - conferma dell'elenco (4.1);
-  - `delivery` e `customersApp`, oggi nascosti: si vendono ancora?
-  - `autoDepartments` e `advancedProducts`: diventano modificabili?
-  - `plan`, `type` ed `expirationDate` del gruppo sono deprecati;
-  - i flag valgono anche per PSA e D?
+- [x] **D-13** Feature flag del gruppo: catalogo confermato con tutte le feature di 4.1 (`delivery` e `customersApp` restano, gestibili dal PSA); le feature valgono anche per PSA e D quando lavorano in un gruppo; `plan`, `type` ed `expirationDate` del gruppo sono deprecati (conservati, mai letti né esposti). Chi modifica cosa: nome, descrizione, lingue e impostazioni statistiche PSA, D, SA; feature e integrazioni PSA e D; `demo` solo PSA. Decisione dell'utente del 2026-11-06.
 - [x] **D-14** Cancellazione degli utenti: cestino (`trash`) e, dal cestino, eliminazione definitiva ammessa a PSA, D e SA nel proprio perimetro e con le regole anti-escalation (permesso `users:delete`); il database è condiviso, quindi l'utente sparisce anche dal legacy. Decisione dell'utente del 2026-11-02.
 - [x] **D-15** Univocità dello username: globale, confrontando NFKC, spazi e minuscole, per gli username nuovi o cambiati; i duplicati esistenti (§0.4.1) restano. Decisione dell'utente del 2026-11-02. L'univocità di `vatNumber` (`companies.code`) si decide con l'area 6.
 - [x] **D-16** Valori ammessi di `APP_ENV`: `development` e `production`, come i database esistenti. Decisione dell'utente del 2026-11-01.
@@ -403,6 +398,8 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
 
 ## 4. Gruppi
 
+Passi decisi dall'utente il 2026-11-06: **4A** = anagrafica dealer (D-09, realizzata); **4B** = gruppi nel backend (4.1–4.4, 2.3.4); **4C** = backoffice (4.5).
+
 ### 4.1 Modello gruppo
 Il modello comprende `dataCluster` (D-25): letto dal nuovo backend; impostato alla creazione (8.1.2); modificabile solo con una procedura di spostamento da progettare a parte.
 
@@ -453,18 +450,18 @@ Task:
   - filtri per dealer (solo PSA), stato, demo, ricerca sul nome;
   - paginazione a cursore.
 - [ ] **4.4.2** Conteggi di aziende, punti vendita e utenti per gruppo, letti dal common (dopo l'area 5).
-- [ ] **4.4.3** Modifica parziale. Chi modifica cosa (da confermare):
+- [ ] **4.4.3** Modifica parziale. Chi modifica cosa (D-13):
   - nome e descrizione;
   - feature e integrazioni abilitate: PSA e D;
   - `demo`: PSA;
   - lingue e impostazioni statistiche.
 - [ ] **4.4.4** Sospensione e riattivazione (solo PSA, decisione del 2026-11-02): revoca di tutte le sessioni del gruppo, `status` legacy aggiornato (il legacy lo legge a ogni richiesta), audit.
 - [ ] **4.4.5** Cestino e ripristino, solo PSA (decisione del 2026-11-02, D-14). `groups:update` di D e SA non può toccare `status` né `trash` (allowlist dei campi).
-- [ ] **4.4.6** Elenco dei dealer (utenti D) per il filtro di PSA.
+- [x] **4.4.6** Elenco dei dealer per il filtro di PSA: `GET /v1/dealers` con l'utente D collegato (passo 4A).
 - [ ] **4.4.7** Test di isolamento: un D non vede né modifica gruppi di un altro dealer (nel legacy poteva farlo con `?groupId=`).
 
 ### 4.5 Backoffice
-- [ ] **4.5.1** Selettore del gruppo per PSA e D, con il gruppo nell'URL `/groups/:groupId/...` (D-10).
+- [x] **4.5.1** Selettore del gruppo per PSA e D, con il gruppo nell'URL `/groups/:groupId/...` (D-10), voce "Tutti i gruppi" e vista trasversale degli utenti (passo 3D e richiesta dell'utente del 2026-11-06).
 - [ ] **4.5.2** Feature nel client: menu, route e sezioni condizionati dalle feature del gruppo corrente (guard e direttiva).
 - [ ] **4.5.3** *(prime letture compatte e selettore del gruppo già realizzati nel passo 3D)* Store dei dati di riferimento del gruppo (sostituisce lo store in memoria del legacy):
   - liste compatte per gruppo, con ETag;

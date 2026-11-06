@@ -6,11 +6,13 @@ import { createRateLimiter, RATE_LIMIT_WINDOW_SECONDS } from '../../src/shared/s
 import type { Databases } from '../../src/db/databases.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { quietLogger } from '../helpers/indexes.ts';
+import { COLLECTIONS } from '../../src/db/collections.ts';
 
 let ctx: TestDatabases;
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases);
+  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
 });
 after(async () => {
   await ctx.cleanup();

@@ -8,6 +8,8 @@ import type { NewSession, SessionsRepository } from '../../src/modules/sessions/
 import { hashSecret } from '../../src/shared/security/secrets.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { quietLogger } from '../helpers/indexes.ts';
+import { COLLECTIONS } from '../../src/db/collections.ts';
 
 let ctx: TestDatabases;
 let repository: SessionsRepository;
@@ -20,7 +22,7 @@ const hash = (): string => hashSecret(`token-${String(counter++)}`);
 
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases);
+  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
   repository = createSessionsRepository(ctx.databases);
 });
 after(() => ctx.cleanup());

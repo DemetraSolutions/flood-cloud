@@ -6,6 +6,8 @@ import { LOCK_THRESHOLD, createCredentialsRepository } from '../../src/modules/u
 import type { CredentialsRepository } from '../../src/modules/users/credentials.repository.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { quietLogger } from '../helpers/indexes.ts';
+import { COLLECTIONS } from '../../src/db/collections.ts';
 
 let ctx: TestDatabases;
 let repository: CredentialsRepository;
@@ -14,7 +16,7 @@ const minutes = (n: number): Date => new Date(T0.getTime() + n * 60_000);
 
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases);
+  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
   repository = createCredentialsRepository(ctx.databases);
 });
 after(() => ctx.cleanup());

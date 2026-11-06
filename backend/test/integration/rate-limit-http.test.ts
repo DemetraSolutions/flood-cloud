@@ -14,6 +14,8 @@ import { startApp, testConfig } from '../helpers/app.ts';
 import type { TestServer } from '../helpers/app.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { quietLogger } from '../helpers/indexes.ts';
+import { COLLECTIONS } from '../../src/db/collections.ts';
 
 const env = { RATE_LIMIT_API_PER_USER: '3', RATE_LIMIT_LOGIN_PER_IP: '6', RATE_LIMIT_LOGIN_PER_USERNAME: '2', RATE_LIMIT_USERNAME_CHECK_PER_USER: '1' };
 const rules = createRateLimitRules(testConfig(env));
@@ -34,7 +36,7 @@ const FROZEN_NOW = Date.now();
 let ctx: TestDatabases;
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases);
+  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
 });
 after(async () => {
   await ctx.cleanup();

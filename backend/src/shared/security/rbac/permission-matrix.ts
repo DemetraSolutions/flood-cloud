@@ -26,7 +26,8 @@ export interface CoreModule {
 
 /** Core modules of the legacy matrix and what they map to. Other modules are kept as data only. */
 export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze({
-  groups: { read: [P.GROUPS_READ], write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH] },
+  // The dealer registry (`dealers:*`) rides on the `groups` module: only the PSA's ceiling contains those permissions, so for the other roles they never become effective.
+  groups: { read: [P.GROUPS_READ, P.DEALERS_READ], write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, P.DEALERS_CREATE, P.DEALERS_UPDATE] },
   users: { read: [P.USERS_READ], write: [P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH, P.USERS_DELETE] },
   companies: { read: [P.COMPANIES_READ], write: [P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH] },
   places: { read: [P.PLACES_READ], write: [P.PLACES_CREATE, P.PLACES_UPDATE, P.PLACES_TRASH] },

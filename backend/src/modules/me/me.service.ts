@@ -8,6 +8,7 @@ import { AppError } from '../../shared/http/errors.ts';
 import { buildPasswordChange } from '../../shared/security/password-change.ts';
 import { verifyUserPassword } from '../../shared/security/password-verifier.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { DealersRepository } from '../dealers/dealers.repository.ts';
 import type { CredentialsRepository } from '../users/credentials.repository.ts';
 import { toLegacyUpdate } from '../users/user.mapper.ts';
 import type { User } from '../users/user.types.ts';
@@ -86,6 +87,8 @@ export interface MeServiceDeps {
   readonly credentials: CredentialsRepository;
   readonly sessions: SessionsRepository;
   readonly groups: GroupSummaryRepository;
+  /** The dealer registry, for the profile of a `D` user. */
+  readonly dealers: Pick<DealersRepository, 'findSummary'>;
   readonly activityLog: ActivityLog;
   /** Clock in epoch milliseconds. */
   readonly now: () => number;
@@ -109,7 +112,7 @@ const toSessionView = (session: Session, currentSessionId: ObjectId): SessionVie
  * @param deps Repositories, configuration, activity log and clock.
  */
 export function createMeService(deps: MeServiceDeps): MeService {
-  const { config, users, credentials, sessions, groups, activityLog } = deps;
+  const { config, users, credentials, sessions, groups, dealers, activityLog } = deps;
   const date = (): Date => new Date(deps.now());
 
   const load = async (principal: AuthPrincipal): Promise<Profile> => {
@@ -119,7 +122,8 @@ export function createMeService(deps: MeServiceDeps): MeService {
     }
     const groupId = principal.scope.kind === 'group' || principal.scope.kind === 'companies' || principal.scope.kind === 'places' ? principal.scope.groupId : null;
     const stored = await credentials.find(principal.userId);
-    return toProfile(mapped.user, principal, groupId === null ? null : await groups.find(groupId), stored?.mustChangePassword === true);
+    const dealer = principal.role === 'D' ? await dealers.findSummary(principal.userId) : null;
+    return toProfile(mapped.user, principal, groupId === null ? null : await groups.find(groupId), dealer, stored?.mustChangePassword === true);
   };
 
   return {

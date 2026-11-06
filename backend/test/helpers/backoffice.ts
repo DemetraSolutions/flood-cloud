@@ -14,6 +14,8 @@ import { seedIsolationCluster } from './isolation.ts';
 import { legacyUser } from './legacy-fixtures.ts';
 import type { IsolationCluster } from './isolation.ts';
 import type { TestDatabases } from './mongo.ts';
+import { quietLogger } from './indexes.ts';
+import { COLLECTIONS } from '../../src/db/collections.ts';
 
 /** Pepper of the fixtures' legacy password hashes (throw-away). */
 export const TEST_PEPPER = randomBytes(16).toString('hex');
@@ -90,7 +92,7 @@ const GENEROUS = {
  * @param options Environment, limiter and extra routes.
  */
 export async function startBackoffice(ctx: TestDatabases, options: BackofficeOptions = {}): Promise<Backoffice> {
-  await ensureIndexes(ctx.databases);
+  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
   const cluster = await seedIsolationCluster(ctx.databases);
   await ctx.databases.common().collection('users').updateMany({}, { $set: { password: hashWithTestPepper(TEST_PASSWORD) } });
   let current = Date.now();

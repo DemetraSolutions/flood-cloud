@@ -11,7 +11,7 @@ import { normalizeUsername } from '../../shared/security/username.ts';
 import { OWNED_PERMISSION_MODULES, fromLegacy } from './user.mapper.ts';
 import type { StoredUser } from '../../shared/security/scope/principal.ts';
 import { USERS_LIST } from './users.list.ts';
-import type { AuthRecord, LegacyUserDocument, LegacyUserUpdate, LoginRecord, MappedUser } from './user.types.ts';
+import type { AuthRecord, LegacyUserDocument, LegacyUserUpdate, LoginRecord, MappedUser, UserStatus } from './user.types.ts';
 
 /** Candidates read when looking a username up without regard to case: more than this is not a real situation. */
 const MAX_USERNAME_CANDIDATES = 20;
@@ -90,6 +90,12 @@ function leafPaths(value: Document, prefix = ''): string[] {
   );
 }
 
+/** The part of a user that other modules show next to their own data. */
+export interface UserSummary {
+  readonly username: string;
+  readonly status: UserStatus;
+}
+
 /** Reads and updates the shared legacy `common.users` collection, translating it to the domain model. */
 export interface UsersRepository {
   /**
@@ -106,6 +112,13 @@ export interface UsersRepository {
    * @returns The record, or `null` when the user does not exist.
    */
   findAuthRecord(id: ObjectId): Promise<AuthRecord | null>;
+  /**
+   * Reads the user name and status of several dealer users (role `D`) at once (one query), for the modules that show a linked user.
+   *
+   * @param ids Ids of the users, at most a page (a few hundred).
+   * @returns The summaries by hex id; an id with no user is simply absent.
+   */
+  findSummaries(ids: readonly ObjectId[]): Promise<Map<string, UserSummary>>;
   /**
    * Reads one user to manage him: the profile, the scope ids and the whole stored permission matrix.
    * The filter decides who can be found, so callers build it with `withScope`.
@@ -231,6 +244,18 @@ export function createUsersRepository(databases: Databases): UsersRepository {
     findAuthRecord: async (id) => {
       const document = await users().findOne({ _id: id }, { projection: AUTH_PROJECTION });
       return document === null ? null : toAuthRecord(document);
+    },
+
+    findSummaries: async (ids) => {
+      const documents = await users()
+        .find({ _id: { $in: [...ids] }, role: 'D' }, { projection: { userName: 1, username: 1, status: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS })
+        .toArray();
+      return new Map(
+        documents.map((document) => {
+          const { user } = fromLegacy(document as LegacyUserDocument);
+          return [(document['_id'] as ObjectId).toHexString(), { username: user.username, status: user.status }];
+        }),
+      );
     },
 
     findManaged: async (filter) => {

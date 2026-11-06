@@ -71,7 +71,7 @@ describe('GET /v1/me', () => {
     }
     const profile = await profileOf(response);
     assert.deepEqual(Object.keys(profile).sort(), [
-      'canManagePermissions', 'companyIds', 'createdAt', 'dealerId', 'email', 'firstName', 'group', 'groupId', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'placeIds', 'role', 'scope', 'status', 'trashed', 'updatedAt', 'username',
+      'canManagePermissions', 'companyIds', 'createdAt', 'dealer', 'dealerId', 'email', 'firstName', 'group', 'groupId', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'placeIds', 'role', 'scope', 'status', 'trashed', 'updatedAt', 'username',
     ]);
     assert.equal(profile['id'], id.toHexString());
     assert.equal(profile['username'], name);
@@ -80,6 +80,7 @@ describe('GET /v1/me', () => {
     assert.equal(profile['canManagePermissions'], true);
     assert.deepEqual(profile.scope, { kind: 'group', groupId: group.groupId.toHexString() });
     assert.deepEqual(profile.group, { id: group.groupId.toHexString(), name: 'group-001' });
+    assert.equal(profile['dealer'], null);
   });
 
   it('narrows the permissions to the ones the user holds', async () => {

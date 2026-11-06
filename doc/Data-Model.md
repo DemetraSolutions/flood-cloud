@@ -37,6 +37,21 @@ Realizzata come **lettura e scrittura compatibile con il legacy** (passo 3A): il
 - Scrittura solo con `$set`/`$unset` dei campi posseduti (elenco nel registro delle collection del backend), mai sostituzione del documento.
 - Indici aggiunti dal nuovo backend (non univoci): `groupId_1_role_1`, `dealerId_1`.
 
+## dealers — anagrafica dei dealer
+Realizzata (passo 4A, D-09, decisione dell'utente del 2026-11-06): una ragione sociale per ogni dealer. **`_id` = `_id` dell'utente D collegato**, così `groups.dealerId` (id dell'utente D) resta valido.
+| Campo | Tipo | Note |
+|---|---|---|
+| `businessName` | string | ragione sociale, 1–200 |
+| `vatNumber` | string \| null | P.IVA: IT 11 cifre, altri paesi 2–30 alfanumerici; univoca quando presente |
+| `fiscalCode` | string \| null | IT: 16 alfanumerici o 11 cifre |
+| `address` | `{ street, postcode, city, province, countryCode }` \| null | IT: provincia di 2 lettere; `countryCode` ISO 3166-1 alpha-2 |
+| `pec`, `email` | string \| null | |
+| `sdiCode` | string \| null | codice destinatario, 7 caratteri |
+| `phone` | string \| null | |
+| `source` | `manual` \| `migration` \| `user` | creato da "Nuovo dealer", dalla migrazione o dalla creazione di un utente D |
+| `createdAt`, `updatedAt`, `createdBy` | | |
+Validazione `$jsonSchema`; indice univoco parziale `vatNumber_1` (solo quando è stringa). Creazione del dealer e del suo utente D nella stessa transazione; l'eliminazione definitiva dell'utente D elimina anche l'anagrafica. I dealer esistenti sono stati registrati con lo script `migrate:dealers` (ragione sociale = username) il 2026-11-06: 1 in `development`, 5 in `production`.
+
 ## userCredentials — credenziali del nuovo backend
 Realizzata (passo 3A, D-03): `_id` = id dell'utente, `passwordHash` (scrypt `scrypt$N$r$p$salt$hash`, facoltativo), `legacyHashFingerprint` (SHA-256 dell'hash legacy da cui deriva, o null), `passwordChangedAt`, `failedLogins`, `lockedUntil` (blocco progressivo dal 5° fallimento: 1, 2, 4, 8, poi 15 minuti; azzerati dal reset dell'amministratore), `mustChangePassword` (password provvisoria impostata da un amministratore: va cambiata al primo accesso; passo 3B), `lastLoginAt`, `createdAt`, `updatedAt`. Validazione `$jsonSchema`; nessun indice oltre `_id`.
 

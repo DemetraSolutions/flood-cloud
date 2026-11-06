@@ -41,7 +41,7 @@ export const SECURITY_ACTIONS = Object.freeze([
 ] as const);
 
 /** Resources whose writes are logged. */
-export const DATA_RESOURCES = Object.freeze(['user', 'group', 'company', 'place'] as const);
+export const DATA_RESOURCES = Object.freeze(['user', 'group', 'dealer', 'company', 'place'] as const);
 
 /** Verbs of a data action. */
 export const DATA_VERBS = Object.freeze(['created', 'updated', 'trashed', 'restored', 'deleted'] as const);

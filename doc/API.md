@@ -132,7 +132,7 @@ Fuori dalle superfici API, per le sonde di GKE.
 - **Superficie:** backoffice
 - **Autenticazione e permesso:** Bearer backoffice, `profile:read` (ammessa anche con la password provvisoria da cambiare)
 - **Ruoli:** ogni utente autenticato, sul proprio profilo
-- **Risposta:** `200` con il profilo. `permissions` è l'elenco dei permessi effettivi (`risorsa:azione`, ordinati alfabeticamente), calcolato dal server a ogni richiesta. `scope` riassume il perimetro dati; `scope.kind` è uno tra `platform`, `dealer` (con `groups` e `groupIds`, al massimo 100 id), `group` (con `groupId`), `companies` (con `groupId`, `companies`, `places`), `places` (con `groupId`, `places`), `none`. `passwordChangeRequired` è `true` finché l'utente ha una password provvisoria da cambiare (route sempre ammessa, vedi la nota sul flusso). `group` (`id` e `name`) è `null` per i ruoli senza gruppo; `firstName`, `lastName`, `email`, `phone`, `createdAt`, `updatedAt` possono essere `null`.
+- **Risposta:** `200` con il profilo. `permissions` è l'elenco dei permessi effettivi (`risorsa:azione`, ordinati alfabeticamente), calcolato dal server a ogni richiesta. `scope` riassume il perimetro dati; `scope.kind` è uno tra `platform`, `dealer` (con `groups` e `groupIds`, al massimo 100 id), `group` (con `groupId`), `companies` (con `groupId`, `companies`, `places`), `places` (con `groupId`, `places`), `none`. `dealer` (`id` e `businessName`) è presente per gli utenti `D` ed è `null` per gli altri ruoli (e per un `D` senza anagrafica). `passwordChangeRequired` è `true` finché l'utente ha una password provvisoria da cambiare (route sempre ammessa, vedi la nota sul flusso). `group` (`id` e `name`) è `null` per i ruoli senza gruppo; `firstName`, `lastName`, `email`, `phone`, `createdAt`, `updatedAt` possono essere `null`.
   ```json
   {
     "data": {
@@ -154,6 +154,7 @@ Fuori dalle superfici API, per le sonde di GKE.
       "permissions": ["companies:read", "places:read", "places:update", "profile:read", "profile:update", "sessions:revoke", "users:read"],
       "canManagePermissions": false,
       "passwordChangeRequired": false,
+      "dealer": null,
       "scope": { "kind": "companies", "groupId": "665f1c2e9b1d4a0012ab34a1", "companies": 1, "places": 2 },
       "group": { "id": "665f1c2e9b1d4a0012ab34a1", "name": "Gruppo Esempio" },
       "createdAt": "2025-03-10T08:30:00.000Z",
@@ -375,7 +376,7 @@ Mai presenti password, hash, PIN o token. Le richieste di creazione e modifica a
 
 ### POST /v1/users
 - **Autenticazione e permesso:** Bearer backoffice, `users:create`; solo **PSA**
-- **Body:** come la creazione di un utente di gruppo ma `role` è `PSA` o `D`, senza `companyIds` né `placeIds` (nessun gruppo, nessun perimetro)
+- **Body:** come la creazione di un utente di gruppo ma `role` è `PSA` o `D`, senza `companyIds` né `placeIds` (nessun gruppo, nessun perimetro). Con `role: "D"` viene creata nella stessa transazione anche l'anagrafica minima del dealer (con lo stesso id e la ragione sociale pari allo username, da completare con `PATCH /v1/dealers/{dealerId}`); per creare un dealer con l'anagrafica completa si usa `POST /v1/dealers`.
 - **Header particolari:** `Location: /v1/users/{userId}`; `RateLimit-*`
 - **Risposta:** `201` con l'utente creato
   ```json
@@ -385,7 +386,7 @@ Mai presenti password, hash, PIN o token. Le richieste di creazione e modifica a
 
 ### GET /v1/users/{userId}, PATCH /v1/users/{userId}, PUT /v1/users/{userId}/password, POST /v1/users/{userId}/trash, POST /v1/users/{userId}/restore, DELETE /v1/users/{userId}
 - **Autenticazione e permesso:** Bearer backoffice, rispettivamente `users:read`, `users:update`, `users:update`, `users:trash`, `users:trash`, `users:delete`; solo **PSA**, su utenti `PSA` e `D`
-- **Body, risposte ed errori:** come le route corrispondenti del gruppo (PATCH senza `companyIds` / `placeIds`, con `role` limitato a `PSA` e `D`). In più, `DELETE` di un `D` che ha ancora gruppi (anche nel cestino) dà `409 CONFLICT`. Un utente di gruppo chiesto su questo percorso è `404 NOT_FOUND`.
+- **Body, risposte ed errori:** come le route corrispondenti del gruppo (PATCH senza `companyIds` / `placeIds`, con `role` limitato a `PSA` e `D`). In più: `DELETE` di un `D` che ha ancora gruppi (anche nel cestino) dà `409 CONFLICT`, altrimenti elimina anche la sua anagrafica dealer; un `PATCH` che porta il ruolo **da o verso `D`** dà `422` con `details: [{ "field": "role", "issue": "immutable" }]` (il ruolo `D` non si cambia). Un utente di gruppo chiesto su questo percorso è `404 NOT_FOUND`.
 
 ### GET /v1/usernames/{username}/availability
 - **Autenticazione e permesso:** Bearer backoffice, `users:create`
@@ -512,6 +513,79 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
 - **Header particolari:** `RateLimit-*` (**30 richieste al minuto per utente** di default)
 - **Risposta:** `202` senza body. Viene salvata una voce `client.error` (categoria `error`, esito `failure`) nel registro attività, attribuita all'utente e al suo gruppo, con `route`, `appVersion` e `User-Agent` (troncato a 120 caratteri) nei `metadata`, e `name`, `message`, `stack` in `error`; il testo è redatto dei dati sensibili e limitato in lunghezza. Lo stesso errore (stesso utente, nome, messaggio e prima riga dello stack) non viene salvato di nuovo per **10 minuti**; oltre un tetto di voci al minuto sul server le segnalazioni in eccesso sono scartate. In entrambi i casi la risposta è comunque `202`: la segnalazione non fallisce mai la richiesta.
 - **Errori:** `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN`, `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`, `422 VALIDATION_ERROR` (per campo, `route` / `appVersion` `pattern`), `429 RATE_LIMITED` con `Retry-After`
+
+## Dealer (`/v1`, solo PSA)
+
+Anagrafica aziendale dei dealer. Un dealer è un documento anagrafico con **lo stesso id** del suo utente `D`: `dealerId` coincide con l'`id` dell'utente. Le route richiedono i permessi `dealers:*`, che hanno solo i PSA: ogni altro ruolo riceve `403 FORBIDDEN`. Errori comuni: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN`, `403 PASSWORD_CHANGE_REQUIRED`, `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE` (16 KB), `415 UNSUPPORTED_MEDIA_TYPE`, `422 VALIDATION_ERROR`.
+
+Rappresentazione di un dealer:
+```json
+{
+  "id": "665f1c2e9b1d4a0012ab34d1",
+  "businessName": "Dealer Nord Srl",
+  "vatNumber": "01234567890",
+  "fiscalCode": "01234567890",
+  "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "countryCode": "IT" },
+  "pec": "dealernord@pec.example.com",
+  "sdiCode": "ABC1234",
+  "email": "info@dealernord.example.com",
+  "phone": "+39 02 1234567",
+  "source": "manual",
+  "createdAt": "2026-11-04T09:00:00.000Z",
+  "updatedAt": "2026-11-04T09:00:00.000Z",
+  "user": { "id": "665f1c2e9b1d4a0012ab34d1", "username": "dealer.nord", "status": "active" }
+}
+```
+`source` indica l'origine (`manual` creato da un PSA, `migration`, `user` creato insieme a un utente `D` da `POST /v1/users`). Tutti i campi anagrafici tranne `businessName` e `id` possono essere `null`; `user` è `null` solo se l'utente collegato non esiste più.
+
+**Regole di validazione dei dati aziendali** (applicate sul risultato finale, dopo il merge). Codici e partita IVA sono salvati in maiuscolo.
+- `businessName` 1–200 caratteri; `vatNumber`, `fiscalCode` solo lettere e cifre (max 30); `sdiCode` max 7; `email`, `pec` sintassi ordinaria; `phone` come nel profilo.
+- Paese italiano (`address.countryCode` `IT`, o indirizzo assente): `vatNumber` 11 cifre; `fiscalCode` 16 caratteri alfanumerici o 11 cifre; `address.province` obbligatoria, 2 lettere. Altri paesi: `vatNumber` e `fiscalCode` 2–30 lettere e cifre. `sdiCode` sempre 7 caratteri alfanumerici. Violazioni: `pattern` (o `required` per la provincia).
+- `address` (`street` 1–200, `postcode` 1–16, `city` 1–100, `province` fino a 8, `countryCode` 2 lettere, default `IT`): una volta presente richiede `street`, `postcode` e `city` (`required` su `address.street`, … se mancanti). `province` può essere `null` fuori dall'Italia.
+- La partita IVA è **univoca** tra i dealer: se già in uso `409 CONFLICT` con `details: [{ "field": "vatNumber", "issue": "taken" }]` (in creazione `company.vatNumber`).
+
+### GET /v1/dealers
+- **Autenticazione e permesso:** Bearer backoffice, `dealers:read`; solo PSA
+- **Query:** `limit`, `cursor`, `sort`, `q` come nelle "Liste". `sort`: `businessName` (default, anche `-businessName`). `q` cerca nella ragione sociale e nella partita IVA.
+- **Risposta:** `200` `{ "data": [ <dealer> ], "page": { "limit": 50, "next": null } }`
+- **Errori:** comuni; `422` su parametri o cursore non validi
+
+### GET /v1/dealers/{dealerId}
+- **Autenticazione e permesso:** Bearer backoffice, `dealers:read`; solo PSA
+- **Parametri di percorso:** `dealerId` (24 caratteri esadecimali)
+- **Risposta:** `200` con il dealer
+- **Errori:** comuni; `404 NOT_FOUND`; `422` se `dealerId` non è un id valido
+
+### POST /v1/dealers
+- **Autenticazione e permesso:** Bearer backoffice, `dealers:create` e `users:create`; solo PSA
+- **Body** (`application/json`, massimo 16 KB, nessun'altra proprietà). L'anagrafica e l'utente `D` sono creati in un'unica transazione; l'utente ha lo stesso id del dealer, nessun gruppo né perimetro, e una **password provvisoria** da cambiare al primo accesso.
+  | Campo | Tipo | Obbligatorio | Vincoli |
+  |---|---|---|---|
+  | `company.businessName` | stringa | sì | 1–200 |
+  | `company.vatNumber`, `fiscalCode`, `sdiCode`, `pec`, `email`, `phone` | stringa o `null` | no | vedi le regole di validazione |
+  | `company.address` | oggetto o `null` | no | `street`, `postcode`, `city`, `province`, `countryCode` |
+  | `user.username` | stringa | sì | ASCII 3–64, come per gli utenti |
+  | `user.password` | stringa | sì | provvisoria, policy 12–128 caratteri, diversa dallo username |
+  | `user.firstName`, `lastName`, `email`, `phone` | stringa o `null` | no | come per gli utenti |
+  | `user.language` | stringa | no | `it` |
+  ```json
+  {
+    "company": { "businessName": "Dealer Nord Srl", "vatNumber": "01234567890", "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI" } },
+    "user": { "username": "dealer.nord", "password": "<password provvisoria>" }
+  }
+  ```
+- **Header particolari:** risposta con `Location: /v1/dealers/{dealerId}`; `RateLimit-*` (stesso limite per utente delle creazioni e dei reset password, 20 al minuto di default)
+- **Risposta:** `201` con il dealer creato (esempio sopra)
+- **Errori:** comuni; `409 CONFLICT` con `username`/`taken` o `company.vatNumber`/`taken`; `422` per campo (`company.vatNumber` `pattern`, `company.address.province` `required`, `user.password` con le issue di policy, …); `429 RATE_LIMITED` con `Retry-After`
+
+### PATCH /v1/dealers/{dealerId}
+- **Autenticazione e permesso:** Bearer backoffice, `dealers:update`; solo PSA
+- **Body** (JSON Merge Patch, massimo 16 KB, almeno un campo): i soli campi anagrafici `businessName`, `vatNumber`, `fiscalCode`, `address`, `pec`, `sdiCode`, `email`, `phone`; un campo assente resta invariato, `null` lo azzera. `address` si fonde **parzialmente** con quello salvato (le parti omesse restano); `address: null` lo rimuove. Le regole del paese sono verificate sul risultato. L'utente `D` si modifica con `PATCH /v1/users/{userId}`.
+  ```json
+  { "pec": "nuova@pec.example.com", "address": { "city": "Torino", "province": "TO" } }
+  ```
+- **Risposta:** `200` con il dealer aggiornato (invariato se nessun valore cambia)
+- **Errori:** comuni; `404 NOT_FOUND`; `409 CONFLICT` (`vatNumber`/`taken`); `422` (anche `(body)`/`required` per body vuoto)
 
 ## Superficie server di punto vendita — `/store/v1`
 Nessun endpoint realizzato.

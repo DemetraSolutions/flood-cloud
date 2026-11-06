@@ -9,6 +9,8 @@ import { recordDataChange } from '../../src/shared/activity-log/data-change.ts';
 import { memoryLogger } from '../helpers/app.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { quietLogger } from '../helpers/indexes.ts';
+import { COLLECTIONS } from '../../src/db/collections.ts';
 
 let ctx: TestDatabases;
 before(async () => {
@@ -37,8 +39,8 @@ const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
 
 describe('activityLog collection (real MongoDB)', () => {
   it('creates the collection, validator and indexes idempotently (two startups)', async () => {
-    await ensureIndexes(ctx.databases);
-    await ensureIndexes(ctx.databases);
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
     const [info] = await ctx.databases.common().listCollections({ name: 'activityLog' }).toArray();
     const options = (info as unknown as { options: { validator: { $jsonSchema: { required: string[] } }; validationLevel: string; validationAction: string } }).options;
     assert.deepEqual(options.validator.$jsonSchema.required, ['at', 'category', 'action', 'outcome', 'actor', 'expiresAt']);
@@ -55,15 +57,15 @@ describe('activityLog collection (real MongoDB)', () => {
       { key: { 'actor.id': 1, at: -1 }, name: 'actor.id_1_at_-1' },
       { key: { category: 1, at: -1 }, name: 'category_1_at_-1' },
     ]);
-    await ensureIndexes(ctx.databases);
-    await ensureIndexes(ctx.databases);
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
     const names = (await log().indexes()).map((index) => index.name);
     assert.deepEqual(names.sort(), ['_id_', 'actor.id_1_at_-1__id_-1', 'at_-1__id_-1', 'category_1_at_-1__id_-1', 'expiresAt_1', 'groupId_1_at_-1__id_-1', 'requestId_1']);
   });
 
   it('updates an outdated validator in place on the next startup', async () => {
     await ctx.databases.common().command({ collMod: 'activityLog', validator: {} });
-    await ensureIndexes(ctx.databases);
+    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
     const [info] = await ctx.databases.common().listCollections({ name: 'activityLog' }).toArray();
     assert.ok((info as unknown as { options: { validator: { $jsonSchema?: unknown } } }).options.validator.$jsonSchema !== undefined);
   });

@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { createCredentialsRepository } from '../../src/modules/users/credentials.repository.ts';
+import { createDealersRepository } from '../../src/modules/dealers/dealers.repository.ts';
 import { createGroupDirectoryRepository } from '../../src/modules/users/group-directory.repository.ts';
 import { fromLegacy } from '../../src/modules/users/user.mapper.ts';
 import type { LegacyUserDocument } from '../../src/modules/users/user.types.ts';
@@ -389,6 +390,7 @@ describe('creating a user is all or nothing', () => {
         config: { legacyPasswordPepper: new Secret(TEST_PEPPER), legacyPasswordCoexistence: true },
         ...repositories,
         directory: createGroupDirectoryRepository(ctx.databases),
+        dealers: createDealersRepository(ctx.databases),
         activityLog,
         transaction: (work) => ctx.databases.transaction(work),
         now: () => Date.now(),

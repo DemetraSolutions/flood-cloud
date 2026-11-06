@@ -20,6 +20,10 @@ import { createAuthenticate } from './modules/auth/authenticate.ts';
 import { createClientErrorsController } from './modules/client-errors/client-errors.controller.ts';
 import { createClientErrorsRoutes } from './modules/client-errors/client-errors.routes.ts';
 import { createClientErrorsService } from './modules/client-errors/client-errors.service.ts';
+import { createDealersController } from './modules/dealers/dealers.controller.ts';
+import { createDealersRepository } from './modules/dealers/dealers.repository.ts';
+import { createDealersRoutes } from './modules/dealers/dealers.routes.ts';
+import { createDealersService } from './modules/dealers/dealers.service.ts';
 import { createGroupSummaryRepository } from './modules/me/group-summary.repository.ts';
 import { createMeController } from './modules/me/me.controller.ts';
 import { createMeRoutes } from './modules/me/me.routes.ts';
@@ -58,7 +62,7 @@ export interface BackofficeDeps {
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile, the user management, the reference lists, the activity log monitor and the browser error reports. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the activity log monitor and the browser error reports. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -71,6 +75,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const credentials = createCredentialsRepository(databases);
   const sessions = createSessionsRepository(databases);
   const groups = createGroupsRepository(databases);
+  const dealers = createDealersRepository(databases);
   const rules = createRateLimitRules(config);
 
   const authenticate = createAuthenticate({
@@ -85,25 +90,26 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   });
   const auth = createAuthController(createAuthService({ config, users, credentials, sessions, groups, activityLog, now }));
   const me = createMeController(
-    createMeService({ config, users, credentials, sessions, groups: createGroupSummaryRepository(databases), activityLog, now }),
+    createMeService({ config, users, credentials, sessions, groups: createGroupSummaryRepository(databases), dealers, activityLog, now }),
   );
-  const usersController = createUsersController(
-    createUsersService({
-      config,
-      users,
-      credentials,
-      sessions,
-      directory: createGroupDirectoryRepository(databases),
-      activityLog,
-      transaction: (work) => databases.transaction(work),
-      now,
-    }),
-  );
+  const usersService = createUsersService({
+    config,
+    users,
+    credentials,
+    sessions,
+    directory: createGroupDirectoryRepository(databases),
+    dealers,
+    activityLog,
+    transaction: (work) => databases.transaction(work),
+    now,
+  });
+  const usersController = createUsersController(usersService);
+  const dealersController = createDealersController(createDealersService({ dealers, users, usersService, activityLog, now }));
   const reference = createReferenceController(createReferenceService(createReferenceRepository(databases)));
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
-    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createReferenceRoutes(reference),
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference),
       ...createActivityLogRoutes(activity),
       ...createClientErrorsRoutes(clientErrors, rules),
     ],
