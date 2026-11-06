@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import type { ClusterId } from '../../config.ts';
 import type { Databases } from '../../db/databases.ts';
 import { emptyRefKinds, emptyRefProfile, tallyKind, tallyRef } from './classify.ts';
 import type { RefKinds, RefProfile } from './classify.ts';
@@ -12,6 +13,12 @@ import { hasCollection, streamDocuments } from './read.ts';
 
 /** Default number of group databases between two progress notifications. */
 export const PROGRESS_INTERVAL = 50;
+
+/** A group database to read: the group and the cluster it was found on. */
+export interface GroupDatabaseRef {
+  readonly groupId: ObjectId;
+  readonly clusterId: ClusterId;
+}
 
 /** Ids that exist inside one group database, as lowercase hex. */
 export interface GroupScope {
@@ -84,14 +91,14 @@ function tallyGroupId(match: GroupIdMatch, value: unknown, expected: ObjectId): 
  * field inventories, indexes, reference checks and `groupId` consistency. Read-only.
  *
  * @param databases Database accessor.
- * @param groupIds Ids of the group databases to read.
+ * @param refs The group databases to read, each with the cluster it lives on.
  * @param onProgress Called with `(done, total)` after every `progressEvery` databases.
  * @param progressEvery Progress interval ({@link PROGRESS_INTERVAL} by default).
  * @returns The aggregated profile plus the ids found in each database.
  */
 export async function profileGroupDatabases(
   databases: Databases,
-  groupIds: readonly ObjectId[],
+  refs: readonly GroupDatabaseRef[],
   onProgress?: (done: number, total: number) => void,
   progressEvery: number = PROGRESS_INTERVAL,
 ): Promise<GroupDatabasesProfile> {
@@ -115,8 +122,8 @@ export async function profileGroupDatabases(
   let companyDatabases = 0;
   let placeDatabases = 0;
 
-  for (const [position, groupId] of groupIds.entries()) {
-    const db = databases.group(groupId);
+  for (const [position, { groupId, clusterId }] of refs.entries()) {
+    const db = databases.group(groupId, clusterId);
     const companies = (await hasCollection(db, 'companies')) ? db.collection('companies') : undefined;
     const places = (await hasCollection(db, 'places')) ? db.collection('places') : undefined;
     const companyIds = new Set<string>();
@@ -162,7 +169,7 @@ export async function profileGroupDatabases(
 
     scopes.set(groupId.toHexString(), { companies: companyIds, places: placeIds });
     if ((position + 1) % progressEvery === 0) {
-      onProgress?.(position + 1, groupIds.length);
+      onProgress?.(position + 1, refs.length);
     }
   }
 

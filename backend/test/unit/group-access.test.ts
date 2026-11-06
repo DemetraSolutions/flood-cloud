@@ -4,12 +4,14 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import type { ObjectId } from 'mongodb';
+import { UnknownClusterError } from '../../src/db/databases.ts';
 import { errorHandler } from '../../src/shared/http/error-handler.ts';
 import { requirePermission } from '../../src/shared/security/rbac/require-permission.ts';
-import { groupDatabaseFor, reportCrossGroupAccess, requireGroupAccess, resolveGroupAccess } from '../../src/shared/security/scope/group-access.ts';
+import { groupDatabaseFor, reportCrossGroupAccess, requireGroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import type { GroupAvailability } from '../../src/shared/security/scope/groups.repository.ts';
 import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts';
+import { accessFor } from '../helpers/group-access.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { memoryRateLimitMount, recordingErrorReporter } from '../helpers/activity.ts';
 import { memoryLogger } from '../helpers/app.ts';
@@ -19,6 +21,7 @@ const g1 = fixtureId('group', 1);
 const g2 = fixtureId('group', 2);
 const g3 = fixtureId('group', 3);
 const hex = (id: ObjectId): string => id.toHexString();
+const C0 = 'cluster0';
 
 const psa = principalOf('PSA');
 const dealer = principalOf('D', { dealerGroupIds: [g1, g2] });
@@ -28,76 +31,97 @@ const pa = principalOf('PA', { groupId: g1, placeIds: [fixtureId('place', 1)] })
 const employee = principalOf('E', { groupId: g1 });
 const noGroup: AuthPrincipal = { ...principalOf('SA'), groupId: null, scope: { kind: 'none' } };
 
-describe('resolveGroupAccess', () => {
-  it('gives PSA every group, flagged as cross-group', () => {
+describe('the perimeter check of requireGroupAccess', () => {
+  it('gives PSA every group, flagged as cross-group', async () => {
     for (const group of [g1, g2, g3]) {
-      const access = resolveGroupAccess(psa, hex(group));
+      const access = (await accessFor(psa, hex(group)));
       assert.ok(access !== null && access.groupId.equals(group) && access.crossGroup);
     }
   });
 
-  it('gives D only the groups of the dealer, flagged as cross-group', () => {
-    assert.equal(resolveGroupAccess(dealer, hex(g1))?.crossGroup, true);
-    assert.equal(resolveGroupAccess(dealer, hex(g2))?.crossGroup, true);
-    assert.equal(resolveGroupAccess(dealer, hex(g3)), null);
+  it('gives D only the groups of the dealer, flagged as cross-group', async () => {
+    assert.equal((await accessFor(dealer, hex(g1)))?.crossGroup, true);
+    assert.equal((await accessFor(dealer, hex(g2)))?.crossGroup, true);
+    assert.equal((await accessFor(dealer, hex(g3))), null);
   });
 
-  it('gives SA, CA and PA only their own group, not flagged', () => {
+  it('gives SA, CA and PA only their own group, not flagged', async () => {
     for (const principal of [sa, ca, pa]) {
-      assert.equal(resolveGroupAccess(principal, hex(g1))?.crossGroup, false);
-      assert.equal(resolveGroupAccess(principal, hex(g2)), null);
+      assert.equal((await accessFor(principal, hex(g1)))?.crossGroup, false);
+      assert.equal((await accessFor(principal, hex(g2))), null);
     }
   });
 
-  it('gives E and a user without group nothing', () => {
-    assert.equal(resolveGroupAccess(employee, hex(g1)), null);
-    assert.equal(resolveGroupAccess(noGroup, hex(g1)), null);
+  it('gives E and a user without group nothing', async () => {
+    assert.equal((await accessFor(employee, hex(g1))), null);
+    assert.equal((await accessFor(noGroup, hex(g1))), null);
   });
 
-  it('rejects malformed ids, even for PSA', () => {
+  it('rejects malformed ids, even for PSA', async () => {
     for (const raw of ['', 'abc', 'A'.repeat(24), `${hex(g1)}0`, hex(g1).slice(1), 'z'.repeat(24), `{"$ne":1}`, 5 as unknown as string]) {
-      assert.equal(resolveGroupAccess(psa, raw), null, String(raw));
+      assert.equal((await accessFor(psa, raw)), null, String(raw));
     }
   });
 
-  it('returns a frozen access', () => {
-    assert.ok(Object.isFrozen(resolveGroupAccess(psa, hex(g1))));
+  it('returns a frozen access', async () => {
+    assert.ok(Object.isFrozen((await accessFor(psa, hex(g1)))));
   });
 });
 
 describe('groupDatabaseFor', () => {
-  const opened: ObjectId[] = [];
-  const databases = { group: (id: ObjectId) => (opened.push(id), { name: hex(id) }) } as never;
+  const opened: Array<[string, string]> = [];
+  const databases = { group: (id: ObjectId, clusterId: string) => (opened.push([hex(id), clusterId]), { name: hex(id) }) } as never;
 
-  it('opens only the database of a verified access', () => {
-    const access = resolveGroupAccess(sa, hex(g1))!;
+  it('opens only the database of a verified access', async () => {
+    const access = (await accessFor(sa, hex(g1)))!;
     const db = groupDatabaseFor(sa, access, databases) as unknown as { name: string };
     assert.equal(db.name, hex(g1));
   });
 
-  it('refuses an access it did not issue, even a look-alike', () => {
-    const forged: GroupAccess = { groupId: g1, crossGroup: false };
-    assert.throws(() => groupDatabaseFor(sa, forged, databases), /verified group access/);
-    assert.throws(() => groupDatabaseFor(psa, { ...resolveGroupAccess(psa, hex(g1))! }, databases), /verified group access/);
+  it('opens it on the cluster the access carries', async () => {
+    const access = (await accessFor(sa, hex(g1), 'cluster7'))!;
+    assert.equal(access.clusterId, 'cluster7');
+    groupDatabaseFor(sa, access, databases);
+    assert.deepEqual(opened.at(-1), [hex(g1), 'cluster7']);
   });
 
-  it('refuses an access presented by another principal', () => {
-    const access = resolveGroupAccess(psa, hex(g2))!;
+  it('refuses an access it did not issue, even a look-alike', async () => {
+    const forged: GroupAccess = { groupId: g1, clusterId: C0, crossGroup: false };
+    assert.throws(() => groupDatabaseFor(sa, forged, databases), /verified group access/);
+    const copy = { ...(await accessFor(psa, hex(g1)))! };
+    assert.throws(() => groupDatabaseFor(psa, copy, databases), /verified group access/);
+  });
+
+  it('refuses an access presented by another principal', async () => {
+    const access = (await accessFor(psa, hex(g2)))!;
     assert.throws(() => groupDatabaseFor(sa, access, databases), /verified group access/);
-    assert.equal(opened.length, 1);
+    assert.equal(opened.length, 2);
   });
 });
 
 describe('requireGroupAccess and reportCrossGroupAccess', () => {
   const states = new Map<string, GroupAvailability>();
   const audit: Array<{ role: string; groupId: string; method: string; granted: boolean }> = [];
+  let brokenCluster: string | null = null;
+  let lastCluster: string | undefined;
   let failAudit: 'throw' | 'reject' | null = null;
   let current: AuthPrincipal | undefined;
   let server: Server;
   let baseUrl: string;
 
   before(async () => {
-    const groups = { findAvailability: async (id: ObjectId) => states.get(hex(id)) ?? null };
+    const groups = {
+      findAccess: async (id: ObjectId) => {
+        const availability = states.get(hex(id));
+        return availability === undefined ? null : { availability, group: { _id: id, dataCluster: id.equals(g2) ? 'cluster2' : C0 } };
+      },
+      resolveCluster: (group: { _id: ObjectId; dataCluster?: unknown }) => {
+        if (brokenCluster === hex(group._id)) {
+          throw new UnknownClusterError('cluster9', group._id);
+        }
+        return group.dataCluster as string;
+      },
+    };
     const report = reportCrossGroupAccess(({ principal, groupId, req, granted }) => {
       if (failAudit === 'throw') {
         throw new Error('audit down');
@@ -115,7 +139,7 @@ describe('requireGroupAccess and reportCrossGroupAccess', () => {
       next();
     });
     app.get('/groups/:groupId', requireGroupAccess(groups), requirePermission('places:read', report), (_req, res) => {
-      res.json({ groupId: hex(res.locals.groupAccess!.groupId) });
+      res.json({ groupId: hex(res.locals.groupAccess!.groupId), clusterId: res.locals.groupAccess!.clusterId });
     });
     app.use(errorHandler(memoryLogger().logger, recordingErrorReporter().reporter));
     server = app.listen(0);
@@ -130,11 +154,13 @@ describe('requireGroupAccess and reportCrossGroupAccess', () => {
     }
     audit.length = 0;
     failAudit = null;
+    brokenCluster = null;
   });
 
   const get = async (groupId: string): Promise<{ status: number; body: { code: string | undefined; groupId: string | undefined } }> => {
     const response = await fetch(`${baseUrl}/groups/${groupId}`);
-    const json = (await response.json()) as { error?: { code: string }; groupId?: string };
+    const json = (await response.json()) as { error?: { code: string }; groupId?: string; clusterId?: string };
+    lastCluster = json.clusterId;
     return { status: response.status, body: { code: json.error?.code, groupId: json.groupId } };
   };
 
@@ -170,6 +196,36 @@ describe('requireGroupAccess and reportCrossGroupAccess', () => {
     current = psa;
     assert.equal((await get(hex(g1))).status, 200);
     assert.deepEqual(audit, [{ role: 'PSA', groupId: hex(g1), method: 'GET', granted: true }]);
+  });
+
+  it('puts the cluster of the group in the verified access', async () => {
+    current = psa;
+    await get(hex(g1));
+    assert.equal(lastCluster, C0);
+    await get(hex(g2));
+    assert.equal(lastCluster, 'cluster2');
+  });
+
+  it('answers 503 when the group is declared on a cluster that is not configured', async () => {
+    brokenCluster = hex(g3);
+    current = psa;
+    assert.deepEqual(await get(hex(g3)), { status: 503, body: { code: 'SERVICE_UNAVAILABLE', groupId: undefined } });
+  });
+
+  it('checks availability and perimeter before the cluster: a suspended group with a broken cluster is 404 for non-PSA', async () => {
+    brokenCluster = hex(g1);
+    states.set(hex(g1), 'unavailable');
+    for (const principal of [sa, ca, pa, dealer]) {
+      current = principal;
+      assert.equal((await get(hex(g1))).status, 404, principal.role);
+    }
+    current = psa;
+    assert.equal((await get(hex(g1))).status, 503);
+    states.set(hex(g1), 'available');
+    current = sa;
+    assert.equal((await get(hex(g1))).status, 503);
+    current = principalOf('SA', { groupId: g2 });
+    assert.equal((await get(hex(g1))).status, 404);
   });
 
   it('passes an own-group access without reporting it', async () => {

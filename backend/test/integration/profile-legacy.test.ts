@@ -39,7 +39,11 @@ describe('profileLegacy on a seeded legacy cluster (real MongoDB)', () => {
     assert.match(report.serverVersion, /^\d+\.\d+\.\d+/);
     assert.equal(seeded.groupIds.length, 2);
     const { other, ...counts } = report.databases;
-    assert.deepEqual(counts, { commonPresent: true, groupDatabases: 4, groupsWithoutDatabase: 2, databasesWithoutGroup: 2 });
+    const { clusters, clusterPlacement, ...rest } = counts;
+    assert.deepEqual(rest, { commonPresent: true, groupDatabases: 4, groupsWithoutDatabase: 2, databasesWithoutGroup: 2 });
+    assert.deepEqual(clusters.map(({ clusterId, groupDatabases }) => [clusterId, groupDatabases]), [['cluster0', 4]]);
+    assert.match(clusters[0]!.serverVersion, /^\d+\.\d+\.\d+/);
+    assert.deepEqual(clusterPlacement, { groupsWithInvalidCluster: 0, groupsWithoutDatabaseOnExpectedCluster: 2, databasesOnUnexpectedCluster: 0 });
     assert.deepEqual(Object.keys(other).sort(), ['flite_common', 'other', 'queue']);
   });
 

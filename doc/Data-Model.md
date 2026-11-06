@@ -12,6 +12,7 @@ Convenzioni: nomi in camelCase inglese; date `Date` in UTC; riferimenti `ObjectI
 | `name` | string | |
 | `dealerId` | ObjectId \| null | dealer che ha creato il gruppo |
 | `status` | `active` \| `suspended` | sospeso ⇒ tutte le credenziali del gruppo rifiutate |
+| `dataCluster` | string \| assente | id del cluster MongoDB con il database del gruppo (decisione del 2026-11-06); assente ⇒ cluster di default dei gruppi; letto dal nuovo backend, scritto dalla creazione dei gruppi (area 4) |
 | `createdAt`, `updatedAt`, `deletedAt` | Date | |
 Indici: `dealerId`, `status`.
 

@@ -106,6 +106,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [ ] **D-24** Credenziale con cui l'app del server di punto vendita chiama le API `/v1`. Va decisa quando si integra l'app; oggi usa l'API key del gruppo, condivisa da tutti i negozi. Opzioni:
   - **login di un utente:** il refresh scade dopo 7 giorni di inattività o 30 di durata massima, quindi il negozio resta bloccato dopo un lungo offline; la password resta salvata sul server del negozio; gli utenti `E` non sono ammessi;
   - **credenziale di dispositivo per punto vendita**, accettata dalle stesse route con scope fisso sul punto vendita.
+- [x] **D-25** Multicluster MongoDB: più cluster, ciascuno con connessione di lettura/scrittura e analytics; login e dati comuni sempre sul cluster comune; ogni gruppo indica il proprio cluster con `groups.dataCluster` (solo l'id; assente ⇒ cluster di default). Finché il legacy è attivo i gruppi restano sul cluster comune; nessuna transazione tra cluster (per i gruppi su altri cluster la copia di companies e places si affida alla riconciliazione). Dettagli in `doc/Architecture.md` §3.2.1. Decisione dell'utente del 2026-11-06, realizzata.
 
 ### 0.4.1 Esiti della profilazione (1.3.6, 2026-11-01)
 Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'utente, di `production_*` (MongoDB 8.0.34). Dati aggregati, senza valori. Servono a prendere le decisioni aperte, non le sostituiscono.
@@ -403,6 +404,8 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
 ## 4. Gruppi
 
 ### 4.1 Modello gruppo
+Il modello comprende `dataCluster` (D-25): letto dal nuovo backend; impostato alla creazione (8.1.2); modificabile solo con una procedura di spostamento da progettare a parte.
+
 Modello di dominio ↔ documento legacy `<env>_common.groups`:
 
 | Campo di dominio | Tipo | Campo legacy | Regole |
@@ -660,7 +663,7 @@ Task:
 ## 8. Onboarding di un nuovo cliente
 Sostituisce il wizard "Nuovo cliente" e `groups/generate` del legacy, che non era atomico.
 - [ ] **8.1.1** Analisi del `legacy_analyst`: collection e documenti minimi che un database di gruppo nuovo deve avere perché legacy, POS e `ms-integration-service` funzionino (D-18).
-- [ ] **8.1.2** Creazione atomica e idempotente (`Idempotency-Key`) di gruppo, azienda, punto vendita, utente SA e database del gruppo.
+- [ ] **8.1.2** Creazione atomica e idempotente (`Idempotency-Key`) di gruppo, azienda, punto vendita, utente SA e database del gruppo, con scelta del cluster (`dataCluster`, D-25; default finché il legacy è attivo).
 - [ ] **8.1.3** Preset per tipologia (feature e dati iniziali, D-18).
 - [ ] **8.1.4** Username proposto e verifica di disponibilità (3.4.8).
 - [ ] **8.1.5** Lookup Cerved sulla P.IVA, che dipende dall'area integrazioni.

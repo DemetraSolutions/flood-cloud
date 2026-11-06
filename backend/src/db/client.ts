@@ -1,24 +1,31 @@
 import { MongoClient } from 'mongodb';
-import type { AppEnv, Config } from '../config.ts';
+import type { AppEnv } from '../config.ts';
+import type { Secret } from '../shared/security/secret.ts';
 
 /** The configuration fields {@link createMongoClient} reads. */
-export type MongoClientConfig = Pick<Config, 'mongodbUri' | 'mongodbServerSelectionTimeoutMs' | 'mongodbMaxPoolSize'> & {
+export interface MongoClientConfig {
+  /** Connection string, a secret. */
+  readonly mongodbUri: Secret;
+  /** Server selection and connect timeout in milliseconds. */
+  readonly mongodbServerSelectionTimeoutMs: number;
+  /** Maximum size of the connection pool. */
+  readonly mongodbMaxPoolSize: number;
   /** When `production`, the built client is verified to use TLS with full certificate checks. */
   readonly appEnv?: AppEnv;
-};
+}
 
 /** Application name reported to the server, visible in logs and `currentOp`. */
 export const MONGO_APP_NAME = 'flood-cloud-backend';
 
 /** Optional behaviour of {@link createMongoClient}. */
 export interface MongoClientOptions {
-  /** Read preference; `primary` unless a read-only tool asks for `secondaryPreferred`. */
-  readonly readPreference?: 'primary' | 'secondaryPreferred';
+  /** Read preference; `primary` unless the client serves read-only work (`secondaryPreferred` or `secondary`). */
+  readonly readPreference?: 'primary' | 'secondaryPreferred' | 'secondary';
 }
 
 /**
- * Creates the process-wide MongoDB client. It does not connect: the caller awaits `connect()`.
- * There must be exactly one client per process, created at startup and never per request.
+ * Creates a MongoDB client (the process holds one per cluster and role, see `clusters.ts`). It does not connect: the caller awaits `connect()`.
+ * Clients are created at startup and never per request.
  *
  * @param config Connection string and pool/timeout settings from the validated configuration.
  * @param options Optional read preference (read-only tools use `secondaryPreferred`).

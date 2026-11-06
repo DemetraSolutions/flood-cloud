@@ -23,7 +23,11 @@ describe('loadConfig', () => {
     const config = loadConfig(env);
     assert.equal(config.appEnv, 'development');
     assert.equal(config.port, 3000);
-    assert.equal(config.mongodbUri.reveal(), 'mongodb://127.0.0.1:1/?directConnection=true');
+    assert.deepEqual([...config.clusters.keys()], ['cluster0']);
+    assert.equal(config.clusters.get('cluster0')?.uri.reveal(), 'mongodb://127.0.0.1:1/?directConnection=true');
+    assert.equal(config.clusters.get('cluster0')?.analyticsUri, null);
+    assert.equal(config.commonCluster, 'cluster0');
+    assert.equal(config.defaultGroupCluster, 'cluster0');
     assert.equal(config.dbNamePrefix, '');
     assert.equal(config.mongodbServerSelectionTimeoutMs, 5000);
     assert.equal(config.mongodbMaxPoolSize, 20);
@@ -126,7 +130,7 @@ describe('loadConfig', () => {
     const config = loadConfig(validEnv({ CORS_ALLOWED_ORIGINS: 'https://a.example.com' }));
     assert.ok(Object.isFrozen(config));
     assert.ok(Object.isFrozen(config.corsAllowedOrigins));
-    assert.ok(Object.isFrozen(config.mongodbUri));
+    assert.ok(Object.isFrozen(config.clusters.get('cluster0')?.uri));
   });
 
   it('keeps secrets out of serializations', () => {
@@ -338,7 +342,7 @@ describe('empty values', () => {
 describe('loadDatabaseConfig', () => {
   it('validates only the database variables, without the secrets it does not use', () => {
     const config = loadDatabaseConfig({ APP_ENV: 'development', MONGODB_URI: 'mongodb://127.0.0.1:1/?directConnection=true', DB_NAME_PREFIX: 'p_' });
-    assert.deepEqual(Object.keys(config).sort(), ['appEnv', 'dbNamePrefix', 'mongodbMaxPoolSize', 'mongodbServerSelectionTimeoutMs', 'mongodbUri']);
+    assert.deepEqual(Object.keys(config).sort(), ['appEnv', 'clusters', 'commonCluster', 'dbNamePrefix', 'defaultGroupCluster', 'mongodbMaxPoolSize', 'mongodbServerSelectionTimeoutMs']);
     assert.equal(config.dbNamePrefix, 'p_');
     assert.equal(config.mongodbMaxPoolSize, 20);
   });
@@ -358,5 +362,111 @@ describe('loadDatabaseConfig', () => {
       'MONGODB_MAX_POOL_SIZE',
       'DB_NAME_PREFIX',
     ]);
+  });
+});
+
+describe('multi-cluster configuration', () => {
+  const URI0 = 'mongodb://127.0.0.1:1/?directConnection=true';
+  const multi = (extra: Record<string, string | undefined> = {}) =>
+    validEnv({
+      MONGODB_URI: undefined,
+      MONGODB_CLUSTERS: 'cluster0,cluster-1',
+      MONGODB_URI_CLUSTER0: URI0,
+      MONGODB_URI_CLUSTER_1: 'mongodb://127.0.0.1:2/?directConnection=true',
+      ...extra,
+    });
+
+  it('reads the optional analytics URI in single-cluster mode', () => {
+    const config = loadConfig(validEnv({ MONGODB_ANALYTICS_URI: 'mongodb://127.0.0.1:3/?directConnection=true' }));
+    assert.equal(config.clusters.get('cluster0')?.analyticsUri?.reveal(), 'mongodb://127.0.0.1:3/?directConnection=true');
+    assert.equal(loadConfig(validEnv({ MONGODB_ANALYTICS_URI: '' })).clusters.get('cluster0')?.analyticsUri, null);
+  });
+
+  it('reads one URI pair per listed cluster, id upper-cased with dashes as underscores', () => {
+    const config = loadConfig(multi({ MONGODB_ANALYTICS_URI_CLUSTER_1: 'mongodb://127.0.0.1:4/?directConnection=true', MONGODB_CLUSTERS: ' cluster0 , cluster-1 ' }));
+    assert.deepEqual([...config.clusters.keys()], ['cluster0', 'cluster-1']);
+    assert.equal(config.clusters.get('cluster0')?.uri.reveal(), URI0);
+    assert.equal(config.clusters.get('cluster0')?.analyticsUri, null);
+    assert.equal(config.clusters.get('cluster-1')?.analyticsUri?.reveal(), 'mongodb://127.0.0.1:4/?directConnection=true');
+    assert.equal(config.commonCluster, 'cluster0');
+    assert.equal(config.defaultGroupCluster, 'cluster0');
+    assert.ok(loadDatabaseConfig(multi()).clusters.has('cluster-1'));
+  });
+
+  it('defaults the common cluster to the first one and the group default to the common cluster', () => {
+    assert.equal(loadConfig(multi({ MONGODB_CLUSTERS: 'zeta,alpha', MONGODB_URI_ZETA: URI0, MONGODB_URI_ALPHA: URI0 })).commonCluster, 'zeta');
+    const config = loadConfig(multi({ MONGODB_COMMON_CLUSTER: 'cluster-1' }));
+    assert.deepEqual([config.commonCluster, config.defaultGroupCluster], ['cluster-1', 'cluster-1']);
+    const split = loadConfig(multi({ MONGODB_DEFAULT_GROUP_CLUSTER: 'cluster-1' }));
+    assert.deepEqual([split.commonCluster, split.defaultGroupCluster], ['cluster0', 'cluster-1']);
+    assert.equal(loadConfig(multi({ MONGODB_COMMON_CLUSTER: '', MONGODB_DEFAULT_GROUP_CLUSTER: '' })).commonCluster, 'cluster0');
+  });
+
+  it('refuses invalid, empty and duplicated ids', () => {
+    for (const list of ['Cluster0', '0cluster', 'a_b', 'a b', 'x'.repeat(33), ',', 'a,,b', 'a,']) {
+      assert.match(reasonFor(multi({ MONGODB_CLUSTERS: list }), 'MONGODB_CLUSTERS') ?? '', /must match/, list);
+    }
+    assert.equal(reasonFor(multi({ MONGODB_CLUSTERS: 'cluster0,cluster0' }), 'MONGODB_CLUSTERS'), 'ids must be unique');
+    assert.equal(loadConfig(multi({ MONGODB_CLUSTERS: `a${'b'.repeat(31)}`, [`MONGODB_URI_A${'B'.repeat(31)}`]: URI0 })).commonCluster.length, 32);
+  });
+
+  it('requires an URI for each cluster and refuses MONGODB_URI together with the list', () => {
+    assert.equal(reasonFor(multi({ MONGODB_URI_CLUSTER_1: undefined }), 'MONGODB_URI_CLUSTER_1'), 'is required');
+    assert.equal(reasonFor(multi({ MONGODB_URI_CLUSTER_1: 'localhost:27017' }), 'MONGODB_URI_CLUSTER_1'), 'must start with mongodb:// or mongodb+srv://');
+    assert.match(reasonFor(multi({ MONGODB_ANALYTICS_URI_CLUSTER0: 'nope' }), 'MONGODB_ANALYTICS_URI_CLUSTER0') ?? '', /mongodb:\/\//);
+    assert.match(reasonFor(multi({ MONGODB_URI: URI0 }), 'MONGODB_URI') ?? '', /must not be set together with MONGODB_CLUSTERS/);
+    assert.equal(issuesOf(multi({ MONGODB_URI: URI0 })).length, 1);
+    assert.doesNotThrow(() => loadConfig(multi({ MONGODB_URI: '' })));
+  });
+
+  it('refuses MONGODB_ANALYTICS_URI together with the list, naming the per-cluster variable', () => {
+    const reason = reasonFor(multi({ MONGODB_ANALYTICS_URI: URI0 }), 'MONGODB_ANALYTICS_URI') ?? '';
+    assert.match(reason, /MONGODB_ANALYTICS_URI_<ID>/);
+    assert.ok(!reason.includes('127.0.0.1'));
+    assert.doesNotThrow(() => loadConfig(multi({ MONGODB_ANALYTICS_URI: '' })));
+  });
+
+  it('allows at most 16 clusters', () => {
+    const ids = (count: number): string[] => Array.from({ length: count }, (_, index) => `c${index}`);
+    const withIds = (list: string[]) =>
+      multi({ MONGODB_CLUSTERS: list.join(','), ...Object.fromEntries(list.map((id) => [`MONGODB_URI_${id.toUpperCase()}`, URI0])) });
+    assert.equal(loadConfig(withIds(ids(16))).clusters.size, 16);
+    assert.equal(reasonFor(withIds(ids(17)), 'MONGODB_CLUSTERS'), 'at most 16 clusters are allowed');
+  });
+
+  it('refuses a common or default cluster that is not in the list', () => {
+    assert.match(reasonFor(multi({ MONGODB_COMMON_CLUSTER: 'other' }), 'MONGODB_COMMON_CLUSTER') ?? '', /one of the ids/);
+    assert.match(reasonFor(multi({ MONGODB_DEFAULT_GROUP_CLUSTER: 'other' }), 'MONGODB_DEFAULT_GROUP_CLUSTER') ?? '', /one of the ids/);
+    const both = issuesOf(multi({ MONGODB_COMMON_CLUSTER: 'other', MONGODB_DEFAULT_GROUP_CLUSTER: 'other' })).map((issue) => issue.variable);
+    assert.deepEqual(both, ['MONGODB_COMMON_CLUSTER', 'MONGODB_DEFAULT_GROUP_CLUSTER']);
+    assert.deepEqual(issuesOf(multi({ MONGODB_COMMON_CLUSTER: 'other' })).map((issue) => issue.variable), ['MONGODB_COMMON_CLUSTER']);
+  });
+
+  it('requires TLS in production for every URI, analytics ones included', () => {
+    const secure = 'mongodb+srv://secret-host.example.net';
+    const production = (extra: Record<string, string | undefined>) => multi({ APP_ENV: 'production', MONGODB_URI_CLUSTER0: secure, MONGODB_URI_CLUSTER_1: secure, ...extra });
+    assert.doesNotThrow(() => loadConfig(production({ MONGODB_ANALYTICS_URI_CLUSTER_1: secure })));
+    for (const variable of ['MONGODB_URI_CLUSTER0', 'MONGODB_URI_CLUSTER_1', 'MONGODB_ANALYTICS_URI_CLUSTER0', 'MONGODB_ANALYTICS_URI_CLUSTER_1']) {
+      assert.match(reasonFor(production({ [variable]: 'mongodb://host-with-secret/?tls=false' }), variable) ?? '', /must use TLS in production/, variable);
+      assert.match(reasonFor(production({ [variable]: `${secure}/?tlsInsecure=true` }), variable) ?? '', /weaken/, variable);
+    }
+    assert.match(reasonFor(validEnv({ APP_ENV: 'production', MONGODB_ANALYTICS_URI: 'mongodb://host/' }), 'MONGODB_ANALYTICS_URI') ?? '', /TLS/);
+  });
+
+  it('never prints a value in an error', () => {
+    const env = multi({
+      MONGODB_URI_CLUSTER_1: 'http://uri-secret-value',
+      MONGODB_ANALYTICS_URI_CLUSTER0: 'http://analytics-secret-value',
+      MONGODB_COMMON_CLUSTER: 'common-secret-value',
+    });
+    try {
+      loadConfig(env);
+      assert.fail('expected a ConfigError');
+    } catch (error) {
+      assert.ok(error instanceof ConfigError);
+      assert.ok(!error.message.includes('secret-value'));
+    }
+    const bad = reasonFor(multi({ MONGODB_CLUSTERS: 'Secret-Value' }), 'MONGODB_CLUSTERS') ?? '';
+    assert.ok(!bad.includes('Secret-Value'));
   });
 });

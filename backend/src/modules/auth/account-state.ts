@@ -21,7 +21,7 @@ const GROUP_ROLES: ReadonlySet<string> = new Set(['SA', 'CA', 'PA']);
  * @param groups Group lookup.
  * @returns `null` when the account is allowed, otherwise the reason.
  */
-export async function checkAccount(user: User | null, groups: GroupsRepository): Promise<AccountDenial | null> {
+export async function checkAccount(user: User | null, groups: Pick<GroupsRepository, 'findAvailability'>): Promise<AccountDenial | null> {
   if (user === null) {
     return 'userMissing';
   }

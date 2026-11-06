@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import type { ObjectId } from 'mongodb';
 import { createCompanyPlacesRepository } from '../../src/shared/security/scope/company-places.repository.ts';
 import { createDealerGroupsRepository } from '../../src/shared/security/scope/dealer-groups.repository.ts';
-import { resolveGroupAccess } from '../../src/shared/security/scope/group-access.ts';
+import { accessFor } from '../helpers/group-access.ts';
 import { createGroupsRepository } from '../../src/shared/security/scope/groups.repository.ts';
 import { fixtureId, legacyGroup, legacyPlace } from '../helpers/legacy-fixtures.ts';
 import { seedIsolationCluster } from '../helpers/isolation.ts';
 import type { IsolationCluster } from '../helpers/isolation.ts';
-import { openTestDatabases } from '../helpers/mongo.ts';
+import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalFromLegacyUser } from '../helpers/principal.ts';
 
@@ -58,12 +58,12 @@ describe('dealer groups: only available groups owned through an ObjectId dealerI
     const principal = await principalFromLegacyUser(saUser, lookups);
     // The SA keeps the scope of his own group, whoever "owns" another group through dealerId.
     assert.equal(principal.scope.kind, 'group');
-    assert.equal(resolveGroupAccess(principal, owned.nonDealerOwner.toHexString()), null);
+    assert.equal(await accessFor(principal, owned.nonDealerOwner.toHexString()), null);
     // Another dealer does not get it either.
     const dealerB = await principalFromLegacyUser((await users.findOne({ _id: cluster.dealerB }))!, lookups);
-    assert.equal(resolveGroupAccess(dealerB, owned.nonDealerOwner.toHexString()), null);
+    assert.equal(await accessFor(dealerB, owned.nonDealerOwner.toHexString()), null);
     // And a real dealer does not see the groups of the other dealer's users.
-    assert.equal(resolveGroupAccess(dealerB, owned.stringDealer.toHexString()), null);
+    assert.equal(await accessFor(dealerB, owned.stringDealer.toHexString()), null);
   });
 
   it('a SA with leftover companyId, placeId and placesId keeps the scope of his group', async () => {
@@ -90,7 +90,7 @@ describe('groups repository: availability', () => {
 describe('company places repository', () => {
   it('lists the places of the companies, trashed ones included, ids only', async () => {
     const group = cluster.groups[0]!;
-    const db = ctx.databases.group(group.groupId);
+    const db = ctx.databases.group(group.groupId, TEST_CLUSTER);
     await db.collection('places').insertOne(legacyPlace(3000, group.groupId, fixtureId('company', 1), { trash: true }));
     const repository = createCompanyPlacesRepository(ctx.databases);
     assert.deepEqual(hexes(await repository.listCompanyPlaceIds(group.groupId, [fixtureId('company', 1)])), hexes([group.ownPlaceId, fixtureId('place', 3000)]));

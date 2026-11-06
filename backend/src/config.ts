@@ -6,6 +6,20 @@ export const APP_ENVS = ['development', 'production'] as const;
 /** Execution environment of the process. */
 export type AppEnv = (typeof APP_ENVS)[number];
 
+/** Identifier of a MongoDB cluster (`cluster0`, `cluster1`…): never a host, never a credential. */
+export type ClusterId = string;
+
+/** Connection strings of one MongoDB cluster. */
+export interface ClusterConfig {
+  /** Read/write connection string, a secret. */
+  readonly uri: Secret;
+  /**
+   * Connection string of the analytics node (a more powerful node for heavy reads), a secret.
+   * `null` when none is configured: analytics reads then use {@link ClusterConfig.uri} with `secondaryPreferred`.
+   */
+  readonly analyticsUri: Secret | null;
+}
+
 /** A single configuration problem: only the variable name and a reason, never the value. */
 export interface ConfigIssue {
   readonly variable: string;
@@ -18,8 +32,16 @@ export interface Config {
   readonly appEnv: AppEnv;
   /** TCP port to listen on (`PORT`). */
   readonly port: number;
-  /** MongoDB connection string (`MONGODB_URI`), wrapped because it is a secret. */
-  readonly mongodbUri: Secret;
+  /**
+   * The configured MongoDB clusters by id. Single-cluster mode (`MONGODB_CLUSTERS` unset) has just `cluster0`,
+   * built from `MONGODB_URI` and `MONGODB_ANALYTICS_URI`; otherwise one entry per listed id, built from
+   * `MONGODB_URI_<ID>` and `MONGODB_ANALYTICS_URI_<ID>`.
+   */
+  readonly clusters: ReadonlyMap<ClusterId, ClusterConfig>;
+  /** Cluster of the common database: login and common data always live here (`MONGODB_COMMON_CLUSTER`). */
+  readonly commonCluster: ClusterId;
+  /** Cluster of the groups whose document has no `dataCluster` (`MONGODB_DEFAULT_GROUP_CLUSTER`). */
+  readonly defaultGroupCluster: ClusterId;
   /** Prefix of every database name (`DB_NAME_PREFIX`). */
   readonly dbNamePrefix: string;
   /** MongoDB server selection and connect timeout in milliseconds (`MONGODB_SERVER_SELECTION_TIMEOUT_MS`). */
@@ -93,6 +115,12 @@ type Env = Readonly<Record<string, string | undefined>>;
 const DECIMAL = /^[0-9]+$/;
 /** MongoDB limits database names to 63 bytes: 27 + "development" (11) + "_" + 24 hex = 63. */
 const DB_PREFIX = /^[A-Za-z0-9_-]{0,27}$/;
+/** Shape of a cluster id. */
+const CLUSTER_ID = /^[a-z][a-z0-9-]{0,31}$/;
+/** Upper bound on the number of clusters. */
+const MAX_CLUSTERS = 16;
+/** Id of the only cluster in single-cluster mode. */
+export const SINGLE_CLUSTER_ID: ClusterId = 'cluster0';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 /**
@@ -196,8 +224,122 @@ function checkOrigin(entry: string, appEnv: string | undefined): string | undefi
 /** The settings needed to open the databases; tools that only read data load just these. */
 export type DatabaseConfig = Pick<
   Config,
-  'appEnv' | 'mongodbUri' | 'dbNamePrefix' | 'mongodbServerSelectionTimeoutMs' | 'mongodbMaxPoolSize'
+  | 'appEnv'
+  | 'clusters'
+  | 'commonCluster'
+  | 'defaultGroupCluster'
+  | 'dbNamePrefix'
+  | 'mongodbServerSelectionTimeoutMs'
+  | 'mongodbMaxPoolSize'
 >;
+
+/**
+ * Validates one MongoDB connection string variable.
+ *
+ * @param required When true a missing variable is an issue; otherwise it yields `null`.
+ * @returns The secret, `null` for an optional variable that is unset, or `undefined` after recording an issue.
+ */
+function readMongoUri(
+  env: Env,
+  issues: ConfigIssue[],
+  variable: string,
+  appEnv: AppEnv | undefined,
+  required: boolean,
+): Secret | null | undefined {
+  const raw = required ? env[variable] : optionalVariable(env, variable);
+  if (raw === undefined) {
+    if (required) {
+      issues.push({ variable, reason: 'is required' });
+      return undefined;
+    }
+    return null;
+  }
+  if (!raw.startsWith('mongodb://') && !raw.startsWith('mongodb+srv://')) {
+    issues.push({ variable, reason: 'must start with mongodb:// or mongodb+srv://' });
+    return undefined;
+  }
+  const problem = appEnv === 'production' ? tlsProblem(raw) : undefined;
+  if (problem !== undefined) {
+    issues.push({ variable, reason: problem });
+    return undefined;
+  }
+  return new Secret(raw);
+}
+
+/**
+ * Reads the cluster list and every connection string. Without `MONGODB_CLUSTERS` there is one cluster,
+ * `cluster0`, from `MONGODB_URI`; with it, each id `x-y` reads `MONGODB_URI_X_Y` and the optional
+ * `MONGODB_ANALYTICS_URI_X_Y`, and `MONGODB_URI` must be unset.
+ *
+ * @returns The clusters, or `undefined` after recording issues.
+ */
+function readClusters(env: Env, issues: ConfigIssue[], appEnv: AppEnv | undefined): ReadonlyMap<ClusterId, ClusterConfig> | undefined {
+  const listRaw = optionalVariable(env, 'MONGODB_CLUSTERS');
+  const clusters = new Map<ClusterId, ClusterConfig>();
+  let valid = true;
+  const readOne = (id: ClusterId, uriVariable: string, analyticsVariable: string): void => {
+    const uri = readMongoUri(env, issues, uriVariable, appEnv, true);
+    const analyticsUri = readMongoUri(env, issues, analyticsVariable, appEnv, false);
+    if (uri === undefined || uri === null || analyticsUri === undefined) {
+      valid = false;
+    } else {
+      clusters.set(id, { uri, analyticsUri });
+    }
+  };
+  if (listRaw === undefined) {
+    readOne(SINGLE_CLUSTER_ID, 'MONGODB_URI', 'MONGODB_ANALYTICS_URI');
+    return valid ? clusters : undefined;
+  }
+  const ids = listRaw.split(',').map((entry) => entry.trim());
+  if (ids.some((id) => !CLUSTER_ID.test(id))) {
+    issues.push({ variable: 'MONGODB_CLUSTERS', reason: 'every id must match ^[a-z][a-z0-9-]{0,31}$' });
+    return undefined;
+  }
+  if (ids.length > MAX_CLUSTERS) {
+    issues.push({ variable: 'MONGODB_CLUSTERS', reason: `at most ${MAX_CLUSTERS} clusters are allowed` });
+    return undefined;
+  }
+  if (new Set(ids).size !== ids.length) {
+    issues.push({ variable: 'MONGODB_CLUSTERS', reason: 'ids must be unique' });
+    return undefined;
+  }
+  if (optionalVariable(env, 'MONGODB_URI') !== undefined) {
+    issues.push({ variable: 'MONGODB_URI', reason: 'must not be set together with MONGODB_CLUSTERS (use MONGODB_URI_<ID>)' });
+    valid = false;
+  }
+  if (optionalVariable(env, 'MONGODB_ANALYTICS_URI') !== undefined) {
+    issues.push({ variable: 'MONGODB_ANALYTICS_URI', reason: 'must not be set together with MONGODB_CLUSTERS (use MONGODB_ANALYTICS_URI_<ID>)' });
+    valid = false;
+  }
+  for (const id of ids) {
+    const suffix = id.toUpperCase().replaceAll('-', '_');
+    readOne(id, `MONGODB_URI_${suffix}`, `MONGODB_ANALYTICS_URI_${suffix}`);
+  }
+  return valid ? clusters : undefined;
+}
+
+/**
+ * Reads a cluster-id variable that must name a configured cluster.
+ *
+ * @returns The id, the fallback when unset, or `undefined` after recording an issue.
+ */
+function readClusterChoice(
+  env: Env,
+  issues: ConfigIssue[],
+  variable: string,
+  clusters: ReadonlyMap<ClusterId, ClusterConfig>,
+  fallback: ClusterId,
+): ClusterId | undefined {
+  const raw = optionalVariable(env, variable);
+  if (raw === undefined) {
+    return fallback;
+  }
+  if (!clusters.has(raw)) {
+    issues.push({ variable, reason: 'must be one of the ids in the cluster list' });
+    return undefined;
+  }
+  return raw;
+}
 
 /**
  * Validates the database variables, recording every problem in `issues`.
@@ -215,19 +357,12 @@ function readDatabaseConfig(env: Env, issues: ConfigIssue[]): DatabaseConfig | u
     issues.push({ variable: 'APP_ENV', reason: `must be one of: ${APP_ENVS.join(', ')}` });
   }
 
-  const mongoRaw = env['MONGODB_URI'];
-  let mongodbUri: Secret | undefined;
-  if (mongoRaw === undefined) {
-    issues.push({ variable: 'MONGODB_URI', reason: 'is required' });
-  } else if (mongoRaw.startsWith('mongodb://') || mongoRaw.startsWith('mongodb+srv://')) {
-    const problem = appEnv === 'production' ? tlsProblem(mongoRaw) : undefined;
-    if (problem !== undefined) {
-      issues.push({ variable: 'MONGODB_URI', reason: problem });
-    } else {
-      mongodbUri = new Secret(mongoRaw);
-    }
-  } else {
-    issues.push({ variable: 'MONGODB_URI', reason: 'must start with mongodb:// or mongodb+srv://' });
+  const clusters = readClusters(env, issues, appEnv);
+  let commonCluster: ClusterId | undefined;
+  let defaultGroupCluster: ClusterId | undefined;
+  if (clusters !== undefined) {
+    commonCluster = readClusterChoice(env, issues, 'MONGODB_COMMON_CLUSTER', clusters, [...clusters.keys()][0] as ClusterId);
+    defaultGroupCluster = readClusterChoice(env, issues, 'MONGODB_DEFAULT_GROUP_CLUSTER', clusters, commonCluster ?? '');
   }
 
   const mongodbServerSelectionTimeoutMs = readInteger(
@@ -247,18 +382,20 @@ function readDatabaseConfig(env: Env, issues: ConfigIssue[]): DatabaseConfig | u
 
   if (
     appEnv === undefined ||
-    mongodbUri === undefined ||
+    clusters === undefined ||
+    commonCluster === undefined ||
+    defaultGroupCluster === undefined ||
     mongodbServerSelectionTimeoutMs === undefined ||
     mongodbMaxPoolSize === undefined ||
     !DB_PREFIX.test(dbNamePrefix)
   ) {
     return undefined;
   }
-  return { appEnv, mongodbUri, dbNamePrefix, mongodbServerSelectionTimeoutMs, mongodbMaxPoolSize };
+  return { appEnv, clusters, commonCluster, defaultGroupCluster, dbNamePrefix, mongodbServerSelectionTimeoutMs, mongodbMaxPoolSize };
 }
 
 /**
- * Reads and validates only the database settings (`APP_ENV`, `MONGODB_URI`, `DB_NAME_PREFIX`,
+ * Reads and validates only the database settings (`APP_ENV`, the cluster variables, `DB_NAME_PREFIX`,
  * `MONGODB_SERVER_SELECTION_TIMEOUT_MS`, `MONGODB_MAX_POOL_SIZE`) with the same rules as
  * {@link loadConfig}, so that tools receive no secret they do not use (least privilege).
  *

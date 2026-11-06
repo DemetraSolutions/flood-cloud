@@ -32,7 +32,12 @@ Lettura e validazione in `src/config.ts` (`loadConfig`, funzione pura). Tutti i 
 |---|---|---|---|
 | `APP_ENV` | sì | `development` \| `production` (D-16) | — |
 | `PORT` | no | intero 1–65535 | `3000` |
-| `MONGODB_URI` | sì, segreto | inizia con `mongodb://` o `mongodb+srv://`. Con `APP_ENV=production` TLS obbligatorio: `mongodb+srv://` senza `tls`/`ssl` diversi da `true`, oppure `mongodb://` con `tls=true`; rifiutate `tlsInsecure`, `tlsAllowInvalidCertificates`, `tlsAllowInvalidHostnames`, `tlsDisableOCSPEndpointCheck`, `tlsDisableCertificateRevocationCheck` a `true` | — |
+| `MONGODB_URI` | sì in modalità a cluster singolo (vietata con `MONGODB_CLUSTERS`), segreto | inizia con `mongodb://` o `mongodb+srv://`. Con `APP_ENV=production` TLS obbligatorio: `mongodb+srv://` senza `tls`/`ssl` diversi da `true`, oppure `mongodb://` con `tls=true`; rifiutate `tlsInsecure`, `tlsAllowInvalidCertificates`, `tlsAllowInvalidHostnames`, `tlsDisableOCSPEndpointCheck`, `tlsDisableCertificateRevocationCheck` a `true` | — |
+| `MONGODB_ANALYTICS_URI` | no, segreto | connessione analytics in modalità a cluster singolo (stesse regole); assente ⇒ secondo client sulla connessione principale con `secondaryPreferred` | — |
+| `MONGODB_CLUSTERS` | no | elenco di id di cluster (`^[a-z][a-z0-9-]{0,31}$`, unici); assente ⇒ cluster singolo `cluster0` con `MONGODB_URI` | — |
+| `MONGODB_URI_<ID>`, `MONGODB_ANALYTICS_URI_<ID>` | la prima sì per ogni cluster dell'elenco, segreti | connessioni di ogni cluster (id in maiuscolo, `-` → `_`), stesse regole di `MONGODB_URI` | — |
+| `MONGODB_COMMON_CLUSTER` | no | cluster di login e dati comuni, tra quelli configurati | primo dell'elenco (`cluster0`) |
+| `MONGODB_DEFAULT_GROUP_CLUSTER` | no | cluster dei gruppi senza `dataCluster` | cluster comune |
 | `MONGODB_SERVER_SELECTION_TIMEOUT_MS` | no | intero 1000–60000 | `5000` |
 | `MONGODB_MAX_POOL_SIZE` | no | intero 1–500 | `20` |
 | `DB_NAME_PREFIX` | no | `^[A-Za-z0-9_-]{0,27}$` (i nomi di database MongoDB non superano 63 byte) | vuoto |
@@ -203,7 +208,9 @@ Letture compatte per i selettori del backoffice (decisione dell'utente del 2026-
 ## 7. Database
 **Cluster condiviso con il legacy** (`doc/Tasks.md` §0.1–0.2): stesse credenziali Atlas (D-02), stessi database. Il backend scrive solo nelle collection nuove e, su `users`, nei soli campi posseduti.
 
-**Client** (`db/client.ts`): un solo `MongoClient` per processo, creato in `server.ts`: `appName: flood-cloud-backend`, `retryWrites`, `w: majority`, `readPreference: primary`, `serverSelectionTimeoutMS` e `connectTimeoutMS` = `MONGODB_SERVER_SELECTION_TIMEOUT_MS`, `maxPoolSize` = `MONGODB_MAX_POOL_SIZE`. In produzione, dopo la costruzione, si verifica che TLS sia attivo e senza opzioni insicure.
+**Più cluster** (`db/clusters.ts`, decisione dell'utente del 2026-11-06, `doc/Architecture.md` §3.2.1): per ogni cluster configurato un client di lettura/scrittura e uno analytics (sola lettura: `readPreference: secondary` verso la connessione dedicata, oppure `secondaryPreferred` sulla principale se manca). All'avvio il cluster comune deve collegarsi (altrimenti uscita con codice 1); gli altri si collegano in background con errori loggati col solo id. La readiness controlla solo il cluster comune. Il database di un gruppo si apre sul cluster indicato da `groups.dataCluster` (assente ⇒ cluster di default; non configurato ⇒ `503` con log `error`, mai ripiego); `requireGroupAccess` legge `dataCluster` insieme allo stato e il `GroupAccess` verificato porta il cluster. Accessi analytics (`analyticsCommon`, `analyticsGroup`) di sola lettura per i futuri report: espongono solo letture, rifiutano aggregazioni con `$out` o `$merge` e non danno accesso al client sottostante. Come difesa in profondità le connessioni analytics vanno configurate con un utente MongoDB con il solo ruolo `read`. Transazioni solo sul cluster comune.
+
+**Client** (`db/client.ts`): opzioni di ogni `MongoClient`, creato in `server.ts`: `appName: flood-cloud-backend`, `retryWrites`, `w: majority`, `readPreference: primary`, `serverSelectionTimeoutMS` e `connectTimeoutMS` = `MONGODB_SERVER_SELECTION_TIMEOUT_MS`, `maxPoolSize` = `MONGODB_MAX_POOL_SIZE`. In produzione, dopo la costruzione, si verifica che TLS sia attivo e senza opzioni insicure.
 
 **Nomi** (`db/names.ts`): common `<DB_NAME_PREFIX><APP_ENV>_common`; gruppo `<DB_NAME_PREFIX><APP_ENV>_<groupId>` con `groupId` ObjectId o 24 caratteri esadecimali minuscoli; `parseGroupDatabaseName` ricava il `groupId` dal nome (D-20).
 
@@ -275,7 +282,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 - `test/integration/`: database reale (guardia, transazione tra common e gruppo, indici, readiness), profilazione e sua CLI (compreso un test che verifica l'assenza nel report di valori sentinella, chiavi di P.IVA, codici fiscali, hex e username), pipeline HTTP completa con `fetch` su porta effimera (`test/helpers/app.ts` monta l'app con route di prova e un logger in memoria), endpoint di salute, `run()` del server con processo simulato, avvio reale di `node src/server.ts` come processo figlio (avvio, `SIGTERM`, configurazione errata).
 - Oltre a `FLOOD_CLOUD_TEST_MONGO_URI` nessuna variabile richiesta: i test costruiscono la configurazione con valori fittizi.
 - **Isolamento** (`test/helpers/isolation.ts`): cluster legacy con due dealer e due gruppi ciascuno e casi standard (altro gruppo, altro dealer, CA fuori azienda, PA fuori punto vendita, E, gruppo sospeso, cestinato o inesistente) da riusare per ogni endpoint.
-- Stato: 1115 test, coverage 100%.
+- Stato: 1157 test, coverage 100%.
 
 **CI** (`.github/workflows/backend.yml`): **disattivata** per decisione dell'utente del 2026-11-01, parte solo a mano (`workflow_dispatch`); i trigger su `push` e `pull_request` sono commentati nel file. Contenuto: MongoDB `mongo:8.0.34` col compose, Node 24.22.2, `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, `npm audit --audit-level=moderate`, `npm audit signatures`; job separato di secret scanning con gitleaks 8.30.1 (binario verificato con sha256) su tutta la storia del repository. Permessi `contents: read`, action pinnate per SHA.
 
@@ -293,6 +300,7 @@ Proprietà possibili: `new` (collection del nuovo backend), `legacy-read`, `lega
 | 2026-11-05 | Sessione e profilo nel backoffice (3.5.1–3.5.5) | servizio di sessione con access token in memoria e refresh condiviso, sessione esclusiva per scheda, login, password provvisoria, guard per sessione e permesso, profilo, cambio password e proprie sessioni |
 | 2026-11-05 | Gestione utenti nel backoffice e letture di riferimento (3.5.6–3.5.8) | selettore del gruppo, elenco e form utenti, azioni con conferma, letture compatte di gruppi, aziende e punti vendita |
 | 2026-11-05 | Errori JavaScript e monitor dei log (2.6.6–2.6.7) | ricezione redatta e limitata degli errori del backoffice, monitor del registro con perimetro per ruolo, errori solo al PSA, staff nascosto ai clienti, pagina del monitor con dettaglio dei cambi |
+| 2026-11-06 | Multicluster MongoDB | cluster multipli con connessioni di lettura/scrittura e analytics, cluster comune per login e dati comuni, `dataCluster` del gruppo con default, 503 per cluster non configurato, readiness sul solo cluster comune, profilazione di tutti i cluster |
 
 ## 11. Backoffice
 SPA **Angular 22.2** in `backoffice/` (Tasks 1.7, 1.8), rilasciata separatamente dal backend. Realizzati: fondamenta (1.7, 1.8), sessione, login, guard, profilo e proprie sessioni (3.5.1–3.5.5), gestione degli utenti con selettore del gruppo (3.5.6–3.5.8).

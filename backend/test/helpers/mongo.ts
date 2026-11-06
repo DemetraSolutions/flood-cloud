@@ -2,7 +2,10 @@ import { randomBytes } from 'node:crypto';
 import type { Db, MongoClient } from 'mongodb';
 import type { AppEnv } from '../../src/config.ts';
 import { createMongoClient } from '../../src/db/client.ts';
+import type { ClusterRegistry } from '../../src/db/clusters.ts';
+import { closeClusters, connectClusters, createClusterClients } from '../../src/db/clusters.ts';
 import { createDatabases } from '../../src/db/databases.ts';
+import { loadDatabaseConfig } from '../../src/config.ts';
 import type { Databases } from '../../src/db/databases.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
 import { validEnv } from './app.ts';
@@ -85,6 +88,19 @@ export function createTestClient(): MongoClient {
   });
 }
 
+/** Id of the only cluster of the single-cluster test registries. */
+export const TEST_CLUSTER = 'cluster0';
+
+/**
+ * A one-cluster registry (`cluster0`, common and default) over an existing client; the analytics client is the same unless given.
+ *
+ * @param client Client used for reads and writes.
+ * @param analytics Client used for analytics reads (`client` by default).
+ */
+export function singleCluster(client: MongoClient, analytics: MongoClient = client): ClusterRegistry {
+  return { clusters: new Map([[TEST_CLUSTER, { main: client, analytics }]]), commonCluster: TEST_CLUSTER, defaultGroupCluster: TEST_CLUSTER };
+}
+
 /** Disposable database for a test file. */
 export interface TestDatabase {
   readonly client: MongoClient;
@@ -135,7 +151,7 @@ export async function openTestDatabases(appEnv: AppEnv = 'development'): Promise
   const prefix = `${TEST_DB_PREFIX}${randomBytes(3).toString('hex')}_`;
   return {
     client,
-    databases: createDatabases(client, { prefix, appEnv }),
+    databases: createDatabases(singleCluster(client), { prefix, appEnv }),
     prefix,
     appEnv,
     cleanup: async () => {
@@ -174,4 +190,63 @@ export function mongoEnv(overrides: Record<string, string | undefined> = {}): Re
     MONGODB_SERVER_SELECTION_TIMEOUT_MS: '2000',
     ...overrides,
   });
+}
+
+/** Two clusters (`cluster0`, `cluster1`) over the one local MongoDB, with distinct clients so routing is observable. */
+export interface TestClusters {
+  readonly registry: ClusterRegistry;
+  readonly databases: Databases;
+  /** `flood_cloud_test_<hex>_`: the database name prefix. */
+  readonly prefix: string;
+  /** Names passed to `client.db()` through each client, keyed `<cluster>:<main|analytics>`. */
+  readonly opened: ReadonlyMap<string, string[]>;
+  /** Drops every database of the prefix and closes all clients. */
+  cleanup(): Promise<void>;
+}
+
+/**
+ * Opens two clusters pointing at the same local MongoDB, each with its own main and analytics client.
+ * Cluster `cluster1` has a dedicated analytics URI, `cluster0` does not.
+ *
+ * @param env Extra variables for the cluster configuration (for example the common or default cluster).
+ */
+export async function openTestClusters(env: Record<string, string | undefined> = {}): Promise<TestClusters> {
+  const uri = testMongoUri();
+  const prefix = `${TEST_DB_PREFIX}${randomBytes(3).toString('hex')}_`;
+  const config = loadDatabaseConfig({
+    APP_ENV: 'development',
+    DB_NAME_PREFIX: prefix,
+    MONGODB_SERVER_SELECTION_TIMEOUT_MS: '2000',
+    MONGODB_CLUSTERS: 'cluster0,cluster1',
+    MONGODB_URI_CLUSTER0: uri,
+    MONGODB_URI_CLUSTER1: uri,
+    MONGODB_ANALYTICS_URI_CLUSTER1: uri,
+    ...env,
+  });
+  const registry = createClusterClients(config);
+  const opened = new Map<string, string[]>();
+  for (const [clusterId, clients] of registry.clusters) {
+    for (const role of ['main', 'analytics'] as const) {
+      const client = clients[role];
+      const names: string[] = [];
+      opened.set(`${clusterId}:${role}`, names);
+      const original = client.db.bind(client);
+      (client as { db: MongoClient['db'] }).db = (name?: string) => {
+        names.push(String(name));
+        return original(name);
+      };
+    }
+  }
+  const { background } = await connectClusters(registry, () => undefined);
+  await background;
+  return {
+    registry,
+    databases: createDatabases(registry, { prefix, appEnv: 'development' }),
+    prefix,
+    opened,
+    cleanup: async () => {
+      await dropDatabasesWithPrefix((registry.clusters.get('cluster0') as { main: MongoClient }).main, prefix);
+      await closeClusters(registry, () => undefined);
+    },
+  };
 }

@@ -10,7 +10,7 @@ import { createMongoClient } from '../../src/db/client.ts';
 import { main, safeMessage } from '../../src/tools/profile-legacy/main.ts';
 import type { MainDeps } from '../../src/tools/profile-legacy/main.ts';
 import { seedLegacyCluster } from '../helpers/legacy-fixtures.ts';
-import { mongoEnv, openTestDatabases } from '../helpers/mongo.ts';
+import { mongoEnv, openTestDatabases, testMongoUri } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
 const CLI = fileURLToPath(new URL('../../src/tools/profile-legacy/cli.ts', import.meta.url));
@@ -67,6 +67,36 @@ describe('profile-legacy main (real MongoDB)', () => {
     assert.deepEqual(error.filter((line) => line.startsWith('profiled')), ['profiled 1/2 group databases', 'profiled 2/2 group databases']);
   });
 
+  it('profiles every configured cluster, reading from secondaries, and reports a failing close without the URI', async () => {
+    const uri = testMongoUri();
+    const modes: string[] = [];
+    const errors: string[] = [];
+    const code = await main(['--out', join(dir, 'multi.json')], {
+      env: env({ MONGODB_URI: undefined, MONGODB_CLUSTERS: 'cluster0,cluster1', MONGODB_URI_CLUSTER0: uri, MONGODB_URI_CLUSTER1: uri, MONGODB_ANALYTICS_URI_CLUSTER1: uri }),
+      cwd: dir,
+      loadEnvFile: () => undefined,
+      info: () => undefined,
+      error: (line) => void errors.push(line),
+      createClient: (config, options) => {
+        const client = createMongoClient(config, options);
+        modes.push(client.options.readPreference.mode);
+        const close = client.close.bind(client);
+        client.close = async () => {
+          await close();
+          throw new Error(`close failed for ${uri}`);
+        };
+        return client;
+      },
+    });
+    assert.equal(code, 0, errors.join());
+    assert.deepEqual(modes, ['secondaryPreferred', 'secondaryPreferred', 'secondaryPreferred', 'secondary']);
+    assert.ok(errors.includes('Profiling development: 4 group databases found on 2 cluster(s), read-only'));
+    assert.equal(errors.filter((line) => line.startsWith('Error: close failed')).length, 4);
+    assert.ok(errors.every((line) => !line.includes(uri)));
+    const report = JSON.parse(await readFile(join(dir, 'multi.json'), 'utf8')) as { databases: { clusters: unknown[] } };
+    assert.equal(report.databases.clusters.length, 2);
+  });
+
   it('requires exactly --out <path>', async () => {
     for (const argv of [
       ['--out'],
@@ -90,7 +120,7 @@ describe('profile-legacy main (real MongoDB)', () => {
     const first = await run(['--out', out], env());
     assert.equal(first.code, 0, first.error.join());
     assert.match(first.info.join(), /Report written/);
-    assert.ok(first.error.includes('Profiling development: 2 group databases found, read-only'));
+    assert.ok(first.error.includes('Profiling development: 2 group databases found on 1 cluster(s), read-only'));
     const parsed = JSON.parse(await readFile(out, 'utf8')) as { appEnv: string; collections: { users: { fields: { documents: number } } } };
     assert.equal(parsed.appEnv, 'development');
     assert.equal(parsed.collections.users.fields.documents, 10);
@@ -163,7 +193,7 @@ describe('profile-legacy main (real MongoDB)', () => {
         createClient: (config, options) => createMongoClient({ ...config, appEnv: 'development' }, options),
       });
       assert.equal(code, 0, errors.join());
-      assert.ok(errors.includes('Profiling production: 2 group databases found, read-only'));
+      assert.ok(errors.includes('Profiling production: 2 group databases found on 1 cluster(s), read-only'));
       const [file] = await readdir(join(backend, 'reports'));
       assert.match(file ?? '', /^legacy-profile-production-\d{8}T\d{9}Z\.json$/);
       const report = JSON.parse(await readFile(join(backend, 'reports', file ?? ''), 'utf8')) as { appEnv: string; databases: { groupDatabases: number } };

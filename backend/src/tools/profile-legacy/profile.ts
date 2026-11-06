@@ -1,4 +1,4 @@
-import type { AppEnv } from '../../config.ts';
+import type { AppEnv, ClusterId } from '../../config.ts';
 import type { Databases } from '../../db/databases.ts';
 import { createFieldProfiler } from './fields.ts';
 import type { FieldProfile } from './fields.ts';
@@ -8,7 +8,7 @@ import { listIndexInfo } from './indexes.ts';
 import type { IndexInfo } from './indexes.ts';
 import { MAX_TIME_MS, streamDocuments } from './read.ts';
 import { profileGroupDatabases } from './tenants.ts';
-import type { GroupDatabasesProfile, TenancyIndex } from './tenants.ts';
+import type { GroupDatabaseRef, GroupDatabasesProfile, TenancyIndex } from './tenants.ts';
 import { profileUsers, readDealerIds } from './users.ts';
 import type { UsersProfile } from './users.ts';
 
@@ -16,13 +16,24 @@ import type { UsersProfile } from './users.ts';
 export interface DatabasesSection {
   /** `true` if the common database has at least one collection. */
   commonPresent: boolean;
-  /** Group databases found for this prefix and environment. */
+  /** Group databases found for this prefix and environment, over all clusters. */
   groupDatabases: number;
+  /** The configured clusters, in order: server version and group databases found on each. */
+  clusters: Array<{ clusterId: ClusterId; serverVersion: string; groupDatabases: number }>;
+  /** Where the databases are compared with the `dataCluster` the groups declare. Counts only. */
+  clusterPlacement: {
+    /** Groups whose `dataCluster` is present but not a configured cluster. */
+    groupsWithInvalidCluster: number;
+    /** Groups with a usable cluster that has no database for them there (also those with no database at all). */
+    groupsWithoutDatabaseOnExpectedCluster: number;
+    /** Group databases found on a cluster other than the one their group declares. */
+    databasesOnUnexpectedCluster: number;
+  };
   /** Groups in `groups` that have no database. */
   groupsWithoutDatabase: number;
   /** Group databases whose group is not in `groups`. */
   databasesWithoutGroup: number;
-  /** Other databases of the cluster, as counts only. */
+  /** Other databases of all clusters, as counts only. */
   other: Record<'flite_common' | 'queue' | 'other', number>;
 }
 
@@ -75,7 +86,7 @@ export interface ProfileOptions {
  * Profiles the legacy databases of one environment in read-only mode and returns a report made of
  * counts, types, field names and allowlisted enums only. Group databases are read one at a time.
  *
- * @param databases Database accessor over the client of the environment to profile.
+ * @param databases Database accessor over the clients of the environment to profile (every cluster is read).
  * @param options Environment and clock.
  * @returns The report.
  * @example
@@ -83,14 +94,24 @@ export interface ProfileOptions {
  */
 export async function profileLegacy(databases: Databases, options: ProfileOptions): Promise<LegacyProfile> {
   const common = databases.common();
-  const serverVersion = await databases.serverVersion();
-  const other = await databases.countOtherDatabases();
+  const other = { flite_common: 0, queue: 0, other: 0 };
+  const clusters: DatabasesSection['clusters'] = [];
+  const refs: GroupDatabaseRef[] = [];
+  for (const clusterId of databases.clusterIds) {
+    const counts = await databases.countOtherDatabases(clusterId);
+    other.flite_common += counts.flite_common;
+    other.queue += counts.queue;
+    other.other += counts.other;
+    const groupIds = await databases.listGroupIds(clusterId);
+    refs.push(...groupIds.map((groupId) => ({ groupId, clusterId })));
+    clusters.push({ clusterId, serverVersion: await databases.serverVersion(clusterId), groupDatabases: groupIds.length });
+  }
+  const serverVersion = (clusters.find(({ clusterId }) => clusterId === databases.commonCluster) as { serverVersion: string }).serverVersion;
   const commonPresent = (await common.listCollections({}, { nameOnly: true, maxTimeMS: MAX_TIME_MS }).toArray()).length > 0;
-  const groupIds = await databases.listGroupIds();
 
   const dealerHexes = await readDealerIds(common);
-  const groupDatabases = await profileGroupDatabases(databases, groupIds, options.onProgress, options.progressEvery);
-  const groups = await profileGroups(common, dealerHexes);
+  const groupDatabases = await profileGroupDatabases(databases, refs, options.onProgress, options.progressEvery);
+  const groups = await profileGroups(common, dealerHexes, (group) => databases.resolveGroupCluster(group));
 
   const countryFields = createFieldProfiler();
   for await (const country of streamDocuments(common.collection('countries'), {}, { _id: 0 })) {
@@ -100,14 +121,33 @@ export async function profileLegacy(databases: Databases, options: ProfileOption
   const tenancy: TenancyIndex = { groupHexes: groups.groupHexes, dealerHexes, perGroup: groupDatabases.scopes };
   const users = await profileUsers(common, tenancy);
 
-  const databaseHexes = new Set(groupIds.map((id) => id.toHexString()));
+  const databaseHexes = new Set(refs.map(({ groupId }) => groupId.toHexString()));
+  const placement = { groupsWithInvalidCluster: 0, groupsWithoutDatabaseOnExpectedCluster: 0, databasesOnUnexpectedCluster: 0 };
+  const hexesByCluster = new Map<ClusterId, Set<string>>();
+  for (const { groupId, clusterId } of refs) {
+    const hex = groupId.toHexString();
+    hexesByCluster.set(clusterId, (hexesByCluster.get(clusterId) ?? new Set<string>()).add(hex));
+    const expected = groups.expectedClusters.get(hex);
+    if (expected !== undefined && expected !== null && expected !== clusterId) {
+      placement.databasesOnUnexpectedCluster += 1;
+    }
+  }
+  for (const [hex, expected] of groups.expectedClusters) {
+    if (expected === null) {
+      placement.groupsWithInvalidCluster += 1;
+    } else if (hexesByCluster.get(expected)?.has(hex) !== true) {
+      placement.groupsWithoutDatabaseOnExpectedCluster += 1;
+    }
+  }
   return {
     generatedAt: (options.now ?? (() => new Date()))().toISOString(),
     appEnv: options.appEnv,
     serverVersion,
     databases: {
       commonPresent,
-      groupDatabases: groupIds.length,
+      groupDatabases: refs.length,
+      clusters,
+      clusterPlacement: placement,
       groupsWithoutDatabase: [...groups.groupHexes].filter((hex) => !databaseHexes.has(hex)).length,
       databasesWithoutGroup: [...databaseHexes].filter((hex) => !groups.groupHexes.has(hex)).length,
       other,

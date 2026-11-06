@@ -51,14 +51,21 @@ I nomi dei database dipendono dall'ambiente, come nel legacy, così più ambient
 
 **Decisione del 2026-10-30:** `companies` e `places` passano nel **common** (nel legacy erano nei database dei gruppi e rendevano costose le liste trasversali, es. tutti i punti vendita di un dealer). La verifica di ogni credenziale e il calcolo dello scope avvengono interamente nel common, senza aprire il database del gruppo.
 
-Il campo `databaseHost` del legacy (cluster dedicato per gruppo) è **eliminato**: tutti i database stanno sullo stesso cluster.
+### 3.2.1 Più cluster (decisione dell'utente del 2026-11-06)
+La piattaforma può usare più cluster MongoDB (`cluster0`, `cluster1`, …), ciascuno con **due connessioni**: lettura/scrittura e **analytics** (nodo dedicato alle letture pesanti, come statistiche e report).
+- **Login e dati comuni** stanno sempre sul **cluster comune** (`MONGODB_COMMON_CLUSTER`, oggi `cluster0`).
+- Ogni gruppo dichiara nel common il proprio cluster con il campo **`dataCluster`** (solo l'id, mai host o credenziali); se manca vale il cluster di default dei gruppi (`MONGODB_DEFAULT_GROUP_CLUSTER`), quindi i gruppi esistenti restano dove sono senza migrazione. Un valore non configurato dà `503`, mai un ripiego su un altro cluster.
+- Le connessioni di ogni cluster stanno nella configurazione (secret manager in produzione). Senza configurazione esplicita dei cluster vale la modalità a cluster singolo.
+- **Vincoli:** finché il legacy è attivo usa un solo cluster, quindi un gruppo su un cluster diverso dal comune non funzionerebbe nei client legacy; non esistono transazioni tra cluster diversi (la doppia scrittura di aziende e punti vendita, §0.3 di `doc/Tasks.md`, è atomica solo per i gruppi sul cluster comune; per gli altri vale la riconciliazione); lo spostamento di un gruppo tra cluster è un'operazione da progettare a parte.
+
+Il campo `databaseHost` del legacy (host nel documento) **non si usa**: al suo posto `dataCluster` con il solo identificativo.
 
 Schema delle collection del common: `doc/Data-Model.md`. I domini operativi si documentano quando vengono affrontati.
 
 ### 3.3 Accesso
-- Un solo `MongoClient` per processo; il database del gruppo si ottiene dal contesto della richiesta (`req.auth`), mai da parametri del client.
+- Un `MongoClient` per cluster e per tipo di connessione (lettura/scrittura, analytics), creati all'avvio; il database del gruppo si ottiene dal contesto della richiesta (`req.auth`) sul cluster del gruppo, mai da parametri del client.
 - I repository dei dati di gruppo ricevono il `Db` del gruppo già risolto e non possono aprirne altri.
-- Le transazioni tra common e database del gruppo sono possibili sullo stesso cluster (replica set) e si usano solo dove serve atomicità.
+- Le transazioni tra common e database del gruppo sono possibili solo se stanno sullo stesso cluster (replica set) e si usano solo dove serve atomicità.
 
 ## 4. Superfici API
 | Superficie | Prefisso | Credenziale | CORS | Note |

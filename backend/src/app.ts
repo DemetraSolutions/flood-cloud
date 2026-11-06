@@ -45,7 +45,7 @@ export interface AppDeps {
     readonly v1?: RequestHandler;
   };
   /** Group lookup for the `/v1` routes declaring `group: true`; PSA and D accesses are audited by the app itself. */
-  readonly groupAccess?: { readonly groups: GroupsRepository };
+  readonly groupAccess?: { readonly groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'> };
   /** The activity log: security events and server errors. */
   readonly activityLog: ActivityLog;
   /** The rate limit counters. */

@@ -1,9 +1,10 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
-import type { MongoClient } from 'mongodb';
 import { APP_ENVS, loadDatabaseConfig } from '../../config.ts';
 import type { AppEnv } from '../../config.ts';
 import { createMongoClient } from '../../db/client.ts';
+import { closeClusters, createClusterClients } from '../../db/clusters.ts';
+import type { ClusterRegistry } from '../../db/clusters.ts';
 import { createDatabases } from '../../db/databases.ts';
 import { profileLegacy } from './profile.ts';
 
@@ -141,7 +142,7 @@ export function safeMessage(error: unknown, secrets: readonly string[]): string 
 
 /**
  * Entry point of the legacy profiling tool: loads the configuration and refuses to run unless `APP_ENV`
- * equals `--env` (`development` by default, `production` only on explicit request), reads the databases with `secondaryPreferred` and writes the report to
+ * equals `--env` (`development` by default, `production` only on explicit request), reads the databases of every configured cluster with `secondaryPreferred` and writes the report to
  * a new file (by default under `backend/reports/`). Read-only on the cluster.
  *
  * @param argv Arguments after the script name: optionally `--env <development|production>` and `--out <path>`.
@@ -174,7 +175,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     deps.error(`Refusing to run: APP_ENV does not match the requested environment (--env ${parsed.env}, default development)`);
     return 1;
   }
-  const uri = config.mongodbUri.reveal();
+  const secrets = [...config.clusters.values()].flatMap((cluster) => [cluster.uri.reveal(), ...(cluster.analyticsUri === null ? [] : [cluster.analyticsUri.reveal()])]);
 
   const destination = await chooseDestination(parsed.out, deps.cwd, config.appEnv);
   if (typeof destination === 'string') {
@@ -187,14 +188,20 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     return 1;
   }
 
-  let client: MongoClient | undefined;
+  let registry: ClusterRegistry | undefined;
   let exitCode = 0;
   try {
-    // Building the client is guarded too: a connection string the driver cannot parse throws here.
-    client = (deps.createClient ?? createMongoClient)(config, { readPreference: 'secondaryPreferred' });
-    await client.connect();
-    const databases = createDatabases(client, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
-    deps.error(`Profiling ${config.appEnv}: ${(await databases.listGroupIds()).length} group databases found, read-only`);
+    // Building the clients is guarded too: a connection string the driver cannot parse throws here.
+    // Every main client reads from secondaries, as the whole tool is read-only; only the main clients connect.
+    const createClient = deps.createClient ?? createMongoClient;
+    registry = createClusterClients(config, (clientConfig, options) => createClient(clientConfig, { readPreference: 'secondaryPreferred', ...options }));
+    await Promise.all([...registry.clusters.values()].map((clients) => clients.main.connect()));
+    const databases = createDatabases(registry, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
+    let found = 0;
+    for (const clusterId of databases.clusterIds) {
+      found += (await databases.listGroupIds(clusterId)).length;
+    }
+    deps.error(`Profiling ${config.appEnv}: ${found} group databases found on ${databases.clusterIds.length} cluster(s), read-only`);
     const report = await profileLegacy(databases, {
       appEnv: config.appEnv,
       ...(deps.progressEvery === undefined ? {} : { progressEvery: deps.progressEvery }),
@@ -206,11 +213,11 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     await writeFile(out, `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     deps.info(`Report written to ${out}`);
   } catch (error) {
-    deps.error(safeMessage(error, [uri]));
+    deps.error(safeMessage(error, secrets));
     exitCode = 1;
   }
-  if (client !== undefined) {
-    await client.close();
+  if (registry !== undefined) {
+    await closeClusters(registry, (_clusterId, error) => deps.error(safeMessage(error, secrets)));
   }
   return exitCode;
 }

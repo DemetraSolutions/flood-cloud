@@ -9,13 +9,13 @@ import { createUsersRepository } from '../../src/modules/users/users.repository.
 import { createSessionsRepository } from '../../src/modules/sessions/sessions.repository.ts';
 import { createUsersService } from '../../src/modules/users/users.service.ts';
 import { legacyPasswordHash } from '../../src/shared/security/legacy-password.ts';
-import { resolveGroupAccess } from '../../src/shared/security/scope/group-access.ts';
+import { accessFor } from '../helpers/group-access.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
 import { TEST_PASSWORD, TEST_PEPPER, addUser as addBackofficeUser, startBackoffice, userName } from '../helpers/backoffice.ts';
 import type { Backoffice } from '../helpers/backoffice.ts';
 import { memoryActivityLog } from '../helpers/activity.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
-import { openTestDatabases } from '../helpers/mongo.ts';
+import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalOf } from '../helpers/principal.ts';
 import { actors, send } from '../helpers/users.ts';
@@ -239,7 +239,7 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
     assert.deepEqual(events(from), ['user.updated', 'user.scopeChanged', 'session.revoked:scopeChanged']);
     assert.equal(await works(token), false);
     // A place the user already has is not checked again: it may have been trashed since.
-    const database = ctx.databases.group(g0().groupId);
+    const database = ctx.databases.group(g0().groupId, TEST_CLUSTER);
     await database.collection('places').updateOne({ _id: place(1) }, { $set: { trash: true } });
     try {
       assert.equal((await as.call(g0().sa, 'PATCH', path(id), { firstName: 'Still fine' })).status, 200);
@@ -364,7 +364,7 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
       });
     const client = { requestId: 'req-12345678', ip: null, userAgent: null };
     const psa = principalOf('PSA');
-    const area = { kind: 'group', access: resolveGroupAccess(psa, hex(g0().groupId))! } as const;
+    const area = { kind: 'group', access: (await accessFor(psa, g0().groupId, TEST_CLUSTER))! } as const;
     await assert.rejects(build({ updateOwned: () => Promise.resolve(false) }).update(psa, area, id, { firstName: 'x' }, client), { code: 'NOT_FOUND' });
     assert.equal((await stored(id))['name'], name, 'the refused update wrote nothing');
     await assert.rejects(build({ findById: () => Promise.resolve(null) }).update(psa, area, id, { firstName: 'y' }, client), { code: 'NOT_FOUND' });
@@ -720,7 +720,7 @@ describe('permanent deletion: dealers with groups, and the race with a restore',
       now: () => Date.now(),
     });
     const psa = principalOf('PSA');
-    const area = { kind: 'group', access: resolveGroupAccess(psa, hex(g0().groupId))! } as const;
+    const area = { kind: 'group', access: (await accessFor(psa, g0().groupId, TEST_CLUSTER))! } as const;
     await assert.rejects(service.remove(psa, area, id, { requestId: 'req-12345678', ip: null, userAgent: null }), { code: 'CONFLICT' });
     assert.equal(await credentials().countDocuments({ _id: id }), 1);
   });
@@ -739,7 +739,7 @@ describe('permanent deletion: dealers with groups, and the race with a restore',
       now: () => Date.now(),
     });
     const psa = principalOf('PSA');
-    const area = { kind: 'group', access: resolveGroupAccess(psa, hex(g0().groupId))! } as const;
+    const area = { kind: 'group', access: (await accessFor(psa, g0().groupId, TEST_CLUSTER))! } as const;
     await assert.rejects(service.resetPassword(psa, area, id, { password: PASSWORD }, { requestId: 'req-12345678', ip: null, userAgent: null }), { code: 'NOT_FOUND' });
     assert.equal(await credentials().countDocuments({ _id: id }), 0);
   });

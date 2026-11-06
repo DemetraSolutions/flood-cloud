@@ -456,7 +456,7 @@ export async function seedLegacyCluster(databases: Databases, options: SeedOptio
     await common.collection('countries').createIndex({ insertDate: 1 }, { name: 'insertDate_ttl', expireAfterSeconds: 3600 });
   }
   for (const [hex, { companies, places }] of perGroup) {
-    const db = databases.group(ObjectId.createFromHexString(hex));
+    const db = databases.group(ObjectId.createFromHexString(hex), databases.resolveGroupCluster({ _id: ObjectId.createFromHexString(hex) }));
     await insert(db, 'companies', companies);
     await insert(db, 'places', places);
     if (options.extraIndexes === true && companies.length > 0) {

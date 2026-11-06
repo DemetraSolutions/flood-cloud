@@ -80,7 +80,7 @@ describe('mountRoutes validation', () => {
 
 describe('mountRoutes with user routes', () => {
   const authenticate = (): void => undefined;
-  const groupAccess = { groups: { findAvailability: async () => null }, onCrossGroupAccess: () => undefined };
+  const groupAccess = { groups: { findAccess: async () => null, resolveCluster: () => 'cluster0' }, onCrossGroupAccess: () => undefined };
   const options = { authenticate, allowedAuth: ['anonymous', 'user'], rateLimit: memoryRateLimitMount() } as const;
   const userRoute = (overrides: Record<string, unknown> = {}): RouteDefinition =>
     route({ auth: { kind: 'user', permission: 'places:read' }, ...overrides });

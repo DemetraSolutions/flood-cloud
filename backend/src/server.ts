@@ -7,7 +7,8 @@ import { createApp } from './app.ts';
 import { createBackofficeModules } from './composition.ts';
 import { loadConfig } from './config.ts';
 import type { Config } from './config.ts';
-import { createMongoClient } from './db/client.ts';
+import { closeClusters, connectClusters, createClusterClients } from './db/clusters.ts';
+import type { ClusterClients, ClusterRegistry } from './db/clusters.ts';
 import { createDatabases } from './db/databases.ts';
 import type { Databases } from './db/databases.ts';
 import { ensureIndexes } from './db/indexes.ts';
@@ -36,8 +37,8 @@ export interface ProcessLike {
 
 /** Collaborators of {@link run} that tests can replace. */
 export interface RunDeps {
-  /** Creates the process-wide MongoDB client. */
-  readonly createClient: (config: Config) => MongoClient;
+  /** Creates the process-wide MongoDB clients (two per cluster), without connecting. */
+  readonly createClusters: (config: Config) => ClusterRegistry;
   /** Creates the startup indexes. */
   readonly ensureIndexes: typeof ensureIndexes;
   /** Tells whether a `.env` file exists in the working directory (the real check by default). */
@@ -47,8 +48,12 @@ export interface RunDeps {
 /** Handle of a running server. */
 export interface RunningServer {
   readonly server: Server;
-  /** The process-wide MongoDB client (closed by the shutdown). */
+  /** The main client of the common cluster. */
   readonly client: MongoClient;
+  /** Every MongoDB client of the process (all closed by the shutdown). */
+  readonly clusters: ClusterRegistry;
+  /** Settles when the background connections to the other clusters and to the analytics nodes have finished. */
+  readonly clusterConnections: Promise<void>;
   /** Starts the graceful shutdown (idempotent). */
   shutdown(signal: string): void;
 }
@@ -81,7 +86,7 @@ export function loadDotEnv(proc: Pick<ProcessLike, 'loadEnvFile'>): void {
  */
 export async function run(
   proc: ProcessLike,
-  deps: RunDeps = { createClient: createMongoClient, ensureIndexes },
+  deps: RunDeps = { createClusters: createClusterClients, ensureIndexes },
 ): Promise<RunningServer | undefined> {
   loadDotEnv(proc);
 
@@ -105,34 +110,31 @@ export async function run(
     logger.warn('TRUST_PROXY is 0 in production: behind a load balancer every client would share its address, and the per-IP rate limits would count them together');
   }
 
-  const closeClient = async (toClose: MongoClient): Promise<boolean> => {
-    try {
-      await toClose.close();
-      return true;
-    } catch (error) {
-      logger.error('closing the database client failed', { error });
-      return false;
-    }
-  };
-  // One client for the whole process. Errors are logged by name only: they could echo the URI.
-  // Building the client is inside the guard too: a connection string the driver cannot parse throws here.
-  let client: MongoClient | undefined;
+  // One set of clients for the whole process (two per cluster). Errors are logged by name only: they could echo a URI.
+  // Building the clients is inside the guard too: a connection string the driver cannot parse throws here.
+  const closeClients = (toClose: ClusterRegistry): Promise<boolean> =>
+    closeClusters(toClose, (clusterId, error) => logger.error('closing a database client failed', { clusterId, errorName: error instanceof Error ? error.name : typeof error }));
+  let clusters: ClusterRegistry | undefined;
   let databases: Databases;
+  let clusterConnections: Promise<void>;
   try {
-    client = deps.createClient(config);
-    databases = createDatabases(client, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
-    await client.connect();
+    clusters = deps.createClusters(config);
+    databases = createDatabases(clusters, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
+    // The common cluster must answer before the server starts; the other clusters connect in the background.
+    ({ background: clusterConnections } = await connectClusters(clusters, ({ clusterId, role, errorName }) =>
+      logger.error('database cluster not reachable at startup', { clusterId, role, errorName }),
+    ));
     await deps.ensureIndexes(databases);
     await warmUpPasswordVerifier();
   } catch (error) {
     logger.error('database startup failed', { errorName: error instanceof Error ? error.name : typeof error });
-    if (client !== undefined) {
-      await closeClient(client);
+    if (clusters !== undefined) {
+      await closeClients(clusters);
     }
     proc.exit(1);
     return undefined;
   }
-  const openClient = client;
+  const openClusters = clusters;
 
   let shuttingDown = false;
   const activityLog = createActivityLog({
@@ -169,7 +171,7 @@ export async function run(
     });
   } catch (error) {
     logger.error('server failed to start', { error });
-    await closeClient(openClient);
+    await closeClients(openClusters);
     proc.exit(1);
     return undefined;
   }
@@ -190,7 +192,7 @@ export async function run(
     forced.unref();
     setTimeout(() => {
       server.close((error) => {
-        void closeClient(openClient).then((clientClosed) => {
+        void closeClients(openClusters).then((clientClosed) => {
           clearTimeout(forced);
           if (error === undefined && clientClosed) {
             logger.info('shutdown completed');
@@ -216,7 +218,7 @@ export async function run(
     proc.exit(1);
   });
 
-  return { server, client: openClient, shutdown };
+  return { server, client: (openClusters.clusters.get(openClusters.commonCluster) as ClusterClients).main, clusters: openClusters, clusterConnections, shutdown };
 }
 
 if (import.meta.main) {

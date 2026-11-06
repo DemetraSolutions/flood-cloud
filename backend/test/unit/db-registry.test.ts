@@ -102,8 +102,10 @@ describe('collection registry', () => {
 
   it('every collection used in src is registered, by literal name', async () => {
     const known = registeredCollectionNames();
-    // indexes.ts walks the registry itself, so its name is not a literal by construction.
-    const dynamicAllowed = new Set([join(SRC, 'db', 'indexes.ts')]);
+    // indexes.ts walks the registry itself, so its name is not a literal by construction. databases.ts has
+    // exactly one non-literal use: the read-only analytics handle forwards the name its caller passes
+    // (and that caller is checked here).
+    const dynamicAllowed = new Map([[join(SRC, 'db', 'indexes.ts'), Infinity], [join(SRC, 'db', 'databases.ts'), 1]]);
     for (const file of await sourceFiles()) {
       const text = await readFile(file, 'utf8');
       const all = [...text.matchAll(/\.collection\(/g)].length;
@@ -111,8 +113,14 @@ describe('collection registry', () => {
       for (const match of literal) {
         assert.ok(known.has(match[2] as string), `${file}: collection "${match[2]}" is not in the registry`);
       }
-      if (!dynamicAllowed.has(file)) {
+      const dynamic = dynamicAllowed.get(file);
+      if (dynamic === undefined) {
         assert.equal(literal.length, all, `${file}: collection names must be string literals`);
+      } else {
+        assert.ok(all - literal.length <= dynamic, `${file}: more non-literal collection names than expected`);
+        if (dynamic === 1) {
+          assert.equal(all - literal.length, 1, `${file}: the read-only handle is expected to be the single non-literal use`);
+        }
       }
     }
   });

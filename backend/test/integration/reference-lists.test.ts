@@ -7,7 +7,7 @@ import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts
 import { startBackoffice } from '../helpers/backoffice.ts';
 import type { Backoffice } from '../helpers/backoffice.ts';
 import { fixtureId, legacyCompany, legacyGroup, legacyPlace } from '../helpers/legacy-fixtures.ts';
-import { openTestDatabases } from '../helpers/mongo.ts';
+import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { actors } from '../helpers/users.ts';
 
@@ -41,7 +41,7 @@ before(async () => {
   await groups.insertMany(documents);
   // Extra companies and places of group 0: a trashed company, a nameless one, a place of a trashed company and one without company.
   const g = group(0).groupId;
-  const db = ctx.databases.group(g);
+  const db = ctx.databases.group(g, TEST_CLUSTER);
   await db.collection('companies').insertMany([
     legacyCompany(50, g, { name: 'Trashed company', trash: true }),
     legacyCompany(51, g, { name: 'Reg.Ex (b+' }),

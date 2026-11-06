@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler } from 'express';
+import { UnknownClusterError } from '../../db/databases.ts';
 import type { Logger } from '../logging/logger.ts';
 import { AppError, DEFAULT_MESSAGES } from './errors.ts';
 import type { ErrorActivityReporter } from './error-activity.ts';
@@ -22,6 +23,7 @@ const CLIENT_STATUS_CODES: Readonly<Record<number, ErrorCode>> = {
 
 type Classification =
   | { readonly kind: 'known'; readonly error: AppError; readonly log: boolean }
+  | { readonly kind: 'unknown-cluster'; readonly error: AppError; readonly cause: UnknownClusterError }
   | { readonly kind: 'aborted' }
   | { readonly kind: 'unexpected' };
 
@@ -29,6 +31,9 @@ type Classification =
 function classify(error: unknown): Classification {
   if (error instanceof AppError) {
     return { kind: 'known', error, log: false };
+  }
+  if (error instanceof UnknownClusterError) {
+    return { kind: 'unknown-cluster', error: new AppError('SERVICE_UNAVAILABLE'), cause: error };
   }
   const { type, status, expose } = (error ?? {}) as { type?: unknown; status?: unknown; expose?: unknown };
   if (type === 'request.aborted') {
@@ -52,7 +57,7 @@ function classify(error: unknown): Classification {
  * Creates the central Express error handler. Known errors become the standard
  * `{ error }` envelope; client errors raised by body-parser or the router map to
  * 4xx codes; an aborted request is only logged (`debug`) and its socket closed;
- * anything else becomes a generic 500 and is logged with its stack (log only,
+ * a group on a cluster that is not configured (`UnknownClusterError`) is a 503 logged at `error` level with the group and cluster ids; anything else becomes a generic 500 and is logged with its stack (log only,
  * never in the response). If the response has already started, the failure is
  * logged and the socket destroyed: no double response. If the handler itself
  * fails (for example an invalid header in an `AppError`), the failure is logged and
@@ -84,10 +89,12 @@ export function errorHandler(logger: Logger, errorActivity: ErrorActivityReporte
       }
       if (outcome.kind === 'unexpected') {
         logger.error('unhandled error', { requestId, error });
+      } else if (outcome.kind === 'unknown-cluster') {
+        logger.error('data cluster not available', { requestId, groupId: outcome.cause.groupId, clusterId: outcome.cause.clusterId });
       } else if (outcome.log) {
         logger.warn('unmapped client error', { requestId, error });
       }
-      const appError = outcome.kind === 'known' ? outcome.error : new AppError('INTERNAL_ERROR');
+      const appError = outcome.kind === 'unexpected' ? new AppError('INTERNAL_ERROR') : outcome.error;
       res.set(appError.headers);
       res.status(appError.status).json({
         error: {

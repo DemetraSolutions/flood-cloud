@@ -8,7 +8,7 @@ import { ensureIndexes } from '../../src/db/indexes.ts';
 import { createPingCheck } from '../../src/db/ping.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
 import { freePort, startApp } from '../helpers/app.ts';
-import { openTestDatabases } from '../helpers/mongo.ts';
+import { openTestDatabases, singleCluster, TEST_CLUSTER } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
 const REGISTRY: CollectionRegistry = {
@@ -104,11 +104,11 @@ describe('ensureIndexes (real MongoDB)', () => {
 
 describe('createDatabases (real MongoDB)', () => {
   it('refuses production_common when APP_ENV is development, whatever the prefix', async () => {
-    const dev = createDatabases(ctx.client, { prefix: '', appEnv: 'development' });
+    const dev = createDatabases(singleCluster(ctx.client), { prefix: '', appEnv: 'development' });
     assert.equal(dev.common().databaseName, 'development_common');
     // The accessor can only build names of its own environment: there is no way to ask for production_*.
-    assert.throws(() => dev.group('zz' as unknown as ObjectId), Error);
-    const prod = createDatabases(ctx.client, { prefix: '', appEnv: 'production' });
+    assert.throws(() => dev.group('zz' as unknown as ObjectId, TEST_CLUSTER), Error);
+    const prod = createDatabases(singleCluster(ctx.client), { prefix: '', appEnv: 'production' });
     assert.equal(prod.common().databaseName, 'production_common');
     assert.throws(() => assertAllowedDatabaseName('production_common', { prefix: '', appEnv: 'development' }), /not allowed/);
   });
@@ -116,19 +116,19 @@ describe('createDatabases (real MongoDB)', () => {
   it('keeps groups apart: tenant A does not see tenant B', async () => {
     const a = new ObjectId();
     const b = new ObjectId();
-    await ctx.databases.group(a).collection('items').insertOne({ label: 'A-only' });
-    await ctx.databases.group(b).collection('items').insertOne({ label: 'B-only' });
-    const seenByA = await ctx.databases.group(a).collection('items').find().toArray();
-    const seenByB = await ctx.databases.group(b).collection('items').find().toArray();
+    await ctx.databases.group(a, TEST_CLUSTER).collection('items').insertOne({ label: 'A-only' });
+    await ctx.databases.group(b, TEST_CLUSTER).collection('items').insertOne({ label: 'B-only' });
+    const seenByA = await ctx.databases.group(a, TEST_CLUSTER).collection('items').find().toArray();
+    const seenByB = await ctx.databases.group(b, TEST_CLUSTER).collection('items').find().toArray();
     assert.deepEqual(seenByA.map((doc) => doc['label']), ['A-only']);
     assert.deepEqual(seenByB.map((doc) => doc['label']), ['B-only']);
-    assert.notEqual(ctx.databases.group(a).databaseName, ctx.databases.group(b).databaseName);
+    assert.notEqual(ctx.databases.group(a, TEST_CLUSTER).databaseName, ctx.databases.group(b, TEST_CLUSTER).databaseName);
   });
 
   it('runs a transaction across the common and a group database (replica set)', async () => {
     const groupId = new ObjectId();
     const common = ctx.databases.common().collection('tx_common');
-    const group = ctx.databases.group(groupId).collection('tx_group');
+    const group = ctx.databases.group(groupId, TEST_CLUSTER).collection('tx_group');
     // Collections must exist before a multi-database transaction touches them.
     await common.insertOne({ seed: true });
     await group.insertOne({ seed: true });
@@ -174,7 +174,7 @@ describe('readiness ping (real MongoDB)', () => {
     const app = await startApp({
       readiness: {
         isShuttingDown: () => false,
-        checks: [createPingCheck(createDatabases(dead, { prefix: ctx.prefix, appEnv: 'development' }))],
+        checks: [createPingCheck(createDatabases(singleCluster(dead), { prefix: ctx.prefix, appEnv: 'development' }))],
       },
     });
     try {
@@ -194,7 +194,7 @@ describe('readiness ping (real MongoDB)', () => {
       mongodbMaxPoolSize: 1,
     });
     await client.close();
-    await assert.rejects(createPingCheck(createDatabases(client, { prefix: ctx.prefix, appEnv: 'development' }))());
+    await assert.rejects(createPingCheck(createDatabases(singleCluster(client), { prefix: ctx.prefix, appEnv: 'development' }))());
   });
 });
 
@@ -202,11 +202,11 @@ describe('database listing (real MongoDB)', () => {
   it('lists only the group databases of this prefix and environment, sorted', async () => {
     const own = [new ObjectId('0000000000000000000000bb'), new ObjectId('0000000000000000000000aa')];
     for (const id of own) {
-      await ctx.databases.group(id).collection('companies').insertOne({ name: 'probe' });
+      await ctx.databases.group(id, TEST_CLUSTER).collection('companies').insertOne({ name: 'probe' });
     }
-    const other = createDatabases(ctx.client, { prefix: ctx.prefix, appEnv: 'production' });
-    await other.group(new ObjectId('0000000000000000000000cc')).collection('companies').insertOne({ name: 'probe' });
-    const listed = (await ctx.databases.listGroupIds()).map((id) => id.toHexString());
+    const other = createDatabases(singleCluster(ctx.client), { prefix: ctx.prefix, appEnv: 'production' });
+    await other.group(new ObjectId('0000000000000000000000cc'), TEST_CLUSTER).collection('companies').insertOne({ name: 'probe' });
+    const listed = (await ctx.databases.listGroupIds(TEST_CLUSTER)).map((id) => id.toHexString());
     assert.ok(listed.includes('0000000000000000000000aa') && listed.includes('0000000000000000000000bb'));
     assert.ok(!listed.includes('0000000000000000000000cc'));
     assert.deepEqual(listed, [...listed].sort());
@@ -217,7 +217,7 @@ describe('database listing (real MongoDB)', () => {
     await ctx.client.db(`${head}queue`).collection('jobs').insertOne({ n: 1 });
     await ctx.client.db(`${head}flite_common`).collection('x').insertOne({ n: 1 });
     await ctx.databases.common().collection('probes').insertOne({ n: 1 });
-    const counts = await ctx.databases.countOtherDatabases();
+    const counts = await ctx.databases.countOtherDatabases(TEST_CLUSTER);
     assert.deepEqual(Object.keys(counts).sort(), ['flite_common', 'other', 'queue']);
     assert.equal(counts.queue, 1);
     assert.equal(counts.flite_common, 1);
@@ -225,6 +225,6 @@ describe('database listing (real MongoDB)', () => {
   });
 
   it('reports the server version', async () => {
-    assert.match(await ctx.databases.serverVersion(), /^\d+\.\d+\.\d+/);
+    assert.match(await ctx.databases.serverVersion(TEST_CLUSTER), /^\d+\.\d+\.\d+/);
   });
 });

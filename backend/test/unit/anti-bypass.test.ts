@@ -50,7 +50,45 @@ describe('database access cannot be bypassed outside src/db', () => {
     assert.deepEqual(callers.sort(), ['server.ts', 'tools/profile-legacy/main.ts']);
   });
 
-  it('opens a group database only from the verified group access, the stored-user company lookup and the tools', async () => {
+  it('creates the cluster clients only from the server and from tool entry points', async () => {
+    const callers: string[] = [];
+    for (const file of await filesUnder(SRC)) {
+      const path = relative(SRC, file).split('\\').join('/');
+      if (path.startsWith('db/')) {
+        continue;
+      }
+      const text = await readFile(file, 'utf8');
+      if (text.includes('createClusterClients') || text.includes('createMongoClient') || text.includes('new MongoClient(')) {
+        callers.push(path);
+        assert.ok(mayCreateDatabases(file), `${path} must not create database clients`);
+      }
+    }
+    assert.deepEqual(callers.sort(), ['server.ts', 'tools/profile-legacy/main.ts']);
+  });
+
+  it('keeps the analytics handles unused outside src/db until a report needs them', async () => {
+    for (const file of await filesUnder(SRC)) {
+      const path = relative(SRC, file).split('\\').join('/');
+      if (!path.startsWith('db/')) {
+        const text = await readFile(file, 'utf8');
+        assert.ok(!text.includes('analyticsGroup(') && !text.includes('analyticsCommon('), `${path} must not use the analytics handles yet`);
+      }
+    }
+  });
+
+  it('issues group accesses only inside group-access.ts', async () => {
+    for (const file of await filesUnder(SRC)) {
+      const path = relative(SRC, file).split('\\').join('/');
+      if (path !== 'shared/security/scope/group-access.ts') {
+        const text = await readFile(file, 'utf8');
+        assert.ok(!text.includes('resolveGroupAccess(') && !text.includes('issueGroupAccess('), `${path} must not issue group accesses`);
+      }
+    }
+    const own = await readFile(join(SRC, 'shared/security/scope/group-access.ts'), 'utf8');
+    assert.ok(own.includes('issueGroupAccess(') && !own.includes('export function issueGroupAccess') && !own.includes('export function resolveGroupAccess'));
+  });
+
+  it('opens a group database only from the verified group access, the stored-user company lookup and the tools (always with an explicit cluster)', async () => {
     const allowed = new Set(['shared/security/scope/group-access.ts', 'shared/security/scope/company-places.repository.ts']);
     const callers: string[] = [];
     for (const file of await filesUnder(SRC)) {
