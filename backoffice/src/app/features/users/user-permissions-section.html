@@ -1,0 +1,39 @@
+<div class="stack">
+  @if (state.fixedPermissions()) {
+    <p class="note">{{ 'USERS.FORM.PERMISSIONS_FIXED' | t }}</p>
+  } @else if (state.isNew()) {
+    <p class="note">{{ 'USERS.FORM.DEFAULTS_NOTE' | t }}</p>
+  } @else if (!state.matrixEditable()) {
+    <p class="note">{{ 'USERS.FORM.PERMISSIONS_READONLY' | t }}</p>
+  } @else {
+    <p class="note">{{ 'USERS.FORM.RELOGIN_WARNING' | t }}</p>
+  }
+  @if (!state.isNew()) {
+    <div class="grid wide">
+      @for (module of modules; track module) {
+        <fieldset class="module">
+          <legend>{{ moduleLabel(module) }}</legend>
+          <fc-checkbox
+            [formField]="flag(module, 'r')"
+            [label]="'USERS.FORM.READ' | t"
+            [hint]="hint(module, 'r')"
+            [error]="state.error(flag(module, 'r'))"
+          />
+          @if (module !== 'logs') {
+            <fc-checkbox
+              [formField]="flag(module, 'w')"
+              [label]="'USERS.FORM.WRITE' | t"
+              [hint]="hint(module, 'w')"
+              [error]="state.error(flag(module, 'w'))"
+            />
+          }
+        </fieldset>
+      }
+    </div>
+    <fc-checkbox
+      [formField]="matrix.canManagePermissions"
+      [label]="'USERS.FORM.CAN_MANAGE' | t"
+      [error]="state.error(matrix.canManagePermissions)"
+    />
+  }
+</div>

@@ -1,0 +1,33 @@
+<fieldset [disabled]="disabled()" [attr.aria-describedby]="message() ? errorId : null">
+  <legend class="label">{{ label() }}</legend>
+  <div class="row">
+    <fc-avatar class="preview" [src]="value() || null" [initials]="initials()" />
+    <div class="actions">
+      <button fc-button variant="secondary" [loading]="busy()" (click)="open()">
+        {{ (value() ? 'AVATAR.CHANGE' : 'AVATAR.CHOOSE') | t }}
+      </button>
+      @if (value()) {
+        <button fc-button variant="ghost" (click)="remove()">{{ 'AVATAR.REMOVE' | t }}</button>
+      }
+    </div>
+  </div>
+  <input
+    #picker
+    class="file"
+    type="file"
+    tabindex="-1"
+    aria-hidden="true"
+    [accept]="accept"
+    (change)="onPick($event)"
+  />
+  <p class="hint">{{ 'AVATAR.HINT' | t }}</p>
+  @if (hiddenImage() && !value()) {
+    <p class="hint">{{ 'AVATAR.HIDDEN' | t }}</p>
+  }
+  <div class="error" [id]="errorId" role="alert">
+    @if (message()) {
+      <fc-icon name="error" />
+      <span>{{ message() }}</span>
+    }
+  </div>
+</fieldset>

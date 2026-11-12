@@ -19,6 +19,7 @@ const page = (data: object[], next: string | null = null) => ({
   template: `<fc-reference-picker
     label="Aziende"
     [loader]="loader()"
+    [labels]="labels()"
     [(value)]="value"
     [error]="error()"
     [disabled]="disabled()"
@@ -28,6 +29,7 @@ const page = (data: object[], next: string | null = null) => ({
 class Host {
   readonly loader = signal<ReferenceLoader>(() => Promise.resolve(page([A, B], 'c1')));
   readonly value = signal<string[]>(['z']);
+  readonly labels = signal<Readonly<Partial<Record<string, string>>> | null>(null);
   readonly error = signal<string | null>(null);
   readonly disabled = signal(false);
   readonly blurs = signal(0);
@@ -161,6 +163,64 @@ describe('ReferencePicker', () => {
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(calls).toEqual(['', 'al']);
     await view();
+  });
+
+  describe('chosen items', () => {
+    const chosen = (root: HTMLElement) =>
+      [...root.querySelectorAll<HTMLLIElement>('ul.chosen li')].map((li) => li.textContent?.trim());
+
+    it('lists nothing without labels', async () => {
+      const { root, picker } = await render();
+      expect(root.querySelector('ul.chosen')).toBeNull();
+      expect((picker as unknown as { chosen(): unknown[] }).chosen()).toEqual([]);
+    });
+
+    it('lists the selected items by name: loaded page first, then labels, then "not found"', async () => {
+      const { host, root, view } = await render();
+      host.labels.set({ a: 'Alfa (etichetta)', y: 'Ypsilon' });
+      host.value.set(['a', 'y', 'z']);
+      await view();
+      expect(root.querySelector('ul.chosen')?.getAttribute('aria-label')).toBe(
+        'REFERENCE_PICKER.CHOSEN',
+      );
+      expect(chosen(root)).toEqual(['Alfa', 'Ypsilon', 'REFERENCE_PICKER.UNKNOWN']);
+    });
+
+    it('omits the list when nothing is selected', async () => {
+      const { host, root, view } = await render();
+      host.labels.set({});
+      host.value.set([]);
+      await view();
+      expect(root.querySelector('ul.chosen')).toBeNull();
+    });
+
+    it('removes an item from the selection with its button', async () => {
+      const { host, root, view } = await render();
+      host.labels.set({ y: 'Ypsilon' });
+      host.value.set(['y', 'z']);
+      await view();
+      const remove = root.querySelectorAll<HTMLButtonElement>('ul.chosen button');
+      expect(remove[0].getAttribute('aria-label')).toBe(
+        'REFERENCE_PICKER.REMOVE {"name":"Ypsilon"}',
+      );
+      expect(remove[1].getAttribute('aria-label')).toBe('REFERENCE_PICKER.REMOVE {"name":""}');
+      remove[0].click();
+      await view();
+      expect(host.value()).toEqual(['z']);
+      expect(chosen(root)).toEqual(['REFERENCE_PICKER.UNKNOWN']);
+    });
+
+    it('does not remove anything while disabled', async () => {
+      const { host, root, view } = await render();
+      host.labels.set({ z: 'Zeta' });
+      host.disabled.set(true);
+      await view();
+      const button = root.querySelector<HTMLButtonElement>('ul.chosen button')!;
+      expect(button.disabled).toBe(true);
+      button.click();
+      await view();
+      expect(host.value()).toEqual(['z']);
+    });
   });
 
   it('ignores a superseded answer and a superseded failure', async () => {

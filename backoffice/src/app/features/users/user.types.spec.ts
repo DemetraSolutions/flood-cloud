@@ -2,9 +2,10 @@ import { Role } from '../../core/session/session.types';
 import {
   areaOf,
   assignableRoles,
+  canGrantFlag,
+  PERMISSION_MODULES,
   emptyMatrix,
   fullName,
-  inheritedMatrix,
   matrixOf,
   scopeKindOf,
   userRoute,
@@ -47,6 +48,21 @@ describe('assignableRoles', () => {
 });
 
 describe('matrices', () => {
+  it('has the 13 modules, logs last', () => {
+    expect(PERMISSION_MODULES).toHaveLength(13);
+    expect(PERMISSION_MODULES.at(-1)).toBe('logs');
+    expect(Object.keys(emptyMatrix().modules)).toEqual([...PERMISSION_MODULES]);
+  });
+
+  it('never grants write on logs, even when the stored data says so', () => {
+    const user = fakeUser({
+      permissions: { modules: { logs: { r: true, w: true }, users: { r: true, w: true } } },
+    });
+    const matrix = matrixOf(user);
+    expect(matrix.modules.logs).toEqual({ r: true, w: false });
+    expect(matrix.modules.users).toEqual({ r: true, w: true });
+  });
+
   it('starts with nothing granted', () => {
     const matrix = emptyMatrix();
     expect(matrix.canManagePermissions).toBe(false);
@@ -85,85 +101,42 @@ describe('user helpers', () => {
   });
 });
 
-describe('inheritedMatrix', () => {
-  const all = () => true;
-  const none = () => false;
-  const flags = (role: Role | '', can: (p: string) => boolean) =>
-    Object.values(inheritedMatrix(role as Role, can).modules).map((m) => [m.r, m.w]);
+describe('canGrantFlag', () => {
+  const holds =
+    (...held: string[]) =>
+    (permission: string) =>
+      held.includes(permission);
+  const none = holds();
 
-  it.each<[Role, boolean[][]]>([
-    [
-      'PSA',
-      [
-        [true, true],
-        [true, true],
-        [true, true],
-        [true, true],
-        [true, false],
-      ],
-    ],
-    [
-      'D',
-      [
-        [true, true],
-        [true, true],
-        [true, true],
-        [true, true],
-        [true, false],
-      ],
-    ],
-    [
-      'SA',
-      [
-        [true, true],
-        [true, true],
-        [true, true],
-        [true, true],
-        [true, false],
-      ],
-    ],
-    [
-      'CA',
-      [
-        [false, false],
-        [true, true],
-        [true, true],
-        [true, true],
-        [true, false],
-      ],
-    ],
-    [
-      'PA',
-      [
-        [false, false],
-        [true, true],
-        [false, false],
-        [true, true],
-        [true, false],
-      ],
-    ],
-    [
-      'E',
-      [
-        [false, false],
-        [false, false],
-        [false, false],
-        [false, false],
-        [false, false],
-      ],
-    ],
-  ])('gives %s the default of the role when the creator holds everything', (role, expected) => {
-    expect(flags(role, all)).toEqual(expected);
+  it('lets the PSA and D grant everything', () => {
+    for (const actor of ['PSA', 'D'] as const) {
+      expect(canGrantFlag(actor, none, 'users', 'w')).toBe(true);
+      expect(canGrantFlag(actor, none, 'logs', 'r')).toBe(true);
+    }
   });
 
-  it('gives nothing for an unknown role or a creator who holds nothing, and never the manage flag', () => {
-    expect(flags('', all).flat().some(Boolean)).toBe(false);
-    expect(flags('SA', none).flat().some(Boolean)).toBe(false);
-    expect(inheritedMatrix('SA', all).canManagePermissions).toBe(false);
+  it('leaves the modules without permissions to the server', () => {
+    expect(canGrantFlag('CA', none, 'calendar', 'r')).toBe(true);
+    expect(canGrantFlag('PA', none, 'stats', 'w')).toBe(true);
   });
 
-  it('needs every write permission of the module', () => {
-    const can = (p: string) => p !== 'users:delete';
-    expect(inheritedMatrix('SA', can).modules.users).toEqual({ r: true, w: false });
+  it('needs the read permission for the read flag', () => {
+    expect(canGrantFlag('CA', holds('users:read'), 'users', 'r')).toBe(true);
+    expect(canGrantFlag('CA', none, 'users', 'r')).toBe(false);
+    expect(canGrantFlag('SA', holds('activityLog:read'), 'logs', 'r')).toBe(true);
+  });
+
+  it('needs every write permission of the module for the write flag', () => {
+    const all = ['products:update'];
+    expect(canGrantFlag('CA', holds(...all), 'products', 'w')).toBe(true);
+    expect(canGrantFlag('CA', none, 'products', 'w')).toBe(false);
+    const partial = holds('users:create', 'users:update', 'users:trash');
+    expect(canGrantFlag('CA', partial, 'users', 'w')).toBe(false);
+    const full = holds('users:create', 'users:update', 'users:trash', 'users:delete');
+    expect(canGrantFlag('CA', full, 'users', 'w')).toBe(true);
+  });
+
+  it('never allows write on logs to a non-PSA actor', () => {
+    expect(canGrantFlag('SA', holds('activityLog:read'), 'logs', 'w')).toBe(false);
   });
 });

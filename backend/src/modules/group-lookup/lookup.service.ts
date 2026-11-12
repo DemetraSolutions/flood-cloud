@@ -6,6 +6,9 @@ import { listParamsOf } from '../../shared/http/list.ts';
 import type { ListPage } from '../../shared/http/list.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { priceLists } from '../groups/catalogs/price-lists.ts';
+import type { PriceList } from '../groups/catalogs/price-lists.ts';
+import type { CatalogsService } from '../groups/catalogs/catalogs.service.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import { LOOKUP_LIST, LOOKUP_NAME } from './lookup.list.ts';
 import type { LookupProductsQuery, LookupQuery } from './lookup.schemas.ts';
@@ -40,6 +43,11 @@ export interface LookupService {
   customers(principal: AuthPrincipal, access: GroupAccess, query: LookupQuery): Promise<LookupPage<LookupItem>>;
   /** Contact groups of the group, by name. */
   contactGroups(principal: AuthPrincipal, access: GroupAccess, query: LookupQuery): Promise<LookupPage<LookupItem>>;
+  /**
+   * The price lists of the group (`id`, `name`, `enabled`, `isDefault`), read from the group document with the mapping of the price-list catalog and
+   * without any other field. The catalog is bounded (at most 50 lists), so the answer is not paginated; `NOT_FOUND` if the group does not exist.
+   */
+  priceLists(access: GroupAccess): Promise<PriceList[]>;
 }
 
 /** Collaborators of {@link createLookupService}. */
@@ -47,6 +55,8 @@ export interface LookupDeps {
   readonly lookup: LookupRepository;
   /** Reads the language of the caller. */
   readonly users: Pick<UsersRepository, 'findById'>;
+  /** Reads the catalogs stored in the group document. */
+  readonly catalogs: Pick<CatalogsService, 'list'>;
 }
 
 /** The ids of `ids` (already shape-checked by the schema) as distinct ObjectIds, or `null` when the parameter is absent. */
@@ -88,5 +98,7 @@ export function createLookupService(deps: LookupDeps): LookupService {
     },
     customers: async (principal, access, query) => pageOfItems(await deps.lookup.customers(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
     contactGroups: async (principal, access, query) => pageOfItems(await deps.lookup.contactGroups(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
+    priceLists: async (access) =>
+      ((await deps.catalogs.list(priceLists, access)) as PriceList[]).map(({ id, name, enabled, isDefault }) => ({ id, name, enabled, isDefault })),
   };
 }

@@ -1,0 +1,46 @@
+<div class="stack">
+  @switch (state.scopeKind()) {
+    @case ('companies') {
+      <fc-reference-picker
+        [formField]="form.companyIds"
+        [label]="'USERS.FORM.COMPANIES' | t"
+        [loader]="companyLoader()"
+        [error]="state.error(form.companyIds)"
+        (blurred)="form.companyIds().markAsTouched()"
+      />
+    }
+    @case ('places') {
+      @if (showCompanyFilter()) {
+        <fc-select
+          [label]="'USERS.FORM.COMPANY_FILTER' | t"
+          [placeholder]="'USERS.FORM.ALL_COMPANIES' | t"
+          [options]="companyOptions()"
+          [value]="companyFilter()"
+          (valueChange)="companyFilter.set($event)"
+        />
+      }
+      <fc-reference-picker
+        [formField]="form.placeIds"
+        [label]="'USERS.FORM.PLACES' | t"
+        [loader]="placeLoader()"
+        [error]="state.error(form.placeIds)"
+        (blurred)="form.placeIds().markAsTouched()"
+      />
+    }
+  }
+  <ng-container *fcFeature="'services'">
+    @if (dutiesRole() && state.groupId() !== undefined) {
+      <fc-reference-picker
+        [formField]="form.serviceIds"
+        [label]="'USERS.FORM.SERVICES' | t"
+        [loader]="state.serviceLoader()"
+        [labels]="state.serviceLabels()"
+        [error]="state.error(form.serviceIds)"
+        (blurred)="form.serviceIds().markAsTouched()"
+      />
+    }
+  </ng-container>
+  @if (nothing()) {
+    <p class="note">{{ 'USERS.FORM.SCOPE_NONE' | t }}</p>
+  }
+</div>

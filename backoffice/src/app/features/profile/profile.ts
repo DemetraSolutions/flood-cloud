@@ -1,3 +1,4 @@
+import { httpResource } from '@angular/common/http';
 import { Component, computed, inject, linkedSignal, signal } from '@angular/core';
 import {
   email,
@@ -6,27 +7,38 @@ import {
   FormField,
   maxLength,
   pattern,
+  ReadonlyFieldTree,
   submit,
   TreeValidationResult,
+  validate,
 } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
+import { ApiData } from '../../core/api/api.types';
 import { ApiError } from '../../core/api/api-error';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { SUPPORTED_LANGUAGES } from '../../core/i18n/language';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { SessionService } from '../../core/session/session.service';
 import { Profile, Role, ScopeSummary } from '../../core/session/session.types';
+import { AvatarField } from '../../shared/ui/avatar-field/avatar-field';
 import {
   failureMessage,
   fieldErrorMessage,
   focusFirstError,
   serverFieldErrors,
 } from '../../shared/forms/form-errors';
+import { initialsOf } from '../../shared/ui/avatar/avatar';
 import { Button } from '../../shared/ui/button/button';
 import { FormError } from '../../shared/ui/form-error/form-error';
 import { Select } from '../../shared/ui/select/select';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { ToastService } from '../../shared/ui/toast/toast.service';
+import { PosOptionsFields, FavoritesChoice } from '../users/pos-options-fields';
+import { percentIssue } from '../users/percent';
+import { blankPos, PosOptionsModel, posModelOf } from '../users/user-model';
+import { optionsPatch } from '../users/user-payload';
+import { fieldAt, normalizeField } from '../users/users-errors';
+import { OwnPin } from './own-pin';
 import { ProfileApi, ProfilePatch } from './profile-api';
 
 /** Editable fields of the profile form (text fields are `''` when empty). */
@@ -36,15 +48,35 @@ export interface ProfileModel {
   email: string;
   phone: string;
   language: string;
+  /** Data URL of the avatar, `''` for none. */
+  avatar: string;
+  /** The user's own point-of-sale preferences. */
+  pos: { options: PosOptionsModel };
 }
 
 const TEXT_FIELDS = ['firstName', 'lastName', 'email', 'phone'] as const;
 const PHONE_PATTERN = /^[0-9 +\-()]*$/;
 
+/**
+ * Whether the profile has point-of-sale preferences to edit: the POS is enabled for the user and
+ * the group has the cash feature.
+ */
+export function hasPosPreferences(profile: Profile | null): boolean {
+  return profile !== null && profile.pos.enabled && profile.groupFeatures?.cash === true;
+}
+
 /** Initial form values from the profile (`null` fields become empty strings). */
 export function toProfileModel(profile: Profile | null): ProfileModel {
   if (profile === null) {
-    return { firstName: '', lastName: '', email: '', phone: '', language: '' };
+    return {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      language: '',
+      avatar: '',
+      pos: { options: blankPos().options },
+    };
   }
   return {
     firstName: profile.firstName ?? '',
@@ -52,6 +84,8 @@ export function toProfileModel(profile: Profile | null): ProfileModel {
     email: profile.email ?? '',
     phone: profile.phone ?? '',
     language: profile.language,
+    avatar: profile.avatar ?? '',
+    pos: { options: posModelOf(profile.pos).options },
   };
 }
 
@@ -73,6 +107,15 @@ export function buildProfilePatch(model: ProfileModel, profile: Profile | null):
   if (model.language !== profile.language) {
     patch.language = model.language;
   }
+  if (model.avatar !== (profile.avatar ?? '')) {
+    patch.avatar = model.avatar === '' ? null : model.avatar;
+  }
+  if (hasPosPreferences(profile)) {
+    const options = optionsPatch(model.pos.options, posModelOf(profile.pos).options, true);
+    if (options !== null) {
+      patch.pos = { options };
+    }
+  }
   return patch;
 }
 
@@ -82,7 +125,18 @@ export function buildProfilePatch(model: ProfileModel, profile: Profile | null):
  */
 @Component({
   selector: 'fc-profile',
-  imports: [Button, FormError, FormField, RouterLink, Select, TextField, TPipe],
+  imports: [
+    AvatarField,
+    Button,
+    FormError,
+    FormField,
+    OwnPin,
+    PosOptionsFields,
+    RouterLink,
+    Select,
+    TextField,
+    TPipe,
+  ],
   templateUrl: './profile.html',
   styleUrl: './profile.css',
 })
@@ -100,6 +154,7 @@ export class ProfilePage {
     email(path.email);
     maxLength(path.phone, 32);
     pattern(path.phone, PHONE_PATTERN);
+    validate(path.pos.options.quickDiscount, ({ value }) => percentIssue(value()));
   });
   protected readonly patch = computed(() => buildProfilePatch(this.model(), this.session.me()));
   protected readonly hasChanges = computed(() => Object.keys(this.patch()).length > 0);
@@ -109,6 +164,23 @@ export class ProfilePage {
     value: language,
     label: this.i18n.t(`LANGUAGE.NAME.${language.toUpperCase()}`),
   }));
+
+  protected readonly showPos = computed(() => hasPosPreferences(this.session.me()));
+  protected readonly initials = computed(() => {
+    const me = this.session.me();
+    return me === null ? '' : initialsOf(me);
+  });
+  protected readonly options = this.profileForm.pos.options as FieldTree<PosOptionsModel>;
+  private readonly favoritesResource = httpResource<ApiData<FavoritesChoice[]>>(() => {
+    const groupId = this.session.me()?.groupId;
+    return this.showPos() && this.session.can('products:read') && groupId
+      ? `/v1/groups/${encodeURIComponent(groupId)}/product-favorites`
+      : undefined;
+  });
+  /** Favorites lists of the group; `null` when the user cannot read them (or they are not read yet). */
+  protected readonly favorites = computed<readonly FavoritesChoice[] | null>(() =>
+    this.favoritesResource.hasValue() ? this.favoritesResource.value().data : null,
+  );
 
   /** Display name of a role. */
   protected roleLabel(role: Role): string {
@@ -136,7 +208,7 @@ export class ProfilePage {
     }
   }
 
-  protected error(field: FieldTree<string>): string | null {
+  protected error(field: FieldTree<unknown>): string | null {
     return fieldErrorMessage(this.i18n, field());
   }
 
@@ -160,13 +232,14 @@ export class ProfilePage {
 
   private reject(error: unknown): TreeValidationResult {
     if (error instanceof ApiError && error.code === 'VALIDATION_ERROR') {
-      const mapped = serverFieldErrors(this.i18n, error, {
-        firstName: this.profileForm.firstName,
-        lastName: this.profileForm.lastName,
-        email: this.profileForm.email,
-        phone: this.profileForm.phone,
-        language: this.profileForm.language,
-      });
+      const fields: Record<string, ReadonlyFieldTree<unknown>> = {};
+      for (const { field } of error.details) {
+        const tree = fieldAt(this.profileForm, normalizeField(field));
+        if (tree !== undefined) {
+          fields[field] = tree;
+        }
+      }
+      const mapped = serverFieldErrors(this.i18n, error, fields);
       if (mapped.unmatched) {
         this.show(this.i18n.t('ERRORS.API.VALIDATION_ERROR'));
       }

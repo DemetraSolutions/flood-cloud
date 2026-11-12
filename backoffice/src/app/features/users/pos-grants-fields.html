@@ -1,0 +1,57 @@
+<div class="stack">
+  @for (group of groups; track group.id) {
+    <fieldset>
+      <legend>{{ groupLabel(group.id) }}</legend>
+      <div class="grid">
+        @for (flag of group.flags; track flag) {
+          <fc-checkbox
+            [formField]="flagField(flag)"
+            [label]="flagLabel(flag)"
+            [hint]="flagHint(flag)"
+            [error]="error(flagField(flag))"
+          />
+        }
+      </div>
+      @if (group.id === 'SALE') {
+        <div class="grid">
+          <fc-text-field
+            [formField]="grants.discountMaxPercentage"
+            inputmode="decimal"
+            [label]="'USERS.POS.DISCOUNT_MAX' | t"
+            [hint]="'USERS.POS.PERCENT_HINT' | t"
+            [error]="error(grants.discountMaxPercentage)"
+            (blurred)="grants.discountMaxPercentage().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="grants.servicePercentage"
+            inputmode="decimal"
+            [label]="'USERS.POS.SERVICE_PERCENTAGE' | t"
+            [hint]="'USERS.POS.PERCENT_HINT' | t"
+            [error]="error(grants.servicePercentage)"
+            (blurred)="grants.servicePercentage().markAsTouched()"
+          />
+        </div>
+      }
+    </fieldset>
+  }
+  <fieldset>
+    <legend>{{ 'USERS.POS.AUTOMATIC_CASH' | t }}</legend>
+    <div class="stack">
+      @for (device of devices; track device) {
+        <fieldset>
+          <legend>{{ deviceLabel(device) }}</legend>
+          <div class="grid">
+            @for (key of keysOf(device); track key) {
+              <fc-checkbox
+                [formField]="automaticField(device, key)"
+                [label]="automaticLabel(key)"
+                [hint]="automaticHint(device, key)"
+                [error]="error(automaticField(device, key))"
+              />
+            }
+          </div>
+        </fieldset>
+      }
+    </div>
+  </fieldset>
+</div>

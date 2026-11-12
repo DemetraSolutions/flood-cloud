@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { sendPage } from '../../shared/http/envelope.ts';
+import { sendData, sendPage } from '../../shared/http/envelope.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
 import type { LookupProductsQuery, LookupQuery } from './lookup.schemas.ts';
 import type { LookupService } from './lookup.service.ts';
@@ -10,6 +10,7 @@ export interface LookupController {
   categories: RequestHandler;
   customers: RequestHandler;
   contactGroups: RequestHandler;
+  priceLists: RequestHandler;
 }
 
 /**
@@ -34,6 +35,9 @@ export function createLookupController(service: LookupService): LookupController
     contactGroups: async (_req, res) => {
       const { items, page } = await service.contactGroups(res.locals.auth!, res.locals.groupAccess!, inputOf<LookupQuery>(res, 'query'));
       sendPage(res, items, page);
+    },
+    priceLists: async (_req, res) => {
+      sendData(res, await service.priceLists(res.locals.groupAccess!));
     },
   };
 }

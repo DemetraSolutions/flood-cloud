@@ -18,6 +18,7 @@ import { ReferenceItem } from '../../core/reference/reference-api';
 import { failureMessage } from '../../shared/forms/form-errors';
 import { Button } from '../../shared/ui/button/button';
 import { Icon } from '../../shared/ui/icon/icon';
+import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { uniqueId } from '../../shared/ui/unique-id';
 import { createDebouncer } from '../../shared/util/debouncer';
@@ -36,7 +37,7 @@ export type ReferenceLoader = (query: {
  */
 @Component({
   selector: 'fc-reference-picker',
-  imports: [Button, Icon, TextField, TPipe],
+  imports: [Button, Icon, IconButton, TextField, TPipe],
   templateUrl: './reference-picker.html',
   styleUrls: ['../../shared/ui/field.css', './reference-picker.css'],
 })
@@ -50,6 +51,11 @@ export class ReferencePicker {
   readonly loader = input.required<ReferenceLoader>();
   /** Ids of the selected items (two-way). */
   readonly value = model<string[]>([]);
+  /**
+   * Names of selected items that may not be on a loaded page, by id. When given, the picker lists
+   * the selected items by name (the names of the loaded items are known by the picker itself).
+   */
+  readonly labels = input<Readonly<Partial<Record<string, string>>> | null>(null);
   /** Error message; empty or null when valid. */
   readonly error = input<string | null>(null);
   /** Disables the whole group. */
@@ -65,6 +71,14 @@ export class ReferencePicker {
   protected readonly loading = signal(false);
   protected readonly failure = signal<string | null>(null);
   protected readonly selected = computed(() => new Set(this.value()));
+  private readonly known = signal<Readonly<Partial<Record<string, string>>>>({});
+  protected readonly chosen = computed(() => {
+    const labels = this.labels();
+    if (labels === null) {
+      return [];
+    }
+    return this.value().map((id) => ({ id, name: this.known()[id] ?? labels[id] ?? null }));
+  });
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private requestId = 0;
@@ -90,6 +104,10 @@ export class ReferencePicker {
     this.value.update((ids) => (checked ? [...ids, id] : ids.filter((other) => other !== id)));
   }
 
+  protected remove(id: string): void {
+    this.value.update((ids) => ids.filter((other) => other !== id));
+  }
+
   protected loadMore(): void {
     void this.load(false);
   }
@@ -108,6 +126,10 @@ export class ReferencePicker {
         cursor: reset ? null : this.next(),
       });
       if (request === this.requestId) {
+        this.known.update((known) => ({
+          ...known,
+          ...Object.fromEntries(page.data.map((item) => [item.id, item.name])),
+        }));
         this.items.update((current) => (reset ? page.data : [...current, ...page.data]));
         this.next.set(page.page.next);
       }

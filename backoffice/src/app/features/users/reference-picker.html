@@ -8,6 +8,22 @@
     (valueChange)="onSearch($event)"
   />
   <p class="count">{{ 'REFERENCE_PICKER.SELECTED' | t: { count: value().length } }}</p>
+  @if (labels() !== null && chosen().length > 0) {
+    <ul class="chosen" [attr.aria-label]="'REFERENCE_PICKER.CHOSEN' | t">
+      @for (entry of chosen(); track entry.id) {
+        <li>
+          <span>{{ entry.name ?? ('REFERENCE_PICKER.UNKNOWN' | t) }}</span>
+          <button
+            fc-icon-button
+            icon="close"
+            [disabled]="disabled()"
+            [label]="'REFERENCE_PICKER.REMOVE' | t: { name: entry.name ?? '' }"
+            (click)="remove(entry.id)"
+          ></button>
+        </li>
+      }
+    </ul>
+  }
   <ul>
     @for (item of items(); track item.id) {
       <li>

@@ -1,0 +1,49 @@
+<fieldset [disabled]="disabled()">
+  <legend>{{ label() }}</legend>
+  <ul>
+    @for (row of rows(); track row.id) {
+      <li>
+        <label>
+          <input
+            type="checkbox"
+            [checked]="row.enabled"
+            [disabled]="disabled()"
+            (change)="setEnabled(row.id, $any($event.target).checked)"
+            (blur)="blurred.emit()"
+          />
+          {{ row.name }}
+        </label>
+        <label>
+          <input
+            type="radio"
+            [name]="name"
+            [checked]="row.isDefault"
+            [disabled]="disabled() || !row.enabled"
+            (change)="setDefault(row.id)"
+            (blur)="blurred.emit()"
+          />
+          {{ 'USERS.POS.PRICE_LIST_DEFAULT' | t }}
+        </label>
+      </li>
+    }
+    <li>
+      <span></span>
+      <label>
+        <input
+          type="radio"
+          [name]="name"
+          [checked]="noDefault()"
+          [disabled]="disabled()"
+          (change)="setDefault(null)"
+          (blur)="blurred.emit()"
+        />
+        {{ 'USERS.POS.PRICE_LIST_NO_DEFAULT' | t }}
+      </label>
+    </li>
+  </ul>
+  <div class="error" aria-live="polite">
+    @if (error()) {
+      <span>{{ error() }}</span>
+    }
+  </div>
+</fieldset>

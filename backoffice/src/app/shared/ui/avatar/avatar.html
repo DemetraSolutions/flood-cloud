@@ -1,0 +1,5 @@
+@if (hasImage()) {
+  <img [src]="src()" alt="" />
+} @else {
+  <span>{{ initials() }}</span>
+}

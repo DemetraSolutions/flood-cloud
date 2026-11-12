@@ -1,0 +1,35 @@
+<ul>
+  @for (slot of slots(); track $index) {
+    <li>
+      <fc-text-field
+        type="time"
+        [formField]="slot.start"
+        [label]="label('START', $index)"
+        [error]="error(slot.start)"
+        (blurred)="slot.start().markAsTouched()"
+      />
+      <fc-text-field
+        type="time"
+        [formField]="slot.end"
+        [label]="label('END', $index)"
+        [error]="error(slot.end)"
+        (blurred)="slot.end().markAsTouched()"
+      />
+      @if (editable()) {
+        <button
+          fc-button
+          variant="ghost"
+          [attr.aria-label]="'USERS.SHIFTS.REMOVE_SLOT' | t: { day: dayLabel(), n: $index + 1 }"
+          (click)="remove($index)"
+        >
+          {{ 'USERS.SHIFTS.REMOVE' | t }}
+        </button>
+      }
+    </li>
+  }
+</ul>
+@if (editable()) {
+  <button fc-button variant="secondary" [disabled]="full()" (click)="add()">
+    {{ 'USERS.SHIFTS.ADD_SLOT' | t }}
+  </button>
+}

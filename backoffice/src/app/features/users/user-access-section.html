@@ -1,0 +1,56 @@
+<div class="stack">
+  <fc-text-field
+    [formField]="form.username"
+    [label]="'USERS.FORM.USERNAME' | t"
+    autocomplete="off"
+    autocapitalize="none"
+    spellcheck="false"
+    [hint]="usernameHint()"
+    [error]="usernameError()"
+    (blurred)="form.username().markAsTouched()"
+  />
+  @if (state.isNew()) {
+    <fc-text-field
+      [formField]="form.password"
+      type="password"
+      autocomplete="new-password"
+      [label]="'USERS.FORM.PASSWORD' | t"
+      [hint]="'USERS.FORM.PASSWORD_HINT' | t"
+      [error]="state.error(form.password)"
+      (blurred)="form.password().markAsTouched()"
+    />
+    <fc-password-generator (generated)="onGenerated($event)" />
+    <fc-text-field
+      [formField]="form.pin"
+      type="password"
+      autocomplete="new-password"
+      inputmode="numeric"
+      [label]="'USERS.FORM.PIN' | t"
+      [hint]="'USERS.FORM.PIN_HINT' | t"
+      [error]="state.error(form.pin)"
+      (blurred)="form.pin().markAsTouched()"
+    />
+  }
+  <div class="grid">
+    <fc-select
+      [formField]="form.role"
+      [label]="'USERS.FORM.ROLE' | t"
+      [options]="state.roleOptions()"
+      [error]="state.error(form.role)"
+      (blurred)="form.role().markAsTouched()"
+    />
+    <fc-select
+      [formField]="form.status"
+      [label]="'USERS.FORM.STATUS' | t"
+      [options]="state.statusOptions()"
+      [error]="state.error(form.status)"
+      (blurred)="form.status().markAsTouched()"
+    />
+  </div>
+  @if (!state.isNew()) {
+    <fieldset>
+      <legend>{{ 'USERS.FORM.PIN' | t }}</legend>
+      <fc-user-pin />
+    </fieldset>
+  }
+</div>

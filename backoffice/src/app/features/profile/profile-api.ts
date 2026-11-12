@@ -11,6 +11,9 @@ export interface ProfilePatch {
   email?: string | null;
   phone?: string | null;
   language?: string;
+  avatar?: string | null;
+  /** The user's own point-of-sale preferences (never permissions or price lists). */
+  pos?: { options: Record<string, unknown> };
 }
 
 /** Writes to the current user's own profile (`/v1/me*`). Reads use `httpResource` in the pages. */
@@ -27,6 +30,14 @@ export class ProfileApi {
   /** Changes the password of the current user (`204`). */
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await firstValueFrom(this.http.put<void>('/v1/me/password', { currentPassword, newPassword }));
+  }
+
+  /**
+   * Sets or removes (`pin: null`) the PIN of the current user (`204`). The PIN and the password
+   * travel only in the request body.
+   */
+  async setPin(currentPassword: string, pin: string | null): Promise<void> {
+    await firstValueFrom(this.http.put<void>('/v1/me/pin', { currentPassword, pin }));
   }
 
   /** Revokes another session of the current user (`204`). */

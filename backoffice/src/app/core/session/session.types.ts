@@ -1,3 +1,5 @@
+import { UserPos } from '../users/pos.catalog';
+import { ShiftTime } from '../users/shift-time';
 import { FeatureFlags } from '../groups/feature-catalog';
 
 /** Role codes of a backoffice user (`doc/Security-Model.md`). */
@@ -30,6 +32,17 @@ export interface Profile {
   readonly dealerId: string | null;
   readonly status: string;
   readonly language: string;
+  readonly description: string | null;
+  /** Data URL of the avatar (`null` for none, or when a legacy image cannot be shown). */
+  readonly avatar: string | null;
+  readonly hasAvatar: boolean;
+  /** Whether the user has a PIN (the PIN itself is never returned). */
+  readonly pinSet: boolean;
+  readonly hiddenInStats: boolean;
+  readonly serviceIds: readonly string[];
+  /** Point-of-sale permissions and preferences of the user. */
+  readonly pos: UserPos;
+  readonly shiftTime: ShiftTime;
   /** Effective permissions (`resource:action`) computed by the server. */
   readonly permissions: readonly string[];
   /** Whether the user may change the permission matrix of other users. */

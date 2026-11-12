@@ -1,0 +1,56 @@
+<div class="stack">
+  @if (state.isNew()) {
+    <p class="note">{{ 'USERS.FORM.DEFAULTS_NOTE' | t }}</p>
+  } @else {
+    <p class="note">{{ 'USERS.FORM.RELOGIN_WARNING' | t }}</p>
+  }
+  @if (showDetails()) {
+    @if (!state.canManagePermissions()) {
+      <p class="note">{{ 'USERS.POS.PERMISSIONS_READONLY' | t }}</p>
+    }
+    <fc-checkbox
+      [formField]="pos.enabled"
+      [label]="'USERS.POS.ENABLED' | t"
+      [hint]="state.canEnablePos() ? null : ('USERS.POS.NOT_GRANTABLE' | t)"
+      [error]="state.error(pos.enabled)"
+    />
+    <section aria-labelledby="pos-grants">
+      <h3 id="pos-grants">{{ 'USERS.POS.GRANTS' | t }}</h3>
+      <fc-pos-grants-fields />
+    </section>
+    <section aria-labelledby="pos-options">
+      <h3 id="pos-options">{{ 'USERS.POS.OPTIONS' | t }}</h3>
+      <fc-pos-options-fields [options]="options" [favorites]="state.favorites()" />
+    </section>
+    <section aria-labelledby="pos-lists">
+      <h3 id="pos-lists">{{ 'USERS.POS.PRICE_LISTS' | t }}</h3>
+      @if (state.priceListsLoading()) {
+        <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+      } @else if (state.priceListsFailed()) {
+        <p role="alert" class="note">
+          {{ 'USERS.POS.PRICE_LISTS_ERROR' | t }}
+          <button fc-button variant="ghost" (click)="state.reloadPriceLists()">
+            {{ 'COMMON.RETRY' | t }}
+          </button>
+        </p>
+      } @else if (priceListChoices().length === 0) {
+        <p class="note">{{ 'USERS.POS.PRICE_LISTS_EMPTY' | t }}</p>
+      } @else {
+        <fc-pos-price-lists
+          [formField]="options.priceLists"
+          [label]="'USERS.POS.PRICE_LISTS_USABLE' | t"
+          [lists]="priceListChoices()"
+          [error]="state.error(options.priceLists)"
+        />
+        <fc-select
+          [formField]="options.defaultPriceListId"
+          [label]="'USERS.POS.START_PRICE_LIST' | t"
+          [hint]="'USERS.POS.START_PRICE_LIST_HINT' | t"
+          [placeholder]="'USERS.POS.CHOICE_NONE' | t"
+          [options]="priceListOptions()"
+          [error]="state.error(options.defaultPriceListId)"
+        />
+      }
+    </section>
+  }
+</div>

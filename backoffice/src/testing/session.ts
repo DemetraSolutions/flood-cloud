@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { SessionService } from '../app/core/session/session.service';
+import { fakePos } from './users';
 import { Profile } from '../app/core/session/session.types';
 
 /** A complete profile for tests; override what the test cares about. */
@@ -16,6 +17,14 @@ export function fakeProfile(overrides: Partial<Profile> = {}): Profile {
     dealerId: null,
     status: 'active',
     language: 'it',
+    description: null,
+    avatar: null,
+    hasAvatar: false,
+    pinSet: false,
+    hiddenInStats: false,
+    serviceIds: [],
+    pos: fakePos(),
+    shiftTime: { enabled: false, weeks: [], specialDays: [] },
     permissions: ['profile:read', 'profile:update', 'sessions:revoke'],
     canManagePermissions: false,
     passwordChangeRequired: false,

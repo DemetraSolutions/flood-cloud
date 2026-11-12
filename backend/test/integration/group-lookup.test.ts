@@ -169,3 +169,29 @@ describe('every compact read', () => {
     assert.equal((await as.call(g(1).sa, 'GET', `${path(1, 'products')}?ids=${hex(shampoo)}`)).body.data.length, 0);
   });
 });
+
+describe('GET /v1/groups/{groupId}/lookup/price-lists', () => {
+  it('lists id, name, enabled and isDefault of the price lists, as the catalog does, and nothing else of the group', async () => {
+    const full = await as.call(g(0).sa, 'GET', `/groups/${g(0).groupId.toHexString()}/price-lists`);
+    assert.equal(full.status, 200, JSON.stringify(full.body));
+    assert.ok(full.body.data.length > 0);
+    for (const caller of [g(0).sa, g(0).ca, g(0).pa, office.cluster.psa]) {
+      const reply = await as.call(caller, 'GET', path(0, 'price-lists'));
+      assert.equal(reply.status, 200, JSON.stringify(reply.body));
+      assert.deepEqual(reply.body, { data: full.body.data });
+      for (const item of reply.body.data) {
+        assert.deepEqual(Object.keys(item).sort(), ['enabled', 'id', 'isDefault', 'name']);
+      }
+    }
+    assert.deepEqual(Object.keys((await as.call(g(0).sa, 'GET', path(0, 'price-lists'))).body), ['data']);
+  });
+
+  it('keeps the groups apart and follows users:read', async () => {
+    assert.equal(as.failure(await as.call(g(0).sa, 'GET', path(1, 'price-lists'))).status, 404);
+    assert.equal(as.failure(await as.call(g(1).ca, 'GET', path(0, 'price-lists'))).status, 404);
+    assert.equal(as.failure(await as.call(office.cluster.dealerB, 'GET', path(0, 'price-lists'))).status, 404);
+    const reader = await addUser(ctx, office, { permissions: { status: false, users: { r: false, w: false } } });
+    assert.equal(as.failure(await as.call(reader.id, 'GET', path(0, 'price-lists'))).status, 403);
+    assert.equal((await office.call('GET', path(0, 'price-lists'), undefined)).status, 401);
+  });
+});

@@ -1,0 +1,48 @@
+<fc-dialog [heading]="heading()" [open]="open()" (openChange)="open.set($event)">
+  @if (open()) {
+    <form id="pin-form" novalidate (submit)="onSubmit($event)">
+      <p>{{ (mode() === 'set' ? 'PIN.SET_INTRO' : 'PIN.REMOVE_INTRO') | t }}</p>
+      @if (mode() === 'set') {
+        <fc-text-field
+          type="password"
+          autocomplete="new-password"
+          inputmode="numeric"
+          [label]="'PIN.LABEL' | t"
+          [hint]="'PIN.HINT' | t"
+          [error]="pinMessage()"
+          [value]="pin()"
+          (valueChange)="pin.set($event)"
+        />
+      }
+      @if (askPassword()) {
+        <fc-text-field
+          type="password"
+          autocomplete="current-password"
+          [label]="'PIN.CURRENT_PASSWORD' | t"
+          [error]="passwordMessage()"
+          [value]="password()"
+          (valueChange)="password.set($event)"
+        />
+      }
+    </form>
+  }
+  <button
+    fcDialogActions
+    fc-button
+    variant="secondary"
+    [disabled]="busy()"
+    (click)="open.set(false)"
+  >
+    {{ 'COMMON.CANCEL' | t }}
+  </button>
+  <button
+    fcDialogActions
+    fc-button
+    type="submit"
+    form="pin-form"
+    [variant]="mode() === 'set' ? 'primary' : 'danger'"
+    [loading]="busy()"
+  >
+    {{ (mode() === 'set' ? 'PIN.SET' : 'PIN.REMOVE') | t }}
+  </button>
+</fc-dialog>

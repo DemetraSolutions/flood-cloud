@@ -39,6 +39,22 @@ describe('ProfileApi', () => {
     });
   });
 
+  it.each([
+    ['1234', { currentPassword: 'pw-current', pin: '1234' }],
+    [null, { currentPassword: 'pw-current', pin: null }],
+  ])(
+    'sets or removes the PIN (%j) with the current password in the body only',
+    async (pin, body) => {
+      const done = TestBed.inject(ProfileApi).setPin('pw-current', pin);
+      const request = backend().expectOne(`${API}/v1/me/pin`);
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual(body);
+      expect(request.request.params.keys()).toEqual([]);
+      request.flush(null, { status: 204, statusText: 'No Content' });
+      await expect(done).resolves.toBeUndefined();
+    },
+  );
+
   it('revokes a session by id, encoding it in the path', async () => {
     const done = TestBed.inject(ProfileApi).revokeSession('665f/1c2e');
     const request = backend().expectOne(`${API}/v1/me/sessions/665f%2F1c2e`);

@@ -1,0 +1,57 @@
+<div class="stack">
+  <fc-avatar-field
+    [formField]="form.avatar"
+    [label]="'AVATAR.LABEL' | t"
+    [initials]="state.initials()"
+    [hiddenImage]="hiddenImage()"
+    [error]="state.error(form.avatar)"
+  />
+  <div class="grid">
+    <fc-text-field
+      [formField]="form.firstName"
+      [label]="'PROFILE.FIRST_NAME' | t"
+      [error]="state.error(form.firstName)"
+      (blurred)="form.firstName().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="form.lastName"
+      [label]="'PROFILE.LAST_NAME' | t"
+      [error]="state.error(form.lastName)"
+      (blurred)="form.lastName().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="form.email"
+      type="email"
+      [label]="'PROFILE.EMAIL' | t"
+      [error]="state.error(form.email)"
+      (blurred)="form.email().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="form.phone"
+      type="tel"
+      [label]="'PROFILE.PHONE' | t"
+      [error]="state.error(form.phone)"
+      (blurred)="form.phone().markAsTouched()"
+    />
+    <fc-select
+      [formField]="form.language"
+      [label]="'PROFILE.LANGUAGE' | t"
+      [options]="state.languages"
+      [error]="state.error(form.language)"
+      (blurred)="form.language().markAsTouched()"
+    />
+  </div>
+  <fc-textarea
+    [formField]="form.description"
+    [label]="'USERS.FORM.DESCRIPTION' | t"
+    [hint]="'USERS.FORM.DESCRIPTION_HINT' | t"
+    [error]="state.error(form.description)"
+    (blurred)="form.description().markAsTouched()"
+  />
+  <fc-checkbox
+    [formField]="form.hiddenInStats"
+    [label]="'USERS.FORM.HIDDEN_IN_STATS' | t"
+    [hint]="'USERS.FORM.HIDDEN_IN_STATS_HINT' | t"
+    [error]="state.error(form.hiddenInStats)"
+  />
+</div>

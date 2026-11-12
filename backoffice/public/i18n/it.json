@@ -171,7 +171,9 @@
     "LANGUAGE": "Lingua",
     "CHANGE_PASSWORD": "Cambia password",
     "SESSIONS": "Sessioni attive",
-    "SAVED": "Profilo aggiornato."
+    "SAVED": "Profilo aggiornato.",
+    "POS_PREFERENCES": "Preferenze della cassa",
+    "PIN": "PIN"
   },
   "SESSIONS": {
     "TITLE": "Sessioni attive",
@@ -243,7 +245,10 @@
     "SEARCH": "Cerca per nome",
     "SELECTED": "{count} selezionati",
     "EMPTY": "Nessun elemento trovato.",
-    "MORE": "Carica altri"
+    "MORE": "Carica altri",
+    "CHOSEN": "Elementi selezionati",
+    "REMOVE": "Rimuovi {name}",
+    "UNKNOWN": "Elemento non trovato"
   },
   "PASSWORD_GENERATOR": {
     "GENERATE": "Genera una password casuale",
@@ -351,7 +356,15 @@
       "USERS": "Utenti",
       "COMPANIES": "Aziende",
       "PLACES": "Punti vendita",
-      "LOGS": "Registro attività"
+      "LOGS": "Registro attività",
+      "DOCUMENTS": "Documenti",
+      "PRODUCTS": "Prodotti",
+      "CALENDAR": "Calendario",
+      "WAREHOUSE": "Magazzino",
+      "CONTACTS": "Contatti",
+      "FIDELITY": "Fidelity",
+      "SETTINGS": "Impostazioni",
+      "STATS": "Statistiche"
     },
     "FORM": {
       "NEW_TITLE": "Nuovo utente",
@@ -381,10 +394,246 @@
       "PERMISSIONS_READONLY": "Solo chi può gestire i permessi può modificare questa matrice.",
       "READ": "Lettura",
       "WRITE": "Scrittura",
-      "CAN_MANAGE": "Gestisce i permessi degli altri utenti"
+      "CAN_MANAGE": "Gestisce i permessi degli altri utenti",
+      "DEFAULTS_NOTE": "Verranno applicati i valori predefiniti del ruolo; potrai modificarli dopo la creazione.",
+      "DESCRIPTION": "Descrizione",
+      "DESCRIPTION_HINT": "Fino a 1000 caratteri.",
+      "HIDDEN_IN_STATS": "Nascondi dalle statistiche",
+      "HIDDEN_IN_STATS_HINT": "L'utente non compare nelle statistiche.",
+      "NOT_GRANTABLE": "Non puoi concedere questo permesso: non lo hai.",
+      "PERMISSIONS_FIXED": "PSA e dealer hanno sempre tutti i permessi: non si modificano.",
+      "PIN": "PIN",
+      "PIN_HINT": "Facoltativo, da 3 a 6 cifre. Non viene mai mostrato.",
+      "RELOGIN_WARNING": "Cambiare i permessi o i permessi della cassa disconnette l'utente da tutte le sessioni.",
+      "SCOPE_NONE": "Questo ruolo non ha un perimetro da scegliere.",
+      "SERVICES": "Servizi erogati"
     },
     "ACTIONS": "Azioni",
-    "ACTIONS_LABEL": "Azioni per {username}"
+    "ACTIONS_LABEL": "Azioni per {username}",
+    "SECTIONS": "Sezioni della scheda utente",
+    "SECTION_ERRORS": "{count} errori",
+    "SECTION": {
+      "PROFILE": "Anagrafica",
+      "ACCESS": "Accesso",
+      "SCOPE": "Perimetro",
+      "PERMISSIONS": "Permessi",
+      "POS": "Cassa",
+      "SHIFTS": "Turni"
+    },
+    "SHIFTS": {
+      "ENABLED": "Turni attivi",
+      "WEEKS": "Settimane",
+      "WEEKS_HINT": "La settimana senza date vale sempre (una sola); le settimane con date valgono in quell'intervallo e non possono sovrapporsi.",
+      "WEEK_DEFAULT": "Settimana predefinita",
+      "WEEK_N": "Settimana {n}",
+      "FROM": "Dal",
+      "TO": "Al",
+      "ACTIVE": "Giorno lavorativo",
+      "ADD_WEEK": "Aggiungi settimana",
+      "REMOVE_WEEK": "Rimuovi la settimana",
+      "SPECIAL": "Giorni speciali",
+      "SPECIAL_HINT": "Un giorno speciale prevale sulle settimane.",
+      "SPECIAL_N": "Giorno speciale {n}",
+      "DATE": "Data",
+      "DAY_OFF": "Giorno libero",
+      "ADD_SPECIAL": "Aggiungi giorno speciale",
+      "REMOVE_SPECIAL": "Rimuovi il giorno speciale",
+      "ADD_SLOT": "Aggiungi fascia",
+      "REMOVE": "Rimuovi",
+      "REMOVE_SLOT": "Rimuovi la fascia {n} di {day}",
+      "SLOT_START": "Inizio fascia {n} di {day}",
+      "SLOT_END": "Fine fascia {n} di {day}",
+      "DAY": {
+        "0": "Domenica",
+        "1": "Lunedì",
+        "2": "Martedì",
+        "3": "Mercoledì",
+        "4": "Giovedì",
+        "5": "Venerdì",
+        "6": "Sabato"
+      }
+    },
+    "POS": {
+      "ENABLED": "Cassa abilitata",
+      "GRANTS": "Permessi della cassa",
+      "OPTIONS": "Preferenze dell'interfaccia",
+      "CHOICES": "Scelte",
+      "PERMISSIONS_READONLY": "Solo chi può gestire i permessi può modificare i permessi della cassa; le preferenze le modifica chi può modificare l'utente.",
+      "NOT_GRANTABLE": "Non puoi concedere questo permesso: non lo hai.",
+      "DISCOUNT_MAX": "Sconto massimo (%)",
+      "SERVICE_PERCENTAGE": "Percentuale di servizio (%)",
+      "PERCENT_HINT": "Da 0 a 100; vuoto per nessun limite.",
+      "AUTOMATIC_CASH": "Cassa automatica",
+      "CHOICE_NONE": "Nessuno",
+      "FAVORITES_NONE": "Nessun elenco",
+      "FAVORITES_UNREADABLE": "Elenco di preferiti collegato: {id} (non hai il permesso di leggere i preferiti del gruppo).",
+      "PRICE_LISTS": "Listini",
+      "PRICE_LISTS_USABLE": "Listini utilizzabili",
+      "PRICE_LIST_DEFAULT": "Selezionato di default",
+      "PRICE_LIST_NO_DEFAULT": "Nessuno selezionato di default",
+      "PRICE_LISTS_EMPTY": "Il gruppo non ha listini.",
+      "PRICE_LISTS_ERROR": "Impossibile caricare i listini del gruppo.",
+      "START_PRICE_LIST": "Listino di partenza della cassa",
+      "START_PRICE_LIST_HINT": "L'ultimo listino con cui la cassa è partita; lo scrive la cassa stessa.",
+      "GRANT": {
+        "FISCAL_CLOSURE": "Chiusura fiscale",
+        "DISCOUNT": "Sconti",
+        "DISCOUNT_REASON": "Motivazione dello sconto",
+        "PRICE_CHANGE": "Modifica dei prezzi",
+        "ONLY_HIGHER_PRICE": "Solo prezzi maggiorati",
+        "INVOICES": "Fatture",
+        "FREE_SALE": "Vendita libera",
+        "CONTACTS": "Gestione contatti",
+        "BYPASS_AUTOMATIC_CASH": "Bypass della cassa automatica",
+        "DELETE_USER_SHIFT_DETAIL": "Cancellazione dei dettagli del turno",
+        "RECEIPT_CANCELLATION": "Annullo dello scontrino",
+        "SELECT_SALE_USER": "Scelta dell'utente di vendita",
+        "MANAGE_SERVICE": "Gestione del servizio",
+        "PRINT_PREBILL": "Stampa del preconto",
+        "PRINT_RECEIPT": "Stampa del conto",
+        "TABLE_CHECKOUT_ACTIVE_DESK": "Conto del tavolo dal banco attivo",
+        "DELETE_TABLE": "Cancellazione del tavolo",
+        "DELETE_TABLE_REASON": "Motivazione della cancellazione del tavolo",
+        "DELETE_TABLE_PRODUCT": "Cancellazione di un prodotto dal tavolo",
+        "DELETE_TABLE_PRODUCT_REASON_NOT_SENT": "Motivazione per prodotto non inviato",
+        "DELETE_TABLE_PRODUCT_REASON_SENT": "Motivazione per prodotto inviato",
+        "TABLE_PREBILL_ACTIONS": "Azioni su tavolo in preconto",
+        "ROOMS_TABLE_QUICK_TOTALS": "Totali rapidi dei tavoli",
+        "ROOMS_ROOMS_PRICES": "Prezzi nelle sale",
+        "ROOMS_TABLE_PRICES": "Prezzi nei tavoli",
+        "ROOMS_ONLY_HIGHER_SEATS_QUANTITY": "Solo aumento dei coperti",
+        "EDIT_SENT_WEIGHT_QUANTITY": "Modifica quantità dei prodotti a peso inviati",
+        "ADVANCED_REPORT": "Report avanzato",
+        "ADVANCED_REPORT_PIN": "PIN per il report avanzato",
+        "REWORK_SALE": "Rielaborazione di una vendita in errore",
+        "SENT_PRODUCTS": "Stato dei prodotti inviati",
+        "NOT_SENT_PRODUCTS": "Stato dei prodotti non inviati",
+        "LOCK_PRODUCTS": "Blocco dei prodotti all'invio",
+        "TABLE_ENGAGE": "Impegno del tavolo",
+        "TABLE_MERGE": "Unione dei tavoli",
+        "TABLE_SPLIT": "Separazione dei tavoli",
+        "TABLE_CLOSE": "Chiusura del tavolo",
+        "CHECKOUT_PARTITION": "Conto suddiviso",
+        "CHECKOUT_SEPARATION": "Conto separato",
+        "MOVE_PRODUCTS": "Spostamento dei prodotti tra tavoli",
+        "UNLOCK_TABLE": "Sblocco del tavolo",
+        "RESEND_PRODUCTS": "Reinvio dei prodotti",
+        "SEARCH_PRODUCTS": "Ricerca dei prodotti",
+        "RIDER": "Rider"
+      },
+      "GRANT_GROUP": {
+        "SALE": "Vendita e sconti",
+        "RECEIPTS": "Scontrini e chiusure",
+        "TABLES": "Tavoli e sale",
+        "PRODUCTS": "Prodotti e comande"
+      },
+      "DEVICE": {
+        "GLORY": "Glory",
+        "CASH_MATIC": "CashMatic",
+        "VNE": "VNE",
+        "AZKOYEN": "Azkoyen",
+        "CASH_SYSTEM": "Cash System"
+      },
+      "AUTOMATIC_FLAG": {
+        "WITHDRAWAL": "Prelievo",
+        "DEPOSIT": "Deposito",
+        "ARCHIVE": "Archiviazione tranne fondo",
+        "ARCHIVE_ALL": "Archiviazione totale",
+        "UNLOCK_NOTE": "Rimozione cassetto banconote",
+        "UNLOCK_COIN": "Rimozione cassetto monete",
+        "COLLECT_VERIFY": "Ripristino contabile",
+        "CHANGE": "Cambio",
+        "REFILL": "Refill",
+        "TOOLS": "Strumenti",
+        "BACKOFFICE": "Backoffice",
+        "STATUS": "Stato"
+      },
+      "OPTION": {
+        "EXTENDED_CART": "Carrello esteso",
+        "NO_SEPARATOR": "Valori senza separatore",
+        "SKIP_CHECKOUT_BUTTON": "Pulsante rapido di pagamento",
+        "SHOW_LAST_SALE_VALUE": "Mostra il valore dell'ultima vendita",
+        "QUICK_PRICE_LIST": "Pulsante rapido cambio listino",
+        "ADVANCED_DISCOUNT": "Sconto avanzato al banco",
+        "INVERTED_CART": "Carrello invertito",
+        "DESK_PRINT_ORDER_DEFAULT": "Stampa le comande di default dal banco",
+        "GENERIC_PRODUCT_PRICE_FOCUS": "Focus sul prezzo del prodotto generico",
+        "REMOVE_FILTERS_PRODUCT_SELECT": "Rimuovi i filtri alla selezione di un prodotto",
+        "REMOVE_FILTERS_ON_SEARCH": "Rimuovi i filtri alla ricerca",
+        "SKIP_FISCAL_RECEIPT_TYPE_REQUEST": "Non chiedere il tipo di scontrino fiscale",
+        "DEPARTMENTS_DIALOG": "Finestra dei reparti",
+        "DARK_MODE": "Tema scuro",
+        "PRODUCTS_PAGINATION": "Paginazione dei prodotti",
+        "PRODUCTS_SHORT_NAME": "Nome breve dei prodotti",
+        "REDUCED_PRODUCTS": "Prodotti ridotti",
+        "REDUCED_PRODUCTS_TABLE": "Prodotti ridotti nel tavolo",
+        "ENLARGED_CATEGORIES": "Categorie ingrandite",
+        "REDUCED_TABLES": "Tavoli ridotti",
+        "TABLE_CART_PRIORITY": "Apri il tavolo sulla presa comanda",
+        "SEND_ORDER_REMAIN_BUTTON": "Pulsante di invio ordine senza uscire dal tavolo",
+        "VIEW_TABLE_STATUS": "Mostra lo stato del tavolo",
+        "VIEW_TABLE_USER": "Mostra l'utente del tavolo",
+        "VIEW_TABLE_CUSTOMER": "Mostra il cliente del tavolo",
+        "VIEW_TABLE_START_DATE": "Mostra la data di apertura del tavolo",
+        "ROOMS_GRID_ACTIVE": "Mappa delle sale attiva di default",
+        "ROOMS_GRID_ACTIONBAR_OPENED": "Barra azioni della mappa aperta di default",
+        "DELIVERY_TAKEAWAY_COMPLETED_DEFAULT": "Mostra di default gli ordini d'asporto completati",
+        "DELIVERY_TAKEAWAY_SHOW_ORDER_DETAIL_ON_SAVE": "Mostra il dettaglio dell'ordine d'asporto al salvataggio",
+        "DELIVERY_TAKEAWAY_SHOW_PRODUCTION": "Mostra i centri di produzione dell'asporto",
+        "QUICK_DISCOUNT": "Pulsante rapido di sconto (%)",
+        "FAVORITES_ID": "Elenco dei preferiti"
+      },
+      "OPTION_GROUP": {
+        "COUNTER": "Banco",
+        "PRODUCTS": "Prodotti",
+        "TABLES": "Tavoli e sale",
+        "DELIVERY": "Asporto e consegna"
+      },
+      "CHOICE": {
+        "SIDE": "Lato del banco",
+        "SIDE_ROOMS": "Lato di sale e tavoli",
+        "VIRTUAL_KEYBOARD": "Tastiera virtuale",
+        "TEMPLATE": "Tema",
+        "PRODUCTS_FONT_SIZE": "Dimensione del nome dei prodotti",
+        "PRODUCTS_SHORT_NAME_FONT_SIZE": "Dimensione del nome breve dei prodotti",
+        "ROOMS_TABLES_COLUMNS": "Colonne dei tavoli",
+        "ROOMS_TABLES_COLUMNS_HANDHELD": "Colonne dei tavoli sul palmare",
+        "ROOMS_GRID_ZOOM_HANDHELD": "Zoom della mappa delle sale sul palmare"
+      },
+      "CHOICE_VALUE": {
+        "SIDE": {
+          "DX": "Destro",
+          "SX": "Sinistro"
+        },
+        "SIDE_ROOMS": {
+          "DX": "Destro",
+          "SX": "Sinistro"
+        },
+        "VIRTUAL_KEYBOARD": {
+          "PB": "Popover con buffer",
+          "P": "Popover senza buffer",
+          "MB": "Finestra con buffer",
+          "M": "Finestra senza buffer"
+        },
+        "TEMPLATE": {
+          "MATERIAL_TEALWHITE_LIGHT": "Verde acqua chiaro",
+          "MATERIAL_TEALWHITE_DARK": "Verde acqua scuro",
+          "MATERIAL_WHITEPURPLE_LIGHT": "Viola chiaro",
+          "MATERIAL_WHITEPURPLE_DARK": "Viola scuro"
+        },
+        "PRODUCTS_FONT_SIZE": {
+          "S": "Piccolo",
+          "M": "Medio",
+          "L": "Grande"
+        },
+        "PRODUCTS_SHORT_NAME_FONT_SIZE": {
+          "S": "Piccolo",
+          "M": "Medio",
+          "L": "Grande"
+        }
+      }
+    },
+    "HAS_AVATAR": "Ha un avatar"
   },
   "ROLE_SHORT": {
     "PSA": "Amm. piattaforma",
@@ -952,5 +1201,37 @@
         "DISCOUNT_HINT": "Da 0 a 100; vuoto se non impostato."
       }
     }
+  },
+  "AVATAR": {
+    "LABEL": "Avatar",
+    "CHOOSE": "Scegli immagine",
+    "CHANGE": "Cambia immagine",
+    "REMOVE": "Rimuovi immagine",
+    "HINT": "PNG, JPEG o WebP. L'immagine viene ridimensionata per stare entro 200 KB.",
+    "HIDDEN": "L'utente ha un'immagine salvata in precedenza che non può essere mostrata: sceglierne una nuova la sostituisce.",
+    "PROBLEM": {
+      "TYPE": "Formato non supportato: scegli un'immagine PNG, JPEG o WebP.",
+      "FILE": "Il file è troppo grande: scegli un'immagine di al massimo 10 MB.",
+      "READ": "Impossibile leggere l'immagine scelta.",
+      "SIZE": "L'immagine è troppo pesante anche dopo il ridimensionamento: scegline una più semplice."
+    }
+  },
+  "PIN": {
+    "LABEL": "PIN",
+    "HINT": "Da 3 a 6 cifre.",
+    "CURRENT_PASSWORD": "Password attuale",
+    "SET": "Imposta PIN",
+    "CHANGE": "Cambia PIN",
+    "REMOVE": "Rimuovi PIN",
+    "SET_TITLE": "Imposta il PIN",
+    "SET_INTRO": "Il PIN non viene mai mostrato: potrai solo sostituirlo o rimuoverlo.",
+    "REMOVE_TITLE": "Rimuovi il PIN",
+    "REMOVE_CONFIRM": "Rimuovere il PIN? Senza PIN non sarà possibile usare le funzioni della cassa che lo richiedono.",
+    "REMOVE_INTRO": "Il PIN verrà rimosso.",
+    "IS_SET": "PIN impostato",
+    "IS_NOT_SET": "PIN non impostato",
+    "SAVED": "PIN salvato.",
+    "REMOVED": "PIN rimosso.",
+    "RATE_LIMITED_WAIT": "Troppi tentativi: riprova tra {seconds} secondi."
   }
 }

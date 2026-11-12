@@ -104,7 +104,14 @@
       }
     </ng-template>
     <ng-template fcCell="username" let-row>
-      <a [routerLink]="detailRoute(row)">{{ row.username }}</a>
+      <span class="identity">
+        <fc-avatar
+          [initials]="initials(row)"
+          [marked]="row.hasAvatar"
+          [label]="row.hasAvatar ? ('USERS.HAS_AVATAR' | t) : ''"
+        />
+        <a [routerLink]="detailRoute(row)">{{ row.username }}</a>
+      </span>
     </ng-template>
     <ng-template fcCell="status" let-row>
       @if (row.trashed) {

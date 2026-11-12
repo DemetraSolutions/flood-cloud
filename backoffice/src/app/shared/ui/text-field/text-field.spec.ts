@@ -12,6 +12,7 @@ import { TextField } from './text-field';
     autocomplete="email"
     autocapitalize="none"
     spellcheck="false"
+    [inputmode]="inputmode()"
     required
     [disabled]="disabled()"
     [(value)]="value"
@@ -23,6 +24,7 @@ class Host {
   readonly hint = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   readonly disabled = signal(false);
+  readonly inputmode = signal<'numeric' | null>(null);
   readonly blurs = signal(0);
 }
 
@@ -74,6 +76,14 @@ describe('TextField', () => {
     expect(error.getAttribute('aria-live')).toBe('polite');
     expect(error.textContent).toContain('Email non valida');
     expect(error.querySelector('svg')).not.toBeNull();
+  });
+
+  it('sets the inputmode attribute only when asked to', async () => {
+    const { fixture, host, input } = await render();
+    expect(input.hasAttribute('inputmode')).toBe(false);
+    host.inputmode.set('numeric');
+    await fixture.whenStable();
+    expect(input.getAttribute('inputmode')).toBe('numeric');
   });
 
   it('can be disabled', async () => {

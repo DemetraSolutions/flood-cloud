@@ -43,6 +43,8 @@ export class TextField {
   readonly autocomplete = input<string | null>(null);
   /** `autocapitalize` attribute (e.g. `none` for usernames). */
   readonly autocapitalize = input<string | null>(null);
+  /** `inputmode` attribute (e.g. `numeric` for a PIN). */
+  readonly inputmode = input<'numeric' | 'decimal' | 'tel' | null>(null);
   /** `spellcheck` attribute. */
   readonly spellcheck = input<'true' | 'false' | null>(null);
   /** Placeholder (never a replacement for the label). */

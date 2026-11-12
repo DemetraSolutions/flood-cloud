@@ -11,7 +11,7 @@ describe('the compact reads', () => {
       products: () => Promise.reject(new Error('must not be reached')),
       categories: () => Promise.reject(new Error('must not be reached')),
     } as unknown as LookupRepository;
-    const service = createLookupService({ lookup, users: { findById: () => Promise.resolve(null) } });
+    const service = createLookupService({ lookup, users: { findById: () => Promise.resolve(null) }, catalogs: { list: () => Promise.reject(new Error('must not be reached')) } });
     await assert.rejects(service.products(principalOf('SA'), {} as GroupAccess, {}), { code: 'NOT_FOUND' });
     await assert.rejects(service.categories(principalOf('SA'), {} as GroupAccess, {}), { code: 'NOT_FOUND' });
   });

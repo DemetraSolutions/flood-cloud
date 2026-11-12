@@ -1,0 +1,21 @@
+.block {
+  margin-block-end: var(--space-3);
+}
+
+.days {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+
+@container (min-width: 40rem) {
+  .days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.problem {
+  margin: 0 0 var(--space-2);
+  color: var(--color-danger);
+}

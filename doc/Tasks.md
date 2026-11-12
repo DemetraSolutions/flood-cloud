@@ -8,6 +8,7 @@
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
 > - Stato al 2026-11-06: aree 1, 2 e 3 completate; area 4 (gruppi): backend realizzato (passi 4B, 4B-bis, 4U), restano 4.4.2 e il backoffice.
 > - Stato al 2026-11-12: il passo 4C (backoffice dei gruppi) è diviso in **4C-1** (fatto: feature, elenco gruppi, scheda del gruppo con integrazioni e sei cataloghi), **4C-2** (form utente completo e profilo) e **4C-3** (fidelity, preferiti, promozioni, con letture compatte già nel backend); decisione dell'utente del 2026-11-12.
+> - Stato al 2026-11-12 (aggiornamento): **4C-2 realizzato** (form utente a 6 tab con permessi POS, listini, servizi, turni, PIN e avatar; profilo con avatar, preferenze della cassa e PIN proprio); resta **4C-3**. Documentazione in `doc/Technical-Guide.md` §11.12.
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -109,6 +110,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **D-28** PSA e D hanno tutto (estende D-10): i loro permessi effettivi sono l'intero tetto del ruolo, senza la matrice legacy del loro documento, e `canManagePermissions` è sempre vero; le risposte mostrano i valori effettivi; nessuna modifica ai documenti. Decisione dell'utente del 2026-11-06.
 - [x] **D-29** Gruppo (modello completo): perimetro "tutto" (scheda gruppo, fidelity, preferiti e promozioni come sotto-risorse); `apiKey` delle integrazioni solo impostabili (`apiKeySet`), `groups.apiKey` mai gestita; `databaseHost` e `filesHost` non gestiti; `places[]` derivato, non esposto; fidelity con permesso `fidelity`, preferiti e promozioni con `products`, scrivibili anche da CA e PA se la loro matrice lo concede; CA e PA limitati al proprio perimetro di punti vendita su promozioni e tipi di carta (lista vuota = tutto il gruppo ⇒ vietata a CA/PA); eliminazione di elementi referenziati rifiutata con `409` (il legacy la permetteva); budget del documento del gruppo 8 MiB. Decisione dell'utente del 2026-11-06, realizzata nel passo 4B-bis.
 - [x] **D-30** Profilazione mirata dei sotto-oggetti di `users` e `groups` in produzione (`npm run profile:legacy -- --focus subobjects`), in sola lettura, eseguita il 2026-11-06: ha fornito le frequenze reali delle chiavi per i modelli completi.
+- [x] **D-31** Listini del gruppo (4C-2): chi legge gli utenti (`users:read`) li legge in forma compatta (`GET /v1/groups/{groupId}/lookup/price-lists`) per assegnarli agli utenti; la modifica dei listini resta a PSA, D e SA (`groups:update`). Decisione dell'utente del 2026-11-12, realizzata nel passo 4C-2.
 
 ### 0.4.1 Esiti della profilazione (1.3.6, 2026-11-01)
 Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'utente, di `production_*` (MongoDB 8.0.34). Dati aggregati, senza valori. Servono a prendere le decisioni aperte, non le sostituiscono.
@@ -394,12 +396,13 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
   - logout.
 - [x] **3.5.3** Avvio dell'app con `GET /v1/me`; stato della sessione a signal.
 - [x] **3.5.4** Guard `canMatch` per sessione e permesso, direttiva o helper `hasPermission` per menu e azioni (le route sono protette, non solo i menu come nel legacy).
-- [x] **3.5.5** Profilo, cambio password, elenco e revoca delle sessioni.
+- [x] **3.5.5** Profilo, cambio password, elenco e revoca delle sessioni (con avatar, preferenze della cassa e PIN proprio dal passo 4C-2).
 - [x] **3.5.6** Elenco utenti: filtri nell'URL, paginazione a cursore, quattro stati della vista, selezione multipla con conferma.
 - [x] **3.5.7** Dettaglio, creazione e modifica dell'utente (con letture compatte di gruppi, aziende e punti vendita aggiunte nel passo 3D per decisione dell'utente del 2026-11-05, da estendere nelle aree 4, 6, 7):
   - ruoli proposti in base a chi crea;
   - scope scelto dai dati di riferimento (4.5.3);
-  - errori `422` e `409` sui campi.
+  - errori `422` e `409` sui campi;
+  - modello completo a 6 tab con un solo `PATCH`, PIN, avatar, servizi, cassa, listini e turni (passo 4C-2, D-26, D-27, D-31).
 - [x] **3.5.8** Reset della password, disattivazione, cestino e ripristino dall'interfaccia.
 
 ### 3.6 Chiusura

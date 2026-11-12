@@ -40,7 +40,7 @@ import { createDebouncer } from '../../shared/util/debouncer';
 import { apiErrorOf } from '../profile/sessions';
 import { PasswordGenerator } from '../users/password-generator';
 import { UsersApi } from '../users/users-api';
-import { USERNAME_PATTERN } from '../users/user-form';
+import { USERNAME_PATTERN } from '../users/user-form-state';
 import {
   buildCompanyBody,
   buildCompanyPatch,

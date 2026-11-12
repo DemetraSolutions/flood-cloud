@@ -131,18 +131,40 @@ describe('UsersList', () => {
       const { flush, cells, root } = await render();
       await flush([ONE, TWO, TRASHED]);
       expect(cells(0).slice(1, 5)).toEqual([
-        'one',
+        'AVone',
         'Anna Verdi',
         'ROLE_SHORT.CA',
         'USERS.STATUS.ACTIVE',
       ]);
-      expect(cells(1).slice(1, 5)).toEqual(['two', '', 'ROLE_SHORT.CA', 'USERS.STATUS.DISABLED']);
+      expect(cells(1).slice(1, 5)).toEqual(['TWtwo', '', 'ROLE_SHORT.CA', 'USERS.STATUS.DISABLED']);
       expect(cells(1)[5]).toBe('');
       expect(cells(0)[5]).toMatch(/2026/);
       expect(cells(2)[4]).toBe('USERS.STATUS.TRASHED');
       expect(root.querySelector('tbody a')?.getAttribute('href')).toBe(
         `/groups/${GROUP}/users/${ONE.id}`,
       );
+    });
+
+    it('shows the initials of each user and marks, without loading it, an existing image', async () => {
+      const { flush, root } = await render();
+      const withImage = fakeUser({
+        id: '665f1c2e9b1d4a0012ab3404',
+        username: 'four',
+        firstName: 'Carla',
+        lastName: null,
+        hasAvatar: true,
+      });
+      await flush([ONE, TWO, withImage]);
+      const avatars = [...root.querySelectorAll<HTMLElement>('tbody fc-avatar')];
+      expect(avatars.map((a) => a.textContent?.trim())).toEqual(['AV', 'TW', 'C']);
+      expect(avatars.map((a) => a.classList.contains('marked'))).toEqual([false, false, true]);
+      expect(avatars.map((a) => a.getAttribute('aria-label'))).toEqual([
+        null,
+        null,
+        'USERS.HAS_AVATAR',
+      ]);
+      expect(avatars[2].getAttribute('role')).toBe('img');
+      expect(root.querySelector('tbody img')).toBeNull();
     });
 
     it('links the users of the platform area to their own pages', async () => {

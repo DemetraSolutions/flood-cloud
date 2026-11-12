@@ -1,4 +1,49 @@
+import {
+  AUTOMATIC_CASH,
+  AUTOMATIC_CASH_DEVICES,
+  POS_BOOLEAN_OPTIONS,
+  POS_FLAGS,
+  UserPos,
+} from '../app/core/users/pos.catalog';
 import { UserRecord } from '../app/features/users/user.types';
+
+/** A complete POS record for tests: every grant off, default preferences. */
+export function fakePos(overrides: Partial<UserPos> = {}): UserPos {
+  return {
+    enabled: true,
+    grants: {
+      ...(Object.fromEntries(POS_FLAGS.map((flag) => [flag, false])) as Record<string, boolean>),
+      discountMaxPercentage: null,
+      servicePercentage: null,
+      automaticCash: Object.fromEntries(
+        AUTOMATIC_CASH_DEVICES.map((device) => [
+          device,
+          Object.fromEntries(AUTOMATIC_CASH[device].map((key) => [key, false])),
+        ]),
+      ),
+    } as unknown as UserPos['grants'],
+    options: {
+      ...(Object.fromEntries(POS_BOOLEAN_OPTIONS.map((name) => [name, false])) as Record<
+        string,
+        boolean
+      >),
+      favoritesId: null,
+      side: 'dx',
+      sideRooms: 'dx',
+      virtualKeyboard: '',
+      template: 'material-whitepurple-light',
+      productsFontSize: 's',
+      productsShortNameFontSize: 's',
+      roomsTablesColumns: null,
+      roomsTablesColumnsHandheld: null,
+      roomsGridZoomHandheld: 2,
+      quickDiscount: null,
+      defaultPriceListId: null,
+      priceLists: [],
+    } as unknown as UserPos['options'],
+    ...overrides,
+  };
+}
 
 /** A complete user record for tests; override what the test cares about. */
 export function fakeUser(overrides: Partial<UserRecord> = {}): UserRecord {
@@ -17,6 +62,14 @@ export function fakeUser(overrides: Partial<UserRecord> = {}): UserRecord {
     status: 'active',
     trashed: false,
     language: 'it',
+    description: null,
+    avatar: null,
+    hasAvatar: false,
+    pinSet: false,
+    hiddenInStats: false,
+    serviceIds: [],
+    pos: fakePos(),
+    shiftTime: { enabled: false, weeks: [], specialDays: [] },
     permissions: {
       modules: { users: { r: true, w: false }, places: { r: true, w: true } },
       canManagePermissions: false,

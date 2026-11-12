@@ -1,0 +1,46 @@
+<div class="stack">
+  @for (group of groups; track group.id) {
+    <fieldset>
+      <legend>{{ groupLabel(group.id) }}</legend>
+      <div class="grid">
+        @for (flag of group.flags; track flag) {
+          <fc-checkbox [formField]="options()[flag]" [label]="optionLabel(flag)" />
+        }
+      </div>
+    </fieldset>
+  }
+  <fieldset>
+    <legend>{{ 'USERS.POS.CHOICES' | t }}</legend>
+    <div class="grid">
+      @for (name of choices; track name) {
+        <fc-select
+          [formField]="options()[name]"
+          [label]="choiceLabel(name)"
+          [options]="choiceOptions(name)"
+          [error]="error(options()[name])"
+        />
+      }
+      <fc-text-field
+        [formField]="options().quickDiscount"
+        inputmode="decimal"
+        [label]="'USERS.POS.OPTION.QUICK_DISCOUNT' | t"
+        [hint]="'USERS.POS.PERCENT_HINT' | t"
+        [error]="error(options().quickDiscount)"
+        (blurred)="options().quickDiscount().markAsTouched()"
+      />
+      @if (favorites() !== null) {
+        <fc-select
+          [formField]="options().favoritesId"
+          [label]="'USERS.POS.OPTION.FAVORITES_ID' | t"
+          [options]="favoriteOptions()"
+          [placeholder]="'USERS.POS.FAVORITES_NONE' | t"
+          [error]="error(options().favoritesId)"
+        />
+      } @else if (options().favoritesId().value() !== '') {
+        <p class="note">
+          {{ 'USERS.POS.FAVORITES_UNREADABLE' | t: { id: options().favoritesId().value() } }}
+        </p>
+      }
+    </div>
+  </fieldset>
+</div>

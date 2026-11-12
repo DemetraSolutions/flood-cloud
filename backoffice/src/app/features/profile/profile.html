@@ -35,6 +35,12 @@
       @if (failure(); as message) {
         <fc-form-error [message]="message" />
       }
+      <fc-avatar-field
+        [formField]="profileForm.avatar"
+        [label]="'AVATAR.LABEL' | t"
+        [initials]="initials()"
+        [error]="error(profileForm.avatar)"
+      />
       <fc-text-field
         [formField]="profileForm.firstName"
         [label]="'PROFILE.FIRST_NAME' | t"
@@ -72,11 +78,22 @@
         [error]="error(profileForm.language)"
         (blurred)="profileForm.language().markAsTouched()"
       />
+      @if (showPos()) {
+        <section aria-labelledby="pos-heading">
+          <h3 id="pos-heading">{{ 'PROFILE.POS_PREFERENCES' | t }}</h3>
+          <fc-pos-options-fields [options]="options" [favorites]="favorites()" />
+        </section>
+      }
       <div class="actions">
         <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
           {{ 'COMMON.SAVE' | t }}
         </button>
       </div>
     </form>
+  </section>
+
+  <section aria-labelledby="pin-heading">
+    <h2 id="pin-heading">{{ 'PROFILE.PIN' | t }}</h2>
+    <fc-own-pin />
   </section>
 }

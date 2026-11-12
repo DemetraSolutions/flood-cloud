@@ -4,6 +4,19 @@ import { FIELD_ISSUES, issueMessageKey } from '../api/field-issues';
 import { FEATURE_NAMES, featureTextKey } from '../groups/feature-catalog';
 import { GROUP_SECTIONS } from '../../features/groups/group-settings';
 import { INTEGRATION_PROVIDERS } from '../../features/groups/group.types';
+import {
+  AUTOMATIC_CASH,
+  AUTOMATIC_CASH_DEVICES,
+  POS_BOOLEAN_OPTIONS,
+  POS_CHOICE_NAMES,
+  POS_CHOICES,
+  POS_FLAGS,
+  POS_GRANT_GROUPS,
+  POS_OPTION_GROUPS,
+  posKey,
+} from '../users/pos.catalog';
+import { SHIFT_DAY_KEYS } from '../users/shift-time';
+import { PERMISSION_MODULES } from '../../features/users/user.types';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -110,6 +123,54 @@ describe('dictionaries', () => {
     }
     for (const key of ['CARDTYPES', 'POINTSCOLLECTIONS', 'OTHER']) {
       expected.push(`CATALOG.REFERENCED.${key}`);
+    }
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the texts of the point of sale, the permission modules and the form sections', () => {
+    const keys = dictionary('it');
+    const expected: string[] = [];
+    for (const flag of POS_FLAGS) {
+      expected.push(`USERS.POS.GRANT.${posKey(flag)}`);
+    }
+    for (const group of POS_GRANT_GROUPS) {
+      expected.push(`USERS.POS.GRANT_GROUP.${group.id}`);
+    }
+    for (const group of POS_OPTION_GROUPS) {
+      expected.push(`USERS.POS.OPTION_GROUP.${group.id}`);
+    }
+    for (const option of POS_BOOLEAN_OPTIONS) {
+      expected.push(`USERS.POS.OPTION.${posKey(option)}`);
+    }
+    for (const device of AUTOMATIC_CASH_DEVICES) {
+      expected.push(`USERS.POS.DEVICE.${posKey(device)}`);
+      for (const flag of AUTOMATIC_CASH[device]) {
+        expected.push(`USERS.POS.AUTOMATIC_FLAG.${posKey(flag)}`);
+      }
+    }
+    for (const name of POS_CHOICE_NAMES) {
+      expected.push(`USERS.POS.CHOICE.${posKey(name)}`);
+      const numeric = name.startsWith('rooms');
+      for (const value of POS_CHOICES[name].filter((item) => item !== '' && !numeric)) {
+        expected.push(
+          `USERS.POS.CHOICE_VALUE.${posKey(name)}.${value.toUpperCase().replace(/-/g, '_')}`,
+        );
+      }
+    }
+    for (const module of PERMISSION_MODULES) {
+      expected.push(`USERS.MODULE.${module.toUpperCase()}`);
+    }
+    for (const section of ['PROFILE', 'ACCESS', 'SCOPE', 'PERMISSIONS', 'POS', 'SHIFTS']) {
+      expected.push(`USERS.SECTION.${section}`);
+    }
+    for (const day of SHIFT_DAY_KEYS) {
+      expected.push(`USERS.SHIFTS.DAY.${day}`);
+    }
+    for (const problem of ['TYPE', 'READ', 'SIZE']) {
+      expected.push(`AVATAR.PROBLEM.${problem}`);
+    }
+    for (const part of ['START', 'END']) {
+      expected.push(`USERS.SHIFTS.SLOT_${part}`);
     }
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });

@@ -675,6 +675,15 @@ Rappresentazione del gruppo:
 - **Errori:** comuni; `403 FORBIDDEN`; `404` (gruppo fuori perimetro); `422` (parametri o cursore non validi)
 - `/services` resta invariato (permesso `users:read` e feature `services`, per la scheda utente).
 
+### GET /v1/groups/{groupId}/lookup/price-lists
+- **Superficie:** backoffice. Elenco compatto dei listini del gruppo, per assegnarli agli utenti (CA e PA non hanno `groups:read`); la modifica dei listini resta a PSA, D, SA (`/price-lists`).
+- **Autenticazione e permesso:** Bearer backoffice, `users:read`; route di gruppo (stesso perimetro e stessi `404` delle altre); nessuna feature richiesta.
+- **Risposta:** `200`, `{ "data": [{ "id", "name", "enabled", "isDefault" }] }`, senza paginazione (al massimo 50 listini, come `GET /price-lists`); solo i listini, mai altri dati del gruppo.
+  ```json
+  { "data": [{ "id": "665f1c2e9b1d4a0012ab34f0", "name": "Listino 1", "enabled": true, "isDefault": true }] }
+  ```
+- **Errori:** comuni; `403 FORBIDDEN`; `404` (gruppo fuori perimetro)
+
 ## Cataloghi del gruppo (`/v1`)
 
 Undici elenchi custoditi nel documento del gruppo, ciascuno una sotto-risorsa REST di `/v1/groups/{groupId}`. Sono **route di gruppo** (stesso controllo di perimetro e stessi `404` della sezione precedente; un gruppo sospeso o nel cestino solo per il PSA). Regole comuni:

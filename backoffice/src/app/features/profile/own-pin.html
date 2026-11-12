@@ -1,0 +1,35 @@
+@if (session.me(); as me) {
+  <p role="status">{{ (me.pinSet ? 'PIN.IS_SET' : 'PIN.IS_NOT_SET') | t }}</p>
+  <p class="actions-row">
+    <button fc-button variant="secondary" (click)="open('set')">
+      {{ (me.pinSet ? 'PIN.CHANGE' : 'PIN.SET') | t }}
+    </button>
+    @if (me.pinSet) {
+      <button fc-button variant="secondary" (click)="open('remove')">
+        {{ 'PIN.REMOVE' | t }}
+      </button>
+    }
+  </p>
+}
+
+<fc-pin-dialog
+  [heading]="'PIN.SET_TITLE' | t"
+  [open]="setOpen()"
+  (openChange)="setOpen.set($event)"
+  [askPassword]="true"
+  [busy]="busy()"
+  [pinError]="pinError()"
+  [passwordError]="passwordError()"
+  (submitted)="submit($event)"
+/>
+
+<fc-pin-dialog
+  mode="remove"
+  [heading]="'PIN.REMOVE_TITLE' | t"
+  [open]="removeOpen()"
+  (openChange)="removeOpen.set($event)"
+  [askPassword]="true"
+  [busy]="busy()"
+  [passwordError]="passwordError()"
+  (submitted)="submit($event)"
+/>

@@ -1,0 +1,99 @@
+<div class="stack">
+  <fc-checkbox
+    [formField]="shift.enabled"
+    [label]="'USERS.SHIFTS.ENABLED' | t"
+    [error]="state.error(shift.enabled)"
+  />
+
+  <section aria-labelledby="shift-weeks">
+    <h3 id="shift-weeks">{{ 'USERS.SHIFTS.WEEKS' | t }}</h3>
+    <p class="note">{{ 'USERS.SHIFTS.WEEKS_HINT' | t }}</p>
+    @for (week of shift.weeks; track $index) {
+      <fieldset class="block">
+        <legend>{{ weekTitle(week, $index) }}</legend>
+        @if (state.error(week); as message) {
+          <p class="problem" role="alert">{{ message }}</p>
+        }
+        <div class="grid">
+          <fc-text-field
+            type="date"
+            [formField]="week.from"
+            [label]="'USERS.SHIFTS.FROM' | t"
+            [error]="state.error(week.from)"
+            (blurred)="week.from().markAsTouched()"
+          />
+          <fc-text-field
+            type="date"
+            [formField]="week.to"
+            [label]="'USERS.SHIFTS.TO' | t"
+            [error]="state.error(week.to)"
+            (blurred)="week.to().markAsTouched()"
+          />
+        </div>
+        <div class="days">
+          @for (key of days; track key) {
+            <fieldset>
+              <legend>{{ dayLabel(key) }}</legend>
+              <fc-checkbox
+                [formField]="week.days[key].active"
+                [label]="'USERS.SHIFTS.ACTIVE' | t"
+              />
+              <fc-shift-slots [slots]="week.days[key].slots" [dayLabel]="dayLabel(key)" />
+            </fieldset>
+          }
+        </div>
+        @if (state.canWrite()) {
+          <button fc-button variant="ghost" (click)="removeWeek($index)">
+            {{ 'USERS.SHIFTS.REMOVE_WEEK' | t }}
+          </button>
+        }
+      </fieldset>
+    }
+    @if (state.canWrite()) {
+      <button
+        fc-button
+        variant="secondary"
+        [disabled]="shift.weeks().value().length >= maxWeeks"
+        (click)="addWeek()"
+      >
+        {{ 'USERS.SHIFTS.ADD_WEEK' | t }}
+      </button>
+    }
+  </section>
+
+  <section aria-labelledby="shift-special">
+    <h3 id="shift-special">{{ 'USERS.SHIFTS.SPECIAL' | t }}</h3>
+    <p class="note">{{ 'USERS.SHIFTS.SPECIAL_HINT' | t }}</p>
+    @for (day of shift.specialDays; track $index) {
+      <fieldset class="block">
+        <legend>{{ specialTitle($index) }}</legend>
+        <div class="grid">
+          <fc-text-field
+            type="date"
+            [formField]="day.date"
+            [label]="'USERS.SHIFTS.DATE' | t"
+            [error]="state.error(day.date)"
+            (blurred)="day.date().markAsTouched()"
+          />
+          <fc-checkbox [formField]="day.dayOff" [label]="'USERS.SHIFTS.DAY_OFF' | t" />
+        </div>
+        <fc-shift-slots [slots]="day.slots" [dayLabel]="specialTitle($index)" />
+        @if (state.canWrite()) {
+          <button fc-button variant="ghost" (click)="removeSpecial($index)">
+            {{ 'USERS.SHIFTS.REMOVE_SPECIAL' | t }}
+          </button>
+        }
+      </fieldset>
+    }
+    @if (state.canWrite()) {
+      <button
+        fc-button
+        variant="secondary"
+        [disabled]="shift.specialDays().value().length >= maxSpecial"
+        (click)="addSpecial()"
+      >
+        {{ 'USERS.SHIFTS.ADD_SPECIAL' | t }}
+      </button>
+    }
+  </section>
+</div>

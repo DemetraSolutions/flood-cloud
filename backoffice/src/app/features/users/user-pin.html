@@ -1,0 +1,35 @@
+<div class="stack">
+  <p role="status">{{ (state.pinSet() ? 'PIN.IS_SET' : 'PIN.IS_NOT_SET') | t }}</p>
+  @if (state.canWrite()) {
+    <div class="actions-row">
+      <button fc-button variant="secondary" (click)="openSet()">
+        {{ (state.pinSet() ? 'PIN.CHANGE' : 'PIN.SET') | t }}
+      </button>
+      @if (state.pinSet()) {
+        <button fc-button variant="secondary" (click)="removeOpen.set(true)">
+          {{ 'PIN.REMOVE' | t }}
+        </button>
+      }
+    </div>
+  }
+</div>
+
+<fc-pin-dialog
+  [heading]="'PIN.SET_TITLE' | t"
+  [open]="setOpen()"
+  (openChange)="setOpen.set($event)"
+  [busy]="busy()"
+  [pinError]="pinError()"
+  (submitted)="set($event)"
+/>
+
+<fc-confirm-dialog
+  [heading]="'PIN.REMOVE_TITLE' | t"
+  [message]="'PIN.REMOVE_CONFIRM' | t"
+  [confirmLabel]="'PIN.REMOVE' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="removeOpen()"
+  (openChange)="removeOpen.set($event)"
+  (confirmed)="remove()"
+/>

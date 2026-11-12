@@ -1,0 +1,59 @@
+/* Layout shared by the sections of the user form. They size to their container, not the viewport. */
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+@container (min-width: 34rem) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 52rem) {
+  .grid.wide {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+legend {
+  padding-inline: var(--space-1);
+  font-weight: var(--font-weight-medium);
+}
+
+fieldset > .stack,
+fieldset > .grid {
+  margin-block-start: var(--space-1);
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}

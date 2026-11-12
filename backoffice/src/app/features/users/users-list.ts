@@ -24,6 +24,7 @@ import { ActionsMenu } from '../../shared/ui/actions-menu/actions-menu';
 import { Button } from '../../shared/ui/button/button';
 import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { CursorPaginator } from '../../shared/ui/cursor-paginator/cursor-paginator';
+import { Avatar, initialsOf } from '../../shared/ui/avatar/avatar';
 import { DataTable } from '../../shared/ui/data-table/data-table';
 import { TableColumn, TableSort } from '../../shared/ui/data-table/data-table.types';
 import { CellTemplate, RowActionsTemplate } from '../../shared/ui/data-table/table-templates';
@@ -58,6 +59,7 @@ type QueryChange = Record<string, string | null>;
   selector: 'fc-users-list',
   imports: [
     ActionsMenu,
+    Avatar,
     Button,
     Can,
     CellTemplate,
@@ -242,6 +244,7 @@ export class UsersList {
   protected readonly rowKey = (row: UserRecord): string => row.id;
   protected readonly detailRoute = userRoute;
   protected readonly abbreviate = abbreviateId;
+  protected readonly initials = initialsOf;
 
   /** Whether the user may do anything to a row (otherwise the actions menu is not offered). */
   protected readonly canAct = computed(

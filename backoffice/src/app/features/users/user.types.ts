@@ -1,10 +1,26 @@
 import { Role } from '../../core/session/session.types';
+import { UserPos } from '../../core/users/pos.catalog';
+import { ShiftTime, ShiftWeekRecord, SpecialDay } from '../../core/users/shift-time';
 
 /** Account status of a user. */
 export type UserStatus = 'active' | 'disabled';
 
 /** Permission modules of the matrix, in display order. */
-export const PERMISSION_MODULES = ['groups', 'users', 'companies', 'places', 'logs'] as const;
+export const PERMISSION_MODULES = [
+  'groups',
+  'users',
+  'companies',
+  'places',
+  'documents',
+  'products',
+  'calendar',
+  'warehouse',
+  'contacts',
+  'fidelity',
+  'settings',
+  'stats',
+  'logs',
+] as const;
 
 /** Name of a permission module. */
 export type PermissionModule = (typeof PERMISSION_MODULES)[number];
@@ -37,6 +53,16 @@ export interface UserRecord {
   readonly status: UserStatus;
   readonly trashed: boolean;
   readonly language: string;
+  readonly description: string | null;
+  /** Data URL of the avatar; only in the detail (`null` also when a legacy image cannot be shown). */
+  readonly avatar?: string | null;
+  readonly hasAvatar: boolean;
+  /** Whether a PIN is set (the PIN itself is never returned). */
+  readonly pinSet: boolean;
+  readonly hiddenInStats: boolean;
+  readonly serviceIds: readonly string[];
+  readonly pos: UserPos;
+  readonly shiftTime: ShiftTime;
   readonly permissions: {
     readonly modules?: Partial<Record<PermissionModule, Partial<ModuleFlags>>>;
     readonly canManagePermissions?: boolean;
@@ -68,6 +94,27 @@ export interface UserWrite {
   companyIds?: string[];
   placeIds?: string[];
   permissions?: PermissionsPatch;
+  description?: string | null;
+  avatar?: string | null;
+  pin?: string | null;
+  hiddenInStats?: boolean;
+  serviceIds?: string[];
+  pos?: PosPatch;
+  shiftTime?: ShiftTimePatch;
+}
+
+/** POS part of a write (only what changes; `null` clears the values that allow it). */
+export interface PosPatch {
+  enabled?: boolean;
+  grants?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+}
+
+/** Shifts part of a write: `weeks` and `specialDays`, when present, replace the stored lists. */
+export interface ShiftTimePatch {
+  enabled?: boolean;
+  weeks?: ShiftWeekRecord[];
+  specialDays?: SpecialDay[];
 }
 
 /** Body of `POST` (creation): the username, password and role are mandatory. */
@@ -117,13 +164,9 @@ export function assignableRoles(actor: Role, area: UserArea): Role[] {
 /** An empty matrix (nothing granted). */
 export function emptyMatrix(): PermissionMatrix {
   return {
-    modules: {
-      groups: { r: false, w: false },
-      users: { r: false, w: false },
-      companies: { r: false, w: false },
-      places: { r: false, w: false },
-      logs: { r: false, w: false },
-    },
+    modules: Object.fromEntries(
+      PERMISSION_MODULES.map((module) => [module, { r: false, w: false }]),
+    ) as Record<PermissionModule, ModuleFlags>,
     canManagePermissions: false,
   };
 }
@@ -134,7 +177,7 @@ export function matrixOf(user: UserRecord): PermissionMatrix {
   for (const module of PERMISSION_MODULES) {
     matrix.modules[module] = {
       r: user.permissions.modules?.[module]?.r === true,
-      w: user.permissions.modules?.[module]?.w === true,
+      w: module !== 'logs' && user.permissions.modules?.[module]?.w === true,
     };
   }
   matrix.canManagePermissions = user.permissions.canManagePermissions === true;
@@ -159,55 +202,45 @@ export function fullName(user: Pick<UserRecord, 'firstName' | 'lastName'>): stri
   return name === '' ? null : name;
 }
 
-/** Write permissions that "write" on a module stands for (the actor must hold them all). */
-const MODULE_WRITES: Record<PermissionModule, readonly string[]> = {
-  groups: ['groups:create', 'groups:update', 'groups:suspend', 'groups:trash'],
-  users: ['users:create', 'users:update', 'users:trash', 'users:delete'],
-  companies: ['companies:create', 'companies:update', 'companies:trash'],
-  places: ['places:create', 'places:update', 'places:trash'],
-  logs: [],
+/**
+ * Permissions of the actor that stand for the flags of the modules the backend turns into
+ * permissions (the other modules are plain data of the matrix: the client cannot tell what the
+ * actor holds there and leaves the decision to the server).
+ */
+const MODULE_PERMISSIONS: Partial<Record<PermissionModule, { r: string; w: readonly string[] }>> = {
+  groups: {
+    r: 'groups:read',
+    w: ['groups:create', 'groups:update', 'groups:suspend', 'groups:trash'],
+  },
+  users: { r: 'users:read', w: ['users:create', 'users:update', 'users:trash', 'users:delete'] },
+  companies: {
+    r: 'companies:read',
+    w: ['companies:create', 'companies:update', 'companies:trash'],
+  },
+  places: { r: 'places:read', w: ['places:create', 'places:update', 'places:trash'] },
+  products: { r: 'products:read', w: ['products:update'] },
+  fidelity: { r: 'fidelity:read', w: ['fidelity:update'] },
+  logs: { r: 'activityLog:read', w: [] },
 };
-const MODULE_READS: Record<PermissionModule, string> = {
-  groups: 'groups:read',
-  users: 'users:read',
-  companies: 'companies:read',
-  places: 'places:read',
-  logs: 'activityLog:read',
-};
-
-/** Default matrix of a role, as the backend applies it (the operator `E` gets nothing). */
-function defaultMatrixOf(role: Role): PermissionMatrix {
-  const matrix = emptyMatrix();
-  if (!['PSA', 'D', 'SA', 'CA', 'PA'].includes(role)) {
-    return matrix;
-  }
-  const platform = role === 'PSA' || role === 'D' || role === 'SA';
-  matrix.modules.groups = { r: platform, w: platform };
-  matrix.modules.users = { r: true, w: true };
-  matrix.modules.companies = { r: role !== 'PA', w: role !== 'PA' };
-  matrix.modules.places = { r: true, w: true };
-  matrix.modules.logs = { r: true, w: false };
-  return matrix;
-}
 
 /**
- * What a new user gets when nobody chose a matrix: the default of the role limited to the flags
- * the creating user holds (as the backend does), with "manages permissions" off.
+ * Whether the actor may grant a flag of a module (an aid: the server enforces "only what you
+ * hold"). The PSA and D hold everything; for modules the client cannot check, the answer is yes.
  *
- * @param role Role of the new user (an empty or unknown role gets nothing).
- * @param can Whether the creating user holds a permission.
+ * @param actor Role of the actor.
+ * @param can Whether the actor holds a permission.
+ * @param module Module of the flag.
+ * @param flag `r` or `w`.
  */
-export function inheritedMatrix(
-  role: Role,
+export function canGrantFlag(
+  actor: Role,
   can: (permission: string) => boolean,
-): PermissionMatrix {
-  const base = defaultMatrixOf(role);
-  for (const module of PERMISSION_MODULES) {
-    const writes = MODULE_WRITES[module];
-    base.modules[module] = {
-      r: base.modules[module].r && can(MODULE_READS[module]),
-      w: base.modules[module].w && writes.length > 0 && writes.every(can),
-    };
+  module: PermissionModule,
+  flag: 'r' | 'w',
+): boolean {
+  const known = MODULE_PERMISSIONS[module];
+  if (actor === 'PSA' || actor === 'D' || known === undefined) {
+    return true;
   }
-  return base;
+  return flag === 'r' ? can(known.r) : known.w.length > 0 && known.w.every(can);
 }

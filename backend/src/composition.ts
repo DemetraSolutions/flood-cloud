@@ -133,7 +133,6 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     createGroupsService({ groups: createManagedGroupsRepository(databases), users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now }),
   );
   const groupServices = createGroupServicesController(createGroupServicesService({ services, users }));
-  const lookup = createLookupController(createLookupService({ lookup: createLookupRepository(databases), users }));
   const catalogsService = createCatalogsService({
     catalogs: catalogsRepository,
     references: createReferencesRepository(databases),
@@ -142,6 +141,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     newId: newElementId,
     now,
   });
+  const lookup = createLookupController(createLookupService({ lookup: createLookupRepository(databases), users, catalogs: catalogsService }));
   const reference = createReferenceController(createReferenceService(createReferenceRepository(databases)));
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
