@@ -241,6 +241,30 @@ describe('database listing (real MongoDB)', () => {
   it('reports the server version', async () => {
     assert.match(await ctx.databases.serverVersion(TEST_CLUSTER), /^\d+\.\d+\.\d+/);
   });
+
+  it('runs every transaction with snapshot reads and majority writes, and lists databases without hiding unauthorized ones', async () => {
+    let transactionOptions: unknown;
+    let listOptions: Record<string, unknown> | undefined;
+    const fake = {
+      withSession: async (work: (session: unknown) => Promise<unknown>) =>
+        work({ withTransaction: async (callback: () => Promise<unknown>, options: unknown) => ((transactionOptions = options), callback()) }),
+      db: () => ({ admin: () => ({ listDatabases: async (options: Record<string, unknown>) => ((listOptions = options), { databases: [{ name: `${ctx.prefix}development_common` }] }) }) }),
+    } as unknown as MongoClient;
+    const databases = createDatabases(singleCluster(fake), { prefix: ctx.prefix, appEnv: 'development' });
+    assert.equal(await databases.transaction(async () => 'done'), 'done');
+    assert.deepEqual(transactionOptions, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } });
+    assert.equal(await databases.commonDatabaseExists(), true);
+    assert.equal(listOptions!['authorizedDatabases'], false);
+    const emptyListing = { db: () => ({ admin: () => ({ listDatabases: async () => ({ databases: [{ name: `${ctx.prefix}production_common` }] }) }) }) } as unknown as MongoClient;
+    assert.equal(await createDatabases(singleCluster(emptyListing), { prefix: ctx.prefix, appEnv: 'development' }).commonDatabaseExists(), false);
+  });
+
+  it('reports the replica set name, and null for a standalone server', async () => {
+    assert.equal(typeof (await ctx.databases.replicaSetName(TEST_CLUSTER)), 'string');
+    const standalone = { db: () => ({ admin: () => ({ command: async () => ({ isWritablePrimary: true }) }) }) } as unknown as MongoClient;
+    const databases = createDatabases(singleCluster(standalone), { prefix: ctx.prefix, appEnv: 'development' });
+    assert.equal(await databases.replicaSetName(TEST_CLUSTER), null);
+  });
 });
 
 describe('ensureIndexes on collections that already have the validators (real MongoDB)', () => {

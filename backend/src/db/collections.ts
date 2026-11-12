@@ -7,9 +7,16 @@ import { ACTIVITY_EVENTS_INDEXES } from './activity-events-schema.ts';
 import { DEALERS_INDEXES, DEALERS_VALIDATOR } from './dealers-schema.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
+import { COMPANIES_MIRROR_INDEXES, PLACES_MIRROR_INDEXES, SYNC_ISSUES_INDEXES } from './mirror-schema.ts';
 
-/** Who owns a collection and may therefore shape its documents and indexes. */
-export type Ownership = 'new' | 'legacy-read' | 'legacy-write';
+/**
+ * Who owns a collection and may therefore shape its documents and indexes.
+ *
+ * `mirror` marks the collections of the common database that hold exact copies of documents of the group databases
+ * (`doc/Tasks.md` D-20): written only by the copy block, with `replaceOne` of the whole document. They admit
+ * non-unique indexes only, no validator and no TTL, so a copy can never be refused or expire.
+ */
+export type Ownership = 'new' | 'legacy-read' | 'legacy-write' | 'mirror';
 
 /** Specification of an index, with an explicit name. */
 export interface IndexSpec {
@@ -27,7 +34,7 @@ export interface IndexSpec {
 
 /** Registry entry of one collection. */
 export interface CollectionSpec {
-  /** `new`: ours. `legacy-read`: shared, read only. `legacy-write`: shared, only `ownedFields` are written. */
+  /** `new`: ours. `legacy-read`: shared, read only. `legacy-write`: shared, only `ownedFields` are written. `mirror`: copies of group documents, common database only. */
   readonly ownership: Ownership;
   /** Fields this backend may write on a `legacy-write` collection (`$set`/`$unset` only). */
   readonly ownedFields?: readonly string[];
@@ -149,6 +156,11 @@ export const COLLECTIONS = {
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
     activityEvents: { ownership: 'new', indexes: ACTIVITY_EVENTS_INDEXES },
     dealers: { ownership: 'new', indexes: DEALERS_INDEXES, validator: DEALERS_VALIDATOR },
+    // Exact copies of the documents of the group databases (D-20), without validator (no collMod dependency).
+    companies: { ownership: 'mirror', indexes: COMPANIES_MIRROR_INDEXES },
+    places: { ownership: 'mirror', indexes: PLACES_MIRROR_INDEXES },
+    // Discrepancies found by the reconciliation; no validator, ids only (no personal data), TTL of 180 days.
+    syncIssues: { ownership: 'new', indexes: SYNC_ISSUES_INDEXES },
     userCredentials: { ownership: 'new', validator: USER_CREDENTIALS_VALIDATOR },
     sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
   },
@@ -170,6 +182,8 @@ export const COLLECTIONS = {
  * - Legacy collections cannot have unique or TTL indexes.
  * - Every index has a non-empty explicit name.
  * - Only `new` collections can have a validator.
+ * - `mirror` collections live in the common database only, take no `ownedFields`, no validator, and only non-unique,
+ *   non-TTL indexes: a copy must always be writable and never expire.
  *
  * @param registry Registry to validate (the real one by default).
  * @throws {Error} Listing every violation, as `<database>.<collection>: <reason>`.
@@ -187,15 +201,24 @@ export function validateRegistry(registry: CollectionRegistry = COLLECTIONS): vo
       } else if (owned !== undefined) {
         problems.push(`${where}: ownedFields is allowed only on legacy-write`);
       }
+      if (spec.ownership === 'mirror' && kind !== 'common') {
+        problems.push(`${where}: a mirror collection must live in the common database`);
+      }
       if (spec.validator !== undefined && spec.ownership !== 'new') {
-        problems.push(`${where}: a validator is allowed only on new collections`);
+        problems.push(
+          spec.ownership === 'mirror' ? `${where}: a mirror collection takes no validator` : `${where}: a validator is allowed only on new collections`,
+        );
       }
       for (const index of spec.indexes ?? []) {
         if (index.name.trim() === '') {
           problems.push(`${where}: every index needs an explicit name`);
         }
         if (spec.ownership !== 'new' && (index.unique === true || index.expireAfterSeconds !== undefined)) {
-          problems.push(`${where}: unique and TTL indexes are forbidden on legacy collections (${index.name})`);
+          problems.push(
+            spec.ownership === 'mirror'
+              ? `${where}: unique and TTL indexes are forbidden on mirror collections (${index.name})`
+              : `${where}: unique and TTL indexes are forbidden on legacy collections (${index.name})`,
+          );
         }
       }
     }

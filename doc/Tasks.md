@@ -98,7 +98,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [ ] **D-18** Onboarding: preset per tipologia (risto, retail, beauty) e struttura minima del database di un gruppo nuovo richiesta dal legacy.
 - [x] **D-19** Policy delle password nuove o cambiate: da 12 a 128 code point dopo NFC, nessuna regola sulle classi, diversa dallo username, nessun carattere Unicode non valido. Le password legacy esistenti restano valide. Decisione dell'utente del 2026-11-02.
 - [x] **D-20** Forma della copia nel common: **documento intero** del database del gruppo, con `groupId` impostato dal nome del database. Proposta dell'utente del 2026-11-01. Il nuovo backend traduce i nomi legacy nel modello di dominio (§0.2, tabelle 6.1 e 7.1).
-- [ ] **D-21** Cancellazione definitiva nel legacy (`deleteMany` dal cestino): la copia nel common si rimuove (raccomandato: la copia resta uno specchio esatto) oppure si marca come cancellata. Collegata a D-14.
+- [x] **D-21** Cancellazione definitiva nel legacy (`deleteMany` dal cestino): **la copia nel common si rimuove** nello stesso punto in cui il legacy cancella. Il comando `sync:copies` del nuovo backend invece non cancella mai (copia solo lo stato attuale; le copie senza originale si segnalano). Decisione dell'utente del 2026-11-12.
 - [x] **D-22** Il server di punto vendita è un'applicazione separata, fuori dallo scope: questo progetto comprende solo il backend cloud e il backoffice. Decisione dell'utente del 2026-11-01.
 - [x] **D-23** Nessuna superficie dedicata al server di punto vendita: l'app separata usa le stesse API del backoffice (`/v1`). La superficie `/store/v1` prevista da `doc/Architecture.md` §4 e `doc/Security-Model.md` §3 e §5 è eliminata. Decisione dell'utente del 2026-11-01.
 - [ ] **D-24** Credenziale con cui l'app del server di punto vendita chiama le API `/v1`. Va decisa quando si integra l'app; oggi usa l'API key del gruppo, condivisa da tutti i negozi. Opzioni:
@@ -498,16 +498,18 @@ Task:
 ## 5. Aziende e punti vendita nel common: migrazione e sincronizzazione
 Strategia in §0.3 (D-01, D-20). I task di 5.3 si fanno nel repository legacy `cloud-commerce-platform-server`, con il suo rilascio; tutti gli altri in questo repository.
 
+> Passo **5A** (2026-11-12): realizzati 5.1, 5.2, 5.4 e 5.5.1/5.5.3 con il comando `npm run sync:copies` (`doc/Technical-Guide.md` §7). Decisioni dell'utente del 2026-11-12: il comando **copia solo lo stato attuale e non cancella mai**; gira **solo in development**, mai in produzione; i database senza documento del gruppo sono solo segnalati; nel legacy la scrittura nel common è semplice (nel punto in cui scrive, scrive lo stesso dato anche nel common), senza altri cambi di comportamento. Caricamento eseguito su development. In questo passo le letture del backend restano sui database dei gruppi. Restano: 5.3 (repository legacy), 5.5.2 (worker, da decidere), 5.6, 5.7, 5.8.2.
+
 ### 5.1 Prerequisiti
-- [ ] **5.1.1** Verificare la versione di MongoDB e le transazioni tra database diversi sul cluster Atlas, con i loro limiti di durata.
-- [ ] **5.1.2** Credenziali Atlas esistenti nel `.env` locale (D-02); guardia 1.3.3 attiva e testata prima di qualunque scrittura.
-- [ ] **5.1.3** Elenco verificato, con il `legacy_analyst`, di tutti i punti di scrittura su companies e places nel legacy, compresi gli endpoint chiamati dal POS e `groups/generate`.
+- [x] **5.1.1** Verificare la versione di MongoDB e le transazioni tra database diversi sul cluster Atlas, con i loro limiti di durata.
+- [x] **5.1.2** Credenziali Atlas esistenti nel `.env` locale (D-02); guardia 1.3.3 attiva e testata prima di qualunque scrittura.
+- [x] **5.1.3** Elenco verificato, con il `legacy_analyst`, di tutti i punti di scrittura su companies e places nel legacy, compresi gli endpoint chiamati dal POS e `groups/generate`.
 
 ### 5.2 Collection nel common
-- [ ] **5.2.1** Collection `companies` e `places`: copia del documento intero, stesso `_id` del database del gruppo (i riferimenti esistenti restano validi), `groupId` dal nome del database (D-20).
-- [ ] **5.2.2** Indici: `groupId`, `groupId + name`, `groupId + companyId` per i punti vendita. Nessun `$jsonSchema` rigido, che bloccherebbe i salvataggi del legacy su dati sporchi: al massimo `groupId` obbligatorio e di tipo ObjectId.
-- [ ] **5.2.3** Collection `syncIssues` per le discordanze trovate (`groupId` diverso, copia mancante o diversa), con il motivo e senza dati personali.
-- [ ] **5.2.4** Specifica del blocco di copia (passi, transazione, errori), scritta prima di toccare il legacy e validata dal `security_expert`.
+- [x] **5.2.1** Collection `companies` e `places`: copia del documento intero, stesso `_id` del database del gruppo (i riferimenti esistenti restano validi), `groupId` dal nome del database (D-20).
+- [x] **5.2.2** Indici: `groupId`, `groupId + name`, `groupId + companyId` per i punti vendita. Nessun `$jsonSchema` rigido, che bloccherebbe i salvataggi del legacy su dati sporchi: al massimo `groupId` obbligatorio e di tipo ObjectId.
+- [x] **5.2.3** Collection `syncIssues` per le discordanze trovate (`groupId` diverso, copia mancante o diversa), con il motivo e senza dati personali.
+- [x] **5.2.4** Specifica del blocco di copia (passi, transazione, errori), scritta prima di toccare il legacy e validata dal `security_expert`.
 
 ### 5.3 Doppia scrittura nel legacy (repository legacy)
 - [ ] **5.3.1** Blocco di copia unico (§0.3, punto 1):
@@ -526,16 +528,16 @@ Strategia in §0.3 (D-01, D-20). I task di 5.3 si fanno nel repository legacy `c
 - [ ] **5.3.10** Rilascio in development, verifica con la riconciliazione (5.5), poi rilascio in produzione.
 
 ### 5.4 Caricamento iniziale (nuovo backend)
-- [ ] **5.4.1** Comando CLI idempotente, da eseguire dopo l'attivazione della doppia scrittura:
+- [x] **5.4.1** Comando CLI idempotente, da eseguire dopo l'attivazione della doppia scrittura:
   - elenca i database dell'ambiente filtrati per regex;
   - per ogni gruppo copia i documenti a blocchi, con cursore limitato;
   - ogni blocco gira in transazione, così le scritture concorrenti del legacy vengono serializzate e il caricamento non sovrascrive dati più recenti.
-- [ ] **5.4.2** Modalità di prova senza scritture, con report per gruppo: conteggi, `groupId` incoerenti, riferimenti orfani.
+- [x] **5.4.2** Modalità di prova senza scritture, con report per gruppo: conteggi, `groupId` incoerenti, riferimenti orfani.
 
 ### 5.5 Riconciliazione (nuovo backend)
-- [ ] **5.5.1** Comando che confronta, gruppo per gruppo, il database del gruppo e il common: insiemi di `_id` e hash del documento con `groupId` normalizzato. Ripara le differenze e scrive le discordanze in `syncIssues`.
+- [x] **5.5.1** Comando che confronta, gruppo per gruppo, il database del gruppo e il common: insiemi di `_id` e hash del documento con `groupId` normalizzato. Ripara le differenze e scrive le discordanze in `syncIssues`.
 - [ ] **5.5.2** Esecuzione periodica nel ruolo `worker` (`doc/Architecture.md` §7), con istanza unica e frequenza da decidere. Allarme se trova differenze: indicano un percorso di scrittura non coperto.
-- [ ] **5.5.3** Test su replica set locale: copie mancanti, diverse o in eccesso; gruppi nuovi; database rimossi.
+- [x] **5.5.3** Test su replica set locale: copie mancanti, diverse o in eccesso; gruppi nuovi; database rimossi.
 
 ### 5.6 Scritture dal nuovo backend (fase 2)
 - [ ] **5.6.1** Servizio di scrittura in **transazione** con la stessa regola del legacy:

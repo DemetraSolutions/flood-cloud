@@ -10,6 +10,7 @@
     "start": "node src/server.ts",
     "profile:legacy": "node src/tools/profile-legacy/cli.ts",
     "migrate:dealers": "node src/tools/migrate-dealers/cli.ts",
+    "sync:copies": "node src/tools/sync-copies/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --env-file-if-exists=.env.test --test --experimental-test-coverage --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test-coverage-include=src/** \"test/**/*.test.ts\""
   },

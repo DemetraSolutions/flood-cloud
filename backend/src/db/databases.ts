@@ -16,6 +16,9 @@ export const MAX_DATABASE_NAME_BYTES = 63;
 /** Upper bound for the administrative commands (listing databases, server version) in milliseconds. */
 const ADMIN_MAX_TIME_MS = 30_000;
 
+/** Options of every transaction: a consistent snapshot for the reads and a majority acknowledgement for the commit. */
+const TRANSACTION_OPTIONS = { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } } as const;
+
 /**
  * Environment guard: accepts only `^<prefix><appEnv>_(common|<24 hex>)$`, at most 63 bytes long.
  * It keeps `production_*` databases out of reach when `APP_ENV=development` and vice versa.
@@ -142,7 +145,8 @@ export interface Databases {
    */
   resolveGroupCluster(group: { readonly _id: ObjectId; readonly dataCluster?: unknown }): ClusterId;
   /**
-   * Runs `work` in a transaction (replica set) on the **common cluster**: every write that receives the
+   * Runs `work` in a transaction (replica set only: a standalone server is not supported) on the **common cluster**,
+   * with snapshot read concern and majority write concern: every write that receives the
    * session commits together or none does. There are no transactions across clusters: an operation that
    * involves the common database and a group on another cluster cannot be atomic. The driver retries
    * `work` on transient errors and on an unknown commit result, so it must hold database operations only
@@ -152,6 +156,11 @@ export interface Databases {
    * @returns What `work` returned.
    */
   transaction<T>(work: (session: ClientSession) => Promise<T>): Promise<T>;
+  /**
+   * Whether the common database appears in the listing of the common cluster. A wrong `DB_NAME_PREFIX` makes it
+   * disappear; write tools check it before touching anything.
+   */
+  commonDatabaseExists(): Promise<boolean>;
   /**
    * Ids of the group databases that exist on a cluster for this prefix and environment
    * (names are parsed, never trusted), sorted by hex.
@@ -173,6 +182,12 @@ export interface Databases {
    * @throws {UnknownClusterError} If the cluster is not configured.
    */
   serverVersion(clusterId: ClusterId): Promise<string>;
+  /**
+   * Name of the replica set a cluster belongs to (`hello.setName`), `null` for a standalone server (no transactions there).
+   *
+   * @throws {UnknownClusterError} If the cluster is not configured.
+   */
+  replicaSetName(clusterId: ClusterId): Promise<string | null>;
 }
 
 /**
@@ -238,7 +253,7 @@ export function createDatabases(registry: ClusterRegistry, context: DatabaseName
     },
   });
   const listNames = async (clusterId: ClusterId): Promise<string[]> => {
-    const { databases } = await clientsOf(clusterId).main.db().admin().listDatabases({ nameOnly: true, maxTimeMS: ADMIN_MAX_TIME_MS });
+    const { databases } = await clientsOf(clusterId).main.db().admin().listDatabases({ nameOnly: true, authorizedDatabases: false, maxTimeMS: ADMIN_MAX_TIME_MS });
     return databases.map((entry) => entry.name);
   };
   const commonName = commonDatabaseName(context);
@@ -258,7 +273,8 @@ export function createDatabases(registry: ClusterRegistry, context: DatabaseName
       }
       return group.dataCluster;
     },
-    transaction: (work) => clientsOf(registry.commonCluster).main.withSession((session) => session.withTransaction(() => work(session))),
+    transaction: (work) => clientsOf(registry.commonCluster).main.withSession((session) => session.withTransaction(() => work(session), TRANSACTION_OPTIONS)),
+    commonDatabaseExists: async () => (await listNames(registry.commonCluster)).includes(commonName),
     listGroupIds: async (clusterId) => {
       const ids: ObjectId[] = [];
       for (const name of await listNames(clusterId)) {
@@ -289,6 +305,10 @@ export function createDatabases(registry: ClusterRegistry, context: DatabaseName
     serverVersion: async (clusterId) => {
       const info = await clientsOf(clusterId).main.db().admin().command({ buildInfo: 1, maxTimeMS: ADMIN_MAX_TIME_MS });
       return String(info['version']);
+    },
+    replicaSetName: async (clusterId) => {
+      const info = await clientsOf(clusterId).main.db().admin().command({ hello: 1, maxTimeMS: ADMIN_MAX_TIME_MS });
+      return typeof info['setName'] === 'string' ? info['setName'] : null;
     },
   };
 }

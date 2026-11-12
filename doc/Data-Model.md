@@ -112,14 +112,14 @@ Validazione `$jsonSchema`; indice univoco parziale `vatNumber_1` (solo quando è
 ## userCredentials — credenziali del nuovo backend
 Realizzata (passo 3A, D-03): `_id` = id dell'utente, `passwordHash` (scrypt `scrypt$N$r$p$salt$hash`, facoltativo), `legacyHashFingerprint` (SHA-256 dell'hash legacy da cui deriva, o null), `passwordChangedAt`, `failedLogins`, `lockedUntil` (blocco progressivo dal 5° fallimento: 1, 2, 4, 8, poi 15 minuti; azzerati dal reset dell'amministratore), `mustChangePassword` (password provvisoria impostata da un amministratore: va cambiata al primo accesso; passo 3B), `lastLoginAt`, `createdAt`, `updatedAt`. Validazione `$jsonSchema`; nessun indice oltre `_id`.
 
-## companies — soggetti giuridici
-`_id`, `groupId`, `name`, `vatNumber`, `fiscalCode`, `address`, `status`, `createdAt`, `updatedAt`, `deletedAt`.
-Indici: `groupId`; univocità di `vatNumber` per gruppo *(da confermare)*.
+## companies — copie delle aziende (collection `mirror`, D-20)
+Realizzata (passo 5A): copia intera del documento `companies` del database del gruppo, stesso `_id`, `groupId` (ObjectId) sempre dal nome del database. Scritta solo con `replaceOne` filtrato da `{_id, groupId}`: dal comando `sync:copies` (solo development) e, in futuro, dal legacy nel punto in cui scrive (specifica in `doc/Technical-Guide.md` §7). Nessun `$jsonSchema`. Indici: `groupId_1__id_1`, `groupId_1_name_1`. Il modello di dominio (`doc/Tasks.md` 6.1) arriva con l'area 6.
 
-## places — punti vendita
-`_id`, `groupId`, `companyId`, `name`, `address`, `status`, `createdAt`, `updatedAt`, `deletedAt`.
-Indici: `groupId + companyId`.
-Le parti incorporate nel legacy (depositi, sale, tavoli, dispositivi) si definiscono nei rispettivi passi.
+## places — copie dei punti vendita (collection `mirror`, D-20)
+Realizzata (passo 5A): come `companies`, copia intera del documento `places` del gruppo, comprese le parti incorporate (dispositivi, sale, magazzini, integrazioni con le loro credenziali: rischio accettato in Tasks §0.3, il backend non le legge mai). Indici: `groupId_1__id_1`, `groupId_1_name_1`, `groupId_1_companyId_1`. Il modello di dominio (Tasks 7.1) arriva con l'area 7.
+
+## syncIssues — discordanze tra database dei gruppi e copie
+Realizzata (passo 5A), senza validatore: `_id`, `runId` (esecuzione di `sync:copies`), `detectedAt`, `kind` (`missingCopy`, `differentCopy`, `extraCopy`, `idCollision`, `invalidCopy`, `groupIdMismatch`, `orphanCompany`, `databaseWithoutGroup`, `unknownCluster`, `nonObjectId`), `collection` (`companies`, `places` o null), `groupId`, `documentId`, `repaired`. Solo id, nessun valore dei documenti né dato personale. Indici: `runId_1`, `kind_1_detectedAt_-1`, TTL `detectedAt_ttl` a 180 giorni.
 
 ## platformSettings — impostazioni di piattaforma
 Documento unico (`_id: 'platform'`), modificabile solo da `PSA`; ogni modifica va nell'audit log.
