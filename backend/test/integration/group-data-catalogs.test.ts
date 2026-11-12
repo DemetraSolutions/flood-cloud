@@ -5,6 +5,7 @@ import type { Document } from 'mongodb';
 import { addUser } from '../helpers/backoffice.ts';
 import { newHex, openCatalogOffice } from '../helpers/catalogs.ts';
 import type { CatalogOffice } from '../helpers/catalogs.ts';
+import { insertCopies } from '../helpers/mirror.ts';
 import { send } from '../helpers/users.ts';
 
 let t: CatalogOffice;
@@ -36,7 +37,7 @@ before(async () => {
   await t.insertInGroup(0, 'products_categories', [{ _id: category.id, trash: false }]);
   await t.insertInGroup(0, 'contacts', [{ _id: contact.id, trash: false }]);
   await t.insertInGroup(0, 'contacts_groups', [{ _id: contactGroup.id }]);
-  await t.insertInGroup(0, 'places', [{ _id: trashedPlace.id, trash: true, groupId: t.group(0).groupId }]);
+  await insertCopies(t.ctx.databases, 'places', [{ _id: trashedPlace.id, trash: true, groupId: t.group(0).groupId }]);
 });
 after(async () => {
   await t.close();

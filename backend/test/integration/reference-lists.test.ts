@@ -7,7 +7,8 @@ import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts
 import { startBackoffice } from '../helpers/backoffice.ts';
 import type { Backoffice } from '../helpers/backoffice.ts';
 import { fixtureId, legacyCompany, legacyGroup, legacyPlace } from '../helpers/legacy-fixtures.ts';
-import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
+import { insertCopies } from '../helpers/mirror.ts';
+import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { actors } from '../helpers/users.ts';
 
@@ -39,15 +40,14 @@ before(async () => {
   delete documents[2]!['name'];
   documents.push(legacyGroup(104, { dealerId: office.cluster.dealerA, name: 7 }));
   await groups.insertMany(documents);
-  // Extra companies and places of group 0: a trashed company, a nameless one, a place of a trashed company and one without company.
+  // Extra companies and places of group 0 (in the copies of the common database): a trashed company, a nameless one, a place of a trashed company and one without company.
   const g = group(0).groupId;
-  const db = ctx.databases.group(g, TEST_CLUSTER);
-  await db.collection('companies').insertMany([
+  await insertCopies(ctx.databases, 'companies', [
     legacyCompany(50, g, { name: 'Trashed company', trash: true }),
     legacyCompany(51, g, { name: 'Reg.Ex (b+' }),
     legacyCompany(52, g, { name: 12 }),
   ]);
-  await db.collection('places').insertMany([
+  await insertCopies(ctx.databases, 'places', [
     legacyPlace(50, g, fixtureId('company', 50), { name: 'Trashed place', trash: true }),
     legacyPlace(51, g, fixtureId('company', 1), { name: 'Second place of company 1' }),
     legacyPlace(52, g, fixtureId('company', 1), { name: 'Orphan place', companyId: undefined }),
@@ -296,6 +296,60 @@ describe('the ids parameter of the companies and places lists', () => {
         assert.equal(as.failure(await as.call(group(0).sa, 'GET', gpath(0, resource, `?ids=${ids}`))).status, 422, ids);
       }
       assert.equal((await as.call(group(0).sa, 'GET', gpath(0, resource, `?ids=${Array(100).fill(c(1)).join(',')}`))).status, 200);
+    }
+  });
+});
+
+describe('the lists read the copies of their own group only', () => {
+  const strayCompany = fixtureId('company', 70);
+  const foreignCompany = fixtureId('company', 71);
+  const stringGroupCompany = fixtureId('company', 72);
+  const strayPlace = fixtureId('place', 70);
+  const foreignPlace = fixtureId('place', 71);
+
+  before(async () => {
+    const g0 = group(0).groupId;
+    const g1 = group(1).groupId;
+    await insertCopies(ctx.databases, 'companies', [
+      legacyCompany(70, g0, { name: 'Stray company', groupId: undefined }),
+      legacyCompany(71, g1, { name: 'company-001' }),
+      legacyCompany(72, g0, { name: 'String group company', groupId: g0.toHexString() }),
+    ]);
+    await insertCopies(ctx.databases, 'places', [
+      legacyPlace(70, g0, fixtureId('company', 1), { name: 'Stray place', groupId: undefined }),
+      legacyPlace(71, g1, fixtureId('company', 1), { name: 'place-001' }),
+    ]);
+  });
+
+  it('ignores a copy without groupId, with the groupId of another group or with a groupId of another type', async () => {
+    const companies = await as.call(group(0).sa, 'GET', gpath(0, 'companies', '?limit=200'));
+    assert.deepEqual(names(companies), ['', 'Reg.Ex (b+', 'company-001', 'company-002']);
+    const places = await as.call(group(0).sa, 'GET', gpath(0, 'places', '?limit=200'));
+    assert.deepEqual(names(places), ['Orphan place', 'Second place of company 1', 'place-001', 'place-002']);
+    // The same name in two groups is two different copies: each group sees its own.
+    assert.deepEqual(names(await as.call(group(1).sa, 'GET', gpath(1, 'companies', '?q=company-001'))), ['company-001']);
+    assert.deepEqual(names(await as.call(group(0).sa, 'GET', gpath(0, 'companies', '?q=company-001'))), ['company-001']);
+    assert.deepEqual(
+      (await as.call(group(0).sa, 'GET', gpath(0, 'companies', '?q=company-001'))).body.data.map((item: { id: string }) => item.id),
+      [hex(fixtureId('company', 1))],
+    );
+  });
+
+  it('does not resolve through ids a copy of another group, nor one without a group', async () => {
+    const ids = (...list: ObjectId[]) => list.map(hex).join(',');
+    assert.deepEqual((await as.call(group(0).sa, 'GET', gpath(0, 'companies', `?ids=${ids(strayCompany, foreignCompany, stringGroupCompany)}`))).body.data, []);
+    assert.deepEqual((await as.call(group(0).sa, 'GET', gpath(0, 'places', `?ids=${ids(strayPlace, foreignPlace)}`))).body.data, []);
+    assert.deepEqual(names(await as.call(group(1).sa, 'GET', gpath(1, 'companies', `?ids=${ids(foreignCompany, strayCompany)}`))), ['company-001']);
+    assert.deepEqual(names(await as.call(group(1).sa, 'GET', gpath(1, 'places', `?ids=${ids(foreignPlace, strayPlace)}`))), ['place-001']);
+  });
+
+  it('never returns the integrations or any other field outside the contract', async () => {
+    const text = JSON.stringify([
+      (await as.call(office.cluster.psa, 'GET', gpath(1, 'places', '?limit=200'))).body,
+      (await as.call(office.cluster.psa, 'GET', gpath(1, 'companies', '?limit=200'))).body,
+    ]);
+    for (const secret of ['integrations', 'dojo', 'fixture-integration-secret', 'fattura_elettronica', 'fixture-secret', 'groupId']) {
+      assert.ok(!text.includes(secret), secret);
     }
   });
 });

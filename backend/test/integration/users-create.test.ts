@@ -18,7 +18,7 @@ import { TEST_PEPPER, addUser as addBackofficeUser, startBackoffice } from '../h
 import type { Backoffice } from '../helpers/backoffice.ts';
 import { memoryActivityLog } from '../helpers/activity.ts';
 import { LEGACY_MODULE_NAMES, fixtureId, legacyUser } from '../helpers/legacy-fixtures.ts';
-import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
+import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalOf } from '../helpers/principal.ts';
 import { actors, send } from '../helpers/users.ts';
@@ -234,7 +234,8 @@ describe('POST /v1/groups/{groupId}/users: the request is validated', () => {
     assert.deepEqual(await post(body({ role: 'PA', companyIds: [hex(company(1))], placeIds: [hex(place(2))] })), invalid(['placeIds.0', 'incorrect']));
     assert.deepEqual(await post(body({ role: 'CA', companyIds: [hex(company(1))], placeIds: [hex(place(2))] })), invalid(['placeIds.0', 'incorrect']));
     // In the trash.
-    const database = ctx.databases.group(g0().groupId, TEST_CLUSTER);
+    // Companies and places are read from the copies in the common database.
+    const database = ctx.databases.common();
     await database.collection('companies').updateOne({ _id: company(2) }, { $set: { trash: true } });
     await database.collection('places').updateOne({ _id: place(2) }, { $set: { trash: true } });
     try {

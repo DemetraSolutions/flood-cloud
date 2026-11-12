@@ -138,6 +138,19 @@ export function reportCrossGroupAccess(onCrossGroupAccess: CrossGroupAccessHandl
 }
 
 /**
+ * Checks that an access was issued by {@link requireGroupAccess} and belongs to the principal.
+ *
+ * @param principal The authenticated caller.
+ * @param access A group access.
+ * @throws {Error} If the access was not issued by {@link requireGroupAccess} or does not belong to the principal.
+ */
+export function assertVerifiedGroupAccess(principal: AuthPrincipal, access: GroupAccess): void {
+  if (!issued.has(access) || checkPerimeter(principal, access.groupId.toHexString()) === null) {
+    throw new Error('Group database requested without a verified group access');
+  }
+}
+
+/**
  * Opens the database of a group. The only inputs are a principal and an access issued by
  * {@link requireGroupAccess}; the access is checked again against the
  * principal, and the database is opened on the cluster the access carries.
@@ -150,8 +163,6 @@ export function reportCrossGroupAccess(onCrossGroupAccess: CrossGroupAccessHandl
  * @throws {UnknownClusterError} If the access's cluster is not configured.
  */
 export function groupDatabaseFor(principal: AuthPrincipal, access: GroupAccess, databases: Databases): Db {
-  if (!issued.has(access) || checkPerimeter(principal, access.groupId.toHexString()) === null) {
-    throw new Error('Group database requested without a verified group access');
-  }
+  assertVerifiedGroupAccess(principal, access);
   return databases.group(access.groupId, access.clusterId);
 }

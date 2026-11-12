@@ -370,17 +370,17 @@ describe('routing of group requests (real MongoDB, two clusters)', () => {
     assert.ok(!clientOf(ctx, 'cluster1:main').some((name) => name.endsWith(hex[1]!)));
   });
 
-  it('finds the places of the companies of a CA on the cluster of the group', async () => {
+  it('finds the places of the companies of a CA in the copies of the common cluster, whatever the cluster of the group', async () => {
     const repository = createCompanyPlacesRepository(ctx.databases);
     const [first, second, broken] = cluster.groups as [IsolationCluster['groups'][number], IsolationCluster['groups'][number], IsolationCluster['groups'][number]];
     reset(ctx);
     const ids = await repository.listCompanyPlaceIds(first.groupId, [fixtureId('company', 1)]);
     assert.ok(ids.length > 0);
-    assert.ok(clientOf(ctx, 'cluster1:main').includes(`${ctx.prefix}development_${hex[0]}`));
-    reset(ctx);
-    await repository.listCompanyPlaceIds(second.groupId, [fixtureId('company', 1)]);
-    assert.ok(clientOf(ctx, 'cluster0:main').includes(`${ctx.prefix}development_${hex[1]}`));
-    await assert.rejects(repository.listCompanyPlaceIds(broken.groupId, [fixtureId('company', 1)]), UnknownClusterError);
+    assert.ok(!clientOf(ctx, 'cluster1:main').some((name) => name.endsWith(hex[0]!)), 'the database of the group is not opened');
+    assert.ok(clientOf(ctx, 'cluster0:main').includes(`${ctx.prefix}development_common`));
+    assert.deepEqual(await repository.listCompanyPlaceIds(second.groupId, [fixtureId('company', 1)]), [], 'the company of another group does not count');
+    // A group declared on an unknown cluster has its copies in the common database all the same.
+    assert.deepEqual(await repository.listCompanyPlaceIds(broken.groupId, [fixtureId('company', 1)]), []);
     assert.deepEqual(await repository.listCompanyPlaceIds(new ObjectId(), [fixtureId('company', 1)]), []);
   });
 });

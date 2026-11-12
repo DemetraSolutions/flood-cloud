@@ -152,11 +152,16 @@ describe('collection registry', () => {
     // indexes.ts walks the registry itself, so its name is not a literal by construction. databases.ts has
     // exactly one non-literal use: the read-only analytics handle forwards the name its caller passes
     // (and that caller is checked here).
-    const dynamicAllowed = new Map([[join(SRC, 'db', 'indexes.ts'), Infinity], [join(SRC, 'db', 'databases.ts'), 1]]);
+    // references.repository.ts has one more: the target table of the group-database references (products, categories, contacts).
+    const dynamicAllowed = new Map([
+      [join(SRC, 'db', 'indexes.ts'), Infinity],
+      [join(SRC, 'db', 'databases.ts'), 1],
+      [join(SRC, 'modules', 'groups', 'catalogs', 'references.repository.ts'), 1],
+    ]);
     for (const file of await sourceFiles()) {
       const text = await readFile(file, 'utf8');
-      const all = [...text.matchAll(/\.collection\(/g)].length;
-      const literal = [...text.matchAll(/\.collection\(\s*(['"`])([^'"`$]*)\1\s*[,)]/g)];
+      const all = [...text.matchAll(/\.collection(?:<[^>]*>)?\(/g)].length;
+      const literal = [...text.matchAll(/\.collection(?:<[^>]*>)?\(\s*(['"`])([^'"`$]*)\1\s*[,)]/g)];
       for (const match of literal) {
         assert.ok(known.has(match[2] as string), `${file}: collection "${match[2]}" is not in the registry`);
       }

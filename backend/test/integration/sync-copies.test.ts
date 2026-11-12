@@ -407,6 +407,22 @@ describe('sync-copies: groups and databases that do not match', () => {
   });
 });
 
+describe('sync-copies: copies whose groupId is an array', () => {
+  it('reports them as invalid copies, with and without a group filter, and never modifies them', async () => {
+    await seed([1]);
+    const id = new ObjectId();
+    await common().collection('places').insertOne({ _id: id, groupId: [G(1), G(2)] });
+    const all = await run([]);
+    assert.deepEqual(all.error, []);
+    assert.match(all.info.join('\n'), /invalidCopy 1/);
+    const one = await run(['--group', G(1).toHexString()]);
+    assert.match(one.info.join('\n'), /invalidCopy 1/);
+    const other = await run(['--group', G(3).toHexString()]);
+    assert.doesNotMatch(other.info.join('\n'), /invalidCopy/);
+    assert.deepEqual((await common().collection('places').findOne({ _id: id }))!['groupId'], [G(1), G(2)]);
+  });
+});
+
 describe('sync-copies --group', () => {
   it('limits everything to one group, the extra copies included', async () => {
     await seed();

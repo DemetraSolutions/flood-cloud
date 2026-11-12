@@ -165,6 +165,7 @@ export const COLLECTIONS = {
     sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
   },
   group: {
+    // Read only by the tools (sync:copies, profile:legacy): the application reads companies and places from the copies in the common database.
     companies: { ownership: 'legacy-read' },
     places: { ownership: 'legacy-read' },
     // Read only, to check that the ids a catalog of the group refers to exist.

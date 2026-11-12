@@ -8,7 +8,7 @@ import type { Scope } from '../../src/shared/security/scope/scope.ts';
 import { companiesScopeFilter, placesScopeFilter, usersScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
 import { seedIsolationCluster } from '../helpers/isolation.ts';
 import type { IsolationCluster } from '../helpers/isolation.ts';
-import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
+import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { fixtureId, legacyUser } from '../helpers/legacy-fixtures.ts';
 import { principalFromLegacyUser } from '../helpers/principal.ts';
@@ -138,11 +138,11 @@ describe('scope filters on real documents', () => {
     assert.ok((await count(users, { ...usersScopeFilter(p['group']!), groupId: other })) > 0);
   });
 
-  it('restricts companies and places of a group database', async () => {
-    const db = ctx.databases.group(cluster.groups[g0]!.groupId, TEST_CLUSTER);
+  it('restricts the copies of companies and places of a group', async () => {
+    const db = ctx.databases.common();
     const result: Record<string, [number, number]> = {};
     for (const [name, principal] of Object.entries(await principals())) {
-      result[name] = [await count(db.collection('companies'), companiesScopeFilter(principal.scope)), await count(db.collection('places'), placesScopeFilter(principal.scope))];
+      result[name] = [await count(db.collection('companies'), withScope({ groupId: cluster.groups[g0]!.groupId }, companiesScopeFilter(principal.scope))), await count(db.collection('places'), withScope({ groupId: cluster.groups[g0]!.groupId }, placesScopeFilter(principal.scope)))];
     }
     assert.deepEqual(result, { platform: [2, 2], dealer: [2, 2], group: [2, 2], companies: [1, 1], places: [0, 1], none: [0, 0] });
   });

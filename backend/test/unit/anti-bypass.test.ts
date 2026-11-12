@@ -88,8 +88,7 @@ describe('database access cannot be bypassed outside src/db', () => {
     assert.ok(own.includes('issueGroupAccess(') && !own.includes('export function issueGroupAccess') && !own.includes('export function resolveGroupAccess'));
   });
 
-  it('opens a group database only from the verified group access, the stored-user company lookup and the tools (always with an explicit cluster)', async () => {
-    const allowed = new Set(['shared/security/scope/group-access.ts', 'shared/security/scope/company-places.repository.ts']);
+  it('opens a group database only from the verified group access and the tools (always with an explicit cluster)', async () => {
     const callers: string[] = [];
     for (const file of await filesUnder(SRC)) {
       const path = relative(SRC, file).split('\\').join('/');
@@ -98,10 +97,63 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
       if (/\.group\(/.test(await readFile(file, 'utf8'))) {
         callers.push(path);
-        assert.ok(allowed.has(path) || path.startsWith('tools/'), `${path} must not open a group database`);
+        assert.ok(path === 'shared/security/scope/group-access.ts' || path.startsWith('tools/'), `${path} must not open a group database`);
       }
     }
-    assert.ok(callers.includes('shared/security/scope/group-access.ts') && callers.includes('shared/security/scope/company-places.repository.ts'));
+    assert.ok(callers.includes('shared/security/scope/group-access.ts'));
+  });
+
+  describe('companies and places', () => {
+    const MIRROR = 'shared/security/scope/group-mirror.ts';
+    const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
+
+    it('reads the copies in common.companies and common.places only through group-mirror.ts', async () => {
+      let seen = false;
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path.startsWith('db/') || path.startsWith('tools/')) {
+          // The tools read the originals in the group databases; only sync-copies may touch the copies (checked below).
+          continue;
+        }
+        const names = [...(await readFile(file, 'utf8')).matchAll(/\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/g)].map((match) => match[0]);
+        if (path === MIRROR) {
+          seen = names.length > 0;
+        } else {
+          assert.deepEqual(names, [], `${path} reads companies or places directly`);
+        }
+      }
+      assert.ok(seen, 'group-mirror.ts is expected to be the single place');
+    });
+
+    it('has no file outside group-mirror.ts, src/db and tools/sync-copies that names the common database and a copy collection', async () => {
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path === MIRROR || path.startsWith('db/') || path.startsWith('tools/sync-copies/')) {
+          continue;
+        }
+        const text = await readFile(file, 'utf8');
+        const literal = /\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/.test(text);
+        assert.ok(!(text.includes('common()') && literal), `${path} touches the copies through the common database`);
+      }
+    });
+
+    it('never reads companies or places from a group database outside the tools', async () => {
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path.startsWith('tools/') || path.startsWith('db/')) {
+          continue;
+        }
+        const text = await readFile(file, 'utf8');
+        assert.ok(!/groupDatabaseFor\([^;]*\)\s*\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/.test(text), `${path} reads companies or places from a group database`);
+        assert.ok(!/\.group\([^;]*\)\s*\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/.test(text), `${path} reads companies or places from a group database`);
+      }
+    });
+
+    it('keeps the copies away from the analytics connection', async () => {
+      const text = await readFile(join(SRC, MIRROR), 'utf8');
+      assert.ok(!/analytics/i.test(text));
+      assert.ok(text.includes('databases.common()'));
+    });
   });
 
   it('recognizes the allowed entry points', () => {

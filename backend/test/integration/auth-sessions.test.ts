@@ -20,6 +20,8 @@ after(async () => {
   await ctx.cleanup();
 });
 
+import { fixtureId } from '../helpers/legacy-fixtures.ts';
+
 const users = () => ctx.databases.common().collection('users');
 const sessions = () => ctx.databases.common().collection('sessions');
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
@@ -292,6 +294,30 @@ describe('Bearer authentication', () => {
     await users().updateOne({ _id: demoted.id }, { $set: { role: 'E' } });
     assert.deepEqual(await errorOf(await me(a.accessToken)), [401, 'UNAUTHENTICATED']);
     assert.deepEqual(await errorOf(await me(b.accessToken)), [401, 'UNAUTHENTICATED']);
+  });
+
+  it('cuts off a CA of a trashed or nonexistent group, who also reaches no group route (so the CA scope needs no group lookup)', async () => {
+    const group = office.cluster.groups[2]!;
+    const own = await office.tokens(userName(group.ca));
+    const places = `/groups/${group.groupId.toHexString()}/places`;
+    assert.equal((await office.call('GET', places, own.accessToken)).status, 200);
+    const groups = ctx.databases.common().collection('groups');
+    await groups.updateOne({ _id: group.groupId }, { $set: { trash: true } });
+    try {
+      assert.deepEqual(await errorOf(await me(own.accessToken)), [401, 'UNAUTHENTICATED']);
+      assert.equal((await office.call('GET', places, own.accessToken)).status, 401);
+    } finally {
+      await groups.updateOne({ _id: group.groupId }, { $set: { trash: false } });
+    }
+    // A user pointed at a group that does not exist: no session, no login, and the group routes answer 401 or 404, never data.
+    const stray = fixtureId('group', 779);
+    const orphan = await addUser({ role: 'CA', groupId: group.groupId, companyId: fixtureId('company', 5) });
+    const session = await office.tokens(orphan.name);
+    await users().updateOne({ _id: orphan.id }, { $set: { groupId: stray } });
+    assert.deepEqual(await errorOf(await me(session.accessToken)), [401, 'UNAUTHENTICATED']);
+    assert.equal((await office.call('GET', places, session.accessToken)).status, 401);
+    assert.equal((await office.call('GET', `/groups/${stray.toHexString()}/places`, session.accessToken)).status, 401);
+    assert.equal((await office.login(orphan.name)).status, 401);
   });
 
   it('refuses a session whose user disappeared, without a group on the event', async () => {

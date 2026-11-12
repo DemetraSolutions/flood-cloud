@@ -241,7 +241,8 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
     assert.deepEqual(events(from), ['user.updated', 'user.scopeChanged', 'session.revoked:scopeChanged']);
     assert.equal(await works(token), false);
     // A place the user already has is not checked again: it may have been trashed since.
-    const database = ctx.databases.group(g0().groupId, TEST_CLUSTER);
+    // Companies and places are read from the copies in the common database.
+    const database = ctx.databases.common();
     await database.collection('places').updateOne({ _id: place(1) }, { $set: { trash: true } });
     try {
       assert.equal((await as.call(g0().sa, 'PATCH', path(id), { firstName: 'Still fine' })).status, 200);

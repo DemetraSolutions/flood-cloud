@@ -66,12 +66,14 @@ async function reportExtraCopies(copy: Collection<Document>, name: SyncCollectio
 }
 
 /**
- * Reports (never modifies) the copies that are not valid: an `_id` or a `groupId` that is not an ObjectId. With a group
+ * Reports (never modifies) the copies that are not valid: an `_id` or a `groupId` that is not an ObjectId, or a `groupId` that is an array. With a group
  * filter only the copies of that group are looked at (a copy without a usable `groupId` belongs to no group).
  */
 async function reportInvalidCopies(copy: Collection<Document>, name: SyncCollection, filter: ObjectId | null, sink: IssueSink): Promise<void> {
   const notId = { $not: { $type: 'objectId' } } as const;
-  const invalid: Document = filter === null ? { $or: [{ _id: notId }, { groupId: notId }] } : { groupId: filter, _id: notId };
+  // `$type` looks inside arrays: an array `groupId` must be asked for explicitly.
+  const groupIdArray = { groupId: { $type: 'array' } } as const;
+  const invalid: Document = filter === null ? { $or: [{ _id: notId }, { groupId: notId }, groupIdArray] } : { groupId: filter, $or: [{ _id: notId }, groupIdArray] };
   for await (const document of copy.find(invalid, { projection: { _id: 1, groupId: 1 } })) {
     await sink.record({
       kind: 'invalidCopy',
@@ -188,7 +190,7 @@ export async function syncCopies(databases: Databases, options: SyncOptions): Pr
   for (const [name, copy] of leftovers) {
     const stale = await copy
       .aggregate<{ _id: ObjectId }>(
-        [{ $match: { groupId: options.groupId ?? { $type: 'objectId' } } }, { $sort: { groupId: 1 } }, { $group: { _id: '$groupId' } }],
+        [{ $match: { $and: [{ groupId: options.groupId ?? { $type: 'objectId' } }, { groupId: { $not: { $type: 'array' } } }] } }, { $sort: { groupId: 1 } }, { $group: { _id: '$groupId' } }],
         { allowDiskUse: true },
       )
       .toArray();

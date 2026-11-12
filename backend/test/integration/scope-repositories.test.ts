@@ -8,7 +8,8 @@ import { createGroupsRepository } from '../../src/shared/security/scope/groups.r
 import { fixtureId, legacyGroup, legacyPlace } from '../helpers/legacy-fixtures.ts';
 import { seedIsolationCluster } from '../helpers/isolation.ts';
 import type { IsolationCluster } from '../helpers/isolation.ts';
-import { openTestDatabases, TEST_CLUSTER } from '../helpers/mongo.ts';
+import { insertCopies } from '../helpers/mirror.ts';
+import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalFromLegacyUser } from '../helpers/principal.ts';
 
@@ -88,10 +89,9 @@ describe('groups repository: availability', () => {
 });
 
 describe('company places repository', () => {
-  it('lists the places of the companies, trashed ones included, ids only', async () => {
+  it('lists the places of the companies from the copies, trashed ones included, ids only', async () => {
     const group = cluster.groups[0]!;
-    const db = ctx.databases.group(group.groupId, TEST_CLUSTER);
-    await db.collection('places').insertOne(legacyPlace(3000, group.groupId, fixtureId('company', 1), { trash: true }));
+    await insertCopies(ctx.databases, 'places', [legacyPlace(3000, group.groupId, fixtureId('company', 1), { trash: true })]);
     const repository = createCompanyPlacesRepository(ctx.databases);
     assert.deepEqual(hexes(await repository.listCompanyPlaceIds(group.groupId, [fixtureId('company', 1)])), hexes([group.ownPlaceId, fixtureId('place', 3000)]));
     assert.equal((await repository.listCompanyPlaceIds(group.groupId, [fixtureId('company', 1), fixtureId('company', 2)])).length, 3);
@@ -102,9 +102,17 @@ describe('company places repository', () => {
     assert.deepEqual(await repository.listCompanyPlaceIds(cluster.groups[0]!.groupId, [fixtureId('company', 12345)]), []);
   });
 
-  it('does not reach into another group database', async () => {
+  it('does not reach the copies of another group, nor those without a group', async () => {
     const repository = createCompanyPlacesRepository(ctx.databases);
     assert.deepEqual(await repository.listCompanyPlaceIds(cluster.groups[1]!.groupId, [fixtureId('company', 1)]), []);
+    // A place of company 1 that belongs to another group, one without groupId and one with a string groupId: never counted for group 0.
+    await insertCopies(ctx.databases, 'places', [
+      legacyPlace(3001, cluster.groups[1]!.groupId, fixtureId('company', 1)),
+      legacyPlace(3002, cluster.groups[0]!.groupId, fixtureId('company', 1), { groupId: undefined }),
+      legacyPlace(3003, cluster.groups[0]!.groupId, fixtureId('company', 1), { groupId: cluster.groups[0]!.groupId.toHexString() }),
+    ]);
+    assert.deepEqual(hexes(await repository.listCompanyPlaceIds(cluster.groups[0]!.groupId, [fixtureId('company', 1)])), hexes([cluster.groups[0]!.ownPlaceId, fixtureId('place', 3000)]));
+    assert.deepEqual(hexes(await repository.listCompanyPlaceIds(cluster.groups[1]!.groupId, [fixtureId('company', 1)])), hexes([fixtureId('place', 3001)]));
   });
 
   it('fails closed above the cap', async () => {

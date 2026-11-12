@@ -13,6 +13,7 @@ import { createGroupsRepository } from '../../src/shared/security/scope/groups.r
 import type { GroupsRepository } from '../../src/shared/security/scope/groups.repository.ts';
 import { placesScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
 import { LEGACY_MODULE_NAMES, fixtureId, legacyPermissions, legacyUser, seedLegacyCluster } from './legacy-fixtures.ts';
+import { copyGroupsToMirror } from './mirror.ts';
 import { principalFromLegacyUser } from './principal.ts';
 
 /** Header the test authenticator reads: the hex id of the legacy user to act as. */
@@ -47,12 +48,13 @@ export interface IsolationCluster {
 /**
  * Seeds the standard cluster of the isolation model with {@link seedLegacyCluster}: two dealers,
  * two groups each, and per group an SA, a CA (company 1), a PA (place 1), an E, two companies
- * and two places.
+ * and two places (also copied into `common.companies` and `common.places`, where the application reads them).
  *
  * @param databases Accessor over a throw-away prefix.
  */
 export async function seedIsolationCluster(databases: Databases): Promise<IsolationCluster> {
   const seeded = await seedLegacyCluster(databases, { groups: GROUPS });
+  await copyGroupsToMirror(databases, seeded.groupIds);
   const dealerB = fixtureId('user', 500);
   await databases.common().collection('users').insertOne(legacyUser(500, { role: 'D' }));
   await databases.common().collection('groups').updateMany({ _id: { $in: seeded.groupIds.slice(2) } }, { $set: { dealerId: dealerB } });
