@@ -17,6 +17,10 @@ import { createAuthController } from './modules/auth/auth.controller.ts';
 import { createAuthRoutes } from './modules/auth/auth.routes.ts';
 import { createAuthService } from './modules/auth/auth.service.ts';
 import { createAuthenticate } from './modules/auth/authenticate.ts';
+import { createLookupController } from './modules/group-lookup/lookup.controller.ts';
+import { createLookupRepository } from './modules/group-lookup/lookup.repository.ts';
+import { createLookupRoutes } from './modules/group-lookup/lookup.routes.ts';
+import { createLookupService } from './modules/group-lookup/lookup.service.ts';
 import { createGroupServicesController } from './modules/group-services/services.controller.ts';
 import { createServicesRepository } from './modules/group-services/services.repository.ts';
 import { createGroupServicesRoutes } from './modules/group-services/services.routes.ts';
@@ -129,6 +133,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     createGroupsService({ groups: createManagedGroupsRepository(databases), users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now }),
   );
   const groupServices = createGroupServicesController(createGroupServicesService({ services, users }));
+  const lookup = createLookupController(createLookupService({ lookup: createLookupRepository(databases), users }));
   const catalogsService = createCatalogsService({
     catalogs: catalogsRepository,
     references: createReferencesRepository(databases),
@@ -144,6 +149,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createGroupsRoutes(groupsController),
       ...createCatalogRoutes(catalogsService, CATALOGS),
       ...createGroupServicesRoutes(groupServices),
+      ...createLookupRoutes(lookup),
       ...createActivityLogRoutes(activity),
       ...createClientErrorsRoutes(clientErrors, rules),
     ],

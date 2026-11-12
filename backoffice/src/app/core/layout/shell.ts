@@ -13,10 +13,11 @@ import { TPipe } from '../i18n/t-pipe';
 import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { Icon } from '../../shared/ui/icon/icon';
 import { GroupContext } from '../groups/group-context';
+import { GroupFeatures } from '../groups/group-features';
 import { GroupSelector } from './group-selector';
 import { LanguageSelector } from './language-selector';
 import { SessionService } from '../session/session.service';
-import { allowAll, MENU_ITEMS, MenuItem, visibleMenu } from './menu';
+import { MENU_ITEMS, MenuItem, visibleMenu } from './menu';
 import { PageAnnouncer } from './page-announcer';
 import { ThemeSelector } from './theme-selector';
 import { UserMenu } from './user-menu';
@@ -56,19 +57,20 @@ export class Shell {
   private readonly session = inject(SessionService);
   private readonly menuItems = inject(MENU_ITEMS);
   protected readonly groups = inject(GroupContext);
+  private readonly features = inject(GroupFeatures);
 
   /** The side menu is offered only to a fully signed-in user (not while a password change is pending). */
   protected readonly showNav = computed(() => this.session.status() === 'authenticated');
 
   /**
-   * Menu entries visible to the current user: filtered by the permissions the server granted.
-   * Enabled features arrive with task 4.5.2: until then every feature is considered enabled.
+   * Menu entries visible to the current user: filtered by the permissions the server granted and
+   * by the features of the working group.
    */
   protected readonly menu = computed(() =>
     visibleMenu(
       this.menuItems,
       (permission) => this.session.can(permission),
-      allowAll,
+      (feature) => this.features.enabled(feature),
       this.session.me()?.role,
     ),
   );

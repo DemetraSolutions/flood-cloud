@@ -6,7 +6,8 @@
 > - Un task si spunta solo quando il codice funziona, i test sono al 100% con typecheck verde, la documentazione è aggiornata (skill `docs-sync-checklist`) e l'utente ha confermato (`GEMINI.md` §1).
 > - Le decisioni `D-nn` (§0.4) vanno prese **prima** dei task che le citano.
 > - Fonti: `doc/` del progetto e analisi del 2026-11-01 di `cloud-commerce-platform-server` e `cloud-commerce-backoffice-client`.
-> - Stato al 2026-11-06: aree 1, 2 e 3 completate; area 4 (gruppi): backend realizzato (passi 4B, 4B-bis, 4U), restano 4.3.2, 4.4.2 e il backoffice (4C).
+> - Stato al 2026-11-06: aree 1, 2 e 3 completate; area 4 (gruppi): backend realizzato (passi 4B, 4B-bis, 4U), restano 4.4.2 e il backoffice.
+> - Stato al 2026-11-12: il passo 4C (backoffice dei gruppi) è diviso in **4C-1** (fatto: feature, elenco gruppi, scheda del gruppo con integrazioni e sei cataloghi), **4C-2** (form utente completo e profilo) e **4C-3** (fidelity, preferiti, promozioni, con letture compatte già nel backend); decisione dell'utente del 2026-11-12.
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)
@@ -452,7 +453,7 @@ Task:
 
 ### 4.3 Contesto del gruppo
 - [x] **4.3.1** `GET /v1/groups/{groupId}` con anagrafica, feature, lingue e impostazioni statistiche; `ETag` e `If-None-Match`.
-- [ ] **4.3.2** Contesto riletto a ogni avvio e a ogni cambio di gruppo. Nel legacy era una fotografia scattata al login: i flag cambiati da PSA o D arrivavano solo al login successivo.
+- [x] **4.3.2** Contesto riletto a ogni avvio e a ogni cambio di gruppo. Nel legacy era una fotografia scattata al login: i flag cambiati da PSA o D arrivavano solo al login successivo.
 
 ### 4.4 Gestione gruppi (backend, PSA e D)
 - [x] **4.4.1** Elenco:
@@ -475,14 +476,14 @@ Task:
 
 ### 4.5 Backoffice
 - [x] **4.5.1** Selettore del gruppo per PSA e D, con il gruppo nell'URL `/groups/:groupId/...` (D-10), voce "Tutti i gruppi" e vista trasversale degli utenti (passo 3D e richiesta dell'utente del 2026-11-06).
-- [ ] **4.5.2** Feature nel client: menu, route e sezioni condizionati dalle feature del gruppo corrente (guard e direttiva).
+- [x] **4.5.2** Feature nel client: menu, route e sezioni condizionati dalle feature del gruppo corrente (guard e direttiva).
 - [ ] **4.5.3** *(prime letture compatte e selettore del gruppo già realizzati nel passo 3D)* Store dei dati di riferimento del gruppo (sostituisce lo store in memoria del legacy):
   - liste compatte per gruppo, con ETag;
   - riconvalida all'avvio e al cambio di gruppo;
   - invalidazione dopo ogni creazione, modifica o cancellazione;
   - estendibile ad altre entità (categorie, utenti…).
-- [ ] **4.5.4** Elenco gruppi con conteggi e dettaglio espandibile (aziende e punti vendita).
-- [ ] **4.5.5** Dettaglio e modifica del gruppo con la scheda delle feature; pagina "Account › Gruppo" per il SA.
+- [x] **4.5.4** Elenco gruppi con conteggi e dettaglio espandibile (aziende e punti vendita). *Fatto l'elenco: i conteggi restano a 4.4.2; il dettaglio espandibile è sostituito dalla scheda del gruppo (4.5.5).*
+- [x] **4.5.5** Dettaglio e modifica del gruppo con la scheda delle feature; pagina "Account › Gruppo" per il SA.
 
 ### 4.6 Chiusura
 - [ ] **4.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`groups`). *Aggiornati per il backend (passi 4B, 4B-bis, 4U); restano le pagine del backoffice (4C).*

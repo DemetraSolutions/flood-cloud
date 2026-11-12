@@ -1,6 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { API_ERROR_CODES, CLIENT_ERROR_CODES } from '../api/api.types';
 import { FIELD_ISSUES, issueMessageKey } from '../api/field-issues';
+import { FEATURE_NAMES, featureTextKey } from '../groups/feature-catalog';
+import { GROUP_SECTIONS } from '../../features/groups/group-settings';
+import { INTEGRATION_PROVIDERS } from '../../features/groups/group.types';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -72,6 +75,43 @@ describe('dictionaries', () => {
         expect(keys.has(issueMessageKey(issue))).toBe(true);
       }
     }
+  });
+
+  it('defines the texts whose keys are built at run time (features, integrations, catalogs, group actions)', () => {
+    const keys = dictionary('it');
+    const expected: string[] = [];
+    for (const name of FEATURE_NAMES) {
+      expected.push(featureTextKey(name, 'LABEL'), featureTextKey(name, 'DESCRIPTION'));
+    }
+    for (const provider of INTEGRATION_PROVIDERS) {
+      expected.push(`INTEGRATION.${provider.toUpperCase()}`);
+    }
+    for (const section of GROUP_SECTIONS) {
+      expected.push(`GROUP_SETTINGS.SECTION.${section.key}`);
+      if (section.path.match(/-|^taxes|^currencies/) !== null) {
+        for (const part of [
+          'TITLE',
+          'HINT',
+          'NEW',
+          'NEW_TITLE',
+          'EDIT_TITLE',
+          'DELETE_CONFIRM',
+          'EMPTY',
+          'EMPTY_MESSAGE',
+        ]) {
+          expected.push(`CATALOG.${section.key}.${part}`);
+        }
+      }
+    }
+    for (const action of ['SUSPEND', 'REACTIVATE', 'TRASH', 'RESTORE']) {
+      for (const part of ['TITLE', 'CONFIRM', 'LABEL', 'DONE', 'ALREADY']) {
+        expected.push(`GROUP_ACTIONS.${part}.${action}`);
+      }
+    }
+    for (const key of ['CARDTYPES', 'POINTSCOLLECTIONS', 'OTHER']) {
+      expected.push(`CATALOG.REFERENCED.${key}`);
+    }
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });
 
   it('defines the role names, whose keys are built at run time', () => {

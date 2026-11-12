@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { sendData } from './envelope.ts';
 
-/** `Cache-Control` of a revalidated resource: the browser may keep a copy for the signed-in user only and must ask the server before every use. */
-export const REVALIDATE_CACHE_CONTROL = 'private, no-cache';
+/** `Cache-Control` of a revalidated resource: never stored by the browser; the backoffice keeps its own in-memory copy and revalidates it with `If-None-Match`. */
+export const REVALIDATE_CACHE_CONTROL = 'no-store';
 
 /**
  * Serializes a JSON value with the keys of every object in alphabetical order, so that two values with
@@ -45,7 +45,7 @@ function matches(header: string | undefined, etag: string): boolean {
 }
 
 /**
- * Sends a `{ data }` envelope with an `ETag` and `Cache-Control: private, no-cache` (revalidation is
+ * Sends a `{ data }` envelope with an `ETag` and `Cache-Control: no-store` (nothing is kept by the browser; the client revalidates its own in-memory copy, revalidation is
  * mandatory; the default of the API is `no-store`, which this resource deliberately relaxes). When the request
  * carries a matching `If-None-Match` the answer is `304 Not Modified` with no body. Only the resources that
  * are cached by the backoffice use this; every other response stays without `ETag`.

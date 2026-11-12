@@ -65,11 +65,21 @@ export class GroupContext {
 
   /**
    * Aligns the working group with the one in the URL once its page loaded successfully (so the
-   * selector and the menu follow the page). The name stays unknown unless it was already chosen.
+   * selector and the menu follow the page). The name stays unknown unless it was already chosen
+   * or the page knows it.
+   *
+   * @param groupId Id of the group of the page.
+   * @param name Name of the group, when the page has it (also refreshes a stale name).
    */
-  adopt(groupId: string): void {
-    if (this.canChoose() && this.chosen()?.id !== groupId) {
-      this.choose({ id: groupId, name: '' });
+  adopt(groupId: string, name = ''): void {
+    if (!this.canChoose()) {
+      return;
+    }
+    const chosen = this.chosen();
+    if (chosen?.id !== groupId) {
+      this.choose({ id: groupId, name });
+    } else if (name !== '' && chosen.name !== name) {
+      this.choose({ id: groupId, name });
     }
   }
 

@@ -1,6 +1,8 @@
 import { inject } from '@angular/core';
 import { CanMatchFn, Router, UrlSegment, UrlTree } from '@angular/router';
+import { FeatureName } from '../groups/feature-catalog';
 import { GroupContext } from '../groups/group-context';
+import { GroupFeatures } from '../groups/group-features';
 import { SessionService } from '../session/session.service';
 import { Role } from '../session/session.types';
 import { safeReturnUrl } from './return-url';
@@ -70,6 +72,34 @@ export function role(...allowed: Role[]): CanMatchFn {
     return current !== undefined && allowed.includes(current)
       ? true
       : inject(Router).createUrlTree(['/forbidden']);
+  };
+}
+
+const OBJECT_ID = /^[0-9a-f]{24}$/;
+
+/** Group of a page of the group area (`groups/{groupId}/…`), `null` for any other path. */
+function groupOfSegments(segments: readonly UrlSegment[]): string | null {
+  const [first, second] = segments;
+  return first?.path === 'groups' && second !== undefined && OBJECT_ID.test(second.path)
+    ? second.path
+    : null;
+}
+
+/**
+ * Requires a feature (module) of the group the page belongs to. Declare it on routes whose path
+ * starts with `groups/:groupId`: users bound to a group use their own group, a PSA or dealer the
+ * one in the URL (its features are read first). A module that is off lands on the
+ * "feature disabled" page, like the `403 FEATURE_DISABLED` the server answers.
+ *
+ * @param required Feature name of the catalog.
+ */
+export function feature(required: FeatureName): CanMatchFn {
+  return async (_route, segments) => {
+    const features = inject(GroupFeatures);
+    const router = inject(Router);
+    return (await features.isEnabledFor(groupOfSegments(segments), required))
+      ? true
+      : router.createUrlTree(['/feature-disabled']);
   };
 }
 

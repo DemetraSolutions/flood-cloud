@@ -1,0 +1,152 @@
+<header class="page-header">
+  <h1>{{ 'GROUPS.TITLE' | t }}</h1>
+</header>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'GROUPS.FILTER.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+  <fc-select
+    [label]="'GROUPS.FILTER.DEMO' | t"
+    [placeholder]="'GROUPS.FILTER.ALL' | t"
+    [options]="demoOptions()"
+    [value]="demo() ?? ''"
+    (valueChange)="onFilter('demo', $event)"
+  />
+  @if (isPlatform()) {
+    <fc-select
+      [label]="'GROUPS.FILTER.STATUS' | t"
+      [placeholder]="'GROUPS.FILTER.ALL' | t"
+      [options]="statusOptions()"
+      [value]="status() ?? ''"
+      (valueChange)="onFilter('status', $event)"
+    />
+    <fc-select
+      [label]="'GROUPS.FILTER.DEALER' | t"
+      [placeholder]="'GROUPS.FILTER.ALL' | t"
+      [options]="dealerOptions()"
+      [value]="dealerId() ?? ''"
+      (valueChange)="onFilter('dealerId', $event)"
+    />
+    <fc-checkbox
+      [label]="'GROUPS.FILTER.TRASHED' | t"
+      [checked]="showTrashed()"
+      (checkedChange)="onTrashed($event)"
+    />
+  }
+</form>
+
+@if (groups.error()) {
+  <fc-error-state
+    [title]="'GROUPS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="groups.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'GROUPS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="'name'"
+    [loading]="groups.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'GROUPS.EMPTY' | t"
+    [emptyMessage]="'GROUPS.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="['/groups', row.id, 'settings']" (click)="open(row)">{{ row.name }}</a>
+    </ng-template>
+    <ng-template fcCell="status" let-row>
+      @if (row.status === 'active') {
+        <fc-status-badge tone="success">{{ 'GROUPS.STATUS.ACTIVE' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge tone="warning">{{ 'GROUPS.STATUS.SUSPENDED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcCell="demo" let-row>
+      @if (row.demo) {
+        <fc-status-badge tone="info">{{ 'GROUPS.DEMO' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcCell="trashed" let-row>
+      @if (row.trashed) {
+        <fc-status-badge tone="danger">{{ 'GROUPS.TRASHED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      <fc-actions-menu
+        [text]="'GROUPS.ACTIONS' | t"
+        [label]="rowLabel('GROUPS.ACTIONS_LABEL', row)"
+      >
+        <button
+          fc-button
+          variant="ghost"
+          [attr.aria-label]="rowLabel('GROUPS.ACTION.OPEN_LABEL', row)"
+          (click)="openCard(row)"
+        >
+          {{ 'GROUPS.ACTION.OPEN' | t }}
+        </button>
+        @if (row.status === 'active') {
+          <button
+            *fcCan="'groups:suspend'"
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="rowLabel('GROUPS.ACTION.SUSPEND_LABEL', row)"
+            (click)="actions.run('suspend', row)"
+          >
+            {{ 'GROUPS.ACTION.SUSPEND' | t }}
+          </button>
+        } @else {
+          <button
+            *fcCan="'groups:suspend'"
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="rowLabel('GROUPS.ACTION.REACTIVATE_LABEL', row)"
+            (click)="actions.run('reactivate', row)"
+          >
+            {{ 'GROUPS.ACTION.REACTIVATE' | t }}
+          </button>
+        }
+        @if (row.trashed) {
+          <button
+            *fcCan="'groups:trash'"
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="rowLabel('GROUPS.ACTION.RESTORE_LABEL', row)"
+            (click)="actions.run('restore', row)"
+          >
+            {{ 'GROUPS.ACTION.RESTORE' | t }}
+          </button>
+        } @else {
+          <button
+            *fcCan="'groups:trash'"
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="rowLabel('GROUPS.ACTION.TRASH_LABEL', row)"
+            (click)="actions.run('trash', row)"
+          >
+            {{ 'GROUPS.ACTION.TRASH' | t }}
+          </button>
+        }
+      </fc-actions-menu>
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="groups.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-group-actions #actions (done)="groups.reload()" />

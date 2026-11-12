@@ -3,6 +3,8 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { HttpTestingController } from '@angular/common/http/testing';
+import { fakeGroup } from '../testing/groups';
 import { signIn } from '../testing/session';
 import { App } from './app';
 import { StartupState } from './core/startup/startup-state';
@@ -158,9 +160,45 @@ describe('routes', () => {
       ['/platform/users/new', psa([...READ, 'users:create']), '⟦USERS.FORM.NEW_TITLE⟧'],
       ['/platform/users/u1', psa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
       ['/groups', psa(), '⟦GROUP_CHOOSER.TITLE⟧'],
+      ['/groups/list', psa(['groups:read']), '⟦GROUPS.TITLE⟧'],
+      ['/groups/list', { ...psa(['groups:read']), role: 'D' as const }, '⟦GROUPS.TITLE⟧'],
       ['/activity-log', sa(['activityLog:read', 'profile:read']), '⟦ACTIVITY.TITLE⟧'],
     ])('lazy-loads %s', async (url, profile, expected) => {
       expect(await go(url, profile)).toBe(expected);
+    });
+
+    it.each([
+      ['', 'GENERAL'],
+      ['/features', 'FEATURES'],
+      ['/integrations', 'INTEGRATIONS'],
+      ['/price-lists', 'PRICE_LISTS'],
+      ['/taxes', 'TAXES'],
+      ['/currencies', 'CURRENCIES'],
+      ['/measure-units', 'MEASURE_UNITS'],
+      ['/warehouse-rules', 'WAREHOUSE_RULES'],
+      ['/fidelity-card-rules', 'FIDELITY_CARD_RULES'],
+    ])('lazy-loads the section %s of the group record', async (path, key) => {
+      setup();
+      sessionStorage.clear();
+      signIn({ role: 'SA', permissions: ['groups:read', 'profile:read'] });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/groups/${GROUP}/settings${path}`);
+      TestBed.inject(HttpTestingController)
+        .expectOne((r) => r.url.endsWith(`/v1/groups/${GROUP}`))
+        .flush({
+          data: fakeGroup({ id: GROUP }),
+        });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      const active = (harness.routeNativeElement as HTMLElement).querySelector('main nav a.active');
+      expect(active?.textContent?.trim()).toBe(`⟦GROUP_SETTINGS.SECTION.${key}⟧`);
+    });
+
+    it('shows the feature-disabled page', async () => {
+      expect(await go('/feature-disabled', sa())).toBe('⟦ERRORS.FEATURE_DISABLED.TITLE⟧');
     });
 
     it('sends the user of a group from /groups to the users of their group', async () => {
@@ -180,6 +218,9 @@ describe('routes', () => {
       ['/users', psa([])],
       ['/platform/users', { ...psa([]) }],
       ['/activity-log', sa()],
+      ['/groups/list', psa([])],
+      ['/groups/list', sa(['groups:read'])],
+      [`/groups/${GROUP}/settings`, sa([])],
     ])('protects %s', async (url, profile) => {
       await go(url, profile);
       expect(location()).toBe('/forbidden');

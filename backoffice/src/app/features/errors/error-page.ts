@@ -5,7 +5,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 
 /** Kinds of error page; each maps to `ERRORS.<KIND>.TITLE` and `.MESSAGE` in the dictionary. */
-export type ErrorPageKind = 'NOT_FOUND' | 'FORBIDDEN' | 'GENERIC';
+export type ErrorPageKind = 'NOT_FOUND' | 'FORBIDDEN' | 'FEATURE_DISABLED' | 'GENERIC';
 
 /**
  * Extracts the optional request id passed in the navigation state
@@ -19,7 +19,7 @@ export function requestIdFromState(state: unknown): string | null {
   return typeof id === 'string' ? id : null;
 }
 
-/** Full-page error: not found (404), forbidden (403) or generic, chosen by the route `data.kind`. */
+/** Full-page error: not found (404), forbidden (403), feature disabled (403) or generic, chosen by the route `data.kind`. */
 @Component({
   selector: 'fc-error-page',
   imports: [RouterLink, TPipe],

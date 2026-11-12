@@ -1,0 +1,44 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="taxForm.rate"
+    type="number"
+    [label]="'CATALOG.TAXES.FIELD.RATE' | t"
+    [hint]="'CATALOG.TAXES.FIELD.RATE_HINT' | t"
+    [error]="message(taxForm.rate, 'rate')"
+    (blurred)="taxForm.rate().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="taxForm.department"
+    type="number"
+    [label]="'CATALOG.TAXES.FIELD.DEPARTMENT' | t"
+    [hint]="'CATALOG.TAXES.FIELD.DEPARTMENT_HINT' | t"
+    [error]="message(taxForm.department, 'department')"
+    (blurred)="taxForm.department().markAsTouched()"
+  />
+  <fc-select
+    [formField]="taxForm.vatNature"
+    [label]="'CATALOG.TAXES.FIELD.VAT_NATURE' | t"
+    [placeholder]="'CATALOG.TAXES.FIELD.NO_VAT_NATURE' | t"
+    [options]="natureOptions()"
+    [error]="message(taxForm.vatNature, 'vatNature')"
+    (valueChange)="onNature($event)"
+    (blurred)="taxForm.vatNature().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="taxForm.description"
+    [label]="'CATALOG.TAXES.FIELD.DESCRIPTION' | t"
+    [error]="message(taxForm.description, 'description')"
+    (blurred)="taxForm.description().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

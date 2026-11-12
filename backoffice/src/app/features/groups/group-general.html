@@ -1,0 +1,116 @@
+@if (state.group()) {
+  @if (!state.canUpdate()) {
+    <p class="note">{{ 'GROUP_SETTINGS.READ_ONLY' | t }}</p>
+  }
+  <form novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (conflict()) {
+        <div class="actions">
+          <button fc-button variant="secondary" (click)="reload()">
+            {{ 'GROUP_SETTINGS.RELOAD' | t }}
+          </button>
+        </div>
+      }
+    }
+    <fieldset>
+      <legend>{{ 'GROUP_SETTINGS.GENERAL.DATA' | t }}</legend>
+      <fc-text-field
+        [formField]="generalForm.name"
+        [label]="'GROUP_SETTINGS.GENERAL.NAME' | t"
+        [error]="error(generalForm.name)"
+        (blurred)="generalForm.name().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="generalForm.description"
+        [label]="'GROUP_SETTINGS.GENERAL.DESCRIPTION' | t"
+        [error]="error(generalForm.description)"
+        (blurred)="generalForm.description().markAsTouched()"
+      />
+      <fc-checkbox
+        [formField]="generalForm.demo"
+        [label]="'GROUP_SETTINGS.GENERAL.DEMO' | t"
+        [hint]="'GROUP_SETTINGS.GENERAL.DEMO_HINT' | t"
+        [error]="error(generalForm.demo)"
+        (blurred)="generalForm.demo().markAsTouched()"
+      />
+    </fieldset>
+
+    <fc-language-picker
+      [formField]="generalForm.languages"
+      [label]="'GROUP_SETTINGS.GENERAL.LANGUAGES' | t"
+      [error]="error(generalForm.languages)"
+      (blurred)="generalForm.languages().markAsTouched()"
+    />
+
+    <fieldset>
+      <legend>{{ 'GROUP_SETTINGS.GENERAL.STATS' | t }}</legend>
+      <fc-text-field
+        [formField]="generalForm.openingTime"
+        type="time"
+        [label]="'GROUP_SETTINGS.GENERAL.OPENING_TIME' | t"
+        [hint]="'GROUP_SETTINGS.GENERAL.OPENING_TIME_HINT' | t"
+        [error]="error(generalForm.openingTime)"
+        (blurred)="generalForm.openingTime().markAsTouched()"
+      />
+      <fc-checkbox
+        [formField]="generalForm.compressProductsCategories"
+        [label]="'GROUP_SETTINGS.GENERAL.COMPRESS' | t"
+        [hint]="'GROUP_SETTINGS.GENERAL.COMPRESS_HINT' | t"
+        [error]="error(generalForm.compressProductsCategories)"
+        (blurred)="generalForm.compressProductsCategories().markAsTouched()"
+      />
+      <fieldset>
+        <legend>{{ 'GROUP_SETTINGS.GENERAL.SLOTS' | t }}</legend>
+        <p class="note">{{ 'GROUP_SETTINGS.GENERAL.SLOTS_HINT' | t }}</p>
+        @let slotsError = error(generalForm.timeSlots);
+        @if (slotsError) {
+          <p class="note" role="alert">{{ slotsError }}</p>
+        }
+        @for (slot of generalForm.timeSlots; track $index; let i = $index) {
+          <div class="slot">
+            <fc-select
+              [formField]="slot.from"
+              [label]="slotLabel('GROUP_SETTINGS.GENERAL.SLOT_FROM', i)"
+              [options]="slotStarts"
+              [error]="error(slot.from)"
+              (blurred)="slot.from().markAsTouched()"
+            />
+            <fc-select
+              [formField]="slot.to"
+              [label]="slotLabel('GROUP_SETTINGS.GENERAL.SLOT_TO', i)"
+              [options]="slotEnds"
+              [error]="error(slot.to)"
+              (blurred)="slot.to().markAsTouched()"
+            />
+            @if (state.canUpdate()) {
+              <button
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="slotLabel('GROUP_SETTINGS.GENERAL.REMOVE_SLOT', i)"
+                (click)="removeSlot(i)"
+              >
+                {{ 'GROUP_SETTINGS.GENERAL.REMOVE' | t }}
+              </button>
+            }
+          </div>
+        }
+        @if (state.canUpdate()) {
+          <div>
+            <button fc-button variant="secondary" [disabled]="!canAddSlot()" (click)="addSlot()">
+              {{ 'GROUP_SETTINGS.GENERAL.ADD_SLOT' | t }}
+            </button>
+          </div>
+        }
+      </fieldset>
+    </fieldset>
+
+    @if (state.canUpdate()) {
+      <div class="actions">
+        <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+          {{ 'COMMON.SAVE' | t }}
+        </button>
+      </div>
+    }
+  </form>
+}

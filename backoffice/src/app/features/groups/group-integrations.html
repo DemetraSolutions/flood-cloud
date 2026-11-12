@@ -1,0 +1,118 @@
+@if (state.group()) {
+  @if (!state.canManage()) {
+    <p class="note">{{ 'GROUP_SETTINGS.INTEGRATIONS.READ_ONLY' | t }}</p>
+  }
+  <form novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (conflict()) {
+        <div class="actions">
+          <button fc-button variant="secondary" (click)="reload()">
+            {{ 'GROUP_SETTINGS.RELOAD' | t }}
+          </button>
+        </div>
+      }
+    }
+    <fieldset>
+      <legend>{{ 'GROUP_SETTINGS.INTEGRATIONS.LEGEND' | t }}</legend>
+      <ul>
+        @for (provider of providers; track provider) {
+          <li>
+            <fc-checkbox
+              [formField]="integrationsForm[provider]"
+              [label]="label(provider)"
+              [error]="error(integrationsForm[provider])"
+              (blurred)="integrationsForm[provider]().markAsTouched()"
+            />
+            <div class="key">
+              @if (keySet(provider)) {
+                <fc-status-badge tone="success">{{
+                  'GROUP_SETTINGS.INTEGRATIONS.KEY_SET' | t
+                }}</fc-status-badge>
+              } @else {
+                <fc-status-badge tone="neutral">{{
+                  'GROUP_SETTINGS.INTEGRATIONS.KEY_NOT_SET' | t
+                }}</fc-status-badge>
+              }
+              @if (state.canManage()) {
+                <button
+                  fc-button
+                  variant="secondary"
+                  [attr.aria-label]="
+                    actionLabel('GROUP_SETTINGS.INTEGRATIONS.SET_KEY_LABEL', provider)
+                  "
+                  (click)="openKey(provider)"
+                >
+                  {{ 'GROUP_SETTINGS.INTEGRATIONS.SET_KEY' | t }}
+                </button>
+                @if (keySet(provider)) {
+                  <button
+                    fc-button
+                    variant="ghost"
+                    [attr.aria-label]="
+                      actionLabel('GROUP_SETTINGS.INTEGRATIONS.REMOVE_KEY_LABEL', provider)
+                    "
+                    (click)="askRemove(provider)"
+                  >
+                    {{ 'GROUP_SETTINGS.INTEGRATIONS.REMOVE_KEY' | t }}
+                  </button>
+                }
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    </fieldset>
+    @if (state.canManage()) {
+      <div class="actions">
+        <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+          {{ 'COMMON.SAVE' | t }}
+        </button>
+      </div>
+    }
+  </form>
+
+  <fc-dialog
+    [heading]="'GROUP_SETTINGS.INTEGRATIONS.KEY_DIALOG' | t"
+    [open]="keyOpen()"
+    (openChange)="closeKey()"
+  >
+    @if (keyOpen()) {
+      <form id="integration-key-form" novalidate (submit)="submitKey($event)">
+        <p>{{ 'GROUP_SETTINGS.INTEGRATIONS.KEY_INTRO' | t }}</p>
+        <fc-text-field
+          type="password"
+          autocomplete="new-password"
+          autocapitalize="none"
+          spellcheck="false"
+          [label]="'GROUP_SETTINGS.INTEGRATIONS.KEY' | t"
+          [hint]="'GROUP_SETTINGS.INTEGRATIONS.KEY_HINT' | t: { min: apiKeyMin, max: apiKeyMax }"
+          [error]="keyIssue()"
+          [value]="keyValue()"
+          (valueChange)="onKey($event)"
+        />
+      </form>
+    }
+    <button fcDialogActions fc-button variant="secondary" [disabled]="busy()" (click)="closeKey()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fcDialogActions fc-button type="submit" form="integration-key-form" [loading]="busy()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </fc-dialog>
+
+  <fc-confirm-dialog
+    [heading]="'GROUP_SETTINGS.INTEGRATIONS.REMOVE_TITLE' | t"
+    [message]="
+      removeProvider() === null
+        ? ''
+        : actionLabel('GROUP_SETTINGS.INTEGRATIONS.REMOVE_CONFIRM', removeProvider()!)
+    "
+    [confirmLabel]="'GROUP_SETTINGS.INTEGRATIONS.REMOVE_KEY' | t"
+    [danger]="true"
+    [busy]="busy()"
+    [open]="removeOpen()"
+    (openChange)="removeOpen.set($event)"
+    (confirmed)="confirmRemove()"
+  />
+}

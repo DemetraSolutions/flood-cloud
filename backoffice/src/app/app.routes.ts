@@ -64,6 +64,80 @@ const dealerRoutes: Routes = [
   },
 ];
 
+/** The catalog pages of the group record, lazy-loaded one by one. */
+const catalogRoutes: Routes = [
+  {
+    path: 'price-lists',
+    title: 'GROUP_SETTINGS.SECTION.PRICE_LISTS',
+    loadComponent: () =>
+      import('./features/groups/catalogs/price-lists-page').then((m) => m.PriceListsPage),
+  },
+  {
+    path: 'taxes',
+    title: 'GROUP_SETTINGS.SECTION.TAXES',
+    loadComponent: () => import('./features/groups/catalogs/taxes-page').then((m) => m.TaxesPage),
+  },
+  {
+    path: 'currencies',
+    title: 'GROUP_SETTINGS.SECTION.CURRENCIES',
+    loadComponent: () =>
+      import('./features/groups/catalogs/currencies-page').then((m) => m.CurrenciesPage),
+  },
+  {
+    path: 'measure-units',
+    title: 'GROUP_SETTINGS.SECTION.MEASURE_UNITS',
+    loadComponent: () =>
+      import('./features/groups/catalogs/measure-units-page').then((m) => m.MeasureUnitsPage),
+  },
+  {
+    path: 'warehouse-rules',
+    title: 'GROUP_SETTINGS.SECTION.WAREHOUSE_RULES',
+    loadComponent: () =>
+      import('./features/groups/catalogs/warehouse-rules-page').then((m) => m.WarehouseRulesPage),
+  },
+  {
+    path: 'fidelity-card-rules',
+    title: 'GROUP_SETTINGS.SECTION.FIDELITY_CARD_RULES',
+    loadComponent: () =>
+      import('./features/groups/catalogs/fidelity-card-rules-page').then(
+        (m) => m.FidelityCardRulesPage,
+      ),
+  },
+];
+
+/**
+ * Record of a group: general data, features, integrations and the six catalogs, as child routes
+ * of one layout page (`groups:read`; the server checks the group against the user's perimeter).
+ */
+const groupSettingsRoutes: Routes = [
+  {
+    path: 'groups/:groupId/settings',
+    canMatch: [permission('groups:read')],
+    loadComponent: () => import('./features/groups/group-settings').then((m) => m.GroupSettings),
+    children: [
+      {
+        path: '',
+        pathMatch: 'full',
+        title: 'GROUP_SETTINGS.SECTION.GENERAL',
+        loadComponent: () => import('./features/groups/group-general').then((m) => m.GroupGeneral),
+      },
+      {
+        path: 'features',
+        title: 'GROUP_SETTINGS.SECTION.FEATURES',
+        loadComponent: () =>
+          import('./features/groups/group-features-page').then((m) => m.GroupFeaturesPage),
+      },
+      {
+        path: 'integrations',
+        title: 'GROUP_SETTINGS.SECTION.INTEGRATIONS',
+        loadComponent: () =>
+          import('./features/groups/group-integrations').then((m) => m.GroupIntegrations),
+      },
+      ...catalogRoutes,
+    ],
+  },
+];
+
 /**
  * Routes of the application; pages are lazy-loaded and `title` is a dictionary key (translated
  * by `PageTitleStrategy`).
@@ -130,6 +204,13 @@ export const routes: Routes = [
               import('./features/groups/group-chooser').then((m) => m.GroupChooser),
           },
           {
+            path: 'groups/list',
+            canMatch: [role('PSA', 'D'), permission('groups:read')],
+            title: 'GROUPS.TITLE',
+            loadComponent: () => import('./features/groups/groups-list').then((m) => m.GroupsList),
+          },
+          ...groupSettingsRoutes,
+          {
             path: 'users',
             canMatch: [role('PSA', 'D'), permission('users:read')],
             title: 'USERS.TITLE',
@@ -150,6 +231,12 @@ export const routes: Routes = [
             path: 'forbidden',
             title: 'ERRORS.FORBIDDEN.TITLE',
             data: { kind: 'FORBIDDEN' },
+            loadComponent: () => import('./features/errors/error-page').then((m) => m.ErrorPage),
+          },
+          {
+            path: 'feature-disabled',
+            title: 'ERRORS.FEATURE_DISABLED.TITLE',
+            data: { kind: 'FEATURE_DISABLED' },
             loadComponent: () => import('./features/errors/error-page').then((m) => m.ErrorPage),
           },
           {

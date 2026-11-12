@@ -1,0 +1,29 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="currencyForm.code"
+    autocapitalize="characters"
+    autocomplete="off"
+    [label]="'CATALOG.CURRENCIES.FIELD.CODE' | t"
+    [hint]="'CATALOG.CURRENCIES.FIELD.CODE_HINT' | t"
+    [error]="message(currencyForm.code, 'code')"
+    (blurred)="currencyForm.code().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="currencyForm.symbol"
+    autocomplete="off"
+    [label]="'CATALOG.CURRENCIES.FIELD.SYMBOL' | t"
+    [error]="message(currencyForm.symbol, 'symbol')"
+    (blurred)="currencyForm.symbol().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

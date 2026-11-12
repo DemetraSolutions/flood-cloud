@@ -25,7 +25,7 @@ async function open(kind: string, state: unknown) {
 }
 
 describe('ErrorPage', () => {
-  it.each(['NOT_FOUND', 'FORBIDDEN', 'GENERIC'])(
+  it.each(['NOT_FOUND', 'FORBIDDEN', 'FEATURE_DISABLED', 'GENERIC'])(
     'shows the %s texts and a link home',
     async (kind) => {
       const root = await open(kind, null);

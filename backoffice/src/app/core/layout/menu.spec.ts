@@ -1,4 +1,6 @@
-import { allowAll, MENU, MenuItem, visibleMenu } from './menu';
+import { MENU, MenuItem, visibleMenu } from './menu';
+
+const allowAll = (): boolean => true;
 
 const ITEMS: MenuItem[] = [
   { id: 'a', labelKey: 'A', icon: 'home', route: '/a' },
@@ -64,8 +66,7 @@ describe('visibleMenu', () => {
     expect(ITEMS[3].children?.length).toBe(2);
   });
 
-  it('allowAll allows anything and the initial menu has the home, profile, users and activity log entries', () => {
-    expect(allowAll('x')).toBe(true);
+  it('the menu has the home, profile, users and activity log entries for a user without roles', () => {
     expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual([
       'home',
       'profile',
@@ -87,5 +88,24 @@ describe('visibleMenu', () => {
     expect(ids(visibleMenu(MENU, (p) => p !== 'dealers:read', allowAll, 'PSA'))).not.toContain(
       'dealers',
     );
+  });
+
+  it('offers the groups to PSA and dealers and the group record to PSA, dealers and SA, with their own labels', () => {
+    const labelOf = (role: 'PSA' | 'D' | 'SA' | 'CA') =>
+      Object.fromEntries(
+        visibleMenu(MENU, allowAll, allowAll, role).map((i) => [i.id, i.labelKey]),
+      );
+    expect(labelOf('PSA')).toMatchObject({
+      groups: 'MENU.GROUPS',
+      'group-settings': 'MENU.GROUP_SETTINGS',
+    });
+    expect(labelOf('D')).toMatchObject({
+      groups: 'MENU.GROUPS',
+      'group-settings': 'MENU.GROUP_SETTINGS',
+    });
+    expect(labelOf('SA')).toMatchObject({ 'account-group': 'MENU.ACCOUNT_GROUP' });
+    expect(labelOf('SA')).not.toHaveProperty('groups');
+    expect(labelOf('CA')).not.toHaveProperty('account-group');
+    expect(labelOf('CA')).not.toHaveProperty('group-settings');
   });
 });

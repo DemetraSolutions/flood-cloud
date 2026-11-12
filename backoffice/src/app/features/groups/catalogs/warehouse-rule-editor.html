@@ -1,0 +1,71 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-select
+    [formField]="ruleForm.type"
+    [label]="'CATALOG.WAREHOUSE_RULES.FIELD.TYPE' | t"
+    [options]="typeOptions()"
+    [error]="message(ruleForm.type, 'type')"
+    (blurred)="ruleForm.type().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="ruleForm.name"
+    [label]="'CATALOG.WAREHOUSE_RULES.FIELD.NAME' | t"
+    [error]="message(ruleForm.name, 'name')"
+    (blurred)="ruleForm.name().markAsTouched()"
+  />
+  <fc-select
+    [formField]="ruleForm.quantity"
+    [label]="'CATALOG.WAREHOUSE_RULES.FIELD.QUANTITY' | t"
+    [options]="signOptions()"
+    [error]="message(ruleForm.quantity, 'quantity')"
+    (blurred)="ruleForm.quantity().markAsTouched()"
+  />
+  <fc-select
+    [formField]="ruleForm.value"
+    [label]="'CATALOG.WAREHOUSE_RULES.FIELD.VALUE' | t"
+    [options]="signOptions()"
+    [error]="message(ruleForm.value, 'value')"
+    (blurred)="ruleForm.value().markAsTouched()"
+  />
+  <fc-select
+    [formField]="ruleForm.counterpart"
+    [label]="'CATALOG.WAREHOUSE_RULES.FIELD.COUNTERPART' | t"
+    [options]="counterpartOptions()"
+    [error]="message(ruleForm.counterpart, 'counterpart')"
+    (blurred)="ruleForm.counterpart().markAsTouched()"
+  />
+  @if (isUnload()) {
+    <fc-checkbox
+      [formField]="ruleForm.useLoadUnit"
+      [label]="'CATALOG.WAREHOUSE_RULES.FIELD.USE_LOAD_UNIT' | t"
+      [hint]="'CATALOG.WAREHOUSE_RULES.FIELD.USE_LOAD_UNIT_HINT' | t"
+      [error]="message(ruleForm.useLoadUnit, 'useLoadUnit')"
+      (blurred)="ruleForm.useLoadUnit().markAsTouched()"
+    />
+    <fc-checkbox
+      [formField]="ruleForm.cashUnload"
+      [label]="'CATALOG.WAREHOUSE_RULES.FIELD.CASH_UNLOAD' | t"
+      [hint]="'CATALOG.WAREHOUSE_RULES.FIELD.CASH_UNLOAD_HINT' | t"
+      [error]="message(ruleForm.cashUnload, 'cashUnload')"
+      (blurred)="ruleForm.cashUnload().markAsTouched()"
+    />
+  } @else {
+    <fc-checkbox
+      [formField]="ruleForm.cashLoad"
+      [label]="'CATALOG.WAREHOUSE_RULES.FIELD.CASH_LOAD' | t"
+      [hint]="'CATALOG.WAREHOUSE_RULES.FIELD.CASH_LOAD_HINT' | t"
+      [error]="message(ruleForm.cashLoad, 'cashLoad')"
+      (blurred)="ruleForm.cashLoad().markAsTouched()"
+    />
+  }
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

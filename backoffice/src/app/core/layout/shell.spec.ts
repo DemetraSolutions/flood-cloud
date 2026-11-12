@@ -3,6 +3,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { fakeFeatureFlags } from '../../../testing/groups';
 import { signIn } from '../../../testing/session';
 import { GroupContext } from '../groups/group-context';
 import { I18nService } from '../i18n/i18n.service';
@@ -119,6 +120,21 @@ describe('Shell', () => {
     expect([...links].map((l) => l.getAttribute('href'))).toEqual(['/g', '/page']);
     expect(links[1].getAttribute('aria-current')).toBe('page');
     expect(links[1].classList.contains('active')).toBe(true);
+  });
+
+  it('hides the entries whose feature the working group does not have', async () => {
+    const { root } = await render(
+      [
+        { id: 'a', labelKey: 'A', icon: 'home', route: '/a' },
+        { id: 'w', labelKey: 'W', icon: 'home', route: '/w', feature: 'warehouse' },
+        { id: 'r', labelKey: 'R', icon: 'home', route: '/r', feature: 'rooms' },
+      ],
+      { role: 'SA', groupFeatures: fakeFeatureFlags(false, { warehouse: true }) },
+    );
+    expect([...root.querySelectorAll('nav a')].map((l) => l.getAttribute('href'))).toEqual([
+      '/a',
+      '/w',
+    ]);
   });
 
   describe('working group', () => {

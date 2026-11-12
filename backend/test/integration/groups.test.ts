@@ -91,10 +91,10 @@ describe('GET /v1/groups/{groupId}', () => {
     const first = await office.call('GET', path(0), token);
     const tag = first.headers.get('etag')!;
     assert.match(tag, /^W\/"/);
-    assert.equal(first.headers.get('cache-control'), 'private, no-cache');
+    assert.equal(first.headers.get('cache-control'), 'no-store');
     await first.text();
     const again = await office.call('GET', path(0), token, undefined, { 'if-none-match': tag });
-    assert.deepEqual([again.status, await again.text(), again.headers.get('etag'), again.headers.get('cache-control')], [304, '', tag, 'private, no-cache']);
+    assert.deepEqual([again.status, await again.text(), again.headers.get('etag'), again.headers.get('cache-control')], [304, '', tag, 'no-store']);
     const stale = await office.call('GET', path(0), token, undefined, { 'if-none-match': 'W/"old"' });
     assert.equal(stale.status, 200);
     await stale.text();

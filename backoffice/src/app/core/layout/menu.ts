@@ -62,6 +62,32 @@ export const MENU: readonly MenuItem[] = [
     roles: ['PSA'],
   },
   {
+    id: 'groups',
+    labelKey: 'MENU.GROUPS',
+    icon: 'building',
+    route: '/groups/list',
+    permission: 'groups:read',
+    roles: ['PSA', 'D'],
+  },
+  {
+    id: 'group-settings',
+    labelKey: 'MENU.GROUP_SETTINGS',
+    icon: 'settings',
+    route: '/groups',
+    groupPath: 'settings',
+    permission: 'groups:read',
+    roles: ['PSA', 'D'],
+  },
+  {
+    id: 'account-group',
+    labelKey: 'MENU.ACCOUNT_GROUP',
+    icon: 'settings',
+    route: '/groups',
+    groupPath: 'settings',
+    permission: 'groups:read',
+    roles: ['SA'],
+  },
+  {
     id: 'activity-log',
     labelKey: 'MENU.ACTIVITY_LOG',
     icon: 'log',
@@ -75,14 +101,6 @@ export const MENU_ITEMS = new InjectionToken<readonly MenuItem[]>('MENU_ITEMS', 
   providedIn: 'root',
   factory: () => MENU,
 });
-
-/**
- * Predicate that allows everything. The shell uses it for `hasFeature` until the enabled
- * features (task 4.5.2) exist; `can` comes from the session.
- */
-export function allowAll(_value: string): boolean {
-  return true;
-}
 
 /**
  * Filters the menu by permission, role and enabled feature. Pure: the predicates come from the caller.

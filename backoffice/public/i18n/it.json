@@ -38,7 +38,10 @@
     "USERS": "Utenti",
     "PLATFORM_USERS": "Utenti di piattaforma",
     "ACTIVITY_LOG": "Registro attività",
-    "DEALERS": "Dealer"
+    "DEALERS": "Dealer",
+    "GROUPS": "Gruppi",
+    "GROUP_SETTINGS": "Scheda gruppo",
+    "ACCOUNT_GROUP": "Account › Gruppo"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -97,9 +100,14 @@
       "INTERNAL_ERROR": "Errore interno del servizio. Riprova più tardi.",
       "SERVICE_UNAVAILABLE": "Servizio temporaneamente non disponibile.",
       "NETWORK_ERROR": "Impossibile contattare il servizio: controlla la connessione.",
-      "UNKNOWN_ERROR": "Si è verificato un errore imprevisto."
+      "UNKNOWN_ERROR": "Si è verificato un errore imprevisto.",
+      "FEATURE_DISABLED": "Questa funzione non è attiva per il gruppo."
     },
-    "BACK_HOME": "Torna alla home"
+    "BACK_HOME": "Torna alla home",
+    "FEATURE_DISABLED": {
+      "TITLE": "Funzione non attiva",
+      "MESSAGE": "Questa funzione non è attiva per il gruppo. Chiedi a chi gestisce il gruppo di attivarla."
+    }
   },
   "AUTH": {
     "SESSION_EXPIRED": "La sessione è scaduta: accedi di nuovo.",
@@ -209,7 +217,12 @@
       "SAME_AS_USERNAME": "La password non può essere uguale al nome utente.",
       "INVALID_CHARACTERS": "La password contiene caratteri non ammessi.",
       "MISMATCH": "Le due password non coincidono.",
-      "INVALID": "Valore non valido."
+      "INVALID": "Valore non valido.",
+      "NOT_ALLOWED": "Non puoi modificare questo campo.",
+      "IMMUTABLE": "Questo valore non si può modificare.",
+      "DEFAULT": "Elemento standard: non si può modificare né eliminare.",
+      "LAST": "Non si può eliminare l’ultimo elemento.",
+      "REFERENCED": "Elemento usato da altri elementi."
     }
   },
   "GROUP_SELECTOR": {
@@ -538,6 +551,406 @@
       "UPDATED": "Ultima modifica",
       "DELETE_NOTE": "Un dealer non si elimina da qui: elimina il suo utente dal cestino degli utenti di piattaforma.",
       "CREATED_ON": "Creato il"
+    }
+  },
+  "FEATURE": {
+    "CASH": {
+      "LABEL": "Cassa",
+      "DESCRIPTION": "Cassa di punto vendita: vendite, scontrini e stampa fiscale."
+    },
+    "ROOMS": {
+      "LABEL": "Sale e tavoli",
+      "DESCRIPTION": "Sale e tavoli di un locale, con il servizio al tavolo."
+    },
+    "ORDERING": {
+      "LABEL": "Ordinazioni",
+      "DESCRIPTION": "Ordinazioni di clienti e camerieri (self-ordering, terminali palmari)."
+    },
+    "WAREHOUSE": {
+      "LABEL": "Magazzino",
+      "DESCRIPTION": "Gestione del magazzino: giacenze, movimenti, inventari e documenti."
+    },
+    "TOBACCOS_GAMES_MONOPOLY": {
+      "LABEL": "Tabacchi, giochi e monopoli",
+      "DESCRIPTION": "Gestione specifica di tabacchi, giochi e generi di monopolio."
+    },
+    "PRODUCTS_VARIANTS": {
+      "LABEL": "Varianti dei prodotti",
+      "DESCRIPTION": "Varianti (taglie, gusti e simili) sotto un unico prodotto."
+    },
+    "SERVICES": {
+      "LABEL": "Servizi",
+      "DESCRIPTION": "Servizi venduti a tempo o per operatore, accanto ai beni."
+    },
+    "APPOINTMENTS": {
+      "LABEL": "Appuntamenti",
+      "DESCRIPTION": "Appuntamenti e prenotazioni con calendario."
+    },
+    "CUSTOMERS_APP": {
+      "LABEL": "App clienti",
+      "DESCRIPTION": "L’app per i clienti: ordini e fedeltà dallo smartphone del cliente."
+    },
+    "MEDIA": {
+      "LABEL": "Media",
+      "DESCRIPTION": "File multimediali (immagini e video) collegati a prodotti e schermi."
+    },
+    "EMAIL": {
+      "LABEL": "Email",
+      "DESCRIPTION": "Invio di email dalla piattaforma (ricevute, notifiche, report)."
+    },
+    "SCALES": {
+      "LABEL": "Bilance",
+      "DESCRIPTION": "Collegamento delle bilance alla cassa."
+    },
+    "DELIVERY": {
+      "LABEL": "Consegne",
+      "DESCRIPTION": "Ordini con consegna a domicilio e da asporto."
+    },
+    "AUTO_DEPARTMENTS": {
+      "LABEL": "Reparti automatici",
+      "DESCRIPTION": "Assegnazione automatica dei reparti ai prodotti."
+    },
+    "ADVANCED_PRODUCTS": {
+      "LABEL": "Prodotti avanzati",
+      "DESCRIPTION": "Dati avanzati dei prodotti (composizione, allergeni, attributi estesi)."
+    }
+  },
+  "INTEGRATION": {
+    "EASYAPPEAR": "EasyAppear",
+    "YELLGO": "Yellgo",
+    "LEGGIMENU": "LeggiMenu",
+    "PLATEFORM": "Plateform",
+    "COOPERTO": "Cooperto",
+    "QODEUP": "QodeUp",
+    "STATMANAGER": "StatManager"
+  },
+  "LANGUAGE_PICKER": {
+    "FILTER": "Filtra le lingue",
+    "COUNT": "{count} lingue selezionate su {max}",
+    "NONE": "Nessuna lingua corrisponde al filtro."
+  },
+  "GROUPS": {
+    "TITLE": "Gruppi",
+    "LOAD_ERROR": "Impossibile caricare i gruppi",
+    "EMPTY": "Nessun gruppo",
+    "EMPTY_MESSAGE": "Nessun gruppo corrisponde ai filtri.",
+    "ACTIONS": "Azioni",
+    "ACTIONS_LABEL": "Azioni per {name}",
+    "DEMO": "Demo",
+    "TRASHED": "Nel cestino",
+    "STATUS": {
+      "ACTIVE": "Attivo",
+      "SUSPENDED": "Sospeso"
+    },
+    "FILTER": {
+      "SEARCH": "Cerca per nome",
+      "DEMO": "Demo",
+      "ALL": "Tutti",
+      "DEMO_ONLY": "Solo gruppi demo",
+      "NO_DEMO": "Senza gruppi demo",
+      "STATUS": "Stato",
+      "DEALER": "Dealer",
+      "TRASHED": "Mostra il cestino"
+    },
+    "COLUMN": {
+      "NAME": "Nome",
+      "DEALER": "Dealer",
+      "STATUS": "Stato",
+      "DEMO": "Demo",
+      "TRASH": "Cestino"
+    },
+    "ACTION": {
+      "OPEN": "Apri la scheda",
+      "OPEN_LABEL": "Apri la scheda di {name}",
+      "SUSPEND": "Sospendi",
+      "SUSPEND_LABEL": "Sospendi {name}",
+      "REACTIVATE": "Riattiva",
+      "REACTIVATE_LABEL": "Riattiva {name}",
+      "TRASH": "Sposta nel cestino",
+      "TRASH_LABEL": "Sposta {name} nel cestino",
+      "RESTORE": "Ripristina",
+      "RESTORE_LABEL": "Ripristina {name}"
+    }
+  },
+  "GROUP_ACTIONS": {
+    "TITLE": {
+      "SUSPEND": "Sospendi il gruppo",
+      "REACTIVATE": "Riattiva il gruppo",
+      "TRASH": "Sposta il gruppo nel cestino",
+      "RESTORE": "Ripristina il gruppo"
+    },
+    "CONFIRM": {
+      "SUSPEND": "Sospendere il gruppo «{name}»? Tutti i suoi utenti vengono disconnessi e non possono accedere finché non lo riattivi.",
+      "REACTIVATE": "Riattivare il gruppo «{name}»? Gli utenti disconnessi dovranno accedere di nuovo.",
+      "TRASH": "Spostare il gruppo «{name}» nel cestino? Tutti i suoi utenti vengono disconnessi; il gruppo si può ripristinare.",
+      "RESTORE": "Ripristinare il gruppo «{name}»? Gli utenti disconnessi dovranno accedere di nuovo."
+    },
+    "LABEL": {
+      "SUSPEND": "Sospendi",
+      "REACTIVATE": "Riattiva",
+      "TRASH": "Sposta nel cestino",
+      "RESTORE": "Ripristina"
+    },
+    "DONE": {
+      "SUSPEND": "Gruppo sospeso.",
+      "REACTIVATE": "Gruppo riattivato.",
+      "TRASH": "Gruppo spostato nel cestino.",
+      "RESTORE": "Gruppo ripristinato."
+    },
+    "ALREADY": {
+      "SUSPEND": "Il gruppo era già sospeso.",
+      "REACTIVATE": "Il gruppo non era sospeso.",
+      "TRASH": "Il gruppo era già nel cestino.",
+      "RESTORE": "Il gruppo non era nel cestino."
+    }
+  },
+  "GROUP_SETTINGS": {
+    "LOAD_ERROR": "Impossibile caricare il gruppo",
+    "SECTIONS": "Sezioni del gruppo",
+    "SECTION": {
+      "GENERAL": "Generale",
+      "FEATURES": "Funzioni",
+      "INTEGRATIONS": "Integrazioni",
+      "PRICE_LISTS": "Listini",
+      "TAXES": "Aliquote IVA",
+      "CURRENCIES": "Valute",
+      "MEASURE_UNITS": "Unità di misura",
+      "WAREHOUSE_RULES": "Regole di magazzino",
+      "FIDELITY_CARD_RULES": "Regole fedeltà"
+    },
+    "BANNER": {
+      "SUSPENDED": "Questo gruppo è sospeso: i suoi utenti non possono accedere. Solo l’amministratore di piattaforma lo vede.",
+      "TRASHED": "Questo gruppo è nel cestino: i suoi utenti non possono accedere. Solo l’amministratore di piattaforma lo vede."
+    },
+    "READ_ONLY": "Non hai il permesso di modificare i dati del gruppo.",
+    "SAVED": "Modifiche salvate.",
+    "RELOAD": "Ricarica i dati",
+    "ERROR": {
+      "CONFLICT": "Il gruppo è stato modificato nel frattempo oppure non può accogliere la modifica. Ricarica i dati e riprova."
+    },
+    "GENERAL": {
+      "DATA": "Dati del gruppo",
+      "NAME": "Nome",
+      "DESCRIPTION": "Descrizione",
+      "DEMO": "Gruppo demo",
+      "DEMO_HINT": "Solo l’amministratore di piattaforma può cambiarlo.",
+      "LANGUAGES": "Lingue del gruppo",
+      "STATS": "Impostazioni statistiche",
+      "OPENING_TIME": "Orario di apertura",
+      "OPENING_TIME_HINT": "Inizio della giornata per le statistiche.",
+      "COMPRESS": "Comprimi le categorie dei prodotti",
+      "COMPRESS_HINT": "Nelle statistiche le categorie dei prodotti sono mostrate in forma compatta.",
+      "SLOTS": "Fasce orarie",
+      "SLOTS_HINT": "Ore intere: ogni fascia termina dopo l’inizio (fino alle 24:00).",
+      "SLOT_FROM": "Fascia {number}: dalle",
+      "SLOT_TO": "Fascia {number}: alle",
+      "REMOVE": "Rimuovi",
+      "REMOVE_SLOT": "Rimuovi la fascia {number}",
+      "ADD_SLOT": "Aggiungi una fascia"
+    },
+    "FEATURES": {
+      "READ_ONLY": "Le funzioni del gruppo le gestisce l’amministratore di piattaforma o il dealer.",
+      "LEGEND": "Funzioni attive per il gruppo"
+    },
+    "INTEGRATIONS": {
+      "READ_ONLY": "Le integrazioni del gruppo le gestisce l’amministratore di piattaforma o il dealer.",
+      "LEGEND": "Integrazioni con servizi esterni",
+      "KEY_SET": "Chiave impostata",
+      "KEY_NOT_SET": "Chiave non impostata",
+      "SET_KEY": "Imposta chiave",
+      "SET_KEY_LABEL": "Imposta la chiave di {provider}",
+      "REMOVE_KEY": "Rimuovi chiave",
+      "REMOVE_KEY_LABEL": "Rimuovi la chiave di {provider}",
+      "KEY_DIALOG": "Imposta la chiave",
+      "KEY_INTRO": "La chiave non viene mai mostrata dopo il salvataggio: per cambiarla se ne imposta una nuova.",
+      "KEY": "Chiave",
+      "KEY_HINT": "Da {min} a {max} caratteri, senza spazi.",
+      "KEY_SAVED": "Chiave di {provider} salvata.",
+      "KEY_REMOVED": "Chiave di {provider} rimossa.",
+      "REMOVE_TITLE": "Rimuovi la chiave",
+      "REMOVE_CONFIRM": "Rimuovere la chiave di «{provider}»? L’integrazione non funzionerà finché non ne imposti un’altra."
+    }
+  },
+  "CATALOG": {
+    "YES": "Sì",
+    "NO": "No",
+    "SAVED": "Modifiche salvate.",
+    "CREATED": "Elemento creato.",
+    "DELETED": "Elemento eliminato.",
+    "LOAD_ERROR": "Impossibile caricare l’elenco",
+    "ACTIONS": "Azioni",
+    "ACTIONS_LABEL": "Azioni per {name}",
+    "EDIT": "Modifica",
+    "EDIT_LABEL": "Modifica {name}",
+    "DELETE": "Elimina",
+    "DELETE_LABEL": "Elimina {name}",
+    "DELETE_TITLE": "Elimina elemento",
+    "LIMIT_REACHED": "Raggiunto il numero massimo di elementi ({max}).",
+    "ERROR": {
+      "CONCURRENT": "Il gruppo è stato modificato nel frattempo. L’elenco è stato aggiornato: riprova.",
+      "DEFAULT": "È un elemento standard: non si può modificare né eliminare.",
+      "LAST": "È l’ultimo elemento: ne serve almeno uno.",
+      "TOO_MANY": "Raggiunto il numero massimo di elementi.",
+      "TAKEN": "Esiste già un elemento con questo valore.",
+      "NOT_ALLOWED": "Una delle impostazioni scelte non è consentita per questo elemento.",
+      "REFERENCED": "Non si può eliminare: è usato da {users}. Modifica prima questi elementi."
+    },
+    "REFERENCED": {
+      "CARDTYPES": "tipi di carta fedeltà ({count})",
+      "POINTSCOLLECTIONS": "raccolte punti ({count})",
+      "OTHER": "altri elementi del gruppo ({count})"
+    },
+    "PRICE_LISTS": {
+      "TITLE": "Listini",
+      "HINT": "Il listino standard è uno solo; i listini del gruppo si possono usare nei tipi di carta fedeltà.",
+      "NEW": "Nuovo listino",
+      "NEW_TITLE": "Nuovo listino",
+      "EDIT_TITLE": "Modifica il listino",
+      "DELETE_CONFIRM": "Eliminare il listino «{name}»?",
+      "EMPTY": "Nessun listino",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora listini.",
+      "COLUMN": {
+        "NAME": "Nome",
+        "ENABLED": "Attivo",
+        "DEFAULT": "Standard"
+      },
+      "FIELD": {
+        "NAME": "Nome",
+        "ENABLED": "Listino attivo",
+        "DEFAULT": "Listino standard",
+        "DEFAULT_HINT": "Ce n’è sempre uno solo: marcandone un altro, questo smette di esserlo. Il primo listino è sempre lo standard."
+      },
+      "DEFAULT": "Standard"
+    },
+    "TAXES": {
+      "TITLE": "Aliquote IVA",
+      "HINT": "Aliquote, reparti fiscali e natura IVA della fattura elettronica.",
+      "NEW": "Nuova aliquota",
+      "NEW_TITLE": "Nuova aliquota IVA",
+      "EDIT_TITLE": "Modifica l’aliquota IVA",
+      "DELETE_CONFIRM": "Eliminare l’aliquota «{name}»?",
+      "EMPTY": "Nessuna aliquota",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora aliquote IVA.",
+      "COLUMN": {
+        "RATE": "Aliquota",
+        "DEPARTMENT": "Reparto",
+        "VAT_NATURE": "Natura IVA",
+        "DESCRIPTION": "Descrizione"
+      },
+      "FIELD": {
+        "RATE": "Aliquota (%)",
+        "RATE_HINT": "Da 0 a 100.",
+        "DEPARTMENT": "Reparto fiscale",
+        "DEPARTMENT_HINT": "Numero da 1 a 99; lascialo vuoto se non serve.",
+        "VAT_NATURE": "Natura IVA",
+        "NO_VAT_NATURE": "Nessuna natura",
+        "DESCRIPTION": "Descrizione"
+      }
+    },
+    "CURRENCIES": {
+      "TITLE": "Valute",
+      "HINT": "Ogni valuta ha la sua regola fedeltà, creata e tolta insieme a lei.",
+      "NEW": "Nuova valuta",
+      "NEW_TITLE": "Nuova valuta",
+      "EDIT_TITLE": "Modifica la valuta",
+      "DELETE_CONFIRM": "Eliminare la valuta «{name}»? Viene eliminata anche la sua regola fedeltà.",
+      "EMPTY": "Nessuna valuta",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora valute.",
+      "COLUMN": {
+        "CODE": "Codice",
+        "SYMBOL": "Simbolo"
+      },
+      "FIELD": {
+        "CODE": "Codice",
+        "CODE_HINT": "Tre lettere maiuscole (per esempio EUR); non si può cambiare dopo la creazione.",
+        "SYMBOL": "Simbolo"
+      }
+    },
+    "MEASURE_UNITS": {
+      "TITLE": "Unità di misura",
+      "HINT": "Le unità proposte nei prodotti. Non si distingue tra maiuscole e minuscole.",
+      "NEW": "Nuova unità",
+      "NEW_TITLE": "Nuova unità di misura",
+      "EDIT_TITLE": "Modifica l’unità di misura",
+      "DELETE_CONFIRM": "Eliminare l’unità «{name}»?",
+      "EMPTY": "Nessuna unità di misura",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora unità di misura.",
+      "COLUMN": {
+        "VALUE": "Unità"
+      },
+      "FIELD": {
+        "VALUE": "Unità",
+        "VALUE_HINT": "Da 1 a 20 caratteri (per esempio kg o pz)."
+      }
+    },
+    "WAREHOUSE_RULES": {
+      "TITLE": "Regole di magazzino",
+      "HINT": "Le causali dei movimenti di magazzino. Quelle standard non si modificano né si eliminano.",
+      "NEW": "Nuova regola",
+      "NEW_TITLE": "Nuova regola di magazzino",
+      "EDIT_TITLE": "Modifica la regola di magazzino",
+      "DELETE_CONFIRM": "Eliminare la regola «{name}»?",
+      "EMPTY": "Nessuna regola",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora regole di magazzino.",
+      "COLUMN": {
+        "NAME": "Nome",
+        "TYPE": "Tipo",
+        "COUNTERPART": "Controparte",
+        "CASH": "Cassa",
+        "ORIGIN": "Origine"
+      },
+      "FIELD": {
+        "TYPE": "Tipo",
+        "NAME": "Nome",
+        "QUANTITY": "Effetto sulla quantità",
+        "VALUE": "Effetto sul valore",
+        "COUNTERPART": "Controparte",
+        "USE_LOAD_UNIT": "Usa l’unità del carico",
+        "USE_LOAD_UNIT_HINT": "Lo scarico usa l’unità di misura del carico.",
+        "CASH_LOAD": "Regola di carico della cassa (resi)",
+        "CASH_LOAD_HINT": "Ce ne può essere una sola nel gruppo.",
+        "CASH_UNLOAD": "Regola di scarico della cassa (vendite)",
+        "CASH_UNLOAD_HINT": "Ce ne può essere una sola nel gruppo."
+      },
+      "TYPE": {
+        "LOAD": "Carico",
+        "UNLOAD": "Scarico"
+      },
+      "SIGN": {
+        "KEEP": "= Invariato",
+        "ADD": "+ Aumenta",
+        "SUBTRACT": "- Diminuisce"
+      },
+      "COUNTERPART": {
+        "SUPPLIERS": "Fornitori",
+        "CUSTOMERS": "Clienti",
+        "INDOOR": "Interno"
+      },
+      "CASH_LOAD": "Resi della cassa",
+      "CASH_UNLOAD": "Vendite della cassa",
+      "STANDARD": "Standard",
+      "CUSTOM": "Personalizzata"
+    },
+    "FIDELITY_CARD_RULES": {
+      "TITLE": "Regole fedeltà",
+      "HINT": "Una regola per ogni valuta: quanto vale un punto e lo sconto delle carte.",
+      "NEW": "Nuova regola",
+      "NEW_TITLE": "Nuova regola",
+      "EDIT_TITLE": "Modifica la regola fedeltà",
+      "DELETE_CONFIRM": "Eliminare la regola «{name}»?",
+      "EMPTY": "Nessuna regola fedeltà",
+      "EMPTY_MESSAGE": "Le regole compaiono quando il gruppo ha delle valute.",
+      "COLUMN": {
+        "CURRENCY": "Valuta",
+        "POINT_VALUE": "Valore di un punto",
+        "DISCOUNT": "Sconto"
+      },
+      "FIELD": {
+        "POINT_VALUE": "Valore di un punto",
+        "POINT_VALUE_HINT": "Quanto vale un punto in denaro; vuoto se non impostato.",
+        "DISCOUNT": "Sconto (%)",
+        "DISCOUNT_HINT": "Da 0 a 100; vuoto se non impostato."
+      }
     }
   }
 }

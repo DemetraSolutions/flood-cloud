@@ -1,0 +1,35 @@
+<fieldset [disabled]="disabled()" [attr.aria-describedby]="error() ? errorId : null">
+  <legend>{{ label() }}</legend>
+  <fc-text-field
+    type="search"
+    [label]="'LANGUAGE_PICKER.FILTER' | t"
+    [value]="filter()"
+    (valueChange)="filter.set($event)"
+  />
+  <p class="count" role="status">
+    {{ 'LANGUAGE_PICKER.COUNT' | t: { count: value().length, max: max } }}
+  </p>
+  <ul>
+    @for (option of shown(); track option.code) {
+      <li>
+        <label>
+          <input
+            type="checkbox"
+            [checked]="isSelected(option.code)"
+            [disabled]="disabled() || (full() && !isSelected(option.code))"
+            (change)="toggle(option.code, $any($event.target).checked)"
+            (blur)="blurred.emit()"
+          />
+          {{ option.name + ' (' + option.code + ')' }}
+        </label>
+      </li>
+    } @empty {
+      <li class="none">{{ 'LANGUAGE_PICKER.NONE' | t }}</li>
+    }
+  </ul>
+  <div class="error" [id]="errorId" aria-live="polite">
+    @if (error()) {
+      <span>{{ error() }}</span>
+    }
+  </div>
+</fieldset>

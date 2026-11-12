@@ -1,0 +1,36 @@
+@if (state.group()) {
+  @if (!state.canManage()) {
+    <p class="note">{{ 'GROUP_SETTINGS.FEATURES.READ_ONLY' | t }}</p>
+  }
+  <form novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (conflict()) {
+        <div class="actions">
+          <button fc-button variant="secondary" (click)="reload()">
+            {{ 'GROUP_SETTINGS.RELOAD' | t }}
+          </button>
+        </div>
+      }
+    }
+    <fieldset>
+      <legend>{{ 'GROUP_SETTINGS.FEATURES.LEGEND' | t }}</legend>
+      @for (name of names; track name) {
+        <fc-checkbox
+          [formField]="featuresForm[name]"
+          [label]="label(name)"
+          [hint]="description(name)"
+          [error]="error(featuresForm[name])"
+          (blurred)="featuresForm[name]().markAsTouched()"
+        />
+      }
+    </fieldset>
+    @if (state.canManage()) {
+      <div class="actions">
+        <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+          {{ 'COMMON.SAVE' | t }}
+        </button>
+      </div>
+    }
+  </form>
+}

@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
+import { localizedName } from '../../db/localized-name.ts';
 import { LIST_MAX_TIME_MS, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
 import type { ListPage, ListParams } from '../../shared/http/list.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
@@ -34,25 +35,6 @@ export interface ServicesRepository {
 }
 
 /**
- * The name of a service in a language: a service has a name by language (`{ it: '…' }`); when the language is missing, the first one available
- * is used, and anything that is not a text gives `null`. The language is a literal, never part of a path.
- */
-function nameIn(language: string): Document {
-  const picked = {
-    $ifNull: [
-      { $getField: { field: { $literal: language }, input: '$$names' } },
-      { $first: { $map: { input: { $objectToArray: '$$names' }, as: 'entry', in: '$$entry.v' } } },
-    ],
-  };
-  return {
-    $let: {
-      vars: { names: { $cond: [{ $eq: [{ $type: '$name' }, 'object'] }, '$name', {}] } },
-      in: { $let: { vars: { picked }, in: { $cond: [{ $eq: [{ $type: '$$picked' }, 'string'] }, '$$picked', null] } } },
-    },
-  };
-}
-
-/**
  * Builds the services repository over the `products` of the group database, which is opened only through a verified group access.
  *
  * @param databases Database accessor.
@@ -67,7 +49,7 @@ export function createServicesRepository(databases: Databases): ServicesReposito
             { $match: SERVICE_FILTER },
             // Only the names travel down the pipeline: a product document can be large, and nothing else of it is needed.
             { $project: { name: 1 } },
-            { $addFields: { [SERVICE_NAME]: nameIn(language) } },
+            { $addFields: { [SERVICE_NAME]: localizedName(language) } },
             ...listPipeline(listSearch(params, SERVICES_LIST), params, SERVICES_LIST, { [SERVICE_NAME]: 1 }),
           ],
           { maxTimeMS: LIST_MAX_TIME_MS },

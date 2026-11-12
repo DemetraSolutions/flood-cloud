@@ -1,0 +1,94 @@
+@if (state.loadFailed()) {
+  <fc-error-state
+    [title]="'GROUP_SETTINGS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="state.loadError()?.requestId ?? null"
+    (retry)="state.reload()"
+  />
+} @else if (state.group(); as group) {
+  <header class="page-header">
+    <h1>{{ group.name }}</h1>
+    <div class="state">
+      @if (group.status === 'suspended') {
+        <fc-status-badge tone="warning">{{ 'GROUPS.STATUS.SUSPENDED' | t }}</fc-status-badge>
+      }
+      @if (group.trashed) {
+        <fc-status-badge tone="danger">{{ 'GROUPS.TRASHED' | t }}</fc-status-badge>
+      }
+    </div>
+    <div class="actions">
+      @if (group.status === 'active') {
+        <button
+          *fcCan="'groups:suspend'"
+          fc-button
+          variant="secondary"
+          (click)="actions.run('suspend', group)"
+        >
+          {{ 'GROUPS.ACTION.SUSPEND' | t }}
+        </button>
+      } @else {
+        <button
+          *fcCan="'groups:suspend'"
+          fc-button
+          variant="secondary"
+          (click)="actions.run('reactivate', group)"
+        >
+          {{ 'GROUPS.ACTION.REACTIVATE' | t }}
+        </button>
+      }
+      @if (group.trashed) {
+        <button
+          *fcCan="'groups:trash'"
+          fc-button
+          variant="secondary"
+          (click)="actions.run('restore', group)"
+        >
+          {{ 'GROUPS.ACTION.RESTORE' | t }}
+        </button>
+      } @else {
+        <button
+          *fcCan="'groups:trash'"
+          fc-button
+          variant="danger"
+          (click)="actions.run('trash', group)"
+        >
+          {{ 'GROUPS.ACTION.TRASH' | t }}
+        </button>
+      }
+    </div>
+  </header>
+
+  @if (group.status === 'suspended' || group.trashed) {
+    <div class="banner" role="status">
+      <fc-icon name="alert" />
+      <p>
+        {{
+          (group.trashed ? 'GROUP_SETTINGS.BANNER.TRASHED' : 'GROUP_SETTINGS.BANNER.SUSPENDED') | t
+        }}
+      </p>
+    </div>
+  }
+
+  <nav class="sections" [attr.aria-label]="'GROUP_SETTINGS.SECTIONS' | t">
+    <ul>
+      @for (section of sections; track section.path) {
+        <li>
+          <a
+            [routerLink]="section.path === '' ? '.' : section.path"
+            routerLinkActive="active"
+            ariaCurrentWhenActive="page"
+            [routerLinkActiveOptions]="{ exact: section.exact }"
+          >
+            {{ 'GROUP_SETTINGS.SECTION.' + section.key | t }}
+          </a>
+        </li>
+      }
+    </ul>
+  </nav>
+
+  <router-outlet />
+
+  <fc-group-actions #actions (done)="state.reload()" />
+} @else {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+}

@@ -184,10 +184,10 @@ Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul clu
 | Collection | Perché | Campi usati |
 |---|---|---|
 | `companies`, `places` | scope di CA e PA, selettori, verifica di `placeIds` dei cataloghi e delle promozioni | `_id`, `name`, `trash`, `companyId` |
-| `products` | esistenza degli id di preferiti e promozioni; servizi del gruppo e verifica di `serviceIds` | `_id`, `trash`, `type` (`'service'`), `name` (oggetto per lingua) |
-| `products_categories` | esistenza delle categorie nelle promozioni | `_id`, `trash` |
-| `contacts` | esistenza dei clienti nelle promozioni | `_id`, `trash` |
-| `contacts_groups` | esistenza dei gruppi di contatti nelle promozioni | `_id` (nessun flag di cestino) |
+| `products` | esistenza degli id di preferiti e promozioni; servizi del gruppo e verifica di `serviceIds`; letture compatte `lookup/products` | `_id`, `trash`, `type` (`product`, `service`, `exempt`, `tobaccos`, `games`, `monopoly`), `name` (oggetto per lingua) |
+| `products_categories` | esistenza delle categorie nelle promozioni; lettura compatta `lookup/product-categories` | `_id`, `trash`, `name` (oggetto per lingua) |
+| `contacts` | esistenza dei clienti nelle promozioni; lettura compatta `lookup/customers` | `_id`, `trash`, `customer`, `companyName`, `name`, `surname` (mai email, telefoni, indirizzi) |
+| `contacts_groups` | esistenza dei gruppi di contatti nelle promozioni; lettura compatta `lookup/contact-groups` | `_id`, `name` (stringa; nessun flag di cestino) |
 
 ## Domande aperte
 1. `groups.dealerId`: nel legacy riferisce l'`_id` dell'utente `D` o un'anagrafica dealer separata? Un dealer può avere più utenti?

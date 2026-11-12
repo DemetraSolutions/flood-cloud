@@ -1,3 +1,5 @@
+import { FeatureFlags } from '../groups/feature-catalog';
+
 /** Role codes of a backoffice user (`doc/Security-Model.md`). */
 export type Role = 'PSA' | 'D' | 'SA' | 'CA' | 'PA' | 'E';
 
@@ -35,6 +37,11 @@ export interface Profile {
   readonly passwordChangeRequired: boolean;
   readonly scope: ScopeSummary;
   readonly group: { readonly id: string; readonly name: string } | null;
+  /**
+   * Features of the user's group (SA, CA, PA). `null` for the roles that work on several groups
+   * (PSA, dealers), who read them from the group they work on.
+   */
+  readonly groupFeatures: FeatureFlags | null;
   readonly createdAt: string | null;
   readonly updatedAt: string | null;
 }

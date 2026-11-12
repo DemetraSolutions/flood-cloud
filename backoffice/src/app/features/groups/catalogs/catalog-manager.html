@@ -1,0 +1,80 @@
+<header class="head">
+  <h2>{{ text('TITLE') }}</h2>
+  @if (canCreate()) {
+    <button fc-button [disabled]="atLimit()" (click)="create()">{{ text('NEW') }}</button>
+  }
+</header>
+<p class="hint">{{ text('HINT') }}</p>
+@if (atLimit()) {
+  <p class="hint" role="status">{{ 'CATALOG.LIMIT_REACHED' | t: { max: limit()! } }}</p>
+}
+
+@if (resource.error()) {
+  <fc-error-state
+    [title]="'CATALOG.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="resource.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="text('TITLE')"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="resource.isLoading()"
+    [emptyTitle]="text('EMPTY')"
+    [emptyMessage]="text('EMPTY_MESSAGE')"
+  >
+    @if (canWrite()) {
+      <ng-template fcRowActions let-row>
+        @if (canEdit(row)) {
+          <fc-actions-menu
+            [text]="'CATALOG.ACTIONS' | t"
+            [label]="rowLabel('CATALOG.ACTIONS_LABEL', row)"
+          >
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('CATALOG.EDIT_LABEL', row)"
+              (click)="edit(row)"
+            >
+              {{ 'CATALOG.EDIT' | t }}
+            </button>
+            @if (canRemove(row)) {
+              <button
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="rowLabel('CATALOG.DELETE_LABEL', row)"
+                (click)="askRemove(row)"
+              >
+                {{ 'CATALOG.DELETE' | t }}
+              </button>
+            }
+          </fc-actions-menu>
+        }
+      </ng-template>
+    }
+  </fc-data-table>
+}
+
+<fc-dialog
+  [heading]="text(editing() === null ? 'NEW_TITLE' : 'EDIT_TITLE')"
+  [open]="editorOpen()"
+  (openChange)="editorOpen.set($event)"
+>
+  @if (editorOpen()) {
+    <ng-container *ngTemplateOutlet="editor(); context: context()" />
+  }
+</fc-dialog>
+
+<fc-confirm-dialog
+  [heading]="'CATALOG.DELETE_TITLE' | t"
+  [message]="removing() === null ? '' : text('DELETE_CONFIRM', { name: nameOf()(removing()!) })"
+  [confirmLabel]="'CATALOG.DELETE' | t"
+  [danger]="true"
+  [busy]="removeBusy()"
+  [open]="removeOpen()"
+  (openChange)="removeOpen.set($event)"
+  (confirmed)="confirmRemove()"
+/>

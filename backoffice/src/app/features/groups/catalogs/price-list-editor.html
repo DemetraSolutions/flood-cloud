@@ -1,0 +1,32 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="priceForm.name"
+    [label]="'CATALOG.PRICE_LISTS.FIELD.NAME' | t"
+    [error]="message(priceForm.name, 'name')"
+    (blurred)="priceForm.name().markAsTouched()"
+  />
+  <fc-checkbox
+    [formField]="priceForm.enabled"
+    [label]="'CATALOG.PRICE_LISTS.FIELD.ENABLED' | t"
+    [error]="message(priceForm.enabled, 'enabled')"
+    (blurred)="priceForm.enabled().markAsTouched()"
+  />
+  <fc-checkbox
+    [formField]="priceForm.isDefault"
+    [label]="'CATALOG.PRICE_LISTS.FIELD.DEFAULT' | t"
+    [hint]="'CATALOG.PRICE_LISTS.FIELD.DEFAULT_HINT' | t"
+    [error]="message(priceForm.isDefault, 'isDefault')"
+    (blurred)="priceForm.isDefault().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

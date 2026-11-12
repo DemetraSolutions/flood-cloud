@@ -97,6 +97,16 @@ describe('GroupContext', () => {
     expect(context.groupName()).toBe('Alfa');
   });
 
+  it('adopts the name the page knows, refreshing a stale one', () => {
+    const context = create();
+    signIn({ role: 'PSA', groupId: null, group: null });
+    context.adopt(ID, 'Alfa');
+    expect(context.groupName()).toBe('Alfa');
+    context.adopt(ID, 'Alfa');
+    context.adopt(ID, 'Beta');
+    expect(context.groupName()).toBe('Beta');
+  });
+
   it('does not adopt anything for a user bound to a group', () => {
     const context = create();
     signIn({ role: 'SA' });

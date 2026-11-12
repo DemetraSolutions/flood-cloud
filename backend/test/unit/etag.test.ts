@@ -40,7 +40,7 @@ describe('sendRevalidated', () => {
   it('sends the data with the tag and a revalidation cache policy when there is no condition', () => {
     const { req, res, headers, sent } = exchange();
     sendRevalidated(req, res, data);
-    assert.deepEqual([headers.get('ETag'), headers.get('Cache-Control'), sent.status, sent.body], [tag, 'private, no-cache', 200, { data }]);
+    assert.deepEqual([headers.get('ETag'), headers.get('Cache-Control'), sent.status, sent.body], [tag, 'no-store', 200, { data }]);
   });
 
   it('answers 304 without a body to a matching If-None-Match: the tag, its strong form, a list containing it, or *', () => {

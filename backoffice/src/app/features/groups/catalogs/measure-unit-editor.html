@@ -1,0 +1,21 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="unitForm.value"
+    autocomplete="off"
+    [label]="'CATALOG.MEASURE_UNITS.FIELD.VALUE' | t"
+    [hint]="'CATALOG.MEASURE_UNITS.FIELD.VALUE_HINT' | t"
+    [error]="message(unitForm.value, 'value')"
+    (blurred)="unitForm.value().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

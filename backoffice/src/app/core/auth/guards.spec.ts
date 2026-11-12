@@ -6,12 +6,15 @@ import { signIn } from '../../../testing/session';
 import {
   anonymousOnly,
   authenticated,
+  feature,
   groupLanding,
   passwordChangeAllowed,
   permission,
   role,
 } from './guards';
 import { GroupContext } from '../groups/group-context';
+import { fakeFeatureFlags } from '../../../testing/groups';
+import { backend } from '../../../testing/api';
 
 beforeEach(() => {
   TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
@@ -130,6 +133,43 @@ describe('groupLanding', () => {
     signIn({ role: 'D' });
     TestBed.inject(GroupContext).choose({ id: '665f1c2e9b1d4a0012ab34a2', name: 'Alfa' });
     expect(serialized(run(groupLanding))).toBe('/groups/665f1c2e9b1d4a0012ab34a2/users');
+    sessionStorage.clear();
+  });
+});
+
+describe('feature', () => {
+  const GROUP = '665f1c2e9b1d4a0012ab34a2';
+  const segments = (...paths: string[]) => paths.map((path) => new UrlSegment(path, {}));
+  const runAsync = (guard: CanMatchFn, parts: UrlSegment[]) =>
+    TestBed.runInInjectionContext(() => guard({} as Route, parts, {} as never)) as Promise<
+      boolean | UrlTree
+    >;
+
+  it('lets through a user whose group has the feature', async () => {
+    signIn({ role: 'SA', groupFeatures: fakeFeatureFlags(false, { cash: true }) });
+    expect(await runAsync(feature('cash'), segments('groups', GROUP, 'cash'))).toBe(true);
+  });
+
+  it('sends to the feature-disabled page when the module is off', async () => {
+    signIn({ role: 'SA', groupFeatures: fakeFeatureFlags(false) });
+    expect(serialized(await runAsync(feature('cash'), segments('groups', GROUP, 'cash')))).toBe(
+      '/feature-disabled',
+    );
+    expect(serialized(await runAsync(feature('cash'), segments('other')))).toBe(
+      '/feature-disabled',
+    );
+    expect(serialized(await runAsync(feature('cash'), segments('groups', 'list')))).toBe(
+      '/feature-disabled',
+    );
+  });
+
+  it('reads the features of the group in the URL for a PSA', async () => {
+    sessionStorage.clear();
+    signIn({ role: 'PSA', groupId: null, group: null });
+    const result = runAsync(feature('rooms'), segments('groups', GROUP, 'rooms'));
+    const req = backend().expectOne(`/v1/groups/${GROUP}`);
+    req.flush({ data: { features: fakeFeatureFlags(false, { rooms: true }) } });
+    expect(await result).toBe(true);
     sessionStorage.clear();
   });
 });

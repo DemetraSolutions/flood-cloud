@@ -8,7 +8,7 @@
 - Date ISO 8601 UTC, importi in centesimi interi, identificativi stringa.
 - Codici d'errore: tabella in `doc/API-Guidelines.md` §5. Le route di un modulo che il gruppo non ha acceso rispondono `403 FEATURE_DISABLED` (qualunque sia il ruolo, PSA e D compresi), dopo il controllo del gruppo e del permesso.
 - Ogni risposta porta `X-Request-Id`, generato dal server (un valore inviato dal client non viene riutilizzato).
-- Ogni risposta è `Cache-Control: no-store`, **tranne** `GET /v1/groups/{groupId}`, che porta `ETag` (debole) e `Cache-Control: private, no-cache` e risponde `304` a un `If-None-Match` corrispondente (vedi la sua descrizione).
+- Ogni risposta è `Cache-Control: no-store`, **tranne** `GET /v1/groups/{groupId}`, che porta anche `ETag` (debole) e risponde `304` a un `If-None-Match` corrispondente (vedi la sua descrizione).
 - Errori comuni a ogni percorso: `404 NOT_FOUND` (percorso inesistente), `405 METHOD_NOT_ALLOWED` con `Allow` (metodo non previsto), `400 BAD_REQUEST` (percorso o richiesta malformati). Sulle route con body: `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE` (limite di default 100 KB), `415 UNSUPPORTED_MEDIA_TYPE` (content type diverso da `application/json` UTF-8 o body compresso).
 
 ## Liste
@@ -588,7 +588,7 @@ Rappresentazione del gruppo:
 - **Superficie:** backoffice
 - **Autenticazione e permesso:** Bearer backoffice, `groups:read`
 - **Ruoli:** PSA, D (propri gruppi) e SA (proprio gruppo); CA e PA `403`
-- **Header particolari:** risposta con `ETag: W/"…"` (debole, SHA-256 del contenuto della risposta per il ruolo del chiamante) e `Cache-Control: private, no-cache`: il browser può conservare una copia ma deve rivalidarla a ogni uso. Con `If-None-Match` contenente il tag (anche `*` o un elenco) la risposta è `304` **senza body**. Il tag cambia a ogni modifica visibile del gruppo; due ruoli diversi possono avere tag diversi (solo il PSA vede `dataCluster`).
+- **Header particolari:** risposta con `ETag: W/"…"` (debole, SHA-256 del contenuto della risposta per il ruolo del chiamante) e `Cache-Control: no-store` come le altre: il browser non conserva copie; il client tiene la propria copia in memoria e la rivalida con `If-None-Match`. Con `If-None-Match` contenente il tag (anche `*` o un elenco) la risposta è `304` **senza body**. Il tag cambia a ogni modifica visibile del gruppo; due ruoli diversi possono avere tag diversi (solo il PSA vede `dataCluster`).
 - **Risposta:** `200` con il gruppo (esempio sopra), oppure `304`
 - **Errori:** comuni; `403 FORBIDDEN` (CA, PA)
 
@@ -654,6 +654,26 @@ Rappresentazione del gruppo:
   { "data": [{ "id": "665f1c2e9b1d4a0012ab34f0", "name": "Taglio donna" }], "page": { "limit": 50, "next": null } }
   ```
 - **Errori:** comuni; `403 FORBIDDEN`, `403 FEATURE_DISABLED`; `422` (parametri o cursore non validi)
+
+### GET /v1/groups/{groupId}/lookup/products
+### GET /v1/groups/{groupId}/lookup/product-categories
+### GET /v1/groups/{groupId}/lookup/customers
+### GET /v1/groups/{groupId}/lookup/contact-groups
+- **Superficie:** backoffice. Letture compatte **in sola lettura** per i selettori dei preferiti e delle promozioni (in attesa dei domini completi), sul modello di `/services`.
+- **Autenticazione e permesso:** Bearer backoffice, `products:read` (lo stesso di preferiti e promozioni, che le usano: PSA e D sempre, gli altri ruoli secondo `products.r`); route di gruppo (stesso perimetro e stessi `404` delle altre); **nessuna feature richiesta**.
+- **Query:** `limit` (1–100, default 50), `cursor`, `sort` (`name`, anche `-name`; default `name`), `q` (cerca nel nome, testo letterale senza distinzione di maiuscole), `ids` (facoltativo: da 1 a 100 id separati da virgola, per risolvere i nomi degli elementi già scelti; id di altri gruppi, inesistenti o nel cestino non compaiono; si combina con `q` e con la paginazione). Solo `/lookup/products` accetta anche `type` (`product`, `service`, `exempt`, `tobaccos`, `games`, `monopoly`; altro valore è `422`). Parametri sconosciuti, `ids` non valido o con più di 100 id: `422`.
+- **Risposta:** `200`, elenco ordinato per nome con `page` (`limit`, `next`); solo i campi sotto, mai altri dati del documento:
+  | Route | Elemento | Elementi inclusi |
+  |---|---|---|
+  | `/lookup/products` | `{ "id", "name", "type" }` | prodotti non nel cestino; `name` per lingua come i servizi (lingua dell'utente, ripiego sulla prima disponibile, `""` se manca); `type` è `null` se assente o non testo |
+  | `/lookup/product-categories` | `{ "id", "name" }` | categorie non nel cestino; `name` per lingua come sopra |
+  | `/lookup/customers` | `{ "id", "name" }` | contatti con `customer: true` non nel cestino (i fornitori non compaiono); `name` è la ragione sociale, altrimenti "nome cognome"; i valori nel formato cifrato del vecchio sistema non si mostrano (`""` se non resta nulla); nessuna email, telefono o indirizzo |
+  | `/lookup/contact-groups` | `{ "id", "name" }` | gruppi di contatti (senza cestino); `name` è una stringa |
+  ```json
+  { "data": [{ "id": "665f1c2e9b1d4a0012ab34f0", "name": "Shampoo", "type": "product" }], "page": { "limit": 50, "next": null } }
+  ```
+- **Errori:** comuni; `403 FORBIDDEN`; `404` (gruppo fuori perimetro); `422` (parametri o cursore non validi)
+- `/services` resta invariato (permesso `users:read` e feature `services`, per la scheda utente).
 
 ## Cataloghi del gruppo (`/v1`)
 

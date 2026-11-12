@@ -1,0 +1,29 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="ruleForm.pointValue"
+    type="number"
+    [label]="'CATALOG.FIDELITY_CARD_RULES.FIELD.POINT_VALUE' | t"
+    [hint]="'CATALOG.FIDELITY_CARD_RULES.FIELD.POINT_VALUE_HINT' | t"
+    [error]="message(ruleForm.pointValue, 'pointValue')"
+    (blurred)="ruleForm.pointValue().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="ruleForm.discountPercentage"
+    type="number"
+    [label]="'CATALOG.FIDELITY_CARD_RULES.FIELD.DISCOUNT' | t"
+    [hint]="'CATALOG.FIDELITY_CARD_RULES.FIELD.DISCOUNT_HINT' | t"
+    [error]="message(ruleForm.discountPercentage, 'discountPercentage')"
+    (blurred)="ruleForm.discountPercentage().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>
