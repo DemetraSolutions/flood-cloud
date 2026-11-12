@@ -1,0 +1,73 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="collectionForm.name"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.NAME' | t"
+    [error]="message(collectionForm.name, 'name')"
+    (blurred)="collectionForm.name().markAsTouched()"
+  />
+  <fc-checkbox
+    [formField]="collectionForm.enabled"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.ENABLED' | t"
+    [error]="message(collectionForm.enabled, 'enabled')"
+    (blurred)="collectionForm.enabled().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="collectionForm.pointConversion"
+    type="number"
+    inputmode="decimal"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.CONVERSION' | t"
+    [hint]="'CATALOG.POINTS_COLLECTIONS.FIELD.CONVERSION_HINT' | t"
+    [error]="message(collectionForm.pointConversion, 'pointConversion')"
+    (blurred)="collectionForm.pointConversion().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="collectionForm.minAmount"
+    type="number"
+    inputmode="decimal"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.MIN_AMOUNT' | t"
+    [error]="message(collectionForm.minAmount, 'minAmount')"
+    (blurred)="collectionForm.minAmount().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="collectionForm.dateFrom"
+    type="datetime-local"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.DATE_FROM' | t"
+    [error]="message(collectionForm.dateFrom, 'dateFrom')"
+    (blurred)="collectionForm.dateFrom().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="collectionForm.dateTo"
+    type="datetime-local"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.DATE_TO' | t"
+    [error]="message(collectionForm.dateTo, 'dateTo')"
+    (blurred)="collectionForm.dateTo().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="collectionForm.pointsExpirationDate"
+    type="datetime-local"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.EXPIRATION' | t"
+    [hint]="'CATALOG.POINTS_COLLECTIONS.FIELD.EXPIRATION_HINT' | t"
+    [error]="message(collectionForm.pointsExpirationDate, 'pointsExpirationDate')"
+    (blurred)="collectionForm.pointsExpirationDate().markAsTouched()"
+  />
+  <fc-select
+    [formField]="collectionForm.prizeCatalogueId"
+    [label]="'CATALOG.POINTS_COLLECTIONS.FIELD.CATALOGUE' | t"
+    [placeholder]="'CATALOG.POINTS_COLLECTIONS.FIELD.NO_CATALOGUE' | t"
+    [options]="catalogueOptions()"
+    [hint]="cataloguesFailed() ? ('CATALOG.POINTS_COLLECTIONS.CATALOGUES_FAILED' | t) : null"
+    [error]="message(collectionForm.prizeCatalogueId, 'prizeCatalogueId')"
+    (blurred)="collectionForm.prizeCatalogueId().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

@@ -66,13 +66,32 @@ describe('visibleMenu', () => {
     expect(ITEMS[3].children?.length).toBe(2);
   });
 
-  it('the menu has the home, profile, users and activity log entries for a user without roles', () => {
+  it('the menu has the entries open to every role when all permissions are held', () => {
     expect(ids(visibleMenu(MENU, allowAll, allowAll))).toEqual([
       'home',
       'profile',
       'users',
+      'fidelity',
+      'products',
+      'promotions',
       'activity-log',
     ]);
+  });
+
+  it('groups fidelity pages under one entry and the favorites under products', () => {
+    const menu = visibleMenu(MENU, allowAll, allowAll);
+    const children = (id: string) => ids([...(menu.find((i) => i.id === id)?.children ?? [])]);
+    expect(children('fidelity')).toEqual(['card-types', 'points-collections', 'prize-catalogues']);
+    expect(children('products')).toEqual(['product-favorites']);
+  });
+
+  it('shows fidelity with fidelity:read, and favorites and promotions with products:read', () => {
+    const only = (permission: string) => ids(visibleMenu(MENU, (p) => p === permission, allowAll));
+    expect(only('fidelity:read')).toContain('fidelity');
+    expect(only('fidelity:read')).not.toContain('products');
+    expect(only('fidelity:read')).not.toContain('promotions');
+    expect(only('products:read')).toEqual(expect.arrayContaining(['products', 'promotions']));
+    expect(only('products:read')).not.toContain('fidelity');
   });
 
   it('shows entries limited to some roles only to those roles', () => {

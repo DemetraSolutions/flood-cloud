@@ -124,6 +124,14 @@ describe('mountRoutes with user routes', () => {
     }
   });
 
+  it('accepts anyPermission as a non-empty list of catalog permissions, never together with permission', () => {
+    mountRoutes(express.Router(), [userRoute({ auth: { kind: 'user', anyPermission: ['users:read', 'groups:read'] } })], options);
+    assert.match(mountMessage([userRoute({ auth: { kind: 'user', anyPermission: [] } })], options), /anyPermission must be a non-empty list/);
+    assert.match(mountMessage([userRoute({ auth: { kind: 'user', anyPermission: 'users:read' } })], options), /anyPermission must be a non-empty list/);
+    assert.match(mountMessage([userRoute({ auth: { kind: 'user', anyPermission: ['users:read', 'places:delete'] } })], options), /unknown permission/);
+    assert.match(mountMessage([userRoute({ auth: { kind: 'user', permission: 'users:read', anyPermission: ['users:read'] } })], options), /either permission or anyPermission/);
+  });
+
   it('requires group: true exactly when the path has :groupId', () => {
     const grouped = { kind: 'user', permission: 'places:read', group: true };
     const both = { ...options, groupAccess };

@@ -70,7 +70,11 @@ describe('catalogFailureMessage', () => {
   });
 
   it('uses the central mapping when there are no details and it is not a conflict', () => {
-    expect(catalogFailureMessage(translator(), fail('FORBIDDEN'))).toBe('ERRORS.API.FORBIDDEN');
+    expect(catalogFailureMessage(translator(), fail('NOT_FOUND'))).toBe('ERRORS.API.NOT_FOUND');
+  });
+
+  it('explains a refusal without details as outside the perimeter', () => {
+    expect(catalogFailureMessage(translator(), fail('FORBIDDEN'))).toBe('CATALOG.ERROR.FORBIDDEN');
   });
 
   it('logs and reports generically an error that is not from the API', () => {
@@ -96,6 +100,18 @@ describe('editorErrors', () => {
     expect(editorErrors(translator(), error, known)).toEqual({
       fields: { name: 'FORM.ISSUE.REQUIRED', enabled: 'FORM.ISSUE.TYPE' },
       form: null,
+    });
+  });
+
+  it('puts an issue on an element of a list on the field of the list', () => {
+    const error = fail('FORBIDDEN', [
+      { field: 'placeIds.2', issue: 'notAllowed' },
+      { field: 'placeIds.3', issue: 'incorrect' },
+      { field: 'namely', issue: 'incorrect' },
+    ]);
+    expect(editorErrors(translator(), error, ['placeIds', 'name'])).toEqual({
+      fields: { placeIds: 'FORM.ISSUE.NOT_ALLOWED' },
+      form: 'CATALOG.ERROR.NOT_ALLOWED',
     });
   });
 

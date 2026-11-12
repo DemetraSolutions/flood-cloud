@@ -1,0 +1,111 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="cardForm.name"
+    [label]="'CATALOG.CARD_TYPES.FIELD.NAME' | t"
+    [error]="message(cardForm.name, 'name')"
+    (blurred)="cardForm.name().markAsTouched()"
+  />
+  <fc-checkbox
+    [formField]="cardForm.enabled"
+    [label]="'CATALOG.CARD_TYPES.FIELD.ENABLED' | t"
+    [error]="message(cardForm.enabled, 'enabled')"
+    (blurred)="cardForm.enabled().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="cardForm.discountPercentage"
+    type="number"
+    inputmode="decimal"
+    [label]="'CATALOG.CARD_TYPES.FIELD.DISCOUNT' | t"
+    [hint]="'CATALOG.CARD_TYPES.FIELD.DISCOUNT_HINT' | t"
+    [error]="message(cardForm.discountPercentage, 'discountPercentage')"
+    (blurred)="cardForm.discountPercentage().markAsTouched()"
+  />
+  <fc-select
+    [formField]="cardForm.priceListId"
+    [label]="'CATALOG.CARD_TYPES.FIELD.PRICE_LIST' | t"
+    [placeholder]="'CATALOG.CARD_TYPES.FIELD.NO_PRICE_LIST' | t"
+    [options]="priceListOptions()"
+    [hint]="priceListsFailed() ? ('CATALOG.CARD_TYPES.PRICE_LISTS_FAILED' | t) : null"
+    [error]="message(cardForm.priceListId, 'priceListId')"
+    (blurred)="cardForm.priceListId().markAsTouched()"
+  />
+
+  <fieldset>
+    <legend>{{ 'CATALOG.CARD_TYPES.PREPAID.TITLE' | t }}</legend>
+    <fc-checkbox
+      [formField]="cardForm.prepaidEnabled"
+      [label]="'CATALOG.CARD_TYPES.PREPAID.ENABLED' | t"
+      [error]="message(cardForm.prepaidEnabled, 'prepaid.enabled')"
+      (blurred)="cardForm.prepaidEnabled().markAsTouched()"
+    />
+    <fc-select
+      [formField]="cardForm.prepaidType"
+      [label]="'CATALOG.CARD_TYPES.PREPAID.TYPE' | t"
+      [options]="prepaidOptions()"
+      [error]="message(cardForm.prepaidType, 'prepaid.type')"
+      (blurred)="cardForm.prepaidType().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="cardForm.prepaidTax"
+      type="number"
+      inputmode="decimal"
+      [label]="'CATALOG.CARD_TYPES.PREPAID.TAX' | t"
+      [hint]="'CATALOG.CARD_TYPES.PREPAID.TAX_HINT' | t"
+      [error]="message(cardForm.prepaidTax, 'prepaid.taxPercentage')"
+      (blurred)="cardForm.prepaidTax().markAsTouched()"
+    />
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'CATALOG.CARD_TYPES.POINTS.TITLE' | t }}</legend>
+    <fc-checkbox
+      [formField]="cardForm.collectEnabled"
+      [label]="'CATALOG.CARD_TYPES.POINTS.ENABLED' | t"
+      [error]="message(cardForm.collectEnabled, 'pointsCollect.enabled')"
+      (blurred)="cardForm.collectEnabled().markAsTouched()"
+    />
+    @if (collectionsFailed()) {
+      <p class="note" role="alert">{{ 'CATALOG.CARD_TYPES.POINTS.LOAD_FAILED' | t }}</p>
+    }
+    <fc-reference-picker
+      [formField]="cardForm.collectionIds"
+      [label]="'CATALOG.CARD_TYPES.POINTS.COLLECTIONS' | t"
+      [loader]="collectionLoader()"
+      [labels]="collectionLabels()"
+      [error]="message(cardForm.collectionIds, 'pointsCollect.collectionIds')"
+      (blurred)="cardForm.collectionIds().markAsTouched()"
+    />
+  </fieldset>
+
+  @if (perimeter.restricted()) {
+    <p class="note" role="note">{{ 'CATALOG.PLACES_RESTRICTED' | t }}</p>
+  } @else {
+    <p class="note">{{ 'CATALOG.CARD_TYPES.PLACES_HINT' | t }}</p>
+  }
+  <fc-reference-picker
+    [formField]="cardForm.placeIds"
+    [label]="'CATALOG.CARD_TYPES.FIELD.PLACES' | t"
+    [loader]="placeLoader()"
+    [labels]="placeLabels()"
+    [error]="message(cardForm.placeIds, 'placeIds')"
+    (blurred)="cardForm.placeIds().markAsTouched()"
+  />
+
+  <div class="actions">
+    @if (readOnly()) {
+      <button fc-button variant="secondary" (click)="cancelled.emit()">
+        {{ 'COMMON.CLOSE' | t }}
+      </button>
+    } @else {
+      <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+        {{ 'COMMON.CANCEL' | t }}
+      </button>
+      <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+        {{ 'COMMON.SAVE' | t }}
+      </button>
+    }
+  </div>
+</form>

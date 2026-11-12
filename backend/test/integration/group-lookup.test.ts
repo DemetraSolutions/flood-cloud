@@ -194,4 +194,15 @@ describe('GET /v1/groups/{groupId}/lookup/price-lists', () => {
     assert.equal(as.failure(await as.call(reader.id, 'GET', path(0, 'price-lists'))).status, 403);
     assert.equal((await office.call('GET', path(0, 'price-lists'), undefined)).status, 401);
   });
+
+  it('is open to whoever holds at least one of users:read, fidelity:read and groups:read, and to nobody else', async () => {
+    const none = { r: false, w: false };
+    const only = (grant: 'users' | 'fidelity' | 'groups') => ({ users: none, fidelity: none, groups: none, [grant]: { r: true, w: false } });
+    for (const grant of ['users', 'fidelity', 'groups'] as const) {
+      const user = await addUser(ctx, office, { permissions: { status: false, ...only(grant) } });
+      assert.equal((await as.call(user.id, 'GET', path(0, 'price-lists'))).status, 200, grant);
+    }
+    const nobody = await addUser(ctx, office, { permissions: { status: false, users: none, fidelity: none, groups: none } });
+    assert.equal(as.failure(await as.call(nobody.id, 'GET', path(0, 'price-lists'))).status, 403);
+  });
 });

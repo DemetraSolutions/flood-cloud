@@ -20,7 +20,7 @@ function emulateNativeDialog(): void {
 @Component({
   imports: [Dialog],
   template: `<button id="opener" type="button" (click)="open.set(true)">Apri</button>
-    <fc-dialog heading="Titolo" [(open)]="open" (closed)="closes.set(closes() + 1)">
+    <fc-dialog heading="Titolo" [wide]="wide()" [(open)]="open" (closed)="closes.set(closes() + 1)">
       <p>Contenuto</p>
       <button fcDialogActions type="button">Azione</button>
     </fc-dialog>`,
@@ -28,6 +28,7 @@ function emulateNativeDialog(): void {
 class Host {
   readonly open = signal(false);
   readonly closes = signal(0);
+  readonly wide = signal(false);
 }
 
 async function render() {
@@ -89,5 +90,13 @@ describe('Dialog', () => {
     host.open.set(true);
     await fixture.whenStable();
     expect(show).not.toHaveBeenCalled();
+  });
+
+  it('is wider on request', async () => {
+    const { fixture, host, dialog } = await render();
+    expect(dialog.classList.contains('wide')).toBe(false);
+    host.wide.set(true);
+    await fixture.whenStable();
+    expect(dialog.classList.contains('wide')).toBe(true);
   });
 });

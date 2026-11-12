@@ -37,8 +37,8 @@ function referencedMessage(i18n: I18nService, error: ApiError): string {
  * User message for a failed write on a catalog. The rejections of the catalogs get a message of
  * their own: element already used (`taken`), standard element (`default`), last element (`last`),
  * element used by others (`referenced`, naming who), limit reached (`tooMany`), field not allowed
- * (`notAllowed`) and a concurrent change (`409` without details). Anything else uses the central
- * mapping.
+ * (`notAllowed`), an element outside the user's perimeter (`403` without details) and a
+ * concurrent change (`409` without details). Anything else uses the central mapping.
  */
 export function catalogFailureMessage(i18n: I18nService, error: unknown): string {
   if (!(error instanceof ApiError)) {
@@ -47,6 +47,9 @@ export function catalogFailureMessage(i18n: I18nService, error: unknown): string
   const issues = new Set(error.details.map((detail) => detail.issue));
   if (error.code === 'CONFLICT' && error.details.length === 0) {
     return i18n.t('CATALOG.ERROR.CONCURRENT');
+  }
+  if (error.code === 'FORBIDDEN' && error.details.length === 0) {
+    return i18n.t('CATALOG.ERROR.FORBIDDEN');
   }
   if (issues.has('referenced')) {
     return referencedMessage(i18n, error);
@@ -81,7 +84,8 @@ export interface EditorErrors {
  *
  * @param i18n Translation service.
  * @param error The error of the last save, if any.
- * @param known Names of the fields of the editor.
+ * @param known Names of the fields of the editor; an issue on an element of a list
+ *   (`placeIds.2`) lands on the field of the list (`placeIds`).
  */
 export function editorErrors(
   i18n: I18nService,
@@ -94,10 +98,13 @@ export function editorErrors(
   const fields: Record<string, string> = {};
   let unmatched = error.details.length === 0;
   for (const { field, issue } of error.details) {
-    if (!known.includes(field)) {
+    const name = known.includes(field)
+      ? field
+      : known.find((candidate) => field.startsWith(`${candidate}.`));
+    if (name === undefined) {
       unmatched = true;
-    } else if (!Object.hasOwn(fields, field)) {
-      fields[field] = i18n.t(issueMessageKey(issue));
+    } else if (!Object.hasOwn(fields, name)) {
+      fields[name] = i18n.t(issueMessageKey(issue));
     }
   }
   return { fields, form: unmatched ? catalogFailureMessage(i18n, error) : null };

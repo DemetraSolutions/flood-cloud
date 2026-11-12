@@ -3,6 +3,7 @@ import { API_ERROR_CODES, CLIENT_ERROR_CODES } from '../api/api.types';
 import { FIELD_ISSUES, issueMessageKey } from '../api/field-issues';
 import { FEATURE_NAMES, featureTextKey } from '../groups/feature-catalog';
 import { GROUP_SECTIONS } from '../../features/groups/group-settings';
+import { PROMOTION_SECTIONS } from '../../features/groups/catalogs/promotion-model';
 import { INTEGRATION_PROVIDERS } from '../../features/groups/group.types';
 import {
   AUTOMATIC_CASH,
@@ -171,6 +172,50 @@ describe('dictionaries', () => {
     }
     for (const part of ['START', 'END']) {
       expected.push(`USERS.SHIFTS.SLOT_${part}`);
+    }
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the texts of the fidelity, favorites and promotion pages, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    const expected: string[] = [];
+    for (const kind of [
+      'CARD_TYPES',
+      'POINTS_COLLECTIONS',
+      'PRIZE_CATALOGUES',
+      'PRODUCT_FAVORITES',
+      'PROMOTIONS',
+    ]) {
+      for (const part of [
+        'TITLE',
+        'HINT',
+        'NEW',
+        'NEW_TITLE',
+        'EDIT_TITLE',
+        'DELETE_CONFIRM',
+        'EMPTY',
+        'EMPTY_MESSAGE',
+      ]) {
+        expected.push(`CATALOG.${kind}.${part}`);
+      }
+    }
+    for (const value of ['TAX_INCLUDED', 'TAX_EXCLUDED']) {
+      expected.push(`CATALOG.PROMOTIONS.AMOUNT_TAX.${value}`);
+    }
+    for (const value of ['ONLY_N', 'ALL']) {
+      expected.push(`CATALOG.PROMOTIONS.SELECTION.${value}`);
+    }
+    for (const value of ['ON_TOTAL', 'ON_PRODUCTS', 'ON_CATEGORIES']) {
+      expected.push(`CATALOG.PROMOTIONS.DISCOUNT_TYPE.${value}`);
+    }
+    for (const value of ['PERCENTAGE', 'AMOUNT']) {
+      expected.push(`CATALOG.PROMOTIONS.DISCOUNT_VALUE_TYPE.${value}`);
+    }
+    for (const section of PROMOTION_SECTIONS) {
+      expected.push(`CATALOG.PROMOTIONS.SECTION.${section.toUpperCase()}`);
+    }
+    for (const value of ['MULTI', 'MONO']) {
+      expected.push(`CATALOG.CARD_TYPES.PREPAID.${value}`);
     }
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });

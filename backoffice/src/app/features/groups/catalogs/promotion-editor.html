@@ -1,0 +1,315 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (formError(); as message) {
+    <fc-form-error [message]="message" />
+  }
+
+  <fc-tab-list
+    [label]="'CATALOG.PROMOTIONS.SECTIONS' | t"
+    idPrefix="promotion"
+    [tabs]="tabs()"
+    [active]="section()"
+    (activeChange)="select($event)"
+  />
+
+  <section
+    id="promotion-panel-general"
+    role="tabpanel"
+    aria-labelledby="promotion-tab-general"
+    [hidden]="section() !== 'general'"
+  >
+    <fc-text-field
+      [formField]="promoForm.name"
+      [label]="'CATALOG.PROMOTIONS.FIELD.NAME' | t"
+      [error]="msg('name')"
+      (blurred)="touch(promoForm.name)"
+    />
+    <fc-checkbox
+      [formField]="promoForm.enabled"
+      [label]="'CATALOG.PROMOTIONS.FIELD.ENABLED' | t"
+      [error]="msg('enabled')"
+      (blurred)="touch(promoForm.enabled)"
+    />
+    <fc-textarea
+      [formField]="promoForm.description"
+      [rows]="3"
+      [label]="'CATALOG.PROMOTIONS.FIELD.DESCRIPTION' | t"
+      [error]="msg('description')"
+      (blurred)="touch(promoForm.description)"
+    />
+    <fc-text-field
+      [formField]="promoForm.code"
+      [label]="'CATALOG.PROMOTIONS.FIELD.CODE' | t"
+      [hint]="'CATALOG.PROMOTIONS.FIELD.CODE_HINT' | t"
+      [error]="msg('code')"
+      (blurred)="touch(promoForm.code)"
+    />
+  </section>
+
+  <section
+    id="promotion-panel-conditions"
+    role="tabpanel"
+    aria-labelledby="promotion-tab-conditions"
+    [hidden]="section() !== 'conditions'"
+  >
+    @if (perimeter.restricted()) {
+      <p class="note" role="note">{{ 'CATALOG.PLACES_RESTRICTED' | t }}</p>
+    } @else {
+      <p class="note">{{ 'CATALOG.PROMOTIONS.PLACES_HINT' | t }}</p>
+    }
+    <fc-reference-picker
+      [formField]="promoForm.placeIds"
+      [label]="'CATALOG.PROMOTIONS.FIELD.PLACES' | t"
+      [loader]="placeLoader()"
+      [labels]="placeLabels()"
+      [error]="msg('placeIds')"
+      (blurred)="touch(promoForm.placeIds)"
+    />
+    <div class="row">
+      <fc-text-field
+        [formField]="promoForm.startDate"
+        type="datetime-local"
+        [label]="'CATALOG.PROMOTIONS.FIELD.START_DATE' | t"
+        [error]="msg('startDate')"
+        (blurred)="touch(promoForm.startDate)"
+      />
+      <fc-text-field
+        [formField]="promoForm.endDate"
+        type="datetime-local"
+        [label]="'CATALOG.PROMOTIONS.FIELD.END_DATE' | t"
+        [error]="msg('endDate')"
+        (blurred)="touch(promoForm.endDate)"
+      />
+    </div>
+    <fc-reference-picker
+      [formField]="promoForm.customerIds"
+      [label]="'CATALOG.PROMOTIONS.FIELD.CUSTOMERS' | t"
+      [loader]="customerLoader()"
+      [labels]="customerLabels()"
+      [emptyLabel]="'CATALOG.NO_NAME_CUSTOMER' | t"
+      [error]="msg('customerIds')"
+      (blurred)="touch(promoForm.customerIds)"
+    />
+    <fc-reference-picker
+      [formField]="promoForm.contactGroupIds"
+      [label]="'CATALOG.PROMOTIONS.FIELD.CONTACT_GROUPS' | t"
+      [loader]="contactGroupLoader()"
+      [labels]="contactGroupLabels()"
+      [emptyLabel]="'CATALOG.NO_NAME' | t"
+      [error]="msg('contactGroupIds')"
+      (blurred)="touch(promoForm.contactGroupIds)"
+    />
+    <div class="row">
+      <fc-text-field
+        [formField]="promoForm.maxUsesPerUser"
+        type="number"
+        inputmode="numeric"
+        [label]="'CATALOG.PROMOTIONS.FIELD.MAX_USES_PER_USER' | t"
+        [error]="msg('maxUsesPerUser')"
+        (blurred)="touch(promoForm.maxUsesPerUser)"
+      />
+      <fc-text-field
+        [formField]="promoForm.maxUsesTotal"
+        type="number"
+        inputmode="numeric"
+        [label]="'CATALOG.PROMOTIONS.FIELD.MAX_USES_TOTAL' | t"
+        [error]="msg('maxUsesTotal')"
+        (blurred)="touch(promoForm.maxUsesTotal)"
+      />
+    </div>
+    <div class="row">
+      <fc-text-field
+        [formField]="promoForm.minAmount"
+        type="number"
+        inputmode="decimal"
+        [label]="'CATALOG.PROMOTIONS.FIELD.MIN_AMOUNT' | t"
+        [error]="msg('minAmount')"
+        (blurred)="touch(promoForm.minAmount)"
+      />
+      <fc-text-field
+        [formField]="promoForm.currency"
+        autocapitalize="characters"
+        [label]="'CATALOG.PROMOTIONS.FIELD.CURRENCY' | t"
+        [hint]="'CATALOG.PROMOTIONS.FIELD.CURRENCY_HINT' | t"
+        [error]="msg('currency')"
+        (blurred)="touch(promoForm.currency)"
+      />
+      <fc-select
+        [formField]="promoForm.amountTax"
+        [label]="'CATALOG.PROMOTIONS.FIELD.AMOUNT_TAX' | t"
+        [options]="amountTaxOptions()"
+        [error]="msg('amountTax')"
+        (blurred)="touch(promoForm.amountTax)"
+      />
+    </div>
+    <fieldset>
+      <legend>{{ 'CATALOG.PROMOTIONS.EXCLUSIONS' | t }}</legend>
+      <fc-checkbox
+        [formField]="promoForm.seatExcluded"
+        [label]="'CATALOG.PROMOTIONS.FIELD.SEAT_EXCLUDED' | t"
+        [error]="msg('seatExcluded')"
+        (blurred)="touch(promoForm.seatExcluded)"
+      />
+      <fc-checkbox
+        [formField]="promoForm.serviceExcluded"
+        [label]="'CATALOG.PROMOTIONS.FIELD.SERVICE_EXCLUDED' | t"
+        [error]="msg('serviceExcluded')"
+        (blurred)="touch(promoForm.serviceExcluded)"
+      />
+      <fc-checkbox
+        [formField]="promoForm.tipExcluded"
+        [label]="'CATALOG.PROMOTIONS.FIELD.TIP_EXCLUDED' | t"
+        [error]="msg('tipExcluded')"
+        (blurred)="touch(promoForm.tipExcluded)"
+      />
+      <fc-checkbox
+        [formField]="promoForm.deliveryExcluded"
+        [label]="'CATALOG.PROMOTIONS.FIELD.DELIVERY_EXCLUDED' | t"
+        [error]="msg('deliveryExcluded')"
+        (blurred)="touch(promoForm.deliveryExcluded)"
+      />
+    </fieldset>
+  </section>
+
+  <section
+    id="promotion-panel-products"
+    role="tabpanel"
+    aria-labelledby="promotion-tab-products"
+    [hidden]="section() !== 'products'"
+  >
+    <fieldset>
+      <legend>{{ 'CATALOG.PROMOTIONS.PRODUCTS_RULE' | t }}</legend>
+      <fc-select
+        [formField]="promoForm.productsType"
+        [label]="'CATALOG.PROMOTIONS.FIELD.PRODUCTS_TYPE' | t"
+        [options]="selectionOptions()"
+        [error]="msg('productsType')"
+        (blurred)="touch(promoForm.productsType)"
+      />
+      <div class="row">
+        <fc-text-field
+          [formField]="promoForm.productsN"
+          type="number"
+          inputmode="numeric"
+          [label]="'CATALOG.PROMOTIONS.FIELD.PRODUCTS_N' | t"
+          [error]="msg('productsN')"
+          (blurred)="touch(promoForm.productsN)"
+        />
+        <fc-text-field
+          [formField]="promoForm.productsQt"
+          type="number"
+          inputmode="numeric"
+          [label]="'CATALOG.PROMOTIONS.FIELD.PRODUCTS_QT' | t"
+          [error]="msg('productsQt')"
+          (blurred)="touch(promoForm.productsQt)"
+        />
+      </div>
+      <fc-reference-picker
+        [formField]="promoForm.productIds"
+        [label]="'CATALOG.PROMOTIONS.FIELD.PRODUCTS' | t"
+        [loader]="productLoader()"
+        [labels]="productLabels()"
+        [emptyLabel]="'CATALOG.NO_NAME' | t"
+        [error]="msg('productIds')"
+        (blurred)="touch(promoForm.productIds)"
+      />
+    </fieldset>
+    <fieldset>
+      <legend>{{ 'CATALOG.PROMOTIONS.CATEGORIES_RULE' | t }}</legend>
+      <fc-select
+        [formField]="promoForm.categoriesType"
+        [label]="'CATALOG.PROMOTIONS.FIELD.CATEGORIES_TYPE' | t"
+        [options]="categorySelectionOptions()"
+        [error]="msg('categoriesType')"
+        (blurred)="touch(promoForm.categoriesType)"
+      />
+      <fc-text-field
+        [formField]="promoForm.categoriesN"
+        type="number"
+        inputmode="numeric"
+        [label]="'CATALOG.PROMOTIONS.FIELD.CATEGORIES_N' | t"
+        [error]="msg('categoriesN')"
+        (blurred)="touch(promoForm.categoriesN)"
+      />
+      <fc-reference-picker
+        [formField]="promoForm.categoryIds"
+        [label]="'CATALOG.PROMOTIONS.FIELD.CATEGORIES' | t"
+        [loader]="categoryLoader()"
+        [labels]="categoryLabels()"
+        [emptyLabel]="'CATALOG.NO_NAME' | t"
+        [error]="msg('categoryIds')"
+        (blurred)="touch(promoForm.categoryIds)"
+      />
+    </fieldset>
+  </section>
+
+  <section
+    id="promotion-panel-actions"
+    role="tabpanel"
+    aria-labelledby="promotion-tab-actions"
+    [hidden]="section() !== 'actions'"
+  >
+    <fc-select
+      [formField]="promoForm.discountType"
+      [label]="'CATALOG.PROMOTIONS.FIELD.DISCOUNT_TYPE' | t"
+      [options]="discountTypeOptions()"
+      [error]="msg('discountType')"
+      (blurred)="touch(promoForm.discountType)"
+    />
+    <div class="row">
+      <fc-text-field
+        [formField]="promoForm.discountValue"
+        type="number"
+        inputmode="decimal"
+        [label]="'CATALOG.PROMOTIONS.FIELD.DISCOUNT_VALUE' | t"
+        [error]="msg('discountValue')"
+        (blurred)="touch(promoForm.discountValue)"
+      />
+      <fc-select
+        [formField]="promoForm.discountValueType"
+        [label]="'CATALOG.PROMOTIONS.FIELD.DISCOUNT_VALUE_TYPE' | t"
+        [options]="discountValueTypeOptions()"
+        [error]="msg('discountValueType')"
+        (blurred)="touch(promoForm.discountValueType)"
+      />
+    </div>
+    <fc-reference-picker
+      [formField]="promoForm.actionProductIds"
+      [label]="'CATALOG.PROMOTIONS.FIELD.ACTION_PRODUCTS' | t"
+      [loader]="productLoader()"
+      [labels]="productLabels()"
+      [emptyLabel]="'CATALOG.NO_NAME' | t"
+      [error]="msg('actionProductIds')"
+      (blurred)="touch(promoForm.actionProductIds)"
+    />
+    <fc-reference-picker
+      [formField]="promoForm.actionCategoryIds"
+      [label]="'CATALOG.PROMOTIONS.FIELD.ACTION_CATEGORIES' | t"
+      [loader]="categoryLoader()"
+      [labels]="categoryLabels()"
+      [emptyLabel]="'CATALOG.NO_NAME' | t"
+      [error]="msg('actionCategoryIds')"
+      (blurred)="touch(promoForm.actionCategoryIds)"
+    />
+    <fc-checkbox
+      [formField]="promoForm.freeShipping"
+      [label]="'CATALOG.PROMOTIONS.FIELD.FREE_SHIPPING' | t"
+      [error]="msg('freeShipping')"
+      (blurred)="touch(promoForm.freeShipping)"
+    />
+  </section>
+
+  <div class="actions">
+    @if (readOnly()) {
+      <button fc-button variant="secondary" (click)="cancelled.emit()">
+        {{ 'COMMON.CLOSE' | t }}
+      </button>
+    } @else {
+      <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+        {{ 'COMMON.CANCEL' | t }}
+      </button>
+      <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+        {{ 'COMMON.SAVE' | t }}
+      </button>
+    }
+  </div>
+</form>

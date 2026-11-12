@@ -197,6 +197,34 @@ describe('routes', () => {
       expect(active?.textContent?.trim()).toBe(`⟦GROUP_SETTINGS.SECTION.${key}⟧`);
     });
 
+    it.each([
+      ['fidelity/card-types', 'fidelity:read', 'CARD_TYPES'],
+      ['fidelity/points-collections', 'fidelity:read', 'POINTS_COLLECTIONS'],
+      ['fidelity/prize-catalogues', 'fidelity:read', 'PRIZE_CATALOGUES'],
+      ['product-favorites', 'products:read', 'PRODUCT_FAVORITES'],
+      ['promotions', 'products:read', 'PROMOTIONS'],
+    ])('lazy-loads %s for the user of the group, who needs only %s', async (path, needed, kind) => {
+      setup();
+      sessionStorage.clear();
+      signIn({ role: 'CA', permissions: [needed, 'profile:read'] });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/groups/${GROUP}/${path}`);
+      const root = harness.routeNativeElement as HTMLElement;
+      expect(root.querySelector('main h2')?.textContent).toBe(`⟦CATALOG.${kind}.TITLE⟧`);
+    });
+
+    it.each([
+      ['fidelity/card-types', 'products:read'],
+      ['fidelity/points-collections', 'products:read'],
+      ['fidelity/prize-catalogues', 'groups:read'],
+      ['product-favorites', 'fidelity:read'],
+      ['promotions', 'fidelity:read'],
+    ])('protects %s: %s is not enough', async (path, granted) => {
+      await go(`/groups/${GROUP}/${path}`, sa([granted]));
+      expect(location()).toBe('/forbidden');
+    });
+
     it('shows the feature-disabled page', async () => {
       expect(await go('/feature-disabled', sa())).toBe('⟦ERRORS.FEATURE_DISABLED.TITLE⟧');
     });

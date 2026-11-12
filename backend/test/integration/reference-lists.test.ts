@@ -265,3 +265,37 @@ describe('GET /v1/groups/{groupId}/places', () => {
     assert.equal((await office.call('GET', gpath(0, 'places'), undefined)).status, 401);
   });
 });
+
+describe('the ids parameter of the companies and places lists', () => {
+  const c = (n: number) => hex(fixtureId('company', n));
+  const pl = (n: number) => hex(fixtureId('place', n));
+
+  it('resolves the given companies, ignoring case and repeats, inside the perimeter', async () => {
+    const sa = await as.call(group(0).sa, 'GET', gpath(0, 'companies', `?ids=${c(2)},${c(1).toUpperCase()},${c(1)}`));
+    assert.deepEqual(names(sa), ['company-001', 'company-002']);
+    // A CA holds only company 1: company 2 and a company of another group are not returned.
+    const ca = await as.call(group(0).ca, 'GET', gpath(0, 'companies', `?ids=${c(1)},${c(2)},${c(5)}`));
+    assert.deepEqual(names(ca), ['company-001']);
+    assert.deepEqual((await as.call(group(0).sa, 'GET', gpath(0, 'companies', `?ids=${c(5)}`))).body.data, []);
+  });
+
+  it('resolves the given places, ignoring case and repeats, inside the perimeter', async () => {
+    const sa = await as.call(group(0).sa, 'GET', gpath(0, 'places', `?ids=${pl(2)},${pl(1).toUpperCase()},${pl(1)}`));
+    assert.deepEqual(names(sa), ['place-001', 'place-002']);
+    const ca = await as.call(group(0).ca, 'GET', gpath(0, 'places', `?ids=${pl(1)},${pl(2)}`));
+    assert.deepEqual(names(ca), ['place-001']);
+    const pa = await as.call(group(0).pa, 'GET', gpath(0, 'places', `?ids=${pl(1)},${pl(2)},${pl(3)}`));
+    assert.deepEqual(names(pa), ['place-001']);
+    assert.deepEqual((await as.call(group(0).sa, 'GET', gpath(0, 'places', `?ids=${pl(3)}`))).body.data, []);
+    assert.deepEqual(names(await as.call(group(0).sa, 'GET', gpath(0, 'places', `?ids=${pl(1)},${pl(2)}&companyId=${c(2)}`))), ['place-002']);
+  });
+
+  it('rejects a malformed or oversized list with 422 and accepts exactly 100', async () => {
+    for (const resource of ['companies', 'places'] as const) {
+      for (const ids of ['not-an-id', `${c(1)},`, Array(101).fill(c(1)).join(',')]) {
+        assert.equal(as.failure(await as.call(group(0).sa, 'GET', gpath(0, resource, `?ids=${ids}`))).status, 422, ids);
+      }
+      assert.equal((await as.call(group(0).sa, 'GET', gpath(0, resource, `?ids=${Array(100).fill(c(1)).join(',')}`))).status, 200);
+    }
+  });
+});

@@ -1,10 +1,12 @@
 import {
   booleanAttribute,
+  afterNextRender,
   Component,
   computed,
   effect,
   ElementRef,
   inject,
+  Injector,
   input,
   model,
   output,
@@ -56,6 +58,13 @@ export class ReferencePicker {
    * the selected items by name (the names of the loaded items are known by the picker itself).
    */
   readonly labels = input<Readonly<Partial<Record<string, string>>> | null>(null);
+  /** Text shown for an item whose name is empty (for example a contact without a name). */
+  readonly emptyLabel = input<string | null>(null);
+  /**
+   * Lets the user reorder the selected items with "up" and "down" buttons (needs `labels`). The
+   * order of `value` is the order of the selection.
+   */
+  readonly ordered = input(false, { transform: booleanAttribute });
   /** Error message; empty or null when valid. */
   readonly error = input<string | null>(null);
   /** Disables the whole group. */
@@ -77,10 +86,19 @@ export class ReferencePicker {
     if (labels === null) {
       return [];
     }
-    return this.value().map((id) => ({ id, name: this.known()[id] ?? labels[id] ?? null }));
+    return this.value().map((id) => {
+      const name = this.known()[id] ?? labels[id] ?? null;
+      return {
+        id,
+        text: name === null ? this.i18n.t('REFERENCE_PICKER.UNKNOWN') : this.show(name),
+      };
+    });
   });
+  /** Announcement of the last move, for screen readers. */
+  protected readonly moved = signal('');
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
   private requestId = 0;
 
   constructor() {
@@ -106,6 +124,34 @@ export class ReferencePicker {
 
   protected remove(id: string): void {
     this.value.update((ids) => ids.filter((other) => other !== id));
+  }
+
+  /** Text of an item name: the neutral label when the name is empty. */
+  protected show(name: string): string {
+    return name === '' ? (this.emptyLabel() ?? '') : name;
+  }
+
+  /** Moves a selected item one place up (`-1`) or down (`1`) and keeps the focus on its button. */
+  protected move(id: string, step: -1 | 1): void {
+    const ids = [...this.value()];
+    const from = ids.indexOf(id);
+    const to = from + step;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    this.value.set(ids);
+    const text = this.chosen()[to].text;
+    this.moved.set(
+      this.i18n.t('REFERENCE_PICKER.MOVED', { name: text, position: to + 1, total: ids.length }),
+    );
+    afterNextRender(
+      () => {
+        const [up, down] = [
+          ...this.host.nativeElement.querySelectorAll<HTMLButtonElement>('button[data-move]'),
+        ].filter((button) => button.dataset['move'] === id);
+        const [wanted, other] = step === -1 ? [up, down] : [down, up];
+        (wanted.disabled ? other : wanted).focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   protected loadMore(): void {

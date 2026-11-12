@@ -3,8 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { GroupSettingsState } from '../app/features/groups/group-settings-state';
 import { I18nService } from '../app/core/i18n/i18n.service';
 import { ToastService } from '../app/shared/ui/toast/toast.service';
+import { Role } from '../app/core/session/session.types';
 import { API, backend, provideApiTesting, settle } from './api';
 import { emulateNativeDialog } from './dialog';
+import { signIn } from './session';
 
 /** Group of the catalog pages in tests. */
 export const CATALOG_GROUP = 'g1';
@@ -17,7 +19,16 @@ export const CATALOG_GROUP = 'g1';
  * @param segment URL segment of its catalog.
  * @param canUpdate Whether the user may change the group.
  */
-export async function renderCatalogPage<C>(page: Type<C>, segment: string, canUpdate = true) {
+export async function renderCatalogPage<C>(
+  page: Type<C>,
+  segment: string,
+  canUpdate = true,
+  options: {
+    inputs?: Record<string, unknown>;
+    /** Signs in a user with this role and these permissions (both given). */
+    user?: { role: Role; permissions: string[] };
+  } = {},
+) {
   emulateNativeDialog();
   TestBed.configureTestingModule({
     providers: [
@@ -28,10 +39,16 @@ export async function renderCatalogPage<C>(page: Type<C>, segment: string, canUp
       },
     ],
   });
+  if (options.user !== undefined) {
+    signIn(options.user);
+  }
   vi.spyOn(TestBed.inject(I18nService), 't').mockImplementation((key, params) =>
     params === undefined ? key : `${key} ${JSON.stringify(params)}`,
   );
   const fixture = TestBed.createComponent(page);
+  for (const [name, value] of Object.entries(options.inputs ?? {})) {
+    fixture.componentRef.setInput(name, value);
+  }
   document.body.appendChild(fixture.nativeElement);
   fixture.detectChanges();
   const root = fixture.nativeElement as HTMLElement;

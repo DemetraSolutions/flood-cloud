@@ -1,4 +1,4 @@
-<dialog [attr.aria-labelledby]="headingId" (close)="onClose()">
+<dialog [class.wide]="wide()" [attr.aria-labelledby]="headingId" (close)="onClose()">
   <div class="panel">
     <header>
       <h2 [id]="headingId">{{ heading() }}</h2>

@@ -31,8 +31,10 @@ export interface AnonymousAuth {
 /** A route reserved to authenticated backoffice users holding a permission. */
 export interface UserAuth {
   readonly kind: 'user';
-  /** Permission of the catalog the caller must hold. */
-  readonly permission: Permission;
+  /** Permission of the catalog the caller must hold. Exactly one of `permission` and `anyPermission` is declared. */
+  readonly permission?: Permission;
+  /** Alternative to `permission`: the caller must hold at least one of these (a non-empty list from the catalog). */
+  readonly anyPermission?: readonly Permission[];
   /**
    * The path has a `:groupId` parameter: the group is verified against the caller's scope and the
    * group's state before the permission check. Must be `true` exactly when the path contains `:groupId`.
@@ -127,7 +129,7 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     if (typeof route.path !== 'string' || !route.path.startsWith('/')) {
       problems.push(`${label}: path must be a string starting with "/"`);
     }
-    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown } | undefined;
+    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown } | undefined;
     if (auth === undefined || auth === null) {
       problems.push(`${label}: missing auth declaration`);
     } else if (auth.kind === 'anonymous') {
@@ -135,7 +137,16 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
         problems.push(`${label}: anonymous route needs a non-empty reason`);
       }
     } else if (auth.kind === 'user') {
-      if (!isPermission(auth.permission)) {
+      if (auth.anyPermission !== undefined) {
+        const any: unknown = auth.anyPermission;
+        if (auth.permission !== undefined) {
+          problems.push(`${label}: declare either permission or anyPermission, not both`);
+        } else if (!Array.isArray(any) || any.length === 0) {
+          problems.push(`${label}: anyPermission must be a non-empty list`);
+        } else if (!any.every(isPermission)) {
+          problems.push(`${label}: unknown permission`);
+        }
+      } else if (!isPermission(auth.permission)) {
         problems.push(`${label}: unknown permission`);
       }
       if (options.authenticate === undefined) {
@@ -272,7 +283,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * @param routes Route declarations.
  * @param options The `authenticate` middleware and the rate limit dependencies, needed by `user` routes.
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
- * empty reason, unknown permission, unknown feature or a feature without `group: true`, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
+ * empty reason, unknown permission, both or an empty `anyPermission`, unknown feature or a feature without `group: true`, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
  * malformed rate limit rules, malformed `middleware` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
  * auth kind not allowed on the surface, disallowed method,
  * bad path, duplicate method and path).
@@ -313,7 +324,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         ...beforeBody,
         ...(route.auth.allowWithPendingPasswordChange === true ? [] : [refusePendingPasswordChange]),
         ...(grouped ? [requireGroupAccess(groupAccess!.groups)] : []),
-        requirePermission(route.auth.permission, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
+        requirePermission(route.auth.anyPermission ?? route.auth.permission!, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
         ...(route.auth.feature === undefined ? [] : [requireFeature(route.auth.feature)]),
       );
     } else {

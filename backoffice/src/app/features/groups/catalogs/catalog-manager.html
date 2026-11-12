@@ -8,6 +8,9 @@
 @if (atLimit()) {
   <p class="hint" role="status">{{ 'CATALOG.LIMIT_REACHED' | t: { max: limit()! } }}</p>
 }
+@if (showLockedNote()) {
+  <p class="hint" role="note">{{ lockedNote()! | t }}</p>
+}
 
 @if (resource.error()) {
   <fc-error-state
@@ -26,9 +29,23 @@
     [emptyTitle]="text('EMPTY')"
     [emptyMessage]="text('EMPTY_MESSAGE')"
   >
-    @if (canWrite()) {
+    @if (canWrite() || viewable()) {
       <ng-template fcRowActions let-row>
-        @if (canEdit(row)) {
+        @if (canView(row)) {
+          <fc-actions-menu
+            [text]="'CATALOG.ACTIONS' | t"
+            [label]="rowLabel('CATALOG.ACTIONS_LABEL', row)"
+          >
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('CATALOG.VIEW_LABEL', row)"
+              (click)="view(row)"
+            >
+              {{ 'CATALOG.VIEW' | t }}
+            </button>
+          </fc-actions-menu>
+        } @else if (canEdit(row)) {
           <fc-actions-menu
             [text]="'CATALOG.ACTIONS' | t"
             [label]="rowLabel('CATALOG.ACTIONS_LABEL', row)"
@@ -59,11 +76,17 @@
 }
 
 <fc-dialog
-  [heading]="text(editing() === null ? 'NEW_TITLE' : 'EDIT_TITLE')"
+  [heading]="
+    viewing() ? ('CATALOG.VIEW_TITLE' | t) : text(editing() === null ? 'NEW_TITLE' : 'EDIT_TITLE')
+  "
+  [wide]="wide()"
   [open]="editorOpen()"
   (openChange)="editorOpen.set($event)"
 >
   @if (editorOpen()) {
+    @if (viewing() && lockedNote(); as note) {
+      <p class="hint" role="note">{{ note | t }}</p>
+    }
     <ng-container *ngTemplateOutlet="editor(); context: context()" />
   }
 </fc-dialog>

@@ -515,7 +515,7 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
 - **Autenticazione e permesso:** Bearer backoffice, `companies:read`
 - **Ruoli:** PSA, D e SA nel proprio perimetro, CA le proprie aziende; il PA non ha `companies:read` (`403`)
 - **Parametri di percorso:** `groupId` (24 caratteri esadecimali); un id malformato o fuori perimetro dà `404 NOT_FOUND`
-- **Query:** parametri di lista; `trashed` (`true` per il cestino; default `false`)
+- **Query:** parametri di lista; `trashed` (`true` per il cestino; default `false`); `ids` (da 1 a 100 id di 24 caratteri esadecimali separati da virgola, duplicati e maiuscole ignorati, stessa semantica di `lookup`): risolve i nomi delle aziende già scelte, sempre nel perimetro del chiamante (un id fuori perimetro non è restituito); `422` se malformato o oltre 100
 - **Risposta:** `200`
   ```json
   {
@@ -532,7 +532,7 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
 - **Autenticazione e permesso:** Bearer backoffice, `places:read`
 - **Ruoli:** i ruoli con il permesso, nel proprio perimetro
 - **Parametri di percorso:** `groupId` (come sopra)
-- **Query:** parametri di lista; `trashed` (default `false`); `companyId` (24 caratteri esadecimali) per limitare a un'azienda. Un'azienda fuori dal perimetro del chiamante non dà errore: la lista è **vuota**.
+- **Query:** parametri di lista; `trashed` (default `false`); `companyId` (24 caratteri esadecimali) per limitare a un'azienda. Un'azienda fuori dal perimetro del chiamante non dà errore: la lista è **vuota**. `ids` (da 1 a 100 id separati da virgola, come per le aziende) risolve i nomi dei punti vendita già scelti, sempre nel perimetro del chiamante (un id fuori perimetro non è restituito); `422` se malformato o oltre 100.
 - **Risposta:** `200`; `companyId` è `null` se il punto vendita non ha azienda
   ```json
   {
@@ -676,8 +676,8 @@ Rappresentazione del gruppo:
 - `/services` resta invariato (permesso `users:read` e feature `services`, per la scheda utente).
 
 ### GET /v1/groups/{groupId}/lookup/price-lists
-- **Superficie:** backoffice. Elenco compatto dei listini del gruppo, per assegnarli agli utenti (CA e PA non hanno `groups:read`); la modifica dei listini resta a PSA, D, SA (`/price-lists`).
-- **Autenticazione e permesso:** Bearer backoffice, `users:read`; route di gruppo (stesso perimetro e stessi `404` delle altre); nessuna feature richiesta.
+- **Superficie:** backoffice. Elenco compatto dei listini del gruppo, per assegnarli agli utenti e ai tipi di carta (CA e PA non hanno `groups:read`); la modifica dei listini resta a PSA, D, SA (`/price-lists`).
+- **Autenticazione e permesso:** Bearer backoffice, **almeno uno** tra `users:read`, `fidelity:read` e `groups:read` (l'elenco compatto non è sensibile; serve alla scheda utente e ai tipi di carta fedeltà); `403` se il chiamante non ne ha nessuno. Route di gruppo (stesso perimetro e stessi `404` delle altre); nessuna feature richiesta.
 - **Risposta:** `200`, `{ "data": [{ "id", "name", "enabled", "isDefault" }] }`, senza paginazione (al massimo 50 listini, come `GET /price-lists`); solo i listini, mai altri dati del gruppo.
   ```json
   { "data": [{ "id": "665f1c2e9b1d4a0012ab34f0", "name": "Listino 1", "enabled": true, "isDefault": true }] }

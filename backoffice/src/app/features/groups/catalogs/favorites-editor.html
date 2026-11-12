@@ -1,0 +1,30 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="favoritesForm.name"
+    [label]="'CATALOG.PRODUCT_FAVORITES.FIELD.NAME' | t"
+    [error]="message(favoritesForm.name, 'name')"
+    (blurred)="favoritesForm.name().markAsTouched()"
+  />
+  <p class="note">{{ 'CATALOG.PRODUCT_FAVORITES.ORDER_HINT' | t }}</p>
+  <fc-reference-picker
+    [formField]="favoritesForm.productIds"
+    [label]="'CATALOG.PRODUCT_FAVORITES.FIELD.PRODUCTS' | t"
+    [loader]="productLoader()"
+    [labels]="productLabels()"
+    [ordered]="true"
+    [emptyLabel]="'CATALOG.NO_NAME' | t"
+    [error]="message(favoritesForm.productIds, 'products')"
+    (blurred)="favoritesForm.productIds().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

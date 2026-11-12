@@ -6,6 +6,7 @@ import { API, backend, errorBody, provideApiTesting, settle } from '../../../../
 import { emulateNativeDialog } from '../../../../testing/dialog';
 import { apiBaseUrlInterceptor } from '../../../core/api/api-base-url.interceptor';
 import { AppConfig } from '../../../core/config/app-config';
+import { GroupContext } from '../../../core/groups/group-context';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { ToastService } from '../../../shared/ui/toast/toast.service';
 import { CatalogManager } from './catalog-manager';
@@ -34,18 +35,24 @@ interface Row {
     [limit]="limit()"
     [locked]="locked"
     [kept]="kept"
+    [lockedNote]="lockedNote()"
+    [wide]="wide()"
+    [adopt]="adopt()"
+    [viewable]="viewable()"
   >
     <ng-template
       #editor
       let-item
       let-error="error"
       let-busy="busy"
+      let-readonly="readonly"
       let-save="save"
       let-cancel="cancel"
     >
       <p class="editing">{{ item === null ? 'new' : item.name }}</p>
       <p class="failure">{{ error === null ? '' : error.code }}</p>
       <p class="busy">{{ busy }}</p>
+      <p class="readonly">{{ readonly }}</p>
       <button type="button" class="do-save" (click)="save({ name: 'body' })">go</button>
       <button type="button" class="do-cancel" (click)="cancel()">stop</button>
     </ng-template>
@@ -57,6 +64,10 @@ class Host {
   readonly allowDelete = signal(true);
   readonly updateMethod = signal<'PATCH' | 'PUT'>('PATCH');
   readonly limit = signal<number | null>(null);
+  readonly lockedNote = signal<string | null>(null);
+  readonly wide = signal(false);
+  readonly adopt = signal(false);
+  readonly viewable = signal(false);
   readonly columns = [{ key: 'name', header: 'Name', cell: (row: Row) => row.name }];
   readonly idOf = (row: Row) => row.id;
   readonly nameOf = (row: Row) => row.name;
@@ -454,5 +465,98 @@ describe('CatalogManager: deleting', () => {
     await view();
     expect(toasts()).toEqual([['error', 'CATALOG.ERROR.CONCURRENT']]);
     await load();
+  });
+
+  describe('explanation of read-only elements', () => {
+    it('does not show the note when no element is read-only', async () => {
+      const { host, load, root } = await render();
+      host.lockedNote.set('CATALOG.CARD_TYPES.LOCKED_NOTE');
+      await load([ALPHA, BETA]);
+      expect(root.querySelector('[role=note]')).toBeNull();
+    });
+
+    it('shows the note when an element is locked, and not without a note text', async () => {
+      const { host, load, root, view } = await render();
+      host.lockedNote.set('CATALOG.CARD_TYPES.LOCKED_NOTE');
+      await load([ALPHA, { id: 'c', name: 'Gamma', locked: true }]);
+      expect(root.querySelector('[role=note]')?.textContent?.trim()).toBe(
+        'CATALOG.CARD_TYPES.LOCKED_NOTE',
+      );
+      host.lockedNote.set(null);
+      await view();
+      expect(root.querySelector('[role=note]')).toBeNull();
+    });
+  });
+
+  describe('wide dialog', () => {
+    it('makes the editor dialog wide on request', async () => {
+      const { host, load, dialogs, view } = await render();
+      await load();
+      expect(dialogs()[0].classList.contains('wide')).toBe(false);
+      host.wide.set(true);
+      await view();
+      expect(dialogs()[0].classList.contains('wide')).toBe(true);
+    });
+  });
+
+  describe('working group', () => {
+    it('makes the group of the page the working one once it loaded, when asked', async () => {
+      const adopt = vi.spyOn(GroupContext.prototype, 'adopt');
+      const { host, load } = await render();
+      host.adopt.set(true);
+      await load();
+      expect(adopt).toHaveBeenCalledWith('g1');
+    });
+
+    it('leaves the working group alone by default', async () => {
+      const adopt = vi.spyOn(GroupContext.prototype, 'adopt');
+      const { load } = await render();
+      await load();
+      expect(adopt).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('viewing read-only elements', () => {
+    const LOCKED: Row = { id: 'c', name: 'Gamma', locked: true };
+
+    it('offers only "View" on a locked element when asked, and opens it for reading', async () => {
+      const { host, load, byLabel, press, dialogs, view, root } = await render();
+      host.viewable.set(true);
+      host.lockedNote.set('CATALOG.CARD_TYPES.LOCKED_NOTE');
+      await load([ALPHA, LOCKED]);
+      expect(byLabel('CATALOG.EDIT_LABEL', 'Gamma')).toBeNull();
+      expect(byLabel('CATALOG.DELETE_LABEL', 'Gamma')).toBeNull();
+      expect(byLabel('CATALOG.VIEW_LABEL', 'Alpha')).toBeNull();
+      await press(byLabel('CATALOG.VIEW_LABEL', 'Gamma'));
+      const dialog = dialogs()[0];
+      expect(dialog.hasAttribute('open')).toBe(true);
+      expect(dialog.querySelector('h2')?.textContent).toBe('CATALOG.VIEW_TITLE');
+      expect(dialog.querySelector('.editing')?.textContent).toBe('Gamma');
+      expect(dialog.querySelector('.readonly')?.textContent).toBe('true');
+      expect(dialog.querySelector('[role=note]')?.textContent?.trim()).toBe(
+        'CATALOG.CARD_TYPES.LOCKED_NOTE',
+      );
+      await view();
+      root.querySelector<HTMLButtonElement>('.do-cancel')!.click();
+    });
+
+    it('opens an editable element normally, not for reading', async () => {
+      const { host, load, byLabel, press, dialogs } = await render();
+      host.viewable.set(true);
+      await load([ALPHA, LOCKED]);
+      await press(byLabel('CATALOG.EDIT_LABEL', 'Alpha'));
+      expect(dialogs()[0].querySelector('.readonly')?.textContent).toBe('false');
+      expect(dialogs()[0].querySelector('[role=note]')).toBeNull();
+    });
+
+    it('shows the actions to those who cannot write only when elements are viewable', async () => {
+      const { host, load, byLabel, view } = await render();
+      host.canWrite.set(false);
+      await load([LOCKED]);
+      expect(byLabel('CATALOG.VIEW_LABEL', 'Gamma')).toBeNull();
+      host.viewable.set(true);
+      await view();
+      expect(byLabel('CATALOG.VIEW_LABEL', 'Gamma')).not.toBeNull();
+    });
   });
 });

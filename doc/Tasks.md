@@ -9,6 +9,7 @@
 > - Stato al 2026-11-06: aree 1, 2 e 3 completate; area 4 (gruppi): backend realizzato (passi 4B, 4B-bis, 4U), restano 4.4.2 e il backoffice.
 > - Stato al 2026-11-12: il passo 4C (backoffice dei gruppi) è diviso in **4C-1** (fatto: feature, elenco gruppi, scheda del gruppo con integrazioni e sei cataloghi), **4C-2** (form utente completo e profilo) e **4C-3** (fidelity, preferiti, promozioni, con letture compatte già nel backend); decisione dell'utente del 2026-11-12.
 > - Stato al 2026-11-12 (aggiornamento): **4C-2 realizzato** (form utente a 6 tab con permessi POS, listini, servizi, turni, PIN e avatar; profilo con avatar, preferenze della cassa e PIN proprio); resta **4C-3**. Documentazione in `doc/Technical-Guide.md` §11.12.
+> - Stato al 2026-11-12 (aggiornamento): **4C-3 realizzato** (fidelity, preferiti dei prodotti e promozioni nel backoffice, con vista in sola lettura per CA e PA); l'**area 4 è completata salvo 4.4.2 e 4.5.3**. Documentazione in `doc/Technical-Guide.md` §11.13.
 
 ## Indice
 0. [Decisioni e coesistenza con il legacy](#0-decisioni-e-coesistenza-con-il-legacy)

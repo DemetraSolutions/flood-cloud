@@ -11,6 +11,7 @@ import type { PriceList } from '../groups/catalogs/price-lists.ts';
 import type { CatalogsService } from '../groups/catalogs/catalogs.service.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import { LOOKUP_LIST, LOOKUP_NAME } from './lookup.list.ts';
+import { parseIds } from './lookup.schemas.ts';
 import type { LookupProductsQuery, LookupQuery } from './lookup.schemas.ts';
 import type { LookupRepository } from './lookup.repository.ts';
 
@@ -61,7 +62,7 @@ export interface LookupDeps {
 
 /** The ids of `ids` (already shape-checked by the schema) as distinct ObjectIds, or `null` when the parameter is absent. */
 function idsOf(query: LookupQuery): ObjectId[] | null {
-  return query.ids === undefined ? null : [...new Set(query.ids.toLowerCase().split(','))].map((id) => ObjectId.createFromHexString(id));
+  return parseIds(query.ids);
 }
 
 function itemOf(document: Document): LookupItem {

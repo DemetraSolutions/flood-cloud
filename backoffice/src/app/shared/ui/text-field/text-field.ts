@@ -13,7 +13,16 @@ import { uniqueId } from '../unique-id';
 
 /** Input types supported by {@link TextField}. */
 export type TextFieldType =
-  'text' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'number' | 'date' | 'time';
+  | 'text'
+  | 'email'
+  | 'password'
+  | 'search'
+  | 'tel'
+  | 'url'
+  | 'number'
+  | 'date'
+  | 'time'
+  | 'datetime-local';
 
 /**
  * Labelled text input on a native `<input>`. The label is always visible; hint and error are

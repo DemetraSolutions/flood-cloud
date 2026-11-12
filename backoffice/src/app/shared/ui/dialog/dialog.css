@@ -9,6 +9,10 @@ dialog {
   box-shadow: var(--shadow-lg);
 }
 
+dialog.wide {
+  inline-size: min(56rem, calc(100vw - 2 * var(--space-4)));
+}
+
 dialog::backdrop {
   background: var(--color-overlay);
 }

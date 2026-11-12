@@ -11,19 +11,19 @@ export type PermissionDecisionHook = (principal: AuthPrincipal, granted: boolean
  * Builds the middleware that enforces a permission. It must run after the authentication
  * middleware (and after the group access check on group routes).
  *
- * @param permission Permission the route requires.
+ * @param permission Permission the route requires, or a list of alternatives of which the caller must hold at least one.
  * @param onDecision Optional hook told the outcome (used to audit cross-group access, so a denied
  * request is recorded as denied and not as an access). If it fails, the request fails.
  * @returns A handler answering `401 UNAUTHENTICATED` when `res.locals.auth` is missing and
- * `403 FORBIDDEN` when the principal lacks the permission; otherwise it continues.
+ * `403 FORBIDDEN` when the principal holds none of the permissions; otherwise it continues.
  */
-export function requirePermission(permission: Permission, onDecision?: PermissionDecisionHook): RequestHandler {
+export function requirePermission(permission: Permission | readonly Permission[], onDecision?: PermissionDecisionHook): RequestHandler {
   return async (req, res, next) => {
     const principal = res.locals.auth;
     if (principal === undefined) {
       throw new AppError('UNAUTHENTICATED');
     }
-    const granted = hasPermission(principal, permission);
+    const granted = (typeof permission === 'string' ? [permission] : permission).some((candidate) => hasPermission(principal, candidate));
     if (onDecision !== undefined) {
       await onDecision(principal, granted, req, res);
     }

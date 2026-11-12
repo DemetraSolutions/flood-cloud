@@ -10,19 +10,40 @@
   <p class="count">{{ 'REFERENCE_PICKER.SELECTED' | t: { count: value().length } }}</p>
   @if (labels() !== null && chosen().length > 0) {
     <ul class="chosen" [attr.aria-label]="'REFERENCE_PICKER.CHOSEN' | t">
-      @for (entry of chosen(); track entry.id) {
+      @for (entry of chosen(); track entry.id; let first = $first; let last = $last) {
         <li>
-          <span>{{ entry.name ?? ('REFERENCE_PICKER.UNKNOWN' | t) }}</span>
-          <button
-            fc-icon-button
-            icon="close"
-            [disabled]="disabled()"
-            [label]="'REFERENCE_PICKER.REMOVE' | t: { name: entry.name ?? '' }"
-            (click)="remove(entry.id)"
-          ></button>
+          <span>{{ entry.text }}</span>
+          <span class="entry-actions">
+            @if (ordered()) {
+              <button
+                fc-icon-button
+                icon="chevron-up"
+                [attr.data-move]="entry.id"
+                [disabled]="disabled() || first"
+                [label]="'REFERENCE_PICKER.MOVE_UP' | t: { name: entry.text }"
+                (click)="move(entry.id, -1)"
+              ></button>
+              <button
+                fc-icon-button
+                icon="chevron-down"
+                [attr.data-move]="entry.id"
+                [disabled]="disabled() || last"
+                [label]="'REFERENCE_PICKER.MOVE_DOWN' | t: { name: entry.text }"
+                (click)="move(entry.id, 1)"
+              ></button>
+            }
+            <button
+              fc-icon-button
+              icon="close"
+              [disabled]="disabled()"
+              [label]="'REFERENCE_PICKER.REMOVE' | t: { name: entry.text }"
+              (click)="remove(entry.id)"
+            ></button>
+          </span>
         </li>
       }
     </ul>
+    <p class="visually-hidden" role="status">{{ moved() }}</p>
   }
   <ul>
     @for (item of items(); track item.id) {
@@ -35,7 +56,7 @@
             (change)="toggle(item.id, $any($event.target).checked)"
             (blur)="blurred.emit()"
           />
-          {{ item.name }}
+          {{ show(item.name) }}
         </label>
       </li>
     }

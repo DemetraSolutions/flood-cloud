@@ -1,5 +1,14 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, effect, ElementRef, inject, input, model, output } from '@angular/core';
+import {
+  booleanAttribute,
+  Component,
+  effect,
+  ElementRef,
+  inject,
+  input,
+  model,
+  output,
+} from '@angular/core';
 import { TPipe } from '../../../core/i18n/t-pipe';
 import { IconButton } from '../icon-button/icon-button';
 import { uniqueId } from '../unique-id';
@@ -23,6 +32,8 @@ export class Dialog {
 
   /** Title of the dialog; also its accessible name. */
   readonly heading = input.required<string>();
+  /** Wider panel, for long forms. */
+  readonly wide = input(false, { transform: booleanAttribute });
   /** Whether the dialog is open (two-way). */
   readonly open = model(false);
   /** Emitted after the dialog closed, whatever the reason. */

@@ -1,0 +1,22 @@
+<div class="tabs" role="tablist" [attr.aria-label]="label()" (keydown)="onKey($event)">
+  @for (tab of tabs(); track tab.id) {
+    <button
+      type="button"
+      role="tab"
+      class="tab"
+      [id]="idPrefix() + '-tab-' + tab.id"
+      [attr.aria-selected]="active() === tab.id"
+      [attr.aria-controls]="idPrefix() + '-panel-' + tab.id"
+      [tabindex]="active() === tab.id ? 0 : -1"
+      (click)="active.set(tab.id)"
+    >
+      {{ tab.label }}
+      @let errors = tab.errors ?? 0;
+      @if (errors > 0) {
+        <fc-status-badge tone="danger">
+          {{ 'TAB_LIST.ERRORS' | t: { count: errors } }}
+        </fc-status-badge>
+      }
+    </button>
+  }
+</div>

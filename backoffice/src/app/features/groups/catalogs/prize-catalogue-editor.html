@@ -1,0 +1,100 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="catalogueForm.name"
+    [label]="'CATALOG.PRIZE_CATALOGUES.FIELD.NAME' | t"
+    [error]="message(catalogueForm.name, 'name')"
+    (blurred)="catalogueForm.name().markAsTouched()"
+  />
+  <fc-checkbox
+    [formField]="catalogueForm.enabled"
+    [label]="'CATALOG.PRIZE_CATALOGUES.FIELD.ENABLED' | t"
+    [error]="message(catalogueForm.enabled, 'enabled')"
+    (blurred)="catalogueForm.enabled().markAsTouched()"
+  />
+
+  <section class="prizes" [attr.aria-label]="'CATALOG.PRIZE_CATALOGUES.PRIZES' | t">
+    <h3>{{ 'CATALOG.PRIZE_CATALOGUES.PRIZES' | t }}</h3>
+    @if (prizeMessage(null, ''); as message) {
+      <fc-form-error [message]="message" />
+    }
+    @if (catalogueForm.prizes().value().length === 0) {
+      <p class="note">{{ 'CATALOG.PRIZE_CATALOGUES.NO_PRIZES' | t }}</p>
+    }
+    @for (prize of catalogueForm.prizes; track $index) {
+      <fieldset>
+        <legend>{{ 'CATALOG.PRIZE_CATALOGUES.PRIZE' | t: { n: $index + 1 } }}</legend>
+        <fc-text-field
+          [formField]="prize.name"
+          [label]="'CATALOG.PRIZE_CATALOGUES.PRIZE_FIELD.NAME' | t: { n: $index + 1 }"
+          [error]="fieldMessage(prize.name, $index, 'name')"
+          (blurred)="prize.name().markAsTouched()"
+        />
+        <fc-checkbox
+          [formField]="prize.enabled"
+          [label]="'CATALOG.PRIZE_CATALOGUES.PRIZE_FIELD.ENABLED' | t: { n: $index + 1 }"
+          [error]="fieldMessage(prize.enabled, $index, 'enabled')"
+          (blurred)="prize.enabled().markAsTouched()"
+        />
+        <fc-textarea
+          [formField]="prize.description"
+          [rows]="2"
+          [label]="'CATALOG.PRIZE_CATALOGUES.PRIZE_FIELD.DESCRIPTION' | t: { n: $index + 1 }"
+          [error]="fieldMessage(prize.description, $index, 'description')"
+          (blurred)="prize.description().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="prize.pointsValue"
+          type="number"
+          inputmode="decimal"
+          [label]="'CATALOG.PRIZE_CATALOGUES.PRIZE_FIELD.POINTS' | t: { n: $index + 1 }"
+          [error]="fieldMessage(prize.pointsValue, $index, 'pointsValue')"
+          (blurred)="prize.pointsValue().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="prize.extraPrice"
+          type="number"
+          inputmode="decimal"
+          [label]="'CATALOG.PRIZE_CATALOGUES.PRIZE_FIELD.EXTRA_PRICE' | t: { n: $index + 1 }"
+          [error]="fieldMessage(prize.extraPrice, $index, 'extraPrice')"
+          (blurred)="prize.extraPrice().markAsTouched()"
+        />
+        <fc-textarea
+          [formField]="prize.redemptionConditions"
+          [rows]="2"
+          [label]="'CATALOG.PRIZE_CATALOGUES.PRIZE_FIELD.CONDITIONS' | t: { n: $index + 1 }"
+          [error]="fieldMessage(prize.redemptionConditions, $index, 'redemptionConditions')"
+          (blurred)="prize.redemptionConditions().markAsTouched()"
+        />
+        @if (prize().value().imageSet) {
+          <p class="note">{{ 'CATALOG.PRIZE_CATALOGUES.IMAGE_SET' | t }}</p>
+        }
+        <button
+          fc-button
+          variant="ghost"
+          [attr.aria-label]="'CATALOG.PRIZE_CATALOGUES.REMOVE_LABEL' | t: { n: $index + 1 }"
+          (click)="removePrize($index)"
+        >
+          {{ 'CATALOG.PRIZE_CATALOGUES.REMOVE' | t }}
+        </button>
+      </fieldset>
+    }
+    <button fc-button variant="secondary" [disabled]="full()" (click)="addPrize()">
+      {{ 'CATALOG.PRIZE_CATALOGUES.ADD' | t }}
+    </button>
+    @if (full()) {
+      <p class="note" role="status">{{ 'CATALOG.LIMIT_REACHED' | t: { max: maxPrizes } }}</p>
+    }
+  </section>
+
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

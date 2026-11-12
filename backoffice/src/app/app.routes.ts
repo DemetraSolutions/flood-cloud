@@ -106,6 +106,55 @@ const catalogRoutes: Routes = [
 ];
 
 /**
+ * Fidelity, product favorites and promotions of the group (`groups/:groupId/…`, outside the
+ * record of the group: company and store administrators reach them too). Fidelity needs
+ * `fidelity:read`, favorites and promotions `products:read`; the server checks the group against
+ * the perimeter of the user. Each route carries its full path so that the group reaches the page
+ * as an input.
+ */
+const groupCatalogRoutes: Routes = [
+  {
+    path: 'groups/:groupId/fidelity/card-types',
+    canMatch: [permission('fidelity:read')],
+    title: 'CATALOG.CARD_TYPES.TITLE',
+    loadComponent: () =>
+      import('./features/groups/catalogs/card-types-page').then((m) => m.CardTypesPage),
+  },
+  {
+    path: 'groups/:groupId/fidelity/points-collections',
+    canMatch: [permission('fidelity:read')],
+    title: 'CATALOG.POINTS_COLLECTIONS.TITLE',
+    loadComponent: () =>
+      import('./features/groups/catalogs/points-collections-page').then(
+        (m) => m.PointsCollectionsPage,
+      ),
+  },
+  {
+    path: 'groups/:groupId/fidelity/prize-catalogues',
+    canMatch: [permission('fidelity:read')],
+    title: 'CATALOG.PRIZE_CATALOGUES.TITLE',
+    loadComponent: () =>
+      import('./features/groups/catalogs/prize-catalogues-page').then((m) => m.PrizeCataloguesPage),
+  },
+  {
+    path: 'groups/:groupId/product-favorites',
+    canMatch: [permission('products:read')],
+    title: 'CATALOG.PRODUCT_FAVORITES.TITLE',
+    loadComponent: () =>
+      import('./features/groups/catalogs/product-favorites-page').then(
+        (m) => m.ProductFavoritesPage,
+      ),
+  },
+  {
+    path: 'groups/:groupId/promotions',
+    canMatch: [permission('products:read')],
+    title: 'CATALOG.PROMOTIONS.TITLE',
+    loadComponent: () =>
+      import('./features/groups/catalogs/promotions-page').then((m) => m.PromotionsPage),
+  },
+];
+
+/**
  * Record of a group: general data, features, integrations and the six catalogs, as child routes
  * of one layout page (`groups:read`; the server checks the group against the user's perimeter).
  */
@@ -210,6 +259,7 @@ export const routes: Routes = [
             loadComponent: () => import('./features/groups/groups-list').then((m) => m.GroupsList),
           },
           ...groupSettingsRoutes,
+          ...groupCatalogRoutes,
           {
             path: 'users',
             canMatch: [role('PSA', 'D'), permission('users:read')],

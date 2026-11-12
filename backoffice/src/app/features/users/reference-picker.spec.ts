@@ -20,6 +20,8 @@ const page = (data: object[], next: string | null = null) => ({
     label="Aziende"
     [loader]="loader()"
     [labels]="labels()"
+    [emptyLabel]="emptyLabel()"
+    [ordered]="ordered()"
     [(value)]="value"
     [error]="error()"
     [disabled]="disabled()"
@@ -30,6 +32,8 @@ class Host {
   readonly loader = signal<ReferenceLoader>(() => Promise.resolve(page([A, B], 'c1')));
   readonly value = signal<string[]>(['z']);
   readonly labels = signal<Readonly<Partial<Record<string, string>>> | null>(null);
+  readonly emptyLabel = signal<string | null>(null);
+  readonly ordered = signal(false);
   readonly error = signal<string | null>(null);
   readonly disabled = signal(false);
   readonly blurs = signal(0);
@@ -203,7 +207,9 @@ describe('ReferencePicker', () => {
       expect(remove[0].getAttribute('aria-label')).toBe(
         'REFERENCE_PICKER.REMOVE {"name":"Ypsilon"}',
       );
-      expect(remove[1].getAttribute('aria-label')).toBe('REFERENCE_PICKER.REMOVE {"name":""}');
+      expect(remove[1].getAttribute('aria-label')).toBe(
+        'REFERENCE_PICKER.REMOVE {"name":"REFERENCE_PICKER.UNKNOWN"}',
+      );
       remove[0].click();
       await view();
       expect(host.value()).toEqual(['z']);
@@ -252,5 +258,101 @@ describe('ReferencePicker', () => {
     await view();
     expect(root.querySelector('[role=alert]')).toBeNull();
     expect(boxes()).toHaveLength(1);
+  });
+
+  describe('items without a name', () => {
+    it('shows the neutral label in the list and in the chosen items', async () => {
+      const { host, root, view } = await render(() =>
+        Promise.resolve(page([{ id: 'n', name: '' }, B])),
+      );
+      host.emptyLabel.set('Senza nome');
+      host.labels.set({ n: '' });
+      host.value.set(['n']);
+      await view();
+      expect(root.querySelector('li label')?.textContent?.trim()).toBe('Senza nome');
+      expect(root.querySelector('ul.chosen span')?.textContent?.trim()).toBe('Senza nome');
+    });
+
+    it('shows nothing for an empty name when there is no neutral label', async () => {
+      const { root } = await render(() => Promise.resolve(page([{ id: 'n', name: '' }])));
+      expect(root.querySelector('li label')?.textContent?.trim()).toBe('');
+    });
+  });
+
+  describe('ordered selection', () => {
+    async function ordered() {
+      const rendered = await render();
+      rendered.host.labels.set({ a: 'Alfa', b: 'Beta', c: 'Gamma' });
+      rendered.host.ordered.set(true);
+      rendered.host.value.set(['a', 'b', 'c']);
+      await rendered.view();
+      const move = (id: string, direction: 'up' | 'down') =>
+        [...rendered.root.querySelectorAll<HTMLButtonElement>('button[data-move]')].filter(
+          (button) => button.dataset['move'] === id,
+        )[direction === 'up' ? 0 : 1];
+      return { ...rendered, move };
+    }
+
+    it('offers no moving buttons unless asked', async () => {
+      const { host, root, view } = await render();
+      host.labels.set({ a: 'Alfa' });
+      host.value.set(['a']);
+      await view();
+      expect(root.querySelectorAll('button[data-move]')).toHaveLength(0);
+    });
+
+    it('offers named up and down buttons, disabled at the ends', async () => {
+      const { move } = await ordered();
+      expect(move('a', 'up').disabled).toBe(true);
+      expect(move('a', 'down').disabled).toBe(false);
+      expect(move('c', 'down').disabled).toBe(true);
+      expect(move('b', 'up').getAttribute('aria-label')).toBe(
+        'REFERENCE_PICKER.MOVE_UP {"name":"Beta"}',
+      );
+      expect(move('b', 'down').getAttribute('aria-label')).toBe(
+        'REFERENCE_PICKER.MOVE_DOWN {"name":"Beta"}',
+      );
+    });
+
+    it('disables the buttons with the group', async () => {
+      const { host, move, view } = await ordered();
+      host.disabled.set(true);
+      await view();
+      expect(move('b', 'up').disabled).toBe(true);
+      expect(move('b', 'down').disabled).toBe(true);
+    });
+
+    it('moves an item down and announces it', async () => {
+      const { host, move, root, view } = await ordered();
+      move('a', 'down').click();
+      await view();
+      expect(host.value()).toEqual(['b', 'a', 'c']);
+      expect(root.querySelector('[role=status].visually-hidden')?.textContent).toBe(
+        'REFERENCE_PICKER.MOVED {"name":"Alfa","position":2,"total":3}',
+      );
+      expect(document.activeElement).toBe(move('a', 'down'));
+    });
+
+    it('moves an item up and keeps the focus on the same button', async () => {
+      const { host, move, view } = await ordered();
+      move('c', 'up').click();
+      await view();
+      expect(host.value()).toEqual(['a', 'c', 'b']);
+      expect(document.activeElement).toBe(move('c', 'up'));
+    });
+
+    it('moves the focus to the other button when the item reaches an end', async () => {
+      const { host, move, view } = await ordered();
+      move('b', 'up').click();
+      await view();
+      expect(host.value()).toEqual(['b', 'a', 'c']);
+      expect(document.activeElement).toBe(move('b', 'down'));
+      move('b', 'down').click();
+      await view();
+      move('b', 'down').click();
+      await view();
+      expect(host.value()).toEqual(['a', 'c', 'b']);
+      expect(document.activeElement).toBe(move('b', 'up'));
+    });
   });
 });

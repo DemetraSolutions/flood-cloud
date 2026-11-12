@@ -1,3 +1,4 @@
+import { ObjectId } from 'mongodb';
 import { listQueryShape } from '../../shared/http/list.ts';
 import { enumOf, integerString, object, optional, string } from '../../shared/validation/schema.ts';
 import type { Infer } from '../../shared/validation/schema.ts';
@@ -9,10 +10,20 @@ export const LOOKUP_PRODUCT_TYPES = ['product', 'service', 'exempt', 'tobaccos',
 /** Largest number of ids `ids` accepts. */
 export const MAX_LOOKUP_IDS = MAX_LOOKUP_LIMIT;
 
-/** `ids`: up to {@link MAX_LOOKUP_IDS} comma-separated ObjectIds, to resolve the names of elements already chosen. */
-const ids = optional(string({ min: 24, max: MAX_LOOKUP_IDS * 25 - 1, pattern: new RegExp(`^[0-9a-fA-F]{24}(,[0-9a-fA-F]{24}){0,${MAX_LOOKUP_IDS - 1}}$`) }));
+/** Schema of the optional `ids` query parameter (also used by the reference lists). */
+export const lookupIds = optional(string({ min: 24, max: MAX_LOOKUP_IDS * 25 - 1, pattern: new RegExp(`^[0-9a-fA-F]{24}(,[0-9a-fA-F]{24}){0,${MAX_LOOKUP_IDS - 1}}$`) }));
 
-const shape = { ...listQueryShape(LOOKUP_LIST), limit: optional(integerString({ min: 1, max: MAX_LOOKUP_LIMIT })), ids };
+/**
+ * The distinct ObjectIds of an `ids` value already checked by {@link lookupIds}.
+ *
+ * @param ids The raw comma-separated value, or `undefined` when the parameter is absent.
+ * @returns The ids, or `null` when the parameter is absent.
+ */
+export function parseIds(ids: string | undefined): ObjectId[] | null {
+  return ids === undefined ? null : [...new Set(ids.toLowerCase().split(','))].map((id) => ObjectId.createFromHexString(id));
+}
+
+const shape = { ...listQueryShape(LOOKUP_LIST), limit: optional(integerString({ min: 1, max: MAX_LOOKUP_LIMIT })), ids: lookupIds };
 
 /** Query of the compact reads of categories, customers and contact groups: the common list parameters (page of at most 100) and `ids`. */
 export const lookupQuery = object(shape);

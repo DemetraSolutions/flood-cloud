@@ -41,7 +41,14 @@
     "DEALERS": "Dealer",
     "GROUPS": "Gruppi",
     "GROUP_SETTINGS": "Scheda gruppo",
-    "ACCOUNT_GROUP": "Account › Gruppo"
+    "ACCOUNT_GROUP": "Account › Gruppo",
+    "FIDELITY": "Fidelity",
+    "CARD_TYPES": "Tipi di carta",
+    "POINTS_COLLECTIONS": "Raccolte punti",
+    "PRIZE_CATALOGUES": "Cataloghi premi",
+    "PRODUCTS": "Prodotti",
+    "PRODUCT_FAVORITES": "Preferiti",
+    "PROMOTIONS": "Promozioni"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -248,7 +255,10 @@
     "MORE": "Carica altri",
     "CHOSEN": "Elementi selezionati",
     "REMOVE": "Rimuovi {name}",
-    "UNKNOWN": "Elemento non trovato"
+    "UNKNOWN": "Elemento non trovato",
+    "MOVE_UP": "Sposta in alto {name}",
+    "MOVE_DOWN": "Sposta in basso {name}",
+    "MOVED": "{name} spostato in posizione {position} di {total}."
   },
   "PASSWORD_GENERATOR": {
     "GENERATE": "Genera una password casuale",
@@ -1039,10 +1049,11 @@
       "CONCURRENT": "Il gruppo è stato modificato nel frattempo. L’elenco è stato aggiornato: riprova.",
       "DEFAULT": "È un elemento standard: non si può modificare né eliminare.",
       "LAST": "È l’ultimo elemento: ne serve almeno uno.",
-      "TOO_MANY": "Raggiunto il numero massimo di elementi.",
+      "TOO_MANY": "Raggiunto il numero massimo di elementi, oppure il gruppo ha raggiunto la dimensione massima.",
       "TAKEN": "Esiste già un elemento con questo valore.",
       "NOT_ALLOWED": "Una delle impostazioni scelte non è consentita per questo elemento.",
-      "REFERENCED": "Non si può eliminare: è usato da {users}. Modifica prima questi elementi."
+      "REFERENCED": "Non si può eliminare: è usato da {users}. Modifica prima questi elementi.",
+      "FORBIDDEN": "Non hai il permesso di modificare questo elemento: vale per punti vendita fuori dal tuo perimetro o per tutto il gruppo."
     },
     "REFERENCED": {
       "CARDTYPES": "tipi di carta fedeltà ({count})",
@@ -1200,7 +1211,229 @@
         "DISCOUNT": "Sconto (%)",
         "DISCOUNT_HINT": "Da 0 a 100; vuoto se non impostato."
       }
-    }
+    },
+    "ALL_PLACES": "Tutti i punti vendita",
+    "PLACES_COUNT": "{count} punti vendita",
+    "READ_ONLY": "sola lettura",
+    "ALWAYS": "Sempre",
+    "VALIDITY": "dal {from} al {to}",
+    "NO_NAME": "(senza nome)",
+    "NO_NAME_CUSTOMER": "Cliente senza nome",
+    "PLACES_RESTRICTED": "Devi scegliere almeno un punto vendita, tra quelli del tuo perimetro: l’elenco vuoto significherebbe tutto il gruppo e non è consentito.",
+    "CARD_TYPES": {
+      "TITLE": "Tipi di carta",
+      "HINT": "Le carte fedeltà del gruppo: sconto, listino, prepagato, raccolta punti e punti vendita in cui valgono.",
+      "NEW": "Nuovo tipo di carta",
+      "NEW_TITLE": "Nuovo tipo di carta",
+      "EDIT_TITLE": "Modifica il tipo di carta",
+      "DELETE_CONFIRM": "Eliminare il tipo di carta «{name}»?",
+      "EMPTY": "Nessun tipo di carta",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora tipi di carta.",
+      "LOCKED_NOTE": "I tipi di carta in sola lettura valgono per punti vendita fuori dal tuo perimetro o per tutto il gruppo: non puoi modificarli né eliminarli.",
+      "UNKNOWN_PRICE_LIST": "Listino non più presente",
+      "PRICE_LISTS_FAILED": "Non è stato possibile leggere i listini del gruppo.",
+      "PLACES_HINT": "Senza punti vendita scelti la carta vale in tutto il gruppo.",
+      "COLUMN": {
+        "NAME": "Nome",
+        "ENABLED": "Attivo",
+        "DISCOUNT": "Sconto",
+        "PLACES": "Punti vendita"
+      },
+      "FIELD": {
+        "NAME": "Nome",
+        "ENABLED": "Tipo di carta attivo",
+        "DISCOUNT": "Sconto (%)",
+        "DISCOUNT_HINT": "Da 0 a 100.",
+        "PRICE_LIST": "Listino",
+        "NO_PRICE_LIST": "Nessun listino",
+        "PLACES": "Punti vendita in cui vale"
+      },
+      "PREPAID": {
+        "TITLE": "Prepagato",
+        "ENABLED": "Carta prepagata",
+        "TYPE": "Tipo di prepagato",
+        "MULTI": "Multiuso",
+        "MONO": "Monouso",
+        "NONE": "Non indicato",
+        "TAX": "IVA (%)",
+        "TAX_HINT": "Da 0 a 100; lascia vuoto se non serve."
+      },
+      "POINTS": {
+        "TITLE": "Raccolta punti",
+        "ENABLED": "La carta raccoglie punti",
+        "COLLECTIONS": "Raccolte punti collegate",
+        "LOAD_FAILED": "Non è stato possibile leggere le raccolte punti del gruppo."
+      }
+    },
+    "POINTS_COLLECTIONS": {
+      "TITLE": "Raccolte punti",
+      "HINT": "Quanto denaro vale un punto, quando si raccolgono e scadono i punti e a quale catalogo premi si possono spendere.",
+      "NEW": "Nuova raccolta punti",
+      "NEW_TITLE": "Nuova raccolta punti",
+      "EDIT_TITLE": "Modifica la raccolta punti",
+      "DELETE_CONFIRM": "Eliminare la raccolta punti «{name}»?",
+      "EMPTY": "Nessuna raccolta punti",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora raccolte punti.",
+      "UNKNOWN_CATALOGUE": "Catalogo non più presente",
+      "CATALOGUES_FAILED": "Non è stato possibile leggere i cataloghi premi del gruppo.",
+      "COLUMN": {
+        "NAME": "Nome",
+        "ENABLED": "Attiva",
+        "CONVERSION": "Importo per punto",
+        "VALIDITY": "Validità"
+      },
+      "FIELD": {
+        "NAME": "Nome",
+        "ENABLED": "Raccolta attiva",
+        "CONVERSION": "Importo per punto",
+        "CONVERSION_HINT": "Il denaro da spendere per guadagnare un punto.",
+        "MIN_AMOUNT": "Importo minimo",
+        "DATE_FROM": "Inizio",
+        "DATE_TO": "Fine",
+        "EXPIRATION": "Scadenza dei punti",
+        "EXPIRATION_HINT": "Data e ora in cui i punti raccolti scadono, nel fuso orario del tuo browser.",
+        "CATALOGUE": "Catalogo premi",
+        "NO_CATALOGUE": "Nessun catalogo"
+      }
+    },
+    "PRIZE_CATALOGUES": {
+      "TITLE": "Cataloghi premi",
+      "HINT": "I premi che i clienti possono ottenere con i punti. L’immagine di un premio non si modifica da qui.",
+      "NEW": "Nuovo catalogo premi",
+      "NEW_TITLE": "Nuovo catalogo premi",
+      "EDIT_TITLE": "Modifica il catalogo premi",
+      "DELETE_CONFIRM": "Eliminare il catalogo premi «{name}»?",
+      "EMPTY": "Nessun catalogo premi",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora cataloghi premi.",
+      "COLUMN": {
+        "NAME": "Nome",
+        "ENABLED": "Attivo",
+        "PRIZES": "Premi"
+      },
+      "FIELD": {
+        "NAME": "Nome",
+        "ENABLED": "Catalogo attivo"
+      },
+      "PRIZES": "Premi",
+      "NO_PRIZES": "Il catalogo non ha premi.",
+      "PRIZE": "Premio {n}",
+      "PRIZE_FIELD": {
+        "NAME": "Nome del premio {n}",
+        "ENABLED": "Premio {n} attivo",
+        "DESCRIPTION": "Descrizione del premio {n}",
+        "POINTS": "Punti del premio {n}",
+        "EXTRA_PRICE": "Prezzo extra del premio {n}",
+        "CONDITIONS": "Condizioni di riscatto del premio {n}"
+      },
+      "IMAGE_SET": "Immagine presente (non modificabile da qui).",
+      "ADD": "Aggiungi un premio",
+      "REMOVE": "Rimuovi",
+      "REMOVE_LABEL": "Rimuovi il premio {n}"
+    },
+    "PRODUCT_FAVORITES": {
+      "TITLE": "Preferiti dei prodotti",
+      "HINT": "Gli elenchi di prodotti preferiti che compaiono in cassa, nell’ordine scelto.",
+      "NEW": "Nuovo elenco",
+      "NEW_TITLE": "Nuovo elenco di preferiti",
+      "EDIT_TITLE": "Modifica l’elenco di preferiti",
+      "DELETE_CONFIRM": "Eliminare l’elenco «{name}»?",
+      "EMPTY": "Nessun elenco di preferiti",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora elenchi di prodotti preferiti.",
+      "ORDER_HINT": "Cerca e scegli i prodotti; poi ordinali con i pulsanti «Sposta in alto» e «Sposta in basso» dell’elenco dei prodotti scelti.",
+      "COLUMN": {
+        "NAME": "Nome",
+        "PRODUCTS": "Prodotti"
+      },
+      "FIELD": {
+        "NAME": "Nome",
+        "PRODUCTS": "Prodotti"
+      }
+    },
+    "PROMOTIONS": {
+      "TITLE": "Promozioni",
+      "HINT": "Sconti con codice, validità, condizioni sul carrello e azioni.",
+      "NEW": "Nuova promozione",
+      "NEW_TITLE": "Nuova promozione",
+      "EDIT_TITLE": "Modifica la promozione",
+      "DELETE_CONFIRM": "Eliminare la promozione «{name}»?",
+      "EMPTY": "Nessuna promozione",
+      "EMPTY_MESSAGE": "Il gruppo non ha ancora promozioni.",
+      "LOCKED_NOTE": "Le promozioni in sola lettura valgono per punti vendita fuori dal tuo perimetro o per tutto il gruppo: non puoi modificarle né eliminarle.",
+      "SECTIONS": "Sezioni della promozione",
+      "SECTION": {
+        "GENERAL": "Generale",
+        "CONDITIONS": "Condizioni",
+        "PRODUCTS": "Prodotti e categorie",
+        "ACTIONS": "Azioni"
+      },
+      "NONE": "Nessuno",
+      "AMOUNT_TAX": {
+        "TAX_INCLUDED": "IVA inclusa",
+        "TAX_EXCLUDED": "IVA esclusa"
+      },
+      "SELECTION": {
+        "ONLY_N": "Solo n elementi",
+        "ALL": "Tutti"
+      },
+      "DISCOUNT_TYPE": {
+        "ON_TOTAL": "Sul totale",
+        "ON_PRODUCTS": "Sui prodotti",
+        "ON_CATEGORIES": "Sulle categorie"
+      },
+      "DISCOUNT_VALUE_TYPE": {
+        "PERCENTAGE": "Percentuale",
+        "AMOUNT": "Importo"
+      },
+      "EXCLUSIONS": "Esclusioni dall’importo",
+      "PRODUCTS_RULE": "Prodotti nel carrello",
+      "CATEGORIES_RULE": "Categorie nel carrello",
+      "PLACES_HINT": "Senza punti vendita scelti la promozione vale in tutto il gruppo.",
+      "COLUMN": {
+        "NAME": "Nome",
+        "CODE": "Codice",
+        "ENABLED": "Attiva",
+        "VALIDITY": "Validità",
+        "PLACES": "Punti vendita"
+      },
+      "FIELD": {
+        "NAME": "Nome",
+        "ENABLED": "Promozione attiva",
+        "DESCRIPTION": "Descrizione",
+        "CODE": "Codice",
+        "CODE_HINT": "Il codice che il cliente può usare per ottenerla.",
+        "PLACES": "Punti vendita in cui vale",
+        "START_DATE": "Inizio",
+        "END_DATE": "Fine",
+        "CUSTOMERS": "Clienti",
+        "CONTACT_GROUPS": "Gruppi di contatti",
+        "MAX_USES_PER_USER": "Utilizzi per utente",
+        "MAX_USES_TOTAL": "Disponibilità totale",
+        "MIN_AMOUNT": "Importo minimo",
+        "CURRENCY": "Valuta",
+        "CURRENCY_HINT": "Tre lettere maiuscole, ad esempio EUR.",
+        "AMOUNT_TAX": "Importo con IVA",
+        "SEAT_EXCLUDED": "Escludi il coperto",
+        "SERVICE_EXCLUDED": "Escludi il servizio",
+        "TIP_EXCLUDED": "Escludi la mancia",
+        "DELIVERY_EXCLUDED": "Escludi la consegna",
+        "PRODUCTS_TYPE": "Quali prodotti",
+        "PRODUCTS_N": "Numero di prodotti (n)",
+        "PRODUCTS_QT": "Quantità per prodotto",
+        "PRODUCTS": "Prodotti",
+        "CATEGORIES_TYPE": "Quali categorie",
+        "CATEGORIES_N": "Numero di categorie (n)",
+        "CATEGORIES": "Categorie",
+        "DISCOUNT_TYPE": "Sconto",
+        "DISCOUNT_VALUE": "Valore dello sconto",
+        "DISCOUNT_VALUE_TYPE": "Tipo di valore",
+        "ACTION_PRODUCTS": "Prodotti scontati",
+        "ACTION_CATEGORIES": "Categorie scontate",
+        "FREE_SHIPPING": "Spedizione gratuita"
+      }
+    },
+    "VIEW": "Visualizza",
+    "VIEW_LABEL": "Visualizza {name}",
+    "VIEW_TITLE": "Dettaglio in sola lettura"
   },
   "AVATAR": {
     "LABEL": "Avatar",
@@ -1233,5 +1466,8 @@
     "SAVED": "PIN salvato.",
     "REMOVED": "PIN rimosso.",
     "RATE_LIMITED_WAIT": "Troppi tentativi: riprova tra {seconds} secondi."
+  },
+  "TAB_LIST": {
+    "ERRORS": "{count} errori"
   }
 }

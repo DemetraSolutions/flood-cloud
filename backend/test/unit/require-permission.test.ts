@@ -117,6 +117,14 @@ describe('requirePermission', () => {
     assert.deepEqual(decisions, [true, false]);
   });
 
+  it('accepts a list of alternatives: one held permission is enough, none is a denial', async () => {
+    const handler = requirePermission(['dealers:read', 'users:read']);
+    let nextCalled = false;
+    await handler({} as never, { locals: { auth: principalOf('SA') } } as never, () => void (nextCalled = true));
+    assert.equal(nextCalled, true);
+    await assert.rejects(async () => handler({} as never, { locals: { auth: principalOf('E') } } as never, () => undefined), { code: 'FORBIDDEN' });
+  });
+
   it('works without a hook', async () => {
     await assert.rejects(async () => requirePermission('users:read')({} as never, { locals: { auth: principalOf('E') } } as never, () => undefined), { code: 'FORBIDDEN' });
   });

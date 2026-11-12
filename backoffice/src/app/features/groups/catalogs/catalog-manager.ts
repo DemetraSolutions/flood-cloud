@@ -4,13 +4,16 @@ import {
   Component,
   computed,
   contentChild,
+  effect,
   inject,
   input,
   signal,
   TemplateRef,
+  untracked,
 } from '@angular/core';
 import { ApiData } from '../../../core/api/api.types';
 import { ApiError, apiErrorMessageKey } from '../../../core/api/api-error';
+import { GroupContext } from '../../../core/groups/group-context';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { TPipe } from '../../../core/i18n/t-pipe';
 import { ActionsMenu } from '../../../shared/ui/actions-menu/actions-menu';
@@ -34,7 +37,12 @@ export type CatalogKind =
   | 'CURRENCIES'
   | 'MEASURE_UNITS'
   | 'WAREHOUSE_RULES'
-  | 'FIDELITY_CARD_RULES';
+  | 'FIDELITY_CARD_RULES'
+  | 'CARD_TYPES'
+  | 'POINTS_COLLECTIONS'
+  | 'PRIZE_CATALOGUES'
+  | 'PRODUCT_FAVORITES'
+  | 'PROMOTIONS';
 
 /**
  * What the manager gives to the editor template of a catalog (`let-item`, `let-error="error"`…).
@@ -47,6 +55,8 @@ export interface EditorContext<T> {
   readonly error: ApiError | null;
   /** A save is in progress. */
   readonly busy: boolean;
+  /** The element is shown for reading only: no field changes and nothing is saved. */
+  readonly readonly: boolean;
   /** Sends the body (the whole element to create, the changes to modify). */
   readonly save: (body: object) => void;
   /** Closes the dialog without saving. */
@@ -79,6 +89,7 @@ export interface EditorContext<T> {
 export class CatalogManager<T> {
   private readonly api = inject(CatalogsApi);
   private readonly toast = inject(ToastService);
+  private readonly groups = inject(GroupContext);
   protected readonly i18n = inject(I18nService);
 
   /** Group the catalog belongs to. */
@@ -108,6 +119,21 @@ export class CatalogManager<T> {
   /** Elements that can be modified but not deleted (the standard price list). */
   readonly kept = input<(row: T) => boolean>(() => false);
 
+  /** Wider dialog, for long forms. */
+  readonly wide = input(false);
+  /**
+   * Dictionary key of the explanation shown when some elements are read-only for the user (for
+   * example elements of stores outside the perimeter of a company or store administrator).
+   */
+  readonly lockedNote = input<string | null>(null);
+  /**
+   * Offers "View" on the elements that cannot be modified (`locked`): the same dialog opens for
+   * reading only, with the explanation.
+   */
+  readonly viewable = input(false);
+  /** Whether the page lives outside the group record: the group of the page becomes the working one. */
+  readonly adopt = input(false);
+
   /** The form of the editor: `<ng-template #editor let-item let-error="error" …>`. */
   protected readonly editor = contentChild.required<TemplateRef<EditorContext<T>>>('editor');
 
@@ -127,17 +153,30 @@ export class CatalogManager<T> {
     const limit = this.limit();
     return limit !== null && this.rows().length >= limit;
   });
+  protected readonly showLockedNote = computed(
+    () => this.lockedNote() !== null && this.rows().some((row) => this.locked()(row)),
+  );
+  // The page loaded: the group in the URL becomes the working group of the selector and the menu.
+  private readonly adoptGroup = effect(() => {
+    const groupId = this.groupId();
+    if (this.adopt() && this.resource.hasValue()) {
+      untracked(() => this.groups.adopt(groupId));
+    }
+  });
+
   protected readonly canCreate = computed(() => this.canWrite() && this.allowCreate());
 
   // Editor dialog.
   protected readonly editing = signal<T | null>(null);
   protected readonly editorOpen = signal(false);
+  protected readonly viewing = signal(false);
   protected readonly saveError = signal<ApiError | null>(null);
   protected readonly saving = signal(false);
   protected readonly context = computed<EditorContext<T>>(() => ({
     $implicit: this.editing(),
     error: this.saveError(),
     busy: this.saving(),
+    readonly: this.viewing(),
     save: (body) => void this.save(body),
     cancel: () => this.editorOpen.set(false),
   }));
@@ -159,19 +198,28 @@ export class CatalogManager<T> {
     return this.canWrite() && !this.locked()(row);
   }
 
+  protected canView(row: T): boolean {
+    return this.viewable() && this.locked()(row);
+  }
+
   protected canRemove(row: T): boolean {
     return this.canEdit(row) && this.allowDelete() && !this.kept()(row);
   }
 
   protected create(): void {
-    this.open(null);
+    this.open(null, false);
   }
 
   protected edit(row: T): void {
-    this.open(row);
+    this.open(row, false);
   }
 
-  private open(row: T | null): void {
+  protected view(row: T): void {
+    this.open(row, true);
+  }
+
+  private open(row: T | null, viewOnly: boolean): void {
+    this.viewing.set(viewOnly);
     this.editing.set(row);
     this.saveError.set(null);
     this.editorOpen.set(true);
