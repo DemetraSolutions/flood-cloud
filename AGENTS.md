@@ -35,12 +35,12 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 |---|---|
 | `doc/Product-Scope.md` | Scopo del prodotto, client, ruoli, obiettivi |
 | `doc/Architecture.md` | Stack, multi-database, superfici API, struttura del codice |
-| `doc/Security-Model.md` | Credenziali delle tre superfici, autorizzazione, rate limit, decisioni aperte |
+| `doc/Security-Model.md` | Credenziali delle due superfici, autorizzazione, rate limit, decisioni aperte |
 | `doc/Data-Model.md` | Collection del database common |
 | `doc/API-Guidelines.md` | Regole REST vincolanti |
 | `doc/Legacy-Analysis.md` | Cosa fa il progetto legacy (riferimento funzionale) |
 | `doc/Technical-Guide.md` | Documentazione tecnica del backend realizzato (mantenuta a ogni passo) |
-| `doc/API.md` | Riferimento di tutte le API delle tre superfici (mantenuto a ogni passo) |
+| `doc/API.md` | Riferimento di tutte le API delle due superfici (mantenuto a ogni passo) |
 | `doc/Public-API.md` | Documentazione delle API pubbliche per gli integratori esterni (mantenuta a ogni passo) |
 
 ## Sottoagenti disponibili
@@ -58,7 +58,7 @@ MongoDB con il driver ufficiale, senza ODM.
 
 ### 3. Security Expert (`security_expert`)
 Garante di `doc/Security-Model.md`; obbligatorio su ogni modifica di sicurezza.
-- Tre superfici: backoffice con token opachi e refresh rotante, server di punto vendita con chiavi Ed25519, API pubbliche con chiavi per gruppo.
+- Due superfici: backoffice `/v1` con token opachi e refresh rotante (usata anche dall'app del punto vendita, credenziale D-24 aperta), API pubbliche con chiavi per gruppo.
 - scrypt, RBAC (PSA, D, SA, CA, PA, E), isolamento dei gruppi, rate limit e quote, validazione, upload, webhook, header, CORS, segreti e log.
 
 ### 4. Tester Expert (`tester_expert`)
@@ -68,7 +68,7 @@ Copertura al 100% con strumenti nativi.
 
 ### 5. API Expert (`api_expert`)
 Contratto REST rigoroso secondo `doc/API-Guidelines.md`.
-- Risorse e metodi HTTP corretti sulle superfici `/v1`, `/store/v1`, `/public/v1`, nessuna query MongoDB dal client, schemi di validazione.
+- Risorse e metodi HTTP corretti sulle superfici `/v1`, `/public/v1`, nessuna query MongoDB dal client, schemi di validazione.
 - Codici HTTP, envelope ed errori, paginazione, idempotenza, `doc/API.md` e `doc/Public-API.md`.
 
 ### 6. Legacy Analyst (`legacy_analyst`)
@@ -110,7 +110,6 @@ Guide operative attivate automaticamente in base alla `description`, in `.agents
 | `input-validation` | Validazione di body, query, params senza librerie |
 | `tenant-isolation` | Accesso a dati di gruppo, ruoli, scope, database del gruppo, test di isolamento |
 | `opaque-token-auth` | Login del backoffice, sessioni, refresh, logout, middleware `/v1` |
-| `store-server-auth` | Attivazione, chiavi Ed25519, token e rotazione dei server di punto vendita |
 | `public-api-keys` | API key della superficie pubblica |
 | `rate-limiting-metering` | Rate limit, quote e conteggio d'uso |
 | `password-hashing` | Password e PIN con scrypt |

@@ -20,7 +20,7 @@ Il backend vive nella cartella **`backend/`** del repository: i percorsi qui sot
 ## Regole
 1. **Express 5:** handler `async` senza `try/catch` di comodo; gli errori arrivano al gestore centrale (skill `express-error-handling`). Attenzione alle differenze rispetto a Express 4 (sintassi dei percorsi, `req.query` in sola lettura, `req.body` indefinito senza parser).
 2. **Body parsing** con `body-parser` e limiti espliciti per route; `compression` globale; `multer` solo sulle route di upload (skill `secure-file-upload`).
-3. **Ogni route** appartiene a una superficie (`/v1`, `/store/v1`, `/public/v1`) e dichiara il permesso richiesto (skill `express-module-scaffold`, `tenant-isolation`); nessuna route è anonima per omissione. Architettura generale in `doc/Architecture.md`, regole REST in `doc/API-Guidelines.md`.
+3. **Ogni route** appartiene a una superficie (`/v1`, `/public/v1`) e dichiara il permesso richiesto (skill `express-module-scaffold`, `tenant-isolation`); nessuna route è anonima per omissione. Architettura generale in `doc/Architecture.md`, regole REST in `doc/API-Guidelines.md`.
 4. **Ogni input** passa dalla validazione del modulo (skill `input-validation`) prima del controller.
 5. **Envelope di risposta** uniforme `{ data }` / `{ error }`, codici HTTP corretti (201 su creazione, 204 senza corpo).
 6. **Nessuna libreria aggiuntiva** senza approvazione (skill `dependency-approval`).

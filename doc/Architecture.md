@@ -4,14 +4,14 @@
 ```
 App di backoffice ─────────── /v1  (token opachi) ───────┐
                                                          │
-Server di punto vendita ───── /store/v1 (Ed25519) ───────┼──► Flood Cloud ──► MongoDB
+App del server di punto vendita ─ /v1 (credenziale: D-24)┼──► Flood Cloud ──► MongoDB
   └─ casse, palmari, altri client locali                 │      (Node.js,      ├─ <env>_common
      (non parlano mai con il cloud)                      │       Express 5)    └─ <env>_<groupId>
                                                          │          │
 Integrazioni di un gruppo ─── /public/v1 (API key) ──────┘          └──► provider esterni
                                                                          (fiscale, fatturazione, pagamenti…)
 ```
-- Il cloud ha **tre client**, ognuno con la propria superficie API e la propria credenziale (`doc/Security-Model.md` §3).
+- Il cloud ha **due superfici API** (`/v1` e `/public/v1`), ciascuna con la propria credenziale (`doc/Security-Model.md` §3). L'app del server di punto vendita è un'applicazione separata, fuori scope (D-22), che usa le stesse API `/v1` del backoffice (D-23); la sua credenziale è una decisione aperta (D-24). La superficie `/store/v1` prevista in origine è **eliminata**.
 - In ogni negozio c'è **un solo server di punto vendita** che centralizza casse e dispositivi: è l'unico che comunica con il cloud per quel negozio.
 
 ## 2. Stack
@@ -44,10 +44,9 @@ I nomi dei database dipendono dall'ambiente, come nel legacy, così più ambient
 | Common (identità, tenancy, sicurezza) | Database del gruppo (dati operativi) |
 |---|---|
 | `groups`, `users`, `companies`, `places` | catalogo (prodotti, reparti, categorie…) |
-| `storeServers`, `storeServerActivations` | magazzino |
-| `sessions`, `storeServerTokens`, `storeServerNonces` | vendite e documenti fiscali |
-| `apiKeys`, `rateLimits`, `apiUsage`, `platformSettings` | clienti e fedeltà, prenotazioni… |
-| `auditLog` | |
+| `sessions` | magazzino |
+| `apiKeys`, `rateLimits`, `apiUsage`, `platformSettings` | vendite e documenti fiscali |
+| `auditLog` | clienti e fedeltà, prenotazioni… |
 
 **Decisione del 2026-10-30:** `companies` e `places` passano nel **common** (nel legacy erano nei database dei gruppi e rendevano costose le liste trasversali, es. tutti i punti vendita di un dealer). La verifica di ogni credenziale e il calcolo dello scope avvengono interamente nel common, senza aprire il database del gruppo.
 
@@ -71,8 +70,9 @@ Schema delle collection del common: `doc/Data-Model.md`. I domini operativi si d
 | Superficie | Prefisso | Credenziale | CORS | Note |
 |---|---|---|---|---|
 | Backoffice | `/v1` | Bearer `fc_at_…` + refresh | allowlist origini del backoffice | ruoli PSA, D, SA, CA, PA |
-| Store | `/store/v1` | Bearer `fc_st_…` ottenuto con firma Ed25519 | chiuso | scope fisso sul punto vendita; `Idempotency-Key` sulle scritture |
 | Pubblica | `/public/v1` | `X-Api-Key: fc_pk_…` | chiuso | scope sul gruppo; rate limit e quote |
+
+Nessuna superficie per il server di punto vendita (D-23): l'app separata usa `/v1`, con credenziale da decidere (D-24).
 
 Lo stesso dominio (es. prodotti) può essere esposto su più superfici con permessi e campi diversi: il service è unico, cambiano route, autenticazione e mapper di risposta. Le regole REST sono in `doc/API-Guidelines.md`; il riferimento degli endpoint in `doc/API.md`.
 
@@ -99,7 +99,7 @@ src/
   db/                    # client, nomi dei database, creazione indici
   shared/
     http/                # definizione route, envelope, errori, header, CORS, timeout
-    security/            # token, hash, scrypt, Ed25519, policy RBAC, rate limit, audit
+    security/            # token, hash, scrypt, policy RBAC, rate limit, audit
     validation/          # validatore per allowlist
   modules/<dominio>/     # routes, controller, service, repository, schemas, mapper, indexes
   integrations/<provider>/

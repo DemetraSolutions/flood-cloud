@@ -7,8 +7,8 @@
 - Nomi al **plurale**, in inglese, **kebab-case**: `/v1/product-categories`.
 - Collezione e elemento: `/v1/products` e `/v1/products/{productId}`.
 - **Annidamento** solo per relazioni di appartenenza reali e al massimo un livello: `/v1/companies/{companyId}/places`. Una risorsa con identità propria resta raggiungibile anche dalla radice (`/v1/places/{placeId}`).
-- Operazioni che non sono CRUD si modellano come **sotto-risorse** create con `POST`: `POST /v1/sales/{saleId}/refunds`, `POST /v1/store-servers/{id}/activation-codes`.
-- Prefisso di superficie e versione: `/v1`, `/store/v1`, `/public/v1` (`doc/Architecture.md` §4). Una modifica incompatibile richiede una nuova versione.
+- Operazioni che non sono CRUD si modellano come **sotto-risorse** create con `POST`: `POST /v1/sales/{saleId}/refunds`, `POST /v1/groups/{groupId}/suspension`.
+- Prefisso di superficie e versione: `/v1` e `/public/v1` (la superficie `/store/v1` è eliminata, D-23) (`doc/Architecture.md` §4). Una modifica incompatibile richiede una nuova versione.
 
 ## 2. Metodi
 | Metodo | Uso | Sicuro | Idempotente | Successo |

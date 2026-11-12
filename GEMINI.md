@@ -5,7 +5,7 @@ Tutti gli agenti e i sottoagenti che operano in questo progetto devono rispettar
 ## 0. Scopo del Progetto (Vision)
 Ogni azione, decisione architetturale o riga di codice DEVE essere consapevole dello scopo del progetto descritto in **`doc/Product-Scope.md`**: leggilo prima di iniziare qualsiasi sviluppo.
 
-**Flood Cloud** è la riscrittura completa, con un nuovo approccio, del server della piattaforma cloud commerce di Flood (progetto legacy `../cloud-commerce-platform-server`). È un server **Node.js + Express + MongoDB** scritto in **TypeScript** (eseguito direttamente da Node con il type stripping nativo) con tre superfici API: backoffice (`/v1`), server di punto vendita (`/store/v1`) e API pubbliche dei gruppi (`/public/v1`).
+**Flood Cloud** è la riscrittura completa, con un nuovo approccio, del server della piattaforma cloud commerce di Flood (progetto legacy `../cloud-commerce-platform-server`). È un server **Node.js + Express + MongoDB** scritto in **TypeScript** (eseguito direttamente da Node con il type stripping nativo) con due superfici API: backoffice (`/v1`) e API pubbliche dei gruppi (`/public/v1`). L'app del server di punto vendita è separata, fuori scope, e usa le stesse API `/v1` del backoffice (D-22, D-23; credenziale: D-24 aperta).
 
 Il repository è un **monorepo** (`doc/Architecture.md` §5): `backend/` (API Node.js) e `backoffice/` (SPA Angular del backoffice), con rilascio indipendente.
 
@@ -43,12 +43,12 @@ Ogni passo crea o aggiorna **sempre** quattro livelli di documentazione. Un pass
 |---|---|---|---|
 | **JSDoc dettagliato** di ogni modulo, funzione, classe, tipo e costante esportata: scopo, `@param`, `@returns`, `@throws`, esempi dove utili (i tipi stanno nel codice TypeScript, non tra graffe nel JSDoc) | nel codice | **Inglese** | sviluppatori |
 | **Documentazione tecnica** di tutto il backend: avvio, configurazione, moduli realizzati, flussi, database, sicurezza implementata, test | `doc/Technical-Guide.md` | Italiano | team di sviluppo |
-| **Riferimento di tutte le API** delle tre superfici | `doc/API.md` | Italiano | team di sviluppo, backoffice e server di punto vendita |
+| **Riferimento di tutte le API** delle due superfici | `doc/API.md` | Italiano | team di sviluppo, backoffice e app del punto vendita |
 | **Documentazione delle API pubbliche** da consegnare agli utilizzatori esterni: **solo** ciò che è pubblico (`/public/v1`, autenticazione con API key, limiti, quote, errori) | `doc/Public-API.md` | Italiano | integratori esterni |
 
 Regole:
 - I tipi TypeScript sono la documentazione dei contratti: precisi, senza `any`, allineati al JSDoc.
-- `doc/Public-API.md` è un documento **pubblicabile**: non deve mai contenere superfici interne (`/v1`, `/store/v1`), dettagli implementativi, nomi di collection, struttura dei database o informazioni utili a un attaccante. Si scrive per chi integra, con esempi completi di richiesta e risposta.
+- `doc/Public-API.md` è un documento **pubblicabile**: non deve mai contenere superfici interne (`/v1`), dettagli implementativi, nomi di collection, struttura dei database o informazioni utili a un attaccante. Si scrive per chi integra, con esempi completi di richiesta e risposta.
 - Un endpoint pubblico va descritto in **entrambi** `doc/API.md` e `doc/Public-API.md`.
 
 ## 4. Test: Copertura Totale

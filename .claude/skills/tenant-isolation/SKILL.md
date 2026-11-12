@@ -24,7 +24,7 @@ export interface Scope {
 /** Verified, frozen authentication context stored in req.auth. */
 export interface AuthContext {
   /** type of the verified credential */
-  readonly kind: 'user' | 'storeServer' | 'apiKey';
+  readonly kind: 'user' | 'apiKey';
   /** id of the user, store server or API key */
   readonly principalId: string;
   /** id of the session, token or key (audit and revocation) */
@@ -44,7 +44,6 @@ export interface AuthContext {
 | SA | il proprio gruppo |
 | CA | il proprio gruppo, `companyIds` |
 | PA | il proprio gruppo, `placeIds` |
-| server di punto vendita | il proprio gruppo, azienda e punto vendita (fisso) |
 | API key pubblica | il proprio gruppo, restrizioni opzionali |
 Valori come `groupId`, `role`, `permissions` nel body o nella query non vengono mai letti: lo schema li rifiuta.
 
@@ -55,7 +54,7 @@ Valori come `groupId`, `role`, `permissions` nel body o nella query non vengono 
 - Un helper unico (`resolveGroupDb(auth, groupId)`) valida l'id, controlla lo scope e restituisce il `Db`; i repository ricevono quel `Db` e non ne aprono altri.
 
 ## Autorizzazione
-- Una sola policy (`src/shared/security/policy.ts`) mappa ruolo → permessi; server di punto vendita e API key hanno i propri permessi.
+- Una sola policy (`src/shared/security/policy.ts`) mappa ruolo → permessi; le API key hanno i propri permessi.
 - Il builder delle route applica `requirePermission(route.permission)` ⇒ `403`.
 - Gli utenti `E` non hanno alcun permesso sul backoffice.
 - Gestione utenti: si creano e modificano solo utenti di ruolo inferiore e nel proprio scope; nessuno modifica il proprio ruolo o scope.
@@ -85,5 +84,4 @@ Ogni accesso di PSA o D a un gruppo è registrato nell'audit log (attore, gruppo
 - Gruppo B non vede, modifica o cancella le risorse di A (`404`, dati invariati).
 - D vede i propri gruppi e non quelli di un altro dealer.
 - CA e PA vedono solo le proprie aziende e i propri punti vendita.
-- Server di punto vendita limitato al proprio punto vendita.
 - Body con `groupId`/`role` ⇒ `422`; permesso mancante ⇒ `403`; utente `E` ⇒ nessun accesso al backoffice.

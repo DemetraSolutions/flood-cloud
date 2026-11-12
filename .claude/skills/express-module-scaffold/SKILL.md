@@ -20,7 +20,7 @@ test/integration/modules/<domain>.test.ts
 Crea **solo** i file che il passo richiede: un modulo di sola lettura non ha bisogno di schemi di update.
 
 ## Route dichiarative (deny by default)
-Le route si dichiarano **per superficie** (`backoffice` → `/v1`, `store` → `/store/v1`, `public` → `/public/v1`, `doc/Architecture.md` §4). Ogni superficie ha il proprio middleware di autenticazione, quindi una credenziale vale solo sulla sua superficie.
+Le route si dichiarano **per superficie** (`backoffice` → `/v1`, `public` → `/public/v1`, `doc/Architecture.md` §4). Ogni superficie ha il proprio middleware di autenticazione, quindi una credenziale vale solo sulla sua superficie.
 
 Il builder condiviso (`src/shared/http/define-routes.ts`) monta nell'ordine autenticazione → rate limit → autorizzazione → validazione → handler, e **lancia un errore all'avvio** se una route non dichiara `permission`, a meno che non sia marcata `anonymous: true` con una motivazione.
 ```ts
@@ -53,7 +53,7 @@ export function productsRoutes(
   };
 }
 ```
-Le uniche route `anonymous: true` ammesse sono quelle che lo sono per natura (health, login, refresh, attivazione e token dei server di punto vendita, webhook con firma propria), sempre con rate limit e un commento che lo motiva. Percorsi e metodi seguono `doc/API-Guidelines.md`.
+Le uniche route `anonymous: true` ammesse sono quelle che lo sono per natura (health, login, refresh, webhook con firma propria), sempre con rate limit e un commento che lo motiva. Percorsi e metodi seguono `doc/API-Guidelines.md`.
 
 ## Controller
 ```ts

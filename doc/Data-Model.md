@@ -121,36 +121,14 @@ Indici: `groupId`; univocità di `vatNumber` per gruppo *(da confermare)*.
 Indici: `groupId + companyId`.
 Le parti incorporate nel legacy (depositi, sale, tavoli, dispositivi) si definiscono nei rispettivi passi.
 
-## storeServers — server di punto vendita
-| Campo | Tipo | Note |
-|---|---|---|
-| `_id` | ObjectId | `storeServerId` |
-| `groupId`, `companyId`, `placeId` | ObjectId | scope fisso |
-| `name` | string | |
-| `status` | `pending` \| `active` \| `revoked` | |
-| `keys` | `{ keyId, publicKey, createdAt, revokedAt }[]` | chiave pubblica Ed25519 (SPKI, base64); una sola attiva |
-| `lastSeenAt`, `lastIp`, `softwareVersion`, `hostname` | | |
-| `activatedAt`, `revokedAt`, `createdBy`, `createdAt`, `updatedAt` | | |
-Indici: `placeId`; `groupId`; `keys.keyId` univoco.
-
 ## platformSettings — impostazioni di piattaforma
 Documento unico (`_id: 'platform'`), modificabile solo da `PSA`; ogni modifica va nell'audit log.
 | Campo | Tipo | Note |
 |---|---|---|
-| `storeServerSilenceThresholdHours` | number \| null | soglia di silenzio dei server di punto vendita; `null` o assente ⇒ nessun allarme (`doc/Security-Model.md` §5.7) |
 | `updatedBy`, `updatedAt` | | |
-
-## storeServerActivations — codici di attivazione
-`_id`, `storeServerId`, `codeHash` (univoco), `expiresAt` (TTL), `attempts`, `usedAt`, `createdBy`, `createdAt`.
-
-## storeServerNonces — anti-replay delle asserzioni
-`_id` = `<storeServerId>:<jti>`, `expiresAt` (TTL, poco oltre la tolleranza di ±5 minuti).
 
 ## sessions — sessioni del backoffice
 Realizzata (passo 3A): un documento per famiglia di sessione. `_id` (id esposto della sessione), `userId`, `accessTokenHash` (SHA-256 del token corrente, univoco), `accessExpiresAt`, `refreshTokenHash` (corrente, univoco), `previousRefreshHashes` (ultimi 50 hash ruotati, per rilevare il riuso), `rotatedAt`, `refreshExpiresAt` (inattività), `familyExpiresAt` (durata massima), `createdAt`, `lastUsedAt`, `userAgent`, `ip`, `revokedAt`, `revokeReason`, `expiresAt` (TTL = fine famiglia + 1 giorno). Indici: `accessTokenHash_1` e `refreshTokenHash_1` univoci, `previousRefreshHashes_1`, `userId_1_revokedAt_1`, TTL `expiresAt_1`. Validazione `$jsonSchema`.
-
-## storeServerTokens — access token dei server di punto vendita
-`_id`, `storeServerId`, `keyId`, `tokenHash` (univoco), `expiresAt` (TTL), `revokedAt`, `createdAt`.
 
 ## apiKeys — chiavi delle API pubbliche
 `_id`, `groupId`, `name`, `keyHash` (univoco), `displayPrefix`, `permissions` (string[]), `companyIds`/`placeIds` (restrizione opzionale), `rateLimitPerMinute`, `monthlyQuota` (opzionale), `expiresAt`, `revokedAt`, `lastUsedAt`, `createdBy`, `createdAt`.

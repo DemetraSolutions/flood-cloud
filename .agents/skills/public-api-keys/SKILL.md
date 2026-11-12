@@ -4,7 +4,7 @@ description: Usa quando crei, verifichi, elenchi, ruoti o revochi le API key del
 ---
 # Public API Keys
 
-Riferimenti: `doc/Security-Model.md` §6, collection `apiKeys` in `doc/Data-Model.md`. Le API key valgono **solo** su `/public/v1`; i server di punto vendita usano un'altra credenziale (skill `store-server-auth`).
+Riferimenti: `doc/Security-Model.md` §6, collection `apiKeys` in `doc/Data-Model.md`. Le API key valgono **solo** su `/public/v1`; l'app del server di punto vendita usa `/v1` (D-23).
 
 ## Formato
 `fc_pk_` + 32 byte casuali (`randomBytes(32).toString('base64url')`). Si salvano:

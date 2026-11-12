@@ -9,7 +9,7 @@ Sostituisce `cloud-commerce-platform-server` (analisi in `doc/Legacy-Analysis.md
 | Client | Cosa fa | Superficie |
 |---|---|---|
 | **App di backoffice** | gli amministratori gestiscono piattaforma, gruppi, anagrafiche, catalogo, report | `/v1` |
-| **Server di punto vendita** | uno per negozio, sempre connesso: centralizza casse e dispositivi locali, invia vendite e scontrini, riceve i dati del catalogo | `/store/v1` |
+| **Server di punto vendita** | uno per negozio, sempre connesso: centralizza casse e dispositivi locali, invia vendite e scontrini, riceve i dati del catalogo. È un'**applicazione separata, fuori dallo scope di questo progetto** (D-22): usa le stesse API del backoffice | `/v1` (nessuna superficie dedicata, D-23) |
 | **Integrazioni del gruppo** | sistemi esterni di un singolo gruppo (es. e-commerce), con limiti e conteggio delle chiamate | `/public/v1` |
 
 Le casse, i palmari e gli altri dispositivi del negozio **non comunicano mai direttamente con il cloud**: passano sempre dal server di punto vendita.
@@ -22,7 +22,7 @@ Platform Super Admin (`PSA`) → Dealer (`D`) → **Gruppo** (tenant, cliente de
 Catena di dominio centrale: **vendita → movimento di magazzino → documento fiscale**.
 
 ## Obiettivi della riscrittura
-1. **Sicurezza rifatta da zero** (`doc/Security-Model.md`): deny by default, sessioni del backoffice a scadenza con refresh, identità a chiave pubblica per ogni server di punto vendita, API pubbliche con chiavi per gruppo, rate limit e conteggio d'uso.
+1. **Sicurezza rifatta da zero** (`doc/Security-Model.md`): deny by default, sessioni del backoffice a scadenza con refresh, nessuna identità dedicata ai server di punto vendita (la loro credenziale verso `/v1` è da decidere, D-24), API pubbliche con chiavi per gruppo, rate limit e conteggio d'uso.
 2. **API REST rigorose** (`doc/API-Guidelines.md`) al posto delle chiamate `POST` che simulavano query MongoDB.
 3. **Copertura dei test al 100%**, applicata dalla suite.
 4. **Dipendenze minime**: `express`, `mongodb`, `body-parser`, `compression`, `multer`; il resto con le API native di Node o su approvazione.

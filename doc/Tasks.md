@@ -141,9 +141,9 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
   - `companies` e `places` nel common come copie dei documenti dei gruppi (D-20);
   - nuove collection `userCredentials` e `syncIssues`;
   - risposte alle domande aperte.
-- [ ] **0.5.4** `doc/Security-Model.md`: compatibilità di password e dati personali legacy (D-04, D-05), sessioni legacy (D-11).
+- [x] **0.5.4** `doc/Security-Model.md`: compatibilità di password e dati personali legacy (D-04, D-05), sessioni legacy (D-11). *Fatto il 2026-11-12 con l'aggiornamento del documento.*
 - [ ] **0.5.5** `GEMINI.md` e `AGENTS.md`: aggiungere `doc/Tasks.md` alla tabella dei documenti.
-- [ ] **0.5.6** `doc/Product-Scope.md`, `doc/Architecture.md` §4, `doc/Security-Model.md` §3 e §5, `doc/Data-Model.md` (collection `storeServer*`): eliminare la superficie `/store/v1` e indicare che l'app del server di punto vendita è separata e usa le API `/v1` (D-22, D-23, D-24).
+- [ ] **0.5.6** `doc/Product-Scope.md`, `doc/Architecture.md` §4, `doc/Security-Model.md` §3 e §5, `doc/Data-Model.md` (collection `storeServer*`): eliminare la superficie `/store/v1` e indicare che l'app del server di punto vendita è separata e usa le API `/v1` (D-22, D-23, D-24). *Il 2026-11-12 aggiornati `doc/Security-Model.md`, `doc/Data-Model.md` e `doc/API.md`; restano `doc/Product-Scope.md` e `doc/Architecture.md` §4.*
 
 ### 0.6 Rischi del legacy in produzione (fuori da questo repository)
 - [ ] **0.6.1** Valutare la rotazione delle credenziali Atlas: oggi sono scritte nel repository legacy (ConfigMap, `launch.json`). Dopo una rotazione vanno aggiornati il legacy e il `.env` locale (D-02).
@@ -275,7 +275,7 @@ Passi decisi dall'utente il 2026-11-02: **2A** = 2.1 e 2.2; **2B** = 2.3 e 2.4; 
 
 ### 2.6 Registro delle attività, audit e monitor degli errori
 Decisione dell'utente del 2026-11-01: una sola collection nuova nel common per attività degli utenti, eventi di sicurezza ed errori, consultabile da un monitor del backoffice. La collection `logs` del legacy resta intatta. Gli errori si scrivono anche su stdout, così non si perdono se MongoDB non risponde.
-- [x] **2.6.1** Collection `activityLog` (al posto di `auditLog`) con categoria `data` | `security` | `error`, gruppo, attore, azione, risorsa, esito, `requestId`; indici `groupId + at`, `actor.id + at`, `category + at`, `requestId`; servizio di scrittura senza segreti.
+- [x] **2.6.1** Collection `activityLog` (al posto di `auditLog`; dal 2026-11-06 `activityEvents`, senza validatore del database) con categoria `data` | `security` | `error`, gruppo, attore, azione, risorsa, esito, `requestId`; indici `groupId + at`, `actor.id + at`, `category + at`, `requestId`; servizio di scrittura senza segreti.
 - [x] **2.6.2** *(catalogo e servizio pronti; collegati oggi accessi trasversali di PSA e D e superamenti dei rate limit; login, sessioni, utenti e gruppi si collegano nelle aree 3 e 4)* Eventi:
   - login riusciti e falliti;
   - refresh e riuso rilevato;

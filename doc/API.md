@@ -8,7 +8,7 @@
 - Date ISO 8601 UTC, importi in centesimi interi, identificativi stringa.
 - Codici d'errore: tabella in `doc/API-Guidelines.md` §5. Le route di un modulo che il gruppo non ha acceso rispondono `403 FEATURE_DISABLED` (qualunque sia il ruolo, PSA e D compresi), dopo il controllo del gruppo e del permesso.
 - Ogni risposta porta `X-Request-Id`, generato dal server (un valore inviato dal client non viene riutilizzato).
-- Ogni risposta è `Cache-Control: no-store`, **tranne** `GET /v1/groups/{groupId}`, che porta anche `ETag` (debole) e risponde `304` a un `If-None-Match` corrispondente (vedi la sua descrizione).
+- Ogni risposta è `Cache-Control: no-store`; `GET /v1/groups/{groupId}` porta in più `ETag` (debole) e risponde `304` a un `If-None-Match` corrispondente, per la copia in memoria del backoffice (vedi la sua descrizione).
 - Errori comuni a ogni percorso: `404 NOT_FOUND` (percorso inesistente), `405 METHOD_NOT_ALLOWED` con `Allow` (metodo non previsto), `400 BAD_REQUEST` (percorso o richiesta malformati). Sulle route con body: `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE` (limite di default 100 KB), `415 UNSUPPORTED_MEDIA_TYPE` (content type diverso da `application/json` UTF-8 o body compresso).
 
 ## Liste
@@ -40,7 +40,7 @@ Fuori dalle superfici API, per le sonde di GKE.
 ## Formato di ogni endpoint
 ```markdown
 ### <METODO> <percorso>
-- **Superficie:** backoffice | store | pubblica
+- **Superficie:** backoffice | pubblica (la superficie `/store/v1` è eliminata, D-23)
 - **Autenticazione e permesso:** es. Bearer backoffice, `products:read` — oppure anonimo (motivo)
 - **Ruoli:** chi può chiamarlo e con quale perimetro
 - **Parametri di percorso / query:** nome, tipo, obbligatorio, vincoli
@@ -919,9 +919,6 @@ Rappresentazione di un dealer:
   ```
 - **Risposta:** `200` con il dealer aggiornato (invariato se nessun valore cambia)
 - **Errori:** comuni; `404 NOT_FOUND`; `409 CONFLICT` (`vatNumber`/`taken`); `422` (anche `(body)`/`required` per body vuoto)
-
-## Superficie server di punto vendita — `/store/v1`
-Nessun endpoint realizzato.
 
 ## Superficie pubblica — `/public/v1`
 Nessun endpoint realizzato.
