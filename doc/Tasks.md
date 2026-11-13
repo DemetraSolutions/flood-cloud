@@ -464,7 +464,7 @@ Task:
   - un D vede solo il proprio `dealerId`;
   - filtri per dealer (solo PSA), stato, demo, ricerca sul nome;
   - paginazione a cursore.
-- [ ] **4.4.2** Conteggi di aziende, punti vendita e utenti per gruppo, letti dal common (dopo l'area 5).
+- [x] **4.4.2** Conteggi di aziende, punti vendita e utenti per gruppo, letti dal common (dopo l'area 5). *Fatto (backend, 2026-11-13): `counts` con attivi e nel cestino in ogni elemento di `GET /v1/groups` (non nel dettaglio), tre aggregazioni per pagina sugli indici esistenti.*
 - [x] **4.4.3** Modifica parziale (campi scalari delle impostazioni comprese). Chi modifica cosa (D-13):
   - nome e descrizione;
   - feature e integrazioni abilitate: PSA e D;
@@ -486,7 +486,7 @@ Task:
   - riconvalida all'avvio e al cambio di gruppo;
   - invalidazione dopo ogni creazione, modifica o cancellazione;
   - estendibile ad altre entità (categorie, utenti…).
-- [x] **4.5.4** Elenco gruppi con conteggi e dettaglio espandibile (aziende e punti vendita). *Fatto l'elenco: i conteggi restano a 4.4.2; il dettaglio espandibile è sostituito dalla scheda del gruppo (4.5.5).*
+- [x] **4.5.4** Elenco gruppi con conteggi e dettaglio espandibile (aziende e punti vendita). *Fatto l'elenco con i conteggi (4.4.2); il dettaglio espandibile è sostituito dalla scheda del gruppo (4.5.5).*
 - [x] **4.5.5** Dettaglio e modifica del gruppo con la scheda delle feature; pagina "Account › Gruppo" per il SA.
 
 ### 4.6 Chiusura

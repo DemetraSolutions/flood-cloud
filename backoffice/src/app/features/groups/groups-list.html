@@ -62,6 +62,15 @@
     <ng-template fcCell="name" let-row>
       <a [routerLink]="['/groups', row.id, 'settings']" (click)="open(row)">{{ row.name }}</a>
     </ng-template>
+    <ng-template fcCell="companies" let-row>
+      <fc-group-count [count]="row.counts.companies" />
+    </ng-template>
+    <ng-template fcCell="places" let-row>
+      <fc-group-count [count]="row.counts.places" />
+    </ng-template>
+    <ng-template fcCell="users" let-row>
+      <fc-group-count [count]="row.counts.users" />
+    </ng-template>
     <ng-template fcCell="status" let-row>
       @if (row.status === 'active') {
         <fc-status-badge tone="success">{{ 'GROUPS.STATUS.ACTIVE' | t }}</fc-status-badge>

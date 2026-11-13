@@ -1,12 +1,14 @@
-import type { Document, Filter } from 'mongodb';
+import type { Document, Filter, ObjectId } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
 import type { ListPage, ListParams } from '../../shared/http/list.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import { groupMirror } from '../../shared/security/scope/group-mirror.ts';
+import { countByGroupPipeline, assertCountedGroups, countsByGroup } from '../../shared/security/scope/group-counts.ts';
+import { countMirrorByGroups, groupMirror } from '../../shared/security/scope/group-mirror.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { companiesScopeFilter, groupsScopeFilter, placesScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
 import { COMPANY_PROJECTION, GROUP_PROJECTION, PLACE_PROJECTION } from './reference.mapper.ts';
+import type { GroupCounts } from './reference.mapper.ts';
 import { REFERENCE_LIST } from './reference.list.ts';
 
 /** Read-only pages of the reference data (`common.groups` and the copies `common.companies` and `common.places`); nothing is ever written here. */
@@ -19,6 +21,15 @@ export interface ReferenceRepository {
    * @param params Validated list parameters.
    */
   listGroups(principal: AuthPrincipal, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
+  /**
+   * Counts the companies, places and users of the groups of a page already returned by {@link ReferenceRepository.listGroups}
+   * (so already inside the caller's perimeter): three aggregations in all, whatever the number of groups, each read from the common database.
+   *
+   * @param groupIds Ids of the groups of the page (never from the client): 1 to the maximum page size.
+   * @returns For each group (hex id) the active and trashed counts of the three kinds, zeros included.
+   * @throws {Error} If the list is empty, too long or holds something that is not an `ObjectId`.
+   */
+  countGroupsContents(groupIds: readonly ObjectId[]): Promise<Map<string, GroupCounts>>;
   /**
    * A page of the `companies` of a verified group (read from the copies in `common.companies`), inside the caller's perimeter.
    *
@@ -58,6 +69,23 @@ export function createReferenceRepository(databases: Databases): ReferenceReposi
         params,
         GROUP_PROJECTION,
       ),
+
+    countGroupsContents: async (groupIds) => {
+      assertCountedGroups(groupIds);
+      // Users are read by the same pipeline shape, on the `groupId_1_role_1` index (prefix `groupId`).
+      const [companies, places, users] = await Promise.all([
+        countMirrorByGroups(databases, 'companies', groupIds),
+        countMirrorByGroups(databases, 'places', groupIds),
+        databases.common().collection('users').aggregate(countByGroupPipeline(groupIds), { maxTimeMS: LIST_MAX_TIME_MS }).toArray(),
+      ]);
+      const userCounts = countsByGroup(groupIds, users);
+      return new Map(
+        groupIds.map((id) => {
+          const key = id.toHexString();
+          return [key, { companies: companies.get(key)!, places: places.get(key)!, users: userCounts.get(key)! }];
+        }),
+      );
+    },
 
     listCompanies: (principal, access, filter, params) =>
       read(

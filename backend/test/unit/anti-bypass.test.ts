@@ -149,6 +149,15 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
     });
 
+    it('exposes from group-mirror.ts only the two per-group openers and the fixed count of the page groups', async () => {
+      const text = await readFile(join(SRC, MIRROR), 'utf8');
+      const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups']);
+      // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
+      assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
+      assert.equal([...text.matchAll(/\.aggregate\(/g)].length, 2);
+    });
+
     it('keeps the copies away from the analytics connection', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       assert.ok(!/analytics/i.test(text));

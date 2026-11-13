@@ -24,6 +24,7 @@ import { abbreviateId } from '../activity-log/activity-log.types';
 import { DealerRecord } from '../dealers/dealer.types';
 import { apiErrorOf } from '../profile/sessions';
 import { GroupActions } from './group-actions';
+import { GroupCount } from './group-count';
 import { GroupListItem } from './group.types';
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -53,6 +54,7 @@ type QueryChange = Record<string, string | null>;
     DataTable,
     ErrorState,
     GroupActions,
+    GroupCount,
     RouterLink,
     RowActionsTemplate,
     Select,
@@ -167,6 +169,12 @@ export class GroupsList {
           },
         ]
       : []),
+    ...(['companies', 'places', 'users'] as const).map((kind) => ({
+      key: kind,
+      header: this.i18n.t(`GROUPS.COLUMN.${kind.toUpperCase()}`),
+      align: 'end' as const,
+      hideNarrow: true,
+    })),
     { key: 'status', header: this.i18n.t('GROUPS.COLUMN.STATUS') },
     { key: 'demo', header: this.i18n.t('GROUPS.COLUMN.DEMO'), hideNarrow: true },
     ...(this.isPlatform()

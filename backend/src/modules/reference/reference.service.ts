@@ -1,4 +1,4 @@
-import type { Document, Filter } from 'mongodb';
+import type { Document, Filter, ObjectId } from 'mongodb';
 import type { PageInfo } from '../../shared/http/envelope.ts';
 import { AppError } from '../../shared/http/errors.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
@@ -7,7 +7,7 @@ import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { parseIds } from '../group-lookup/lookup.schemas.ts';
 import { REFERENCE_LIST } from './reference.list.ts';
 import { toCompanyReference, toGroupReference, toPlaceReference } from './reference.mapper.ts';
-import type { CompanyReference, GroupReference, PlaceReference } from './reference.mapper.ts';
+import type { CompanyReference, GroupCounts, GroupReference, PlaceReference } from './reference.mapper.ts';
 import type { ReferenceRepository } from './reference.repository.ts';
 import type { CompaniesQuery, GroupsQuery, PlacesQuery } from './reference.schemas.ts';
 
@@ -22,6 +22,7 @@ export interface ReferenceService {
   /**
    * Lists the groups of the caller's perimeter. Only a PSA may look at suspended or trashed groups
    * (a dealer or a group administrator reaches only active, untrashed ones) and filter by dealer; `demo` is open to everybody.
+   * Every item carries the counts of its companies, places and users (active and trashed), computed for the page only.
    *
    * @param principal The authenticated caller.
    * @param query Validated query.
@@ -76,7 +77,9 @@ export function createReferenceService(repository: ReferenceRepository): Referen
         conditions.push({ demo: query.demo === 'true' ? true : { $ne: true } });
       }
       const { items, page } = await repository.listGroups(principal, { $and: conditions }, listParamsOf(query, REFERENCE_LIST));
-      return { items: items.map(toGroupReference), page };
+      // One count per kind for the whole page (3 aggregations), only for the groups the caller was just allowed to list.
+      const counts = items.length === 0 ? new Map<string, GroupCounts>() : await repository.countGroupsContents(items.map((item) => item['_id'] as ObjectId));
+      return { items: items.map((item) => toGroupReference(item, counts.get((item['_id'] as ObjectId).toHexString())!)), page };
     },
 
     listCompanies: async (principal, access, query) => {

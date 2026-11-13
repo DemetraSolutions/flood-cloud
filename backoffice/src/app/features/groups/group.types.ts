@@ -53,6 +53,19 @@ export interface Group {
   readonly updatedAt: string | null;
 }
 
+/** Active and trashed elements of one kind. */
+export interface ElementCount {
+  readonly active: number;
+  readonly trashed: number;
+}
+
+/** Counts of the companies, places and users of a group (from the common database). */
+export interface GroupCounts {
+  readonly companies: ElementCount;
+  readonly places: ElementCount;
+  readonly users: ElementCount;
+}
+
 /** A group as listed by `GET /v1/groups`. */
 export interface GroupListItem {
   readonly id: string;
@@ -61,6 +74,7 @@ export interface GroupListItem {
   readonly trashed: boolean;
   readonly dealerId: string | null;
   readonly demo: boolean;
+  readonly counts: GroupCounts;
 }
 
 /** Body of `PATCH /v1/groups/{groupId}` (JSON Merge Patch: only what changed). */

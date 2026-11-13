@@ -916,7 +916,15 @@
       "DEALER": "Dealer",
       "STATUS": "Stato",
       "DEMO": "Demo",
-      "TRASH": "Cestino"
+      "TRASH": "Cestino",
+      "COMPANIES": "Aziende",
+      "PLACES": "Punti vendita",
+      "USERS": "Utenti"
+    },
+    "COUNT": {
+      "TRASHED": "+{count} nel cestino",
+      "LABEL": "Attivi: {active}",
+      "LABEL_TRASHED": "Attivi: {active}, nel cestino: {trashed}"
     },
     "ACTION": {
       "OPEN": "Apri la scheda",

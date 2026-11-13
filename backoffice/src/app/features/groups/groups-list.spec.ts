@@ -18,7 +18,15 @@ import { GroupListItem } from './group.types';
 const LIST = `${API}/v1/groups`;
 const DEALERS = `${API}/v1/dealers`;
 const DEALER = fakeDealer({ id: '665f1c2e9b1d4a0012ab34d1', businessName: 'Dealer Nord Srl' });
-const ONE = fakeGroupListItem({ dealerId: DEALER.id, demo: true });
+const ONE = fakeGroupListItem({
+  dealerId: DEALER.id,
+  demo: true,
+  counts: {
+    companies: { active: 2, trashed: 1 },
+    places: { active: 5, trashed: 0 },
+    users: { active: 12, trashed: 3 },
+  },
+});
 const TWO = fakeGroupListItem({
   id: '665f1c2e9b1d4a0012ab34a2',
   name: 'Zeta',
@@ -146,18 +154,39 @@ describe('GroupsList', () => {
       expect(cells(0)).toEqual([
         'Gruppo Esempio',
         'Dealer Nord Srl',
+        '2GROUPS.COUNT.TRASHED {"count":1}',
+        '5',
+        '12GROUPS.COUNT.TRASHED {"count":3}',
         'GROUPS.STATUS.ACTIVE',
         'GROUPS.DEMO',
         '',
       ]);
       expect(cells(1)[0]).toBe('Zeta');
-      expect(cells(1).slice(2)).toEqual(['GROUPS.STATUS.SUSPENDED', '', 'GROUPS.TRASHED']);
+      expect(cells(1).slice(5)).toEqual(['GROUPS.STATUS.SUSPENDED', '', 'GROUPS.TRASHED']);
       expect(cells(1)[1]).not.toBe('');
       expect(cells(1)[1]).not.toBe('Dealer Nord Srl');
-      expect(cells(2)).toEqual(['Orfano', '', 'GROUPS.STATUS.ACTIVE', '', '']);
+      expect(cells(2)).toEqual(['Orfano', '', '0', '0', '0', 'GROUPS.STATUS.ACTIVE', '', '']);
       expect(root.querySelector('tbody a')?.getAttribute('href')).toBe(
         `/groups/${ONE.id}/settings`,
       );
+    });
+
+    it('labels each count with its active and trashed numbers', async () => {
+      const { flush, flushDealers, root } = await render();
+      await flushDealers();
+      await flush([ONE, THREE]);
+      const labels = (row: number) =>
+        [...root.querySelectorAll('tbody tr')[row].querySelectorAll('fc-group-count')].map((c) =>
+          c.getAttribute('aria-label'),
+        );
+      expect(labels(0)).toEqual([
+        'GROUPS.COUNT.LABEL_TRASHED {"active":2,"trashed":1}',
+        'GROUPS.COUNT.LABEL {"active":5,"trashed":0}',
+        'GROUPS.COUNT.LABEL_TRASHED {"active":12,"trashed":3}',
+      ]);
+      expect(root.querySelector('thead')?.textContent).toContain('GROUPS.COLUMN.COMPANIES');
+      expect(root.querySelector('thead')?.textContent).toContain('GROUPS.COLUMN.PLACES');
+      expect(root.querySelector('thead')?.textContent).toContain('GROUPS.COLUMN.USERS');
     });
 
     it('reads the filters, sort, size and cursor from the URL', async () => {
@@ -262,10 +291,17 @@ describe('GroupsList', () => {
       expect(params(req)).toEqual({ limit: '25', sort: 'name', demo: 'true' });
       req.flush(page([ONE]));
       await view();
-      expect(cells(0)).toEqual(['Gruppo Esempio', 'GROUPS.STATUS.ACTIVE', 'GROUPS.DEMO']);
+      expect(cells(0)).toEqual([
+        'Gruppo Esempio',
+        '2GROUPS.COUNT.TRASHED {"count":1}',
+        '5',
+        '12GROUPS.COUNT.TRASHED {"count":3}',
+        'GROUPS.STATUS.ACTIVE',
+        'GROUPS.DEMO',
+      ]);
       expect(root.querySelector('fc-checkbox')).toBeNull();
       expect(root.querySelectorAll('form fc-select')).toHaveLength(1);
-      expect(root.querySelectorAll('thead th')).toHaveLength(4);
+      expect(root.querySelectorAll('thead th')).toHaveLength(7);
     });
 
     it('offers only the action to open the record', async () => {

@@ -1,0 +1,6 @@
+<span class="active" aria-hidden="true">{{ count().active }}</span>
+@if (count().trashed > 0) {
+  <small class="trashed" aria-hidden="true">{{
+    'GROUPS.COUNT.TRASHED' | t: { count: count().trashed }
+  }}</small>
+}

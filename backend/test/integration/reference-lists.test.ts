@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { createReferenceRepository } from '../../src/modules/reference/reference.repository.ts';
 import { createReferenceService } from '../../src/modules/reference/reference.service.ts';
 import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts';
@@ -67,7 +67,7 @@ describe('GET /v1/groups', () => {
     assert.deepEqual(reply.body.page, { limit: 200, next: null });
     const byId = new Map(reply.body.data.map((item: { id: string }) => [item.id, item]));
     for (const g of office.cluster.groups) {
-      assert.deepEqual(Object.keys(byId.get(hex(g.groupId)) as object).sort(), ['dealerId', 'demo', 'id', 'name', 'status', 'trashed']);
+      assert.deepEqual(Object.keys(byId.get(hex(g.groupId)) as object).sort(), ['counts', 'dealerId', 'demo', 'id', 'name', 'status', 'trashed']);
     }
     assert.ok(!byId.has(hex(fixtureId('group', 101))), 'trashed groups are hidden by default');
     assert.equal((byId.get(hex(fixtureId('group', 100))) as { status: string }).status, 'suspended');
@@ -127,6 +127,24 @@ describe('GET /v1/groups', () => {
     for (const query of ['status=active', 'status=suspended', 'trashed=true']) {
       assert.deepEqual(as.failure(await as.call(office.cluster.dealerA, 'GET', `/groups?${query}`)), { status: 403, code: 'FORBIDDEN', details: undefined }, query);
     }
+  });
+
+  it('carries the counts of the common database on every group, a dealer seeing only those of his own groups', async () => {
+    const countOf = async (id: ObjectId, name: 'companies' | 'places' | 'users') =>
+      ({
+        active: await ctx.databases.common().collection(name).countDocuments({ groupId: id, trash: { $ne: true } }),
+        trashed: await ctx.databases.common().collection(name).countDocuments({ groupId: id, trash: true }),
+      });
+    const psa = await as.call(office.cluster.psa, 'GET', '/groups?limit=200');
+    const dealer = await as.call(office.cluster.dealerA, 'GET', '/groups?limit=200');
+    assert.ok(dealer.body.data.length < psa.body.data.length);
+    for (const item of psa.body.data as Array<{ id: string; counts: Record<string, unknown> }>) {
+      const id = new ObjectId(item.id);
+      assert.deepEqual(item.counts, { companies: await countOf(id, 'companies'), places: await countOf(id, 'places'), users: await countOf(id, 'users') }, item.id);
+    }
+    assert.deepEqual((await as.call(group(0).sa, 'GET', `/groups/${hex(group(0).groupId)}`)).body.data.counts, undefined);
+    const empty = psa.body.data.find((item: { id: string }) => item.id === hex(fixtureId('group', 102)));
+    assert.deepEqual(empty.counts, { companies: { active: 0, trashed: 0 }, places: { active: 0, trashed: 0 }, users: { active: 0, trashed: 0 } });
   });
 
   it('shows an SA only his own group and refuses the platform filters', async () => {

@@ -502,12 +502,13 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
   ```json
   {
     "data": [
-      { "id": "665f1c2e9b1d4a0012ab34a1", "name": "Gruppo Esempio", "status": "active", "trashed": false, "dealerId": "665f1c2e9b1d4a0012ab34d1", "demo": false }
+      { "id": "665f1c2e9b1d4a0012ab34a1", "name": "Gruppo Esempio", "status": "active", "trashed": false, "dealerId": "665f1c2e9b1d4a0012ab34d1", "demo": false,
+        "counts": { "companies": { "active": 2, "trashed": 1 }, "places": { "active": 5, "trashed": 0 }, "users": { "active": 12, "trashed": 3 } } }
     ],
     "page": { "limit": 50, "next": null }
   }
   ```
-  `status` è `active` o `suspended`; `dealerId` è `null` se il gruppo non ha dealer; `demo` è `false` se non è un gruppo demo.
+  `status` è `active` o `suspended`; `dealerId` è `null` se il gruppo non ha dealer; `demo` è `false` se non è un gruppo demo. `counts` riporta, per aziende, punti vendita e utenti del gruppo, gli elementi attivi (`active`: `trash` diverso da `true`) e quelli nel cestino (`trashed`: `trash: true`); lo `status` dell'utente non conta. Aziende e punti vendita sono contati sulle copie del database comune, gli utenti sugli utenti con quel `groupId`; un gruppo vuoto ha tutti zeri. I conteggi sono calcolati solo per i gruppi della pagina restituita (quindi dentro il perimetro del chiamante) con tre aggregazioni per richiesta; non sono presenti in `GET /v1/groups/{groupId}`.
 - **Errori:** comuni; `403 FORBIDDEN` anche per i filtri riservati
 
 ### GET /v1/groups/{groupId}/companies

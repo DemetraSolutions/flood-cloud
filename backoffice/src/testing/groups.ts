@@ -61,6 +61,11 @@ export function fakeGroupListItem(overrides: Partial<GroupListItem> = {}): Group
     trashed: false,
     dealerId: null,
     demo: false,
+    counts: {
+      companies: { active: 0, trashed: 0 },
+      places: { active: 0, trashed: 0 },
+      users: { active: 0, trashed: 0 },
+    },
     ...overrides,
   };
 }

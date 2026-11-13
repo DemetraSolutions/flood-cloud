@@ -1,8 +1,10 @@
 import { ObjectId } from 'mongodb';
 import type { Document, Filter, Sort } from 'mongodb';
 import type { Databases } from '../../../db/databases.ts';
-import { LIST_MAX_TIME_MS } from '../../http/list.ts';
+import { LIST_MAX_TIME_MS, MAX_LIMIT } from '../../http/list.ts';
 import { assertVerifiedGroupAccess } from './group-access.ts';
+import { assertCountedGroups, countByGroupPipeline, countsByGroup } from './group-counts.ts';
+import type { TrashCount } from './group-counts.ts';
 import type { GroupAccess } from './group-access.ts';
 import type { AuthPrincipal } from './principal.ts';
 
@@ -282,4 +284,27 @@ export function groupMirror(principal: AuthPrincipal, access: GroupAccess, datab
  */
 export function trustedGroupMirror(groupId: ObjectId, databases: Databases, name: MirrorCollection): GroupMirror {
   return build(groupId, databases, name);
+}
+
+/**
+ * Counts, with one aggregation, the copies of several groups by group and by trash state (`trash: true` is trashed, anything
+ * else is active). It is the only multi-group read of the copies: the pipeline is built here (a `$match` on the groups and a
+ * `$group`), nothing is taken from the caller, and a copy whose `groupId` is an array or is not an `ObjectId` is never counted.
+ * The group ids must come from a page already restricted to the caller's perimeter, never from the client.
+ *
+ * @param databases Database accessor.
+ * @param name `companies` or `places`.
+ * @param groupIds Ids of the groups of the page: a non-empty list of at most {@link MAX_LIMIT} `ObjectId`s.
+ * @returns The counts by group (hex id), with zeros for a group that holds nothing.
+ * @throws {Error} If `name` is not a copy collection, or the list is empty, too long or holds something that is not an `ObjectId`.
+ */
+export async function countMirrorByGroups(databases: Databases, name: MirrorCollection, groupIds: readonly ObjectId[]): Promise<Map<string, TrashCount>> {
+  if (!MIRROR_COLLECTIONS.includes(name)) {
+    throw new Error('Not a copy collection');
+  }
+  assertCountedGroups(groupIds);
+  // Literal names: the collection registry check requires every collection name to be a string literal.
+  const collection = name === 'companies' ? databases.common().collection('companies') : databases.common().collection('places');
+  const rows = await collection.aggregate(countByGroupPipeline(groupIds), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
+  return countsByGroup(groupIds, rows);
 }
