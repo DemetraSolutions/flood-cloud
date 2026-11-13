@@ -17,7 +17,7 @@ describe('effectivePermissions (D-06)', () => {
       [
         'groups:read', 'groups:update',
         'users:read',
-        'companies:create', 'companies:update', 'companies:trash',
+        'companies:create', 'companies:update', 'companies:trash', 'companies:delete',
         'places:read',
         'activityLog:read',
         ...SESSIONS,

@@ -24,14 +24,14 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes and validators', () => {
     assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'companies', 'countries', 'dealers', 'groups', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'syncIssues', 'userCredentials', 'users']);
-    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'places', 'products', 'products_categories']);
+    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'files', 'places', 'products', 'products_categories']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
       const isMirror = ['companies', 'places'].includes(name) && COLLECTIONS.common[name as 'companies' | 'places'] === spec;
       const expected = isMirror
         ? 'mirror'
         : ['activityEvents', 'dealers', 'rateLimits', 'sessions', 'syncIssues', 'userCredentials'].includes(name)
           ? 'new'
-          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || (['companies', 'places'].includes(name) && !isMirror)
+          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || (['companies', 'files', 'places'].includes(name) && !isMirror)
             ? 'legacy-write'
             : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
@@ -66,7 +66,7 @@ describe('collection registry', () => {
       [['accessTokenHash_1', true, null], ['refreshTokenHash_1', true, null], ['previousRefreshHashes_1', false, null], ['userId_1_revokedAt_1', false, null], ['expiresAt_1', false, 0]],
     );
     // The copies of the group documents: non-unique indexes only, no validator; the issues collection has a 180-day TTL and no validator.
-    assert.deepEqual(COLLECTIONS.common.companies.indexes.map((index) => [index.name, index.key]), [['groupId_1__id_1', { groupId: 1, _id: 1 }], ['groupId_1_name_1', { groupId: 1, name: 1 }]]);
+    assert.deepEqual(COLLECTIONS.common.companies.indexes.map((index) => [index.name, index.key]), [['groupId_1__id_1', { groupId: 1, _id: 1 }], ['groupId_1_name_1', { groupId: 1, name: 1 }], ['groupId_1_status_1', { groupId: 1, status: 1 }], ['groupId_1_code_1', { groupId: 1, code: 1 }]]);
     assert.deepEqual(COLLECTIONS.common.places.indexes.map((index) => index.name), ['groupId_1__id_1', 'groupId_1_name_1', 'groupId_1_companyId_1']);
     for (const spec of [COLLECTIONS.common.companies, COLLECTIONS.common.places]) {
       assert.equal('validator' in spec, false);
@@ -79,7 +79,7 @@ describe('collection registry', () => {
     ]);
     assert.equal('validator' in COLLECTIONS.common.syncIssues, false);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'groups', 'places', 'products', 'products_categories', 'rateLimits', 'reserve_with_google', 'sessions', 'syncIssues', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'files', 'groups', 'places', 'products', 'products_categories', 'rateLimits', 'reserve_with_google', 'sessions', 'syncIssues', 'userCredentials', 'users']);
   });
 
   it('accepts valid new, legacy-read and legacy-write entries', () => {

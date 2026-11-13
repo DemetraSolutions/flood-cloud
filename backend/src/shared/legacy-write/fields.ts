@@ -1,8 +1,15 @@
-import { ObjectId } from 'mongodb';
+import { Double, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
+import { ECOMMERCE_FLAGS, E_INVOICING_KEYS, MEDIA_IMAGE_KEYS } from './company-paths.ts';
 import { InvalidWriteInputError } from './errors.ts';
 
-/** The fields of a company that the write service owns: the registry data and the state (`COMPANIES_OWNED_FIELDS` minus `trash` and `updateDate`). */
+/** Largest `settings.global.lastInvoiceNumber` (the largest Int32): the legacy writes it as an Int32. */
+export const MAX_INVOICE_NUMBER = 2_147_483_647;
+
+/**
+ * The fields of a company that the write service owns at the top level of the document: the registry data and the state. The rest of what it owns
+ * (`COMPANIES_OWNED_FIELDS` minus `trash` and `updateDate`) is {@link CompanyBlockFields}.
+ */
 export interface CompanyFields {
   /** Name of the company. */
   readonly name: string;
@@ -57,8 +64,21 @@ export interface PlaceFields {
   readonly expirationDate: Date | null;
 }
 
+/**
+ * The other owned fields of a company, by their legacy dotted path: `invoicesPS`, the arrays `invoicesPSValues`, `banks` and `ticketsSuppliers` (each a whole
+ * value), and the keys of the blocks one by one (`fattura_elettronica.hub`, `settings.global.lastInvoiceNumber`, `settings.ecommerce.minAmount`,
+ * `medias.images.externalUrl`…; `COMPANIES_OWNED_FIELDS` lists them all). Each is checked by its own kind ({@link COMPANY_FIELD_KINDS}): the
+ * values are exactly what is stored, never a whole block.
+ */
+export interface CompanyBlockFields {
+  readonly [path: string]: unknown;
+}
+
 /** Fields of a new company: only the name is required, the others take the defaults of {@link newCompanyDocument}. */
-export type NewCompanyFields = Pick<CompanyFields, 'name'> & Partial<CompanyFields>;
+export type NewCompanyFields = Pick<CompanyFields, 'name'> & Partial<CompanyFields> & CompanyBlockFields;
+
+/** The changes of an update of a company: any of the owned fields, at least one. */
+export type CompanyChanges = Partial<CompanyFields> & CompanyBlockFields;
 
 /** Fields of a new place: the name and the company are required, the others take the defaults of {@link newPlaceDocument}. */
 export type NewPlaceFields = Pick<PlaceFields, 'name' | 'companyId'> & Partial<PlaceFields> & {
@@ -67,10 +87,25 @@ export type NewPlaceFields = Pick<PlaceFields, 'name' | 'companyId'> & Partial<P
 };
 
 /** How the value of a field is checked. */
-type FieldKind = 'name' | 'text' | 'textOrNull' | 'boolean' | 'dateOrNull' | 'objectId' | 'flagOrTextOrNull';
+type FieldKind =
+  | 'name'
+  | 'text'
+  | 'textOrNull'
+  | 'boolean'
+  | 'dateOrNull'
+  | 'objectId'
+  | 'flagOrTextOrNull'
+  | 'amount'
+  | 'invoiceNumberOrNull'
+  | 'positionOrNull'
+  | 'minAmount'
+  | 'invoiceSeries'
+  | 'banks'
+  | 'suppliers'
+  | 'logoOrNull';
 
-/** Kind of every field of a company. */
-export const COMPANY_FIELD_KINDS: Readonly<Record<keyof CompanyFields, FieldKind>> = Object.freeze({
+/** Kind of every field of a company: the registry data, the whole values and every owned key of the blocks, by dotted path. */
+export const COMPANY_FIELD_KINDS: Readonly<Record<string, FieldKind>> = Object.freeze({
   name: 'name',
   code: 'text',
   code2: 'text',
@@ -84,6 +119,22 @@ export const COMPANY_FIELD_KINDS: Readonly<Record<keyof CompanyFields, FieldKind
   telephone: 'textOrNull',
   status: 'boolean',
   expirationDate: 'dateOrNull',
+  invoicesPS: 'positionOrNull',
+  invoicesPSValues: 'invoiceSeries',
+  banks: 'banks',
+  ticketsSuppliers: 'suppliers',
+  ...Object.fromEntries(E_INVOICING_KEYS.map((key) => [`fattura_elettronica.${key}`, 'text' as const])),
+  'settings.global.enableLoginSignup': 'boolean',
+  'settings.global.showPrivacyPage': 'boolean',
+  'settings.global.showTermsPage': 'boolean',
+  'settings.global.discountLines': 'boolean',
+  'settings.global.lastInvoiceNumber': 'invoiceNumberOrNull',
+  'settings.api.cerved': 'boolean',
+  ...Object.fromEntries(ECOMMERCE_FLAGS.map((key) => [`settings.ecommerce.${key}`, 'boolean' as const])),
+  'settings.ecommerce.listId': 'text',
+  'settings.ecommerce.minAmount': 'minAmount',
+  'settings.ecommerce.showProductRemainingQuantity': 'amount',
+  ...Object.fromEntries(MEDIA_IMAGE_KEYS.map((key) => [`medias.images.${key}`, key.startsWith('customersAppLogo') ? ('logoOrNull' as const) : ('text' as const)])),
 });
 
 /** Kind of every field of a place. */
@@ -106,6 +157,53 @@ export const PLACE_FIELD_KINDS: Readonly<Record<keyof PlaceFields, FieldKind>> =
   expirationDate: 'dateOrNull',
 });
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+type Shape = Readonly<Record<string, 'string' | 'boolean' | 'numbers'>>;
+
+/** Whether a value is an object with exactly the given keys, each of the given type (`numbers`: a list of numbers, `null` allowed as an element). */
+function hasShape(value: unknown, shape: Shape): boolean {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  const keys = Object.keys(shape);
+  return (
+    Object.keys(value).length === keys.length &&
+    keys.every((key) => {
+      const item = value[key];
+      return shape[key] === 'numbers' ? Array.isArray(item) && item.every((cut) => cut === null || (typeof cut === 'number' && Number.isFinite(cut) && cut >= 0)) : typeof item === shape[key];
+    })
+  );
+}
+
+/** The keys of a logo descriptor, in the order the legacy Media Manager writes them. */
+const LOGO_DESCRIPTOR_KEYS = ['_id', 'dirname', 'basename', 'extension', 'filename', 'mimetype', 'filectime', 'mmThumb', 'type', 'title', 'alt'] as const;
+
+/**
+ * Whether a value is the descriptor of a logo as the legacy stores it: exactly the eleven keys in order, `_id` the hexadecimal string of an id, `filectime` a finite number or a
+ * double, `mmThumb` an empty object, `type` `image`, the rest text.
+ */
+function isLogoDescriptor(value: unknown): boolean {
+  if (!isPlainObject(value) || Object.keys(value).join() !== LOGO_DESCRIPTOR_KEYS.join()) {
+    return false;
+  }
+  const created = value['filectime'];
+  const mmThumb = value['mmThumb'];
+  return (
+    typeof value['_id'] === 'string' &&
+    /^[0-9a-f]{24}$/.test(value['_id']) &&
+    (created instanceof Double ? Number.isFinite(created.value) : typeof created === 'number' && Number.isFinite(created)) &&
+    isPlainObject(mmThumb) &&
+    Object.keys(mmThumb).length === 0 &&
+    value['type'] === 'image' &&
+    (['dirname', 'basename', 'extension', 'filename', 'mimetype', 'title', 'alt'] as const).every((key) => typeof value[key] === 'string')
+  );
+}
+
+const listOf = (shape: Shape) => (value: unknown): boolean => Array.isArray(value) && value.every((item) => hasShape(item, shape));
+
 const CHECKS: Readonly<Record<FieldKind, (value: unknown) => boolean>> = {
   name: (value) => typeof value === 'string' && value.trim() !== '',
   text: (value) => typeof value === 'string',
@@ -114,6 +212,15 @@ const CHECKS: Readonly<Record<FieldKind, (value: unknown) => boolean>> = {
   dateOrNull: (value) => value === null || (value instanceof Date && !Number.isNaN(value.getTime())),
   objectId: (value) => value instanceof ObjectId,
   flagOrTextOrNull: (value) => value === null || typeof value === 'string' || typeof value === 'boolean',
+  amount: (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0,
+  invoiceNumberOrNull: (value) => value === null || (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_INVOICE_NUMBER),
+  positionOrNull: (value) => value === null || value === 'prefix' || value === 'suffix',
+  // The minimum orders by currency: only the keys that are operators are refused (a legacy key the backend keeps untouched is not judged).
+  minAmount: (value) => isPlainObject(value) && Object.keys(value).every((key) => !key.startsWith('$')),
+  invoiceSeries: listOf({ name: 'string', cash: 'boolean' }),
+  banks: listOf({ id: 'string', name: 'string', iban: 'string', abi: 'string', cab: 'string', bic: 'string', default: 'boolean' }),
+  suppliers: listOf({ id: 'string', name: 'string', cuts: 'numbers' }),
+  logoOrNull: (value) => value === null || isLogoDescriptor(value),
 };
 
 /**

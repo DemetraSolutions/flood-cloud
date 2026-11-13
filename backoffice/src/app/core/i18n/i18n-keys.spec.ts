@@ -18,6 +18,7 @@ import {
 } from '../users/pos.catalog';
 import { SHIFT_DAY_KEYS } from '../users/shift-time';
 import { PERMISSION_MODULES } from '../../features/users/user.types';
+import { COMPANY_SECTIONS, ECOMMERCE_FLAGS } from '../../features/companies/company.types';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -257,5 +258,54 @@ describe('templates', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('defines the texts of the company pages, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    const expected: string[] = [];
+    for (const section of COMPANY_SECTIONS) {
+      expected.push(`COMPANIES.SECTION.${section.key}`);
+    }
+    for (const flag of ECOMMERCE_FLAGS) {
+      expected.push(
+        `COMPANIES.CUSTOMER_APP.FLAG.${flag.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase()}`,
+      );
+    }
+    for (const action of ['TRASH', 'RESTORE', 'DELETE']) {
+      for (const part of ['TITLE', 'CONFIRM', 'LABEL', 'DONE']) {
+        expected.push(`COMPANIES.ACTION.${part}.${action}`);
+      }
+    }
+    for (const code of ['SU', 'SM']) {
+      expected.push(`COMPANIES.E_INVOICING.SHAREHOLDERS.${code}`);
+    }
+    for (const code of ['LS', 'LN']) {
+      expected.push(`COMPANIES.E_INVOICING.LIQUIDATION.${code}`);
+    }
+    for (const key of [
+      'COMPANIES.NUMBERING.CERVED_HINT',
+      'COMPANIES.RESERVED_NOTE',
+      'COMPANIES.NUMBERING.PREFIX',
+      'COMPANIES.NUMBERING.SUFFIX',
+      'COMPANIES.STATUS.ACTIVE',
+      'COMPANIES.STATUS.DISABLED',
+      'COMPANIES.NEW_TITLE',
+      'COMPANIES.CREATE',
+      'COMPANIES.MEDIA.FILE_TYPE',
+      'COMPANIES.MEDIA.FILE_SIZE',
+    ]) {
+      expected.push(key);
+    }
+    for (const part of [
+      'TOO_LARGE',
+      'UNSUPPORTED',
+      'INVALID',
+      'RATE_LIMITED',
+      'RATE_LIMITED_WAIT',
+      'UNAVAILABLE',
+    ]) {
+      expected.push(`COMPANIES.MEDIA.UPLOAD_ERROR.${part}`);
+    }
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });
 });

@@ -88,6 +88,14 @@ export const MENU: readonly MenuItem[] = [
     roles: ['SA'],
   },
   {
+    id: 'companies',
+    labelKey: 'MENU.COMPANIES',
+    icon: 'building',
+    route: '/groups',
+    groupPath: 'companies',
+    permission: 'companies:read',
+  },
+  {
     id: 'fidelity',
     labelKey: 'MENU.FIDELITY',
     icon: 'card',

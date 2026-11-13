@@ -4,12 +4,15 @@ import type { Databases } from '../../db/databases.ts';
 import { groupDatabaseFor } from '../security/scope/group-access.ts';
 import type { GroupAccess } from '../security/scope/group-access.ts';
 import type { AuthPrincipal } from '../security/scope/principal.ts';
+import { companyInScope, placeInScope } from '../security/scope/scope-filters.ts';
 import { EXACT_TYPES, expectedCopy } from './copy-rule.ts';
-import { newCompanyDocument, newPlaceDocument } from './defaults.ts';
-import { CrossClusterWriteError, InvalidWriteInputError } from './errors.ts';
+import { COMPANY_CONTAINERS } from './company-paths.ts';
+import { companyContainerDefaults, newCompanyDocument, newPlaceDocument } from './defaults.ts';
+import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from './errors.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkObjectId } from './fields.ts';
-import type { CompanyFields, NewCompanyFields, NewPlaceFields, PlaceFields } from './fields.ts';
+import type { CompanyChanges, NewCompanyFields, NewPlaceFields, PlaceFields } from './fields.ts';
 import { reserveWithGoogleRecord } from './reserve-with-google.ts';
+import { normalizeVatNumber, vatNumberFilter } from './vat.ts';
 import { versionOf } from './version.ts';
 
 /** The two collections the service writes. */
@@ -28,7 +31,11 @@ export type WriteOutcome =
   /** The `companyId` of a place does not name a company of the group that is not in the trash. Nothing was written. */
   | { readonly outcome: 'companyNotFound' }
   /** A deletion was asked for a document that is not in the trash. Nothing was written. */
-  | { readonly outcome: 'notTrashed' };
+  | { readonly outcome: 'notTrashed' }
+  /** The VAT number of a company created or changed is already the number of another company of the group that is not in the trash. Nothing was written. */
+  | { readonly outcome: 'vatNumberTaken' }
+  /** A company in the trash cannot be deleted because a place of the group (trashed ones included) still refers to it. Nothing was written. */
+  | { readonly outcome: 'referenced' };
 
 /** Options of {@link companiesPlacesWriter}. */
 export interface WriterOptions {
@@ -46,7 +53,7 @@ export const MAX_GROUP_PLACES = 10_000;
 
 /**
  * The write service of companies and places (`doc/Tasks.md` 5.6): the only writer of the `companies` and `places` of a group database
- * and of their copies in the common database. It has no HTTP routes: the routes of areas 6 and 7 use it.
+ * and of their copies in the common database. It has no HTTP routes of its own: the company routes (area 6) use it, and the place routes (area 7) will.
  *
  * Every operation runs in one transaction on the common cluster and, in this order: writes the group database in the legacy format, rereads
  * the whole document (with `EXACT_TYPES`), writes the copy in `common` with `replaceOne({ _id, groupId }, { ...document, groupId }, { upsert: true })`
@@ -68,10 +75,21 @@ export interface CompaniesPlacesWriter {
    */
   currentVersion(kind: EntityKind, id: ObjectId): Promise<string | null>;
   /**
+   * Reads a document of the group database as stored, with its version: the document with the exact BSON types (`EXACT_TYPES`: `Int32` and `Double`
+   * wrappers instead of numbers), the version the same bytes give. It is the read of the detail routes, so the `ETag` they send is the version the next
+   * write checks; it is not scoped (the caller applies the perimeter of the principal to the id first).
+   *
+   * @param kind `companies` or `places`.
+   * @param id Id of the document.
+   * @returns The document and its version, or `null` when the document does not exist in the group.
+   */
+  read(kind: EntityKind, id: ObjectId): Promise<{ readonly document: Document; readonly version: string } | null>;
+  /**
    * Creates a company with the complete structure the legacy expects.
    *
-   * @param fields The owned fields; `name` is required.
-   * @returns `written`.
+   * @param fields The owned fields (the top-level ones and the dotted ones of the blocks); `name` is required.
+   * @returns `written`, or `vatNumberTaken` when another company of the group that is not in the trash has the same normalized VAT number
+   * (checked inside the transaction).
    * @throws {InvalidWriteInputError} If a field is not allowed, invalid or missing.
    * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
    */
@@ -86,16 +104,19 @@ export interface CompaniesPlacesWriter {
    */
   createPlace(fields: NewPlaceFields): Promise<WriteOutcome>;
   /**
-   * Changes some owned fields of a company with `$set`; nothing else of the document is written but `updateDate`.
+   * Changes some owned fields of a company with `$set`, each on its own leaf path (a key of `settings.ecommerce`, one of `fattura_elettronica`…, a whole
+   * array); nothing else of the document is written but `updateDate`, so the keys the service does not own survive. A block that is missing or empty
+   * (`settings: {}`) is completed with the defaults of the keys the change does not set. The VAT number is checked when it changes.
    *
    * @param id Id of the company.
    * @param expectedVersion The version the caller read.
    * @param changes The fields to change, at least one.
-   * @returns `written`, `notFound` or `conflict`.
+   * @returns `written`, `notFound`, `conflict`, or `vatNumberTaken` when the new VAT number belongs to another company of the group that is not in the trash.
    * @throws {InvalidWriteInputError} If a field is not allowed or invalid, or there is none.
+   * @throws {MalformedDocumentError} If a block the change writes into is not an object in the stored document.
    * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
    */
-  updateCompany(id: ObjectId, expectedVersion: string, changes: Partial<CompanyFields>): Promise<WriteOutcome>;
+  updateCompany(id: ObjectId, expectedVersion: string, changes: CompanyChanges): Promise<WriteOutcome>;
   /**
    * Changes some owned fields of a place with `$set` and recalculates `groups.places[]`. A new `companyId` must name a company of the group that
    * is not in the trash.
@@ -126,18 +147,18 @@ export interface CompaniesPlacesWriter {
    * @param kind `companies` or `places`.
    * @param id Id of the document.
    * @param expectedVersion The version the caller read.
-   * @returns `written`, `notFound` or `conflict`.
+   * @returns `written`, `notFound`, `conflict`, or (companies) `vatNumberTaken` when another company of the group that is not in the trash now has its VAT number.
    * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
    */
   restore(kind: EntityKind, id: ObjectId, expectedVersion: string): Promise<WriteOutcome>;
   /**
    * Deletes a company or a place that is in the trash, and its copy. A place also leaves the Reserve with Google feed and `groups.places[]` is
-   * recalculated. Nothing is cascaded.
+   * recalculated. Nothing is cascaded, so a company that a place of the group (trashed ones included) still refers to is not deleted.
    *
    * @param kind `companies` or `places`.
    * @param id Id of the document.
    * @param expectedVersion The version the caller read.
-   * @returns `deleted`, `notFound`, `conflict` or `notTrashed`.
+   * @returns `deleted`, `notFound`, `conflict`, `notTrashed`, or `referenced` (a company with places).
    * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
    */
   deleteTrashed(kind: EntityKind, id: ObjectId, expectedVersion: string): Promise<WriteOutcome>;
@@ -150,6 +171,54 @@ const NOT_FOUND = Object.freeze({ outcome: 'notFound' }) satisfies WriteOutcome;
 const CONFLICT = Object.freeze({ outcome: 'conflict' }) satisfies WriteOutcome;
 const COMPANY_NOT_FOUND = Object.freeze({ outcome: 'companyNotFound' }) satisfies WriteOutcome;
 const NOT_TRASHED = Object.freeze({ outcome: 'notTrashed' }) satisfies WriteOutcome;
+const VAT_TAKEN = Object.freeze({ outcome: 'vatNumberTaken' }) satisfies WriteOutcome;
+const REFERENCED = Object.freeze({ outcome: 'referenced' }) satisfies WriteOutcome;
+
+/** The container (`settings.global`, `fattura_elettronica`…) a leaf path belongs to, `undefined` for a top-level field. */
+const containerOf = (path: string): string | undefined => Object.keys(COMPANY_CONTAINERS).find((container) => path.startsWith(`${container}.`));
+
+/**
+ * The leaves a write adds so that no block of the stored company stays half built: for every block the change writes into, when it is missing
+ * or empty, the default of each of its keys the change does not set. A block that already has keys is left as it is (a legacy company may lack
+ * some, and the legacy wrote it so), and a block that is not an object (also any parent of it) is refused.
+ *
+ * @param current The stored document.
+ * @param set The leaves the change sets.
+ * @returns The extra leaves to `$set`.
+ * @throws {MalformedDocumentError} If a block, or a parent of it, is stored as something that is not an object.
+ */
+function completionOf(current: Document, set: Document): Document {
+  const extra: Document = {};
+  for (const container of new Set(Object.keys(set).map(containerOf))) {
+    if (container === undefined) {
+      continue;
+    }
+    let value: unknown = current;
+    let path = '';
+    let present = true;
+    for (const step of container.split('.')) {
+      path = path === '' ? step : `${path}.${step}`;
+      const holder = value as Document;
+      if (!Object.hasOwn(holder, step)) {
+        present = false;
+        break;
+      }
+      value = holder[step];
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new MalformedDocumentError(path);
+      }
+    }
+    if (!present || Object.keys(value as Document).length === 0) {
+      for (const [key, fallback] of Object.entries(companyContainerDefaults(container))) {
+        const leaf = `${container}.${key}`;
+        if (!Object.hasOwn(set, leaf)) {
+          extra[leaf] = fallback;
+        }
+      }
+    }
+  }
+  return extra;
+}
 
 /**
  * Opens the write service for a group the caller was verified to reach. The access is checked again against the principal (it must have been
@@ -231,6 +300,16 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
     }
   };
 
+  /** Whether another company of the group that is not in the trash has the same normalized VAT number (`except` is the company being written). */
+  const vatNumberTaken = async (code: string, except: ObjectId, session: ClientSession): Promise<boolean> => {
+    const normalized = normalizeVatNumber(code);
+    if (normalized === '') {
+      return false;
+    }
+    const other = await original('companies').findOne({ _id: { $ne: except }, trash: { $ne: true }, ...vatNumberFilter(normalized) }, { projection: { _id: 1 }, session });
+    return other !== null;
+  };
+
   /** Whether a company of the group exists and is not in the trash. */
   const companyIsUsable = async (companyId: ObjectId, session: ClientSession): Promise<boolean> =>
     (await original('companies').findOne({ _id: companyId, trash: { $ne: true } }, { projection: { _id: 1 }, session })) !== null;
@@ -264,10 +343,26 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
       return document === null ? null : versionOf(kind, document);
     },
 
+    read: async (kind, id) => {
+      checkObjectId(id, 'id');
+      // The perimeter of the caller is applied here, so no caller can get a document outside it.
+      if (kind === 'companies' && !companyInScope(principal.scope, id)) {
+        return null;
+      }
+      const document = await original(kind).findOne({ _id: id }, { ...EXACT_TYPES });
+      if (document === null || (kind === 'places' && !placeInScope(principal.scope, id, document['companyId']))) {
+        return null;
+      }
+      return { document, version: versionOf(kind, document) };
+    },
+
     createCompany: async (fields) => {
       const id = new ObjectId();
       const document = newCompanyDocument(id, groupId, fields, clock());
       return run(async (session) => {
+        if (await vatNumberTaken(document['code'] as string, id, session)) {
+          return VAT_TAKEN;
+        }
         await original('companies').insertOne(document, { session });
         return mirror('companies', id, session);
       });
@@ -287,7 +382,20 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
       });
     },
 
-    updateCompany: async (id, expected, changes) => change('companies', id, expected, checkChanges(COMPANY_FIELD_KINDS, changes), none),
+    updateCompany: async (id, expected, changes) => {
+      const set = checkChanges(COMPANY_FIELD_KINDS, changes);
+      return run(async (session) => {
+        const passed = await gate('companies', checkObjectId(id, 'id'), expected, session);
+        if ('stop' in passed) {
+          return passed.stop;
+        }
+        if (Object.hasOwn(set, 'code') && (await vatNumberTaken(set['code'] as string, id, session))) {
+          return VAT_TAKEN;
+        }
+        await original('companies').updateOne({ _id: id }, { $set: { ...set, ...completionOf(passed.current, set), updateDate: clock() } }, { session });
+        return mirror('companies', id, session);
+      });
+    },
 
     updatePlace: async (id, expected, changes) => {
       const set = checkChanges(PLACE_FIELD_KINDS, changes);
@@ -298,7 +406,20 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
       change(kind, id, expected, { trash: true }, kind === 'places' ? (session) => placeEffects(session, () => leaveFeed(id, session)) : none),
 
     restore: (kind, id, expected) =>
-      change(kind, id, expected, { trash: false }, kind === 'places' ? (session) => placeEffects(session, () => rejoinFeed(id, session)) : none),
+      kind === 'companies'
+        ? run(async (session) => {
+            const passed = await gate(kind, checkObjectId(id, 'id'), expected, session);
+            if ('stop' in passed) {
+              return passed.stop;
+            }
+            // While it was in the trash another company may have taken its VAT number.
+            if (typeof passed.current['code'] === 'string' && (await vatNumberTaken(passed.current['code'], id, session))) {
+              return VAT_TAKEN;
+            }
+            await original(kind).updateOne({ _id: id }, { $set: { trash: false, updateDate: clock() } }, { session });
+            return mirror(kind, id, session);
+          })
+        : change(kind, id, expected, { trash: false }, (session) => placeEffects(session, () => rejoinFeed(id, session))),
 
     deleteTrashed: (kind, id, expected) =>
       run(async (session) => {
@@ -308,6 +429,9 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
         }
         if (passed.current['trash'] !== true) {
           return NOT_TRASHED;
+        }
+        if (kind === 'companies' && (await original('places').findOne({ companyId: { $in: [id, id.toHexString()] } }, { projection: { _id: 1 }, session })) !== null) {
+          return REFERENCED;
         }
         await original(kind).deleteOne({ _id: id }, { session });
         await copy(kind).deleteOne({ _id: id, groupId }, { session });

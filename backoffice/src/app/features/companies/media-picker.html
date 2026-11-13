@@ -1,0 +1,82 @@
+<fc-dialog
+  [heading]="'COMPANIES.MEDIA.PICKER_TITLE' | t"
+  [wide]="true"
+  [open]="open()"
+  (openChange)="open.set($event)"
+>
+  <div class="tools">
+    <fc-text-field
+      type="search"
+      [label]="'COMPANIES.MEDIA.SEARCH' | t"
+      [value]="searchText()"
+      (valueChange)="onSearch($event)"
+    />
+    <div class="upload">
+      <input
+        #chooser
+        class="file"
+        type="file"
+        tabindex="-1"
+        aria-hidden="true"
+        [accept]="accept"
+        (change)="onFile($event)"
+      />
+      <button fc-button variant="secondary" [loading]="uploading()" (click)="browse()">
+        {{ 'COMPANIES.MEDIA.UPLOAD' | t }}
+      </button>
+      <p class="hint">{{ 'COMPANIES.MEDIA.UPLOAD_HINT' | t }}</p>
+    </div>
+  </div>
+  <p class="problem" role="alert">{{ problem() }}</p>
+
+  @if (images.error()) {
+    <fc-error-state
+      [title]="'COMPANIES.MEDIA.LOAD_ERROR' | t"
+      [message]="errorMessage()"
+      [requestId]="loadError()?.requestId ?? null"
+      (retry)="images.reload()"
+    />
+  } @else if (images.isLoading() && rows().length === 0) {
+    <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+  } @else if (rows().length === 0) {
+    <p class="empty">{{ 'COMPANIES.MEDIA.EMPTY' | t }}</p>
+  } @else {
+    <ul class="images" [attr.aria-busy]="images.isLoading()">
+      @for (image of rows(); track image.id) {
+        <li>
+          <button
+            type="button"
+            class="image"
+            [attr.aria-label]="'COMPANIES.MEDIA.CHOOSE_LABEL' | t: { name: image.name }"
+            (click)="choose(image)"
+          >
+            @if (image.urls) {
+              <img [src]="image.urls.xs" alt="" loading="lazy" />
+            } @else {
+              <span class="no-preview">{{ 'COMPANIES.MEDIA.NO_PREVIEW' | t }}</span>
+            }
+            <span class="name">{{ image.name }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  <div class="pages">
+    <button
+      fc-button
+      variant="secondary"
+      [disabled]="cursorStack().length === 0"
+      (click)="previous()"
+    >
+      {{ 'PAGINATION.PREVIOUS' | t }}
+    </button>
+    <button fc-button variant="secondary" [disabled]="nextCursor() === null" (click)="next()">
+      {{ 'PAGINATION.NEXT' | t }}
+    </button>
+  </div>
+
+  <button fcDialogActions fc-button variant="secondary" (click)="open.set(false)">
+    {{ 'COMMON.CLOSE' | t }}
+  </button>
+</fc-dialog>

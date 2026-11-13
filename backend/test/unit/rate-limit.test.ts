@@ -13,13 +13,18 @@ import { testConfig } from '../helpers/app.ts';
 const rules = createRateLimitRules(testConfig());
 
 describe('createRateLimitRules', () => {
-  it('builds the nine rules from the thresholds', () => {
+  it('builds the twelve rules from the thresholds', () => {
     assert.deepEqual(
       Object.values(rules).map(({ bucket, limit }) => [bucket, limit]),
-      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['api:user', 300]],
+      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['media-upload:user', 30], ['media-upload-day:user', 300], ['media-upload-day:group', 2000], ['api:user', 300]],
     );
-    const custom = createRateLimitRules(testConfig({ RATE_LIMIT_LOGIN_PER_USERNAME: '7', RATE_LIMIT_API_PER_USER: '9' }));
-    assert.deepEqual([custom.loginPerUsername.limit, custom.apiPerUser.limit], [7, 9]);
+    const custom = createRateLimitRules(testConfig({ RATE_LIMIT_LOGIN_PER_USERNAME: '7', RATE_LIMIT_API_PER_USER: '9', RATE_LIMIT_MEDIA_UPLOAD_PER_USER: '4', RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY: '8', RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY: '9' }));
+    assert.deepEqual([custom.loginPerUsername.limit, custom.apiPerUser.limit, custom.mediaUploadPerUser.limit], [7, 9, 4]);
+    assert.deepEqual([custom.mediaUploadPerUserDaily.limit, custom.mediaUploadPerGroupDaily.limit, custom.mediaUploadPerUserDaily.windowSeconds, custom.mediaUploadPerGroupDaily.windowSeconds], [8, 9, 86400, 86400]);
+    assert.equal(rules.mediaUploadPerGroupDaily.needsGroup, true);
+    const res = (groupAccess?: { groupId: { toHexString(): string } }) => ({ locals: { groupAccess } }) as never;
+    assert.equal(rules.mediaUploadPerGroupDaily.key({} as never, res({ groupId: { toHexString: () => 'abc' } })), 'abc');
+    assert.equal(rules.mediaUploadPerGroupDaily.key({} as never, res()), null);
     assert.ok(Object.isFrozen(rules) && Object.isFrozen(rules.apiPerUser));
   });
 

@@ -1,0 +1,71 @@
+<form novalidate (submit)="$event.preventDefault()">
+  @if (state.fieldError(f); as problem) {
+    <p class="problem" role="alert">{{ problem }}</p>
+  }
+  @if (state.model().mealVoucherIssuers.length === 0) {
+    <p class="note">{{ 'COMPANIES.VOUCHERS.EMPTY' | t }}</p>
+  }
+  <div class="rows">
+    @for (issuer of f; track $index; let i = $index) {
+      <fieldset class="row">
+        <legend>{{ label('COMPANIES.VOUCHERS.ROW', i) }}</legend>
+        <fc-text-field
+          [formField]="issuer.name"
+          [label]="label('COMPANIES.VOUCHERS.NAME', i)"
+          [error]="state.fieldError(issuer.name)"
+          (blurred)="issuer.name().markAsTouched()"
+        />
+        <p class="note">{{ 'COMPANIES.VOUCHERS.CUTS_HINT' | t }}</p>
+        @if (state.fieldError(issuer.cuts); as problem) {
+          <p class="problem" role="alert">{{ problem }}</p>
+        }
+        @for (cut of issuer.cuts; track $index; let c = $index) {
+          <div class="cut">
+            <fc-text-field
+              [formField]="cut"
+              type="number"
+              inputmode="decimal"
+              [label]="label('COMPANIES.VOUCHERS.CUT', i, c)"
+              [error]="state.fieldError(cut)"
+              (blurred)="cut().markAsTouched()"
+            />
+            @if (state.canWrite()) {
+              <button
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="label('COMPANIES.VOUCHERS.REMOVE_CUT_LABEL', i, c)"
+                (click)="removeCut(i, c)"
+              >
+                {{ 'COMPANIES.REMOVE' | t }}
+              </button>
+            }
+          </div>
+        }
+        @if (state.canWrite()) {
+          <div class="row-actions">
+            <button fc-button variant="secondary" [disabled]="!canAddCut(i)" (click)="addCut(i)">
+              {{ 'COMPANIES.VOUCHERS.ADD_CUT' | t }}
+            </button>
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="label('COMPANIES.VOUCHERS.REMOVE_LABEL', i)"
+              (click)="remove(i)"
+            >
+              {{ 'COMPANIES.REMOVE' | t }}
+            </button>
+          </div>
+        }
+      </fieldset>
+    }
+  </div>
+  @if (state.canWrite()) {
+    <div>
+      <button fc-button variant="secondary" [disabled]="!canAdd()" (click)="add()">
+        {{ 'COMPANIES.VOUCHERS.ADD' | t }}
+      </button>
+    </div>
+  }
+
+  <fc-company-save section="mealVoucherIssuers" />
+</form>

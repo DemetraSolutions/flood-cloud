@@ -20,6 +20,19 @@ export interface ClusterConfig {
   readonly analyticsUri: Secret | null;
 }
 
+/** Where the uploaded media are stored and how the server authenticates to the storage. */
+export type MediaConfig =
+  /** No storage: the upload route answers `503 SERVICE_UNAVAILABLE`, the list of the images still works. */
+  | { readonly kind: 'disabled' }
+  /** Google Cloud Storage in one bucket. */
+  | {
+      readonly kind: 'gcs';
+      /** Name of the bucket (`GCS_MEDIA_BUCKET`). */
+      readonly bucket: string;
+      /** `metadata`: the token of the metadata server (GKE Workload Identity). `service-account-file`: a JWT signed with the key of a credentials file, read once at start-up. */
+      readonly auth: { readonly mode: 'metadata' } | { readonly mode: 'service-account-file'; readonly file: string };
+    };
+
 /** A single configuration problem: only the variable name and a reason, never the value. */
 export interface ConfigIssue {
   readonly variable: string;
@@ -84,6 +97,14 @@ export interface Config {
   readonly rateLimitApiPerUser: number;
   /** Failed authentications per minute allowed to a client IP on `/v1` (`RATE_LIMIT_UNAUTHENTICATED_PER_IP`). */
   readonly rateLimitUnauthenticatedPerIp: number;
+  /** Image uploads per minute allowed to a user (`RATE_LIMIT_MEDIA_UPLOAD_PER_USER`): each decodes and resizes an image and writes five objects. */
+  readonly rateLimitMediaUploadPerUser: number;
+  /** Image uploads per day allowed to a user (`RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY`). */
+  readonly rateLimitMediaUploadPerUserDaily: number;
+  /** Image uploads per day allowed to a group (`RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY`). */
+  readonly rateLimitMediaUploadPerGroupDaily: number;
+  /** The media storage (`MEDIA_STORAGE`, `GCS_MEDIA_BUCKET`, `GCS_AUTH`, `GCS_SERVICE_ACCOUNT_FILE`). */
+  readonly media: MediaConfig;
   /** Days the `data` and `security` activity log entries are kept (`ACTIVITY_LOG_RETENTION_DAYS`). */
   readonly activityLogRetentionDays: number;
   /** Days the `error` activity log entries are kept (`ACTIVITY_LOG_ERROR_RETENTION_DAYS`). */
@@ -219,6 +240,44 @@ function checkOrigin(entry: string, appEnv: string | undefined): string | undefi
     return undefined;
   }
   return 'https is required (http is allowed only for localhost and 127.0.0.1 when APP_ENV=development)';
+}
+
+/** Shape of a Google Cloud Storage bucket name (3 to 63 characters, lower case letters, digits, dashes, underscores and dots, starting and ending with a letter or a digit). */
+const BUCKET_NAME = /^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/;
+
+/**
+ * Reads the media storage settings. `MEDIA_STORAGE` is `disabled` (the default) or `gcs`; `gcs` needs `GCS_MEDIA_BUCKET` and `GCS_AUTH`
+ * (`metadata` or `service-account-file`), and the latter needs `GCS_SERVICE_ACCOUNT_FILE`. The variables of a mode that is not chosen are ignored.
+ *
+ * @returns The settings, or `undefined` after recording issues.
+ */
+function readMedia(env: Env, issues: ConfigIssue[]): MediaConfig | undefined {
+  const storage = optionalVariable(env, 'MEDIA_STORAGE') ?? 'disabled';
+  if (storage === 'disabled') {
+    return Object.freeze({ kind: 'disabled' as const });
+  }
+  if (storage !== 'gcs') {
+    issues.push({ variable: 'MEDIA_STORAGE', reason: 'must be gcs or disabled' });
+    return undefined;
+  }
+  const bucket = optionalVariable(env, 'GCS_MEDIA_BUCKET');
+  const authMode = optionalVariable(env, 'GCS_AUTH');
+  const file = optionalVariable(env, 'GCS_SERVICE_ACCOUNT_FILE');
+  const before = issues.length;
+  if (bucket === undefined) {
+    issues.push({ variable: 'GCS_MEDIA_BUCKET', reason: 'is required when MEDIA_STORAGE is gcs' });
+  } else if (!BUCKET_NAME.test(bucket)) {
+    issues.push({ variable: 'GCS_MEDIA_BUCKET', reason: 'must be a bucket name (3 to 63 characters: lower case letters, digits, dots, dashes and underscores)' });
+  }
+  if (authMode !== 'metadata' && authMode !== 'service-account-file') {
+    issues.push({ variable: 'GCS_AUTH', reason: authMode === undefined ? 'is required when MEDIA_STORAGE is gcs (metadata or service-account-file)' : 'must be metadata or service-account-file' });
+  } else if (authMode === 'service-account-file' && (file === undefined || file.includes('\0'))) {
+    issues.push({ variable: 'GCS_SERVICE_ACCOUNT_FILE', reason: 'is required, as a path without NUL characters, when GCS_AUTH is service-account-file' });
+  }
+  if (issues.length > before || bucket === undefined || authMode === undefined) {
+    return undefined;
+  }
+  return Object.freeze({ kind: 'gcs' as const, bucket, auth: Object.freeze(authMode === 'metadata' ? { mode: 'metadata' as const } : { mode: 'service-account-file' as const, file: file as string }) });
 }
 
 /** The settings needed to open the databases; tools that only read data load just these. */
@@ -470,6 +529,10 @@ export function loadConfig(env: Env): Config {
   const rateLimitClientErrorsPerUser = readInteger(env, issues, 'RATE_LIMIT_CLIENT_ERRORS_PER_USER', 30, 1, 100000);
   const rateLimitApiPerUser = readInteger(env, issues, 'RATE_LIMIT_API_PER_USER', 300, 1, 100000);
   const rateLimitUnauthenticatedPerIp = readInteger(env, issues, 'RATE_LIMIT_UNAUTHENTICATED_PER_IP', 300, 1, 100000);
+  const rateLimitMediaUploadPerUser = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_USER', 30, 1, 100000);
+  const rateLimitMediaUploadPerUserDaily = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY', 300, 1, 1_000_000);
+  const rateLimitMediaUploadPerGroupDaily = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY', 2000, 1, 1_000_000);
+  const media = readMedia(env, issues);
   const activityLogRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_RETENTION_DAYS', 365, 1, 3650);
   const activityLogErrorRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_ERROR_RETENTION_DAYS', 90, 1, 3650);
 
@@ -516,6 +579,10 @@ export function loadConfig(env: Env): Config {
     rateLimitClientErrorsPerUser === undefined ||
     rateLimitApiPerUser === undefined ||
     rateLimitUnauthenticatedPerIp === undefined ||
+    rateLimitMediaUploadPerUser === undefined ||
+    rateLimitMediaUploadPerUserDaily === undefined ||
+    rateLimitMediaUploadPerGroupDaily === undefined ||
+    media === undefined ||
     activityLogRetentionDays === undefined ||
     activityLogErrorRetentionDays === undefined
   ) {
@@ -543,6 +610,10 @@ export function loadConfig(env: Env): Config {
     rateLimitClientErrorsPerUser,
     rateLimitApiPerUser,
     rateLimitUnauthenticatedPerIp,
+    rateLimitMediaUploadPerUser,
+    rateLimitMediaUploadPerUserDaily,
+    rateLimitMediaUploadPerGroupDaily,
+    media,
     activityLogRetentionDays,
     activityLogErrorRetentionDays,
   });

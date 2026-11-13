@@ -80,6 +80,12 @@ export interface RouteDefinition {
    */
   readonly middleware?: readonly RequestHandler[];
   /**
+   * For a route whose body is not JSON (an upload): the handler that reads it, which replaces the JSON guard and parser (`POST`, `PUT` and `PATCH` only). It runs after
+   * authentication, the rate limit, the group check and the permission, so a body is never read for a caller who may not send it, and it is responsible for refusing a body that is
+   * not of the expected type (`415`) and for its size limit; `bodyLimit` does not apply.
+   */
+  readonly multipart?: RequestHandler;
+  /**
    * `false` for a route whose response carries credentials (access or refresh tokens): the response
    * is never compressed, which would expose the secrets to BREACH-style attacks (D-12).
    */
@@ -184,6 +190,10 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     if (extra !== undefined && !(Array.isArray(extra) && extra.every((item: unknown) => typeof item === 'function'))) {
       problems.push(`${label}: middleware must be a list of functions`);
     }
+    const multipart: unknown = route.multipart;
+    if (multipart !== undefined && (typeof multipart !== 'function' || !BODY_METHODS.has(route.method))) {
+      problems.push(`${label}: multipart must be a function and only POST, PUT and PATCH routes read a body`);
+    }
     const compress: unknown = route.compress;
     if (compress !== undefined && compress !== false) {
       problems.push(`${label}: compress can only be false`);
@@ -197,6 +207,8 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
         problems.push(`${label}: rateLimit must be a list of rules with a bucket and a key function`);
       } else if (options.rateLimit === undefined && rules.length > 0) {
         problems.push(`${label}: rate limit rules need the rateLimit dependencies`);
+      } else if ((rules as RateLimitRule[]).some((rule) => rule.needsGroup === true) && !(auth?.kind === 'user' && auth.group === true)) {
+        problems.push(`${label}: a rate limit rule that needs the group requires a user route declaring group: true`);
       }
     }
     if (auth?.kind === 'anonymous') {
@@ -275,7 +287,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * methods plus a catch-all answering 405 with the `Allow` header. `GET` implies `HEAD`.
  * The chain of a `user` route is: `authenticate` (guarded by the per-IP limit on failed authentications), the rate limit (the per-user API rule, then the
  * declared rules), the refusal of a user with a provisional password (unless the route allows it), the group check (when `group: true`), `requirePermission` (which reports PSA and D
- * group requests with their outcome), the feature check (when the route declares a `feature`), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser,
+ * group requests with their outcome), the feature check (when the route declares a `feature`), the rules that read the verified group (`needsGroup`), then (POST/PUT/PATCH) the 415 guard and the per-route JSON parser (or the route's `multipart` handler instead),
  * then the declared rules that read the body (`needsBody`), then the route `middleware` (validation), then the handler. An anonymous route runs
  * its declared rules, the guard and parser, the body rules, the handler. `/health` declares none.
  *
@@ -284,7 +296,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * @param options The `authenticate` middleware and the rate limit dependencies, needed by `user` routes.
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
  * empty reason, unknown permission, both or an empty `anyPermission`, unknown feature or a feature without `group: true`, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
- * malformed rate limit rules, malformed `middleware` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
+ * malformed rate limit rules, malformed `middleware`, `multipart` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
  * auth kind not allowed on the surface, disallowed method,
  * bad path, duplicate method and path).
  */
@@ -314,8 +326,9 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
     ];
     const declared = route.rateLimit ?? [];
     const limits = (rules: readonly RateLimitRule[]): RequestHandler[] => rules.map((rule) => rateLimit(rule, rateLimitOptions!));
-    const beforeBody = limits(declared.filter((rule) => rule.needsBody !== true));
+    const beforeBody = limits(declared.filter((rule) => rule.needsBody !== true && rule.needsGroup !== true));
     const afterBody = limits(declared.filter((rule) => rule.needsBody === true));
+    const afterGroup = limits(declared.filter((rule) => rule.needsGroup === true));
     if (route.auth.kind === 'user') {
       const grouped = route.auth.group === true;
       middleware.push(
@@ -326,11 +339,14 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         ...(grouped ? [requireGroupAccess(groupAccess!.groups)] : []),
         requirePermission(route.auth.anyPermission ?? route.auth.permission!, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
         ...(route.auth.feature === undefined ? [] : [requireFeature(route.auth.feature)]),
+        ...afterGroup,
       );
     } else {
       middleware.push(...beforeBody);
     }
-    if (BODY_METHODS.has(route.method)) {
+    if (BODY_METHODS.has(route.method) && route.multipart !== undefined) {
+      middleware.push(route.multipart);
+    } else if (BODY_METHODS.has(route.method)) {
       middleware.push(
         requireJsonContentType,
         express.json({ limit: route.bodyLimit ?? DEFAULT_BODY_LIMIT, strict: true, inflate: false, type: 'application/json' }),

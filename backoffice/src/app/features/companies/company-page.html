@@ -1,0 +1,91 @@
+@if (state.loadFailed()) {
+  <fc-error-state
+    [title]="'COMPANIES.LOAD_ERROR' | t"
+    [message]="errorKey() | t"
+    [requestId]="state.loadError()?.requestId ?? null"
+    (retry)="state.reload()"
+  />
+  <p>
+    <a [routerLink]="['/groups', groupId(), 'companies']">{{ 'COMPANIES.BACK' | t }}</a>
+  </p>
+} @else {
+  @let company = state.company();
+  @if (state.isNew() || company) {
+    <header class="page-header">
+      <h1>{{ state.isNew() ? ('COMPANIES.NEW_TITLE' | t) : company?.name }}</h1>
+      @if (company?.trashed) {
+        <fc-status-badge tone="danger">{{ 'COMPANIES.STATUS.TRASHED' | t }}</fc-status-badge>
+      } @else if (company?.status === 'disabled') {
+        <fc-status-badge tone="warning">{{ 'COMPANIES.STATUS.DISABLED' | t }}</fc-status-badge>
+      }
+      @if (!state.isNew() && state.canWrite()) {
+        <button
+          fc-button
+          [loading]="state.saving()"
+          [disabled]="!state.anyDirty()"
+          (click)="state.save('all')"
+        >
+          {{ 'COMPANIES.SAVE_ALL' | t }}
+        </button>
+      }
+    </header>
+
+    @if (!state.canWrite()) {
+      <p class="note">{{ 'COMPANIES.READ_ONLY' | t }}</p>
+    }
+    @if (state.lookupFailed()) {
+      <p class="note" role="status">{{ 'COMPANIES.LOOKUP_ERROR' | t }}</p>
+    }
+    @if (state.failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (state.stale()) {
+        <div class="actions">
+          <button fc-button variant="secondary" (click)="state.reload()">
+            {{ 'COMPANIES.RELOAD' | t }}
+          </button>
+        </div>
+      }
+    }
+
+    @if (!state.isNew()) {
+      <nav class="sections" [attr.aria-label]="'COMPANIES.SECTIONS' | t">
+        <ul>
+          @for (section of state.sections(); track section.id) {
+            <li>
+              <a
+                [routerLink]="section.path === '' ? '.' : section.path"
+                routerLinkActive="active"
+                ariaCurrentWhenActive="page"
+                [routerLinkActiveOptions]="{ exact: section.exact }"
+              >
+                {{ 'COMPANIES.SECTION.' + section.key | t }}
+                @if (state.dirty().has(section.id)) {
+                  <fc-status-badge tone="warning">{{ 'COMPANIES.UNSAVED' | t }}</fc-status-badge>
+                }
+                @if (state.errorCounts()[section.id] > 0) {
+                  <fc-status-badge tone="danger">
+                    {{ 'COMPANIES.SECTION_ERRORS' | t: { count: state.errorCounts()[section.id] } }}
+                  </fc-status-badge>
+                }
+              </a>
+            </li>
+          }
+        </ul>
+      </nav>
+    }
+
+    <router-outlet />
+  } @else {
+    <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+  }
+}
+
+<fc-confirm-dialog
+  [heading]="'COMPANIES.LEAVE.TITLE' | t"
+  [message]="'COMPANIES.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'COMPANIES.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>

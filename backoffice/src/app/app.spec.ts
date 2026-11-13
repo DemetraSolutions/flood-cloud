@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
+import { fakeCompany } from '../testing/companies';
 import { fakeGroup } from '../testing/groups';
 import { signIn } from '../testing/session';
 import { App } from './app';
@@ -251,6 +252,73 @@ describe('routes', () => {
       [`/groups/${GROUP}/settings`, sa([])],
     ])('protects %s', async (url, profile) => {
       await go(url, profile);
+      expect(location()).toBe('/forbidden');
+    });
+  });
+
+  describe('companies', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a1';
+    const COMPANY = '665f1c2e9b1d4a0012ab34b2';
+    const sa = (permissions: string[]) => ({
+      role: 'SA' as const,
+      permissions: [...permissions, 'profile:read'],
+    });
+
+    async function open(url: string, permissions: string[]) {
+      setup();
+      sessionStorage.clear();
+      signIn(sa(permissions));
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(url);
+      return harness;
+    }
+
+    it('lazy-loads the list', async () => {
+      const list = await open(`/groups/${GROUP}/companies`, ['companies:read']);
+      expect((list.routeNativeElement as HTMLElement).querySelector('main h1')?.textContent).toBe(
+        '⟦COMPANIES.TITLE⟧',
+      );
+    });
+
+    it('lazy-loads the page of a new company', async () => {
+      const created = await open(`/groups/${GROUP}/companies/new`, [
+        'companies:read',
+        'companies:create',
+      ]);
+      expect(
+        (created.routeNativeElement as HTMLElement).querySelector('main h1')?.textContent,
+      ).toBe('⟦COMPANIES.NEW_TITLE⟧');
+    });
+
+    it.each([
+      ['', 'fc-company-general'],
+      ['/e-invoicing', 'fc-company-e-invoicing'],
+      ['/invoice-numbering', 'fc-company-numbering'],
+      ['/bank-accounts', 'fc-company-banks'],
+      ['/meal-vouchers', 'fc-company-meal-vouchers'],
+      ['/customer-app', 'fc-company-customer-app'],
+      ['/media', 'fc-company-media'],
+    ])('lazy-loads the tab %s of a company', async (path, selector) => {
+      const harness = await open(`/groups/${GROUP}/companies/${COMPANY}${path}`, [
+        'companies:read',
+      ]);
+      TestBed.inject(HttpTestingController)
+        .expectOne((r) => r.url.endsWith(`/v1/groups/${GROUP}/companies/${COMPANY}`))
+        .flush({ data: fakeCompany() });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      expect((harness.routeNativeElement as HTMLElement).querySelector(selector)).not.toBeNull();
+    });
+
+    it.each([
+      [`/groups/${GROUP}/companies`, []],
+      [`/groups/${GROUP}/companies/${COMPANY}`, []],
+      [`/groups/${GROUP}/companies/new`, ['companies:read']],
+    ])('protects %s', async (url, permissions) => {
+      await open(url, permissions);
       expect(location()).toBe('/forbidden');
     });
   });

@@ -1,5 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import type { RequestHandler } from 'express';
 import type { Config } from './config.ts';
+import type { MediaStorage } from './integrations/gcs/index.ts';
 import type { Databases } from './db/databases.ts';
 import type { ActivityLog } from './shared/activity-log/activity-log.ts';
 import type { RouteDefinition } from './shared/http/routes.ts';
@@ -42,7 +44,15 @@ import { createGroupsController } from './modules/groups/groups.controller.ts';
 import { createManagedGroupsRepository } from './modules/groups/groups.repository.ts';
 import { createGroupsRoutes } from './modules/groups/groups.routes.ts';
 import { createGroupsService } from './modules/groups/groups.service.ts';
+import { createCompaniesController } from './modules/companies/companies.controller.ts';
+import { createCompaniesRepository } from './modules/companies/companies.repository.ts';
+import { createCompaniesRoutes } from './modules/companies/companies.routes.ts';
+import { createCompaniesService } from './modules/companies/companies.service.ts';
 import { createGroupSummaryRepository } from './modules/me/group-summary.repository.ts';
+import { createMediaController } from './modules/media/media.controller.ts';
+import { createMediaRepository } from './modules/media/media.repository.ts';
+import { createMediaRoutes } from './modules/media/media.routes.ts';
+import { createMediaService } from './modules/media/media.service.ts';
 import { createMeController } from './modules/me/me.controller.ts';
 import { createMeRoutes } from './modules/me/me.routes.ts';
 import { createMeService } from './modules/me/me.service.ts';
@@ -51,6 +61,7 @@ import { createReferenceRepository } from './modules/reference/reference.reposit
 import { createReferenceRoutes } from './modules/reference/reference.routes.ts';
 import { createReferenceService } from './modules/reference/reference.service.ts';
 import { createSessionsRepository } from './modules/sessions/sessions.repository.ts';
+import { companiesPlacesWriter } from './shared/legacy-write/companies-places.writer.ts';
 import { createCredentialsRepository } from './modules/users/credentials.repository.ts';
 import { createGroupDirectoryRepository } from './modules/users/group-directory.repository.ts';
 import { createGroupOptionsReader } from './modules/users/group-options.ts';
@@ -75,13 +86,15 @@ export interface BackofficeDeps {
   readonly databases: Databases;
   readonly activityLog: ActivityLog;
   readonly logger: Logger;
+  /** The media storage built at start-up (`createMediaStorage`); `null` or absent when it is disabled (the upload answers `503`). */
+  readonly mediaStorage?: MediaStorage | null;
   /** Clock in epoch milliseconds; defaults to `Date.now`. */
   readonly now?: () => number;
 }
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the groups, the activity log monitor and the browser error reports. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the companies, the media (images), the groups, the activity log monitor and the browser error reports. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -143,10 +156,30 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   });
   const lookup = createLookupController(createLookupService({ lookup: createLookupRepository(databases), users, catalogs: catalogsService }));
   const reference = createReferenceController(createReferenceService(createReferenceRepository(databases)));
+  const companiesRepository = createCompaniesRepository(databases, catalogsRepository);
+  const mediaService = createMediaService({
+    repository: createMediaRepository(databases),
+    storage: deps.mediaStorage ?? null,
+    logger,
+    now,
+    // The company of an image: one of the group, inside the caller's perimeter, not in the trash (read from the copies, scoped like every company read).
+    companyUsable: async (principal, access, companyId) =>
+      (await companiesRepository.list(principal, access, { _id: companyId, trash: { $ne: true } }, { limit: 1, sort: 'name', q: null, cursor: null })).items.length === 1,
+  });
+  const media = createMediaController(mediaService);
+  const companies = createCompaniesController(
+    createCompaniesService({
+      repository: companiesRepository,
+      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()) }),
+      images: mediaService,
+      activityLog,
+      newId: () => randomBytes(12).toString('hex'),
+    }),
+  );
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
-    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createGroupsRoutes(groupsController),
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController),
       ...createCatalogRoutes(catalogsService, CATALOGS),
       ...createGroupServicesRoutes(groupServices),
       ...createLookupRoutes(lookup),

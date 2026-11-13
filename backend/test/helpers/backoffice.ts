@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Document, ObjectId } from 'mongodb';
 import { createBackofficeModules } from '../../src/composition.ts';
+import type { MediaStorage } from '../../src/integrations/gcs/index.ts';
 import { ensureIndexes } from '../../src/db/indexes.ts';
 import { legacyPasswordHash } from '../../src/shared/security/legacy-password.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
@@ -72,6 +73,8 @@ export interface BackofficeOptions {
   readonly rateLimiter?: RateLimiter;
   /** Extra routes mounted on `/v1` next to the real ones. */
   readonly extraRoutes?: readonly RouteDefinition[];
+  /** The media storage; none (the upload answers 503) by default. */
+  readonly mediaStorage?: MediaStorage | null;
 }
 
 /** Thresholds high enough for tests that are not about rate limits. */
@@ -101,7 +104,7 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
   const env = { LEGACY_PASSWORD_PEPPER: TEST_PEPPER, ...GENEROUS, ...options.env };
   const config = testConfig(env);
   const logs = memoryLogger();
-  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now });
+  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, mediaStorage: options.mediaStorage ?? null });
   const app = await startApp(
     {
       config,

@@ -8,6 +8,7 @@
 - Date ISO 8601 UTC, importi in centesimi interi, identificativi stringa.
 - Codici d'errore: tabella in `doc/API-Guidelines.md` §5. Le route di un modulo che il gruppo non ha acceso rispondono `403 FEATURE_DISABLED` (qualunque sia il ruolo, PSA e D compresi), dopo il controllo del gruppo e del permesso.
 - Ogni risposta porta `X-Request-Id`, generato dal server (un valore inviato dal client non viene riutilizzato).
+- **Concorrenza ottimistica sulle aziende** (`ETag` forte e `If-Match`, `doc/API-Guidelines.md` §6): le risposte che portano un'azienda hanno `ETag: "<43 caratteri base64url>"` (la versione del documento memorizzato); ogni scrittura su un'azienda esistente richiede `If-Match` con quel valore, tra virgolette. Header mancante: `422` con `details: [{ "field": "If-Match", "issue": "required" }]`; non è un tag di questo server (elenco, tag debole `W/`, `*`): `422` con `issue: "format"`; versione non più corrente: `412 PRECONDITION_FAILED`.
 - Ogni risposta è `Cache-Control: no-store`; `GET /v1/groups/{groupId}` e le liste compatte di riferimento (vedi "Liste") portano in più `ETag` (debole) e rispondono `304` a un `If-None-Match` corrispondente, per la copia in memoria del backoffice.
 - Errori comuni a ogni percorso: `404 NOT_FOUND` (percorso inesistente), `405 METHOD_NOT_ALLOWED` con `Allow` (metodo non previsto), `400 BAD_REQUEST` (percorso o richiesta malformati). Sulle route con body: `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE` (limite di default 100 KB), `415 UNSUPPORTED_MEDIA_TYPE` (content type diverso da `application/json` UTF-8 o body compresso).
 
@@ -492,7 +493,7 @@ Le richieste di creazione e modifica accettano `permissions` come `{ "modules": 
 
 ## Dati di riferimento (`/v1`)
 
-Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del backoffice, per esempio il gruppo, le aziende e i punti vendita nel perimetro di un utente. Le aree gruppi, aziende e punti vendita le estenderanno con le route di gestione complete. Parametri di lista comuni (`limit`, `cursor`, `sort`, `q`: vedi "Liste"); `sort` ammette solo `name` (default, anche `-name`), `q` cerca nel nome. Errori comuni a tutte e tre: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR` (parametri non validi, `cursor`/`format` per un cursore non valido).
+Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del backoffice, per esempio il gruppo, le aziende e i punti vendita nel perimetro di un utente. Le aree gruppi, aziende e punti vendita le estendono con le route di gestione complete (le aziende sono in "Aziende"). Parametri di lista comuni (`limit`, `cursor`, `sort`, `q`: vedi "Liste"); `sort` ammette solo `name` (default, anche `-name`), `q` cerca nel nome. Errori comuni a queste letture: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR` (parametri non validi, `cursor`/`format` per un cursore non valido).
 
 ### GET /v1/groups
 - **Superficie:** backoffice
@@ -514,22 +515,12 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
 - **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
 
 ### GET /v1/groups/{groupId}/companies
-- **Superficie:** backoffice
-- **Autenticazione e permesso:** Bearer backoffice, `companies:read`
-- **Ruoli:** PSA, D e SA nel proprio perimetro, CA le proprie aziende; il PA non ha `companies:read` (`403`)
-- **Parametri di percorso:** `groupId` (24 caratteri esadecimali); un id malformato o fuori perimetro dà `404 NOT_FOUND`
-- **Query:** parametri di lista; `trashed` (`true` per il cestino; default `false`); `ids` (da 1 a 100 id di 24 caratteri esadecimali separati da virgola, duplicati e maiuscole ignorati, stessa semantica di `lookup`): risolve i nomi delle aziende già scelte, sempre nel perimetro del chiamante (un id fuori perimetro non è restituito); `422` se malformato o oltre 100
-- **Risposta:** `200`
-  ```json
-  {
-    "data": [
-      { "id": "665f1c2e9b1d4a0012ab34b2", "name": "Azienda Esempio Srl", "trashed": false }
-    ],
-    "page": { "limit": 50, "next": null }
-  }
-  ```
-- **Errori:** comuni; `404 NOT_FOUND`
-- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
+La lista compatta delle aziende (che alimenta i selettori e lo store dei dati di riferimento del backoffice) è descritta in "Aziende", con gli stessi campi `id`, `name` e `trashed` più quelli aggiunti dal passo 6A.
+
+### GET /v1/countries
+- **Autenticazione e permesso:** Bearer backoffice, qualunque utente autenticato (permesso `profile:read`, che tutti hanno)
+- **Risposta:** `200` con `{ "data": [ { "code": "IT", "name": "Italia", "areas": [ { "code": "MI", "name": "Milano" } ] } ], "page": { "limit": <numero di elementi>, "next": null } }`, ordinati per nome (poi per codice), con `ETag` debole e `304` a un `If-None-Match` corrispondente (`Cache-Control: no-store`). Letti dalla collection `countries` (al più 400): un documento senza codice alpha-2 valido è escluso, un nome mancante vale il codice, `areas` che non è un elenco (per esempio `'none'`) vale `[]`, un'area senza codice è esclusa e il suo nome mancante vale il codice. Gli stessi codici sono quelli accettati da `address.country` e `address.province` delle aziende.
+- **Errori:** comuni
 
 ### GET /v1/groups/{groupId}/places
 - **Superficie:** backoffice
@@ -549,6 +540,164 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
   ```
 - **Errori:** comuni; `404 NOT_FOUND`
 - **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
+
+## Aziende (`/v1`)
+
+L'azienda (`companies` del gruppo) è gestita **per intero**: oltre ai dati anagrafici, la fatturazione elettronica, la numerazione delle fatture, le banche, i buoni pasto, le impostazioni dell'app clienti e i media, con gli stessi tipi BSON che scrive il backoffice legacy (stringhe `''` in `fattura_elettronica`, array sempre presenti, interi Int32 o `null`, nessuna chiave sconosciuta rimossa). Le scritture passano dal servizio di scrittura (transazione sul database del gruppo e sulla copia del common, versione per `If-Match`). Tutte le route sono **route di gruppo**: `groupId` è verificato rispetto al perimetro **prima** del permesso (id malformato, inesistente o fuori perimetro: `404 NOT_FOUND`). Un'azienda inesistente, di un altro gruppo o fuori dal perimetro (un CA raggiunge solo la propria) è lo stesso `404`. Errori comuni: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante; il PA non ha permessi sulle aziende), `403 PASSWORD_CHANGE_REQUIRED`, `404 NOT_FOUND`, `413 PAYLOAD_TOO_LARGE` (body oltre 64 KB), `415`, `422 VALIDATION_ERROR` (per campo; `unknown` per le proprietà non previste, `forbiddenKey` per gli operatori).
+
+**Permessi per ruolo.** PSA, D e SA leggono, creano, modificano, mettono nel cestino ed eliminano nel proprio perimetro (la matrice dell'utente restringe il SA); il CA legge e modifica **tutte le schede della propria azienda** ma non crea né cestina (`403`); il PA non ha permessi. L'eliminazione dal cestino ha il permesso `companies:delete` (stessi ruoli e tetti di `companies:trash`: PSA, D e SA, mai CA e PA; è derivato dal modulo `companies` della matrice come `users:delete` da `users`). **`hub`, `transmitter` (paese e codice), `status`, `expirationDate` e `invoiceNumbering.cervedLookup`** possono essere modificati solo da PSA e D: per SA e CA un valore **diverso** da quello attuale dà `403 FORBIDDEN` con `details: [{ "field": "eInvoicing.hub", "issue": "notAllowed" }, …]`, mentre rimandare il valore attuale è accettato (così il salvataggio unico può rinviare l'intero oggetto). Alla **creazione** il confronto è con i default (`status` `active`, `expirationDate`, `hub`, `transmitter.country` e `transmitter.code` `null`/`''`, `cervedLookup` `false`): inviare il default è accettato, un valore diverso dà lo stesso `403` per i ruoli non ammessi.
+
+**Hub.** Valori ammessi: `null` (o `''`: nessuno), `aruba`, `aruba__<id esadecimale di un utente D attivo e non nel cestino>`. Il PSA sceglie qualsiasi valore ammesso; il D solo nessuno, `aruba` o `aruba__<proprio id>` (l'hub di un altro dealer è `403 notAllowed`); un valore attuale di un altro dealer resta invariato se il D non lo cambia. Un valore sconosciuto (forma errata, utente che non è un dealer, dealer nel cestino) è `422` con `issue: "incorrect"`. Nessuna verifica Aruba lato server.
+
+**Rappresentazione** (la restituiscono `GET`, `POST`, `PATCH`, le `PUT` e `trash`/`restore`; i campi che il documento non ha o ha di tipo sbagliato sono `null`, `false`, `0` o `[]`, mai un `500`; le chiavi sconosciute del documento non sono mai restituite):
+```json
+{
+  "data": {
+    "id": "665f1c2e9b1d4a0012ab34b2", "groupId": "665f1c2e9b1d4a0012ab34a1",
+    "name": "Azienda Esempio Srl", "vatNumber": "01114601006", "fiscalCode": null,
+    "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" },
+    "currency": "EUR", "email": "info@esempio.it", "phone": "+39 02 1234567",
+    "status": "active", "trashed": false, "expirationDate": null,
+    "createdAt": "2026-01-15T10:00:00.000Z", "updatedAt": "2026-11-13T09:30:00.000Z",
+    "eInvoicing": {
+      "hub": "aruba", "transmitter": { "country": "IT", "code": "01879020517" }, "eori": null, "pec": "pec@esempio.it", "recipientCode": "ABC1234",
+      "professionalRegister": { "name": null, "number": null, "province": null, "date": null },
+      "rea": { "office": "MI", "number": "123456", "shareCapital": "10000.50", "shareholders": "SU", "liquidation": "LN" },
+      "taxRegime": "RF01"
+    },
+    "invoiceNumbering": { "position": "prefix", "values": [{ "name": "FE", "cash": true }], "lastInvoiceNumber": 120, "discountLines": true, "cervedLookup": false },
+    "bankAccounts": [{ "id": "6a1b…", "name": "Banca", "iban": "IT60X0542811101000000123456", "abi": "05428", "cab": "11101", "bic": null, "default": true }],
+    "mealVoucherIssuers": [{ "id": "6a1c…", "name": "Buoni Pasto", "cuts": [5, 10, null] }],
+    "customerApp": {
+      "enableLoginSignup": true, "showPrivacyPage": true, "showTermsPage": false,
+      "ecommerce": { "status": true, "priceListId": "665f…", "minimumOrder": { "EUR": 25.5 }, "showProductRemainingQuantity": 3, "showProductAvailability": false, "…": "i 23 flag booleani di settings.ecommerce con i nomi del legacy (acceptOrderOutOfStock … enableFidelity)" }
+    },
+    "media": { "internalFileName": "", "externalUrl": "", "customersAppLogoLight": { "_id": "f00d", "basename": "logo.png", "extension": "png", "filename": "logo", "mimetype": "image/png", "title": null, "alt": null, "dirname": "/media/image", "type": "image", "filectime": 1700000000000 }, "customersAppLogoDark": null }
+  }
+}
+```
+Mapping dei nomi: `vatNumber` = `code`, `fiscalCode` = `code2` (`''` e `null` si leggono `null`), `address.street/postcode/city/province/country` = `address/postcode/city/countryAreaCode/countryCode`, `currency` = `currencyCode`, `phone` = `telephone`, `status` = `active`/`disabled` dal booleano, `trashed` = `trash`, `eInvoicing` = `fattura_elettronica` (16 chiavi stringa; `''` si legge `null`, `null` si scrive `''`), `invoiceNumbering.position/values` = `invoicesPS`/`invoicesPSValues`, `invoiceNumbering.lastInvoiceNumber/discountLines` = `settings.global.*`, `invoiceNumbering.cervedLookup` = `settings.api.cerved`, `bankAccounts` = `banks` (`abi`, `cab`, `bic` `''` → `null`), `mealVoucherIssuers` = `ticketsSuppliers`, `customerApp` = `settings.global.{enableLoginSignup,showPrivacyPage,showTermsPage}` e `settings.ecommerce` (`priceListId` = `listId`, `minimumOrder` = `minAmount`, riletto come `{ "<valuta>": numero }` e scritto come `{ code, value }`), `media` = `medias.images`.
+
+### GET /v1/groups/{groupId}/companies
+- **Autenticazione e permesso:** Bearer backoffice, `companies:read`
+- **Ruoli:** PSA, D e SA nel proprio perimetro, CA le proprie aziende; il PA non ha `companies:read` (`403`)
+- **Query:** parametri di lista (`sort`: `name`, default, anche `-name`; `q` cerca nel nome e nella partita IVA); `trashed` (`true` per il cestino; default `false`); `ids` (da 1 a 100 id separati da virgola, duplicati e maiuscole ignorati: risolve le aziende già scelte, sempre nel perimetro); `status` (`active`, `disabled`); `country` (ISO alpha-2 maiuscolo); `province` (codice, 1–10 caratteri). Letta dalle copie nel database common.
+- **Risposta:** `200`; `vatNumber`, `city`, `province` e `country` sono `null` se mancanti
+  ```json
+  { "data": [ { "id": "665f1c2e9b1d4a0012ab34b2", "name": "Azienda Esempio Srl", "vatNumber": "01114601006", "city": "Milano", "province": "MI", "country": "IT", "status": "active", "trashed": false } ], "page": { "limit": 50, "next": null } }
+  ```
+  `id`, `name` e `trashed` sono i campi che usa `ReferenceStore` del backoffice, invariati.
+- **Errori:** comuni; `422` per parametri non validi
+- **Cache:** `ETag` debole e `304` con `If-None-Match` (vedi "Liste")
+
+### POST /v1/groups/{groupId}/companies
+- **Autenticazione e permesso:** Bearer backoffice, `companies:create`
+- **Ruoli:** PSA, D e SA (CA e PA `403`); il gruppo viene dal percorso
+- **Body** (`application/json`, massimo 64 KB): `name` (1–150), `vatNumber` (1–30), `address` (`street` 1–150, `postcode` 1–20, `city` 1–100, `country` ISO alpha-2 maiuscolo **obbligatori**, `province` opzionale fino a 10) sono obbligatori; opzionali `fiscalCode`, `currency` (default `EUR`), `email`, `phone` (fino a 30), `status` (`active` default), `expirationDate` (data o istante ISO 8601, `null` di default: mai l'epoca del legacy) e i blocchi `eInvoicing`, `invoiceNumbering`, `bankAccounts`, `mealVoucherIssuers`, `customerApp`, `media` con i campi che si vogliono impostare (gli altri hanno i default del legacy: `fattura_elettronica` con le 16 chiavi `''` e `regime_fiscale` `RF01`, `settings` completo con le 27 chiavi `ecommerce`, `banks`, `ticketsSuppliers` e `invoicesPSValues` vuoti, `invoicesPS` `null`, `medias.images` con le quattro chiavi). Gli id di banche e fornitori non si inviano alla creazione (li genera il server: 24 caratteri esadecimali); un id inviato è `422 incorrect`.
+  ```json
+  { "name": "Azienda Esempio Srl", "vatNumber": "01114601006", "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" },
+    "email": "info@esempio.it", "bankAccounts": [{ "name": "Banca", "iban": "IT60 X054 2811 1010 0000 0123 456", "default": true }] }
+  ```
+- **Validazione:** vedi "Regole di validazione delle aziende" più sotto.
+- **Header particolari:** `Location: /v1/groups/{groupId}/companies/{companyId}` e `ETag`
+- **Risposta:** `201` con l'azienda (rappresentazione completa)
+- **Errori:** comuni; `403 FORBIDDEN` (CA, PA; SA con `notAllowed`); `409 CONFLICT` con `details: [{ "field": "vatNumber", "issue": "taken" }]` se un'altra azienda del gruppo non nel cestino ha la stessa partita IVA normalizzata (spazi tolti, maiuscole, prefisso `IT` davanti a 11 cifre); `422`
+
+### GET /v1/groups/{groupId}/companies/{companyId}
+- **Autenticazione e permesso:** Bearer backoffice, `companies:read`
+- **Risposta:** `200` con l'azienda (anche nel cestino), `ETag` forte = versione del documento del **database del gruppo** (non della copia), cioè quella che `If-Match` si aspetta
+- **Errori:** comuni; `404 NOT_FOUND` identico per azienda inesistente, di un altro gruppo o (CA) di un'altra azienda; `422` per `companyId` malformato
+
+### PATCH /v1/groups/{groupId}/companies/{companyId}
+Il **salvataggio unico**: qualsiasi sottoinsieme dei campi generali e dei blocchi.
+- **Autenticazione e permesso:** Bearer backoffice, `companies:update`; **`If-Match` obbligatorio**
+- **Body** (massimo 64 KB): gli stessi campi della creazione, tutti opzionali (`address` e i blocchi accettano un sottoinsieme dei propri campi, anche nei sotto-oggetti `transmitter`, `professionalRegister`, `rea`, `ecommerce`); gli array (`bankAccounts`, `mealVoucherIssuers`, `invoiceNumbering.values`) sono sostituiti **per intero**; un body vuoto è `422` (`(body)` `required`). Si scrivono solo i campi il cui valore **differisce** da quello memorizzato: rimandare l'intero oggetto ricevuto da `GET` non cambia nulla (e restituisce lo stesso `ETag`).
+- **Id di banche e fornitori:** un id già presente nell'azienda si conserva, un elemento senza id ne riceve uno dal server, un id sconosciuto o ripetuto è `422 incorrect` (`bankAccounts.N.id`).
+- **`minimumOrder`:** le chiavi sono valute del gruppo (altrimenti `422 incorrect`, salvo un valore invariato); le chiavi già presenti di altre valute si conservano intatte.
+- **Logo:** `customersAppLogoLight`/`Dark` accettano `null` (rimozione), il descrittore che l'azienda ha già (restituito da `GET`, invariato) oppure **`{ "imageId": "<24 esadecimali>" }`**, l'id di un'immagine del gruppo caricata con `POST …/media/images` (vedi "Media"). Il server costruisce il descrittore dall'immagine memorizzata, come il Media Manager del legacy (la directory è sempre `/media/image`, mai quella del documento; `_id`, `dirname`, `basename`, `extension`, `filename`, `mimetype`, `filectime`, `mmThumb: {}`, `type`, `title`, `alt`); il **CA** può usare solo un'immagine che appartiene all'azienda di cui imposta il logo (`companyId` uguale), gli altri ruoli qualunque immagine del gruppo; un'immagine inesistente, nel cestino, di un altro gruppo, non utilizzabile dal chiamante o non utilizzabile come logo (nome del file non semplice, tipo che non è `image/*`, estensione non valida) è `422` con `issue: "incorrect"` sul campo del logo; un oggetto con `imageId` e altre chiavi è `422 unknown`; un altro descrittore è `422 notAllowed`. Vale anche per la creazione, per `PUT …/media` e per `PATCH`.
+- **Risposta:** `200` con l'azienda aggiornata e il nuovo `ETag`
+- **Errori:** comuni; `403` (`notAllowed`); `404`; `409 CONFLICT` (`vatNumber` `taken`; oppure un blocco del documento memorizzato che non è un oggetto, per esempio `settings: null`, con un messaggio: la scrittura fallisce e non cambia nulla); `412 PRECONDITION_FAILED` (versione cambiata, anche da una scrittura del legacy dopo la lettura); `422` (`If-Match` mancante o non valido, regole di validazione)
+- Un blocco mancante o vuoto nel documento (`settings: {}`) viene completato con i default delle chiavi che la richiesta non imposta; ogni altra chiave sconosciuta del documento resta com'è. Ogni scrittura registra `company.updated` nel registro delle attività con i **nomi** dei campi o blocchi cambiati e mai i valori.
+
+### GET /v1/groups/{groupId}/companies/e-invoicing-hubs
+- **Autenticazione e permesso:** Bearer backoffice, `companies:update` (route di gruppo)
+- **Risposta:** `200` con `{ "data": [ { "value": "aruba", "label": "Aruba" }, { "value": "aruba__<id del dealer>", "label": "<ragione sociale del dealer, altrimenti nome e cognome>" } ] }`: gli hub che il chiamante può impostare in `eInvoicing.hub`, con la **stessa** regola della scrittura. Il PSA riceve `aruba` e tutti i dealer attivi (utenti `D` abilitati e non nel cestino, al più 500, ordinati per etichetta); il D `aruba` e se stesso; il SA e il CA una lista vuota (non possono cambiare l'hub). Non è paginata.
+- **Errori:** comuni; `403` (permesso); `404` (gruppo fuori perimetro)
+
+### PUT /v1/groups/{groupId}/companies/{companyId}/e-invoicing
+### PUT …/invoice-numbering
+### PUT …/bank-accounts
+### PUT …/meal-voucher-issuers
+### PUT …/customer-app
+### PUT …/media
+Sostituiscono **un blocco intero**, con le stesse regole, gli stessi errori e la stessa risposta di `PATCH` (`If-Match` obbligatorio, `companies:update`). Il body è il blocco come lo restituisce `GET`, con **tutte** le chiavi obbligatorie (anche dei sotto-oggetti): `bank-accounts` e `meal-voucher-issuers` sono array (anche `[]`). Corrispondenze: `e-invoicing` → `eInvoicing`; `invoice-numbering` → `invoiceNumbering`; `bank-accounts` → `bankAccounts`; `meal-voucher-issuers` → `mealVoucherIssuers`; `customer-app` → `customerApp`; `media` → `media`. In `media` solo `internalFileName` (vuoto o un nome di file semplice, `^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$` senza `..`), `externalUrl` (vuoto o URL `http(s)` fino a 2048) e i logo a `null` o al descrittore attuale.
+  ```json
+  { "position": "suffix", "values": [{ "name": "FE", "cash": true }, { "name": "NC", "cash": false }], "lastInvoiceNumber": 120, "discountLines": false, "cervedLookup": false }
+  ```
+
+### POST /v1/groups/{groupId}/companies/{companyId}/trash
+### POST /v1/groups/{groupId}/companies/{companyId}/restore
+- **Autenticazione e permesso:** Bearer backoffice, `companies:trash`; **`If-Match` obbligatorio**; senza body
+- **Ruoli:** PSA, D e SA (il CA `403`). Il ripristino ricontrolla la partita IVA: `409` con `details: [{ "field": "vatNumber", "issue": "taken" }]` se nel frattempo un'altra azienda attiva del gruppo l'ha presa. I punti vendita dell'azienda **mantengono il riferimento**.
+- **Risposta:** `200` con l'azienda e il nuovo `ETag`
+- **Errori:** comuni; `404`; `409 CONFLICT` se è già nel cestino (`trash`) o non lo è (`restore`); `412`; `422` (`If-Match`)
+
+### DELETE /v1/groups/{groupId}/companies/{companyId}
+- **Autenticazione e permesso:** Bearer backoffice, `companies:delete`; **`If-Match` obbligatorio**
+- **Comportamento:** elimina per sempre un'azienda **dal cestino** (database del gruppo e copia, nella stessa transazione). Registra `company.deleted`.
+- **Risposta:** `204` senza body
+- **Errori:** comuni; `404`; `409 CONFLICT` se non è nel cestino, oppure con `details: [{ "field": "places", "issue": "referenced" }]` se un punto vendita del gruppo (anche nel cestino) ha ancora questa `companyId` (confrontata sia come ObjectId sia come stringa esadecimale); `412`; `422` (`If-Match`)
+
+### Regole di validazione delle aziende
+Rigorose in scrittura, tolleranti in lettura. Un campo si controlla quando **cambia** (o alla creazione): un'azienda con dati legacy che non rispettano una regola resta modificabile in ciò che la regola non tocca.
+- **Paese e provincia:** `address.country` deve esistere nella collection `countries` (`incorrect`); `address.province` è `''` oppure uno dei codici delle aree del paese quando il paese le elenca (`incorrect`), altrimenti testo libero fino a 10 caratteri.
+- **Partita IVA** (`vatNumber`): per `country` `IT` 11 cifre con la cifra di controllo, con prefisso `IT` facoltativo conservato come inviato; per gli altri paesi 2–30 caratteri **ASCII stampabili** (`format`; niente caratteri invisibili o spazi Unicode). Anche il codice fiscale non italiano è ASCII stampabile. **Codice fiscale** (`fiscalCode`): `null`/`''`, oppure per `IT` 11 cifre con controllo o 16 caratteri con il carattere di controllo (convertito in maiuscolo), per gli altri paesi fino a 30 caratteri (`format`). Cambiare il paese riverifica la partita IVA e il codice fiscale memorizzati.
+- **Valuta:** tra le valute del gruppo (`incorrect`; se manca alla creazione vale `EUR`, e il gruppo deve averla: `required`). **Listino dell'e-commerce** (`priceListId`): `null` o un listino attivo del gruppo (`incorrect`).
+- **`email`, `eInvoicing.pec`:** sintassi e-mail o `null`; `phone` fino a 30 caratteri o `null`.
+- **`eInvoicing`:** `recipientCode` `null` o 6–7 caratteri alfanumerici (convertiti in maiuscolo); `taxRegime` `null`, `RF01`, `RF02`, `RF04`–`RF19`; `rea.office` e `professionalRegister.province` `null` o una sigla di provincia italiana; `rea.shareholders` `SU`/`SM`; `rea.liquidation` `LS`/`LN`; `rea.shareCapital` `null` o testo decimale con al più due decimali; `professionalRegister.date` `null` o `YYYY-MM-DD` esistente; `transmitter.country` `null` o ISO alpha-2; `''` equivale a `null`.
+- **`invoiceNumbering`:** `values` fino a 50 elementi con `name` univoco di 1–50 caratteri e al più uno con `cash: true` (`incorrect` sul campo dell'elemento ripetuto); `lastInvoiceNumber` `null` o intero da 0 a 2147483647 (scritto come Int32).
+- **`bankAccounts`:** fino a 20; `iban` obbligatorio, normalizzato (spazi tolti, maiuscolo) con il checksum ISO 13616 (`format`); `abi` e `cab` `null`/`''` o 5 cifre; `bic` `null`/`''` o 8/11 caratteri; `name` fino a 100; al più un `default` true. **L'IBAN è restituito a chi legge l'azienda e non compare mai nei log né nel registro delle attività.**
+- **`mealVoucherIssuers`:** fino a 50; `name` 1–100; `cuts` fino a 50 numeri ≥ 0 o `null` (importo libero).
+- **`customerApp.ecommerce`:** l'insieme esatto delle chiavi (27 con `priceListId` e `minimumOrder`), booleani e numeri ≥ 0; `minimumOrder` ha al più 10 valute (codici di 3 lettere maiuscole).
+- I numeri interi nell'intervallo Int32 sono scritti come Int32, gli altri come Double (come il legacy).
+
+## Media (`/v1`)
+
+Le immagini di un gruppo (`files` del database del gruppo, oggetti nel bucket di Google Cloud Storage nel formato `<groupId>/media/image/<xs|s|m|l|xl>/<basename>` del legacy). Route di gruppo (`group: true`), permesso **`companies:update`** (l'elenco dei permessi ammessi crescerà con le altre entità che hanno immagini): PSA, D e SA nel proprio perimetro, il CA, mai il PA. **Proprietario.** Ogni immagine caricata ha un proprietario: `companyId` (l'azienda a cui appartiene, oppure `null` per un'immagine di tutto il gruppo) e, nel documento, `createdBy` (l'utente che l'ha caricata). Il **CA** carica, elenca e legge **solo le immagini delle proprie aziende** (un'immagine senza `companyId`, come ogni immagine del legacy, non è sua: `404` in lettura, assente dall'elenco); PSA, D e SA vedono tutte le immagini del gruppo. Qualsiasi ruolo può filtrare l'elenco con `companyId`. In questo passo le immagini non si modificano, né si mettono nel cestino, né si eliminano.
+
+**Rappresentazione dell'immagine** (tollerante: un documento legacy a cui manca un campo dà `''` o `null`, mai un `500`; `companyId` è l'id esadecimale dell'azienda o `null`):
+```json
+{
+  "data": {
+    "id": "6734a1c2e9b1d4a0012ab3f1", "name": "Logo Bar", "title": "Logo Bar", "alt": "Logo Bar", "companyId": null,
+    "extension": "png", "mimetype": "image/png", "createdAt": "2026-11-13T10:00:00.123Z",
+    "urls": {
+      "xs": "https://files.esempio.it/665f1c2e9b1d4a0012ab34a1/media/image/xs/logo-bar-1a2b3c4d.png",
+      "s": "…/s/logo-bar-1a2b3c4d.png", "m": "…/m/…", "l": "…/l/…", "xl": "…/xl/…"
+    }
+  }
+}
+```
+`urls` è `${filesHost del gruppo}/${groupId}/media/image/${taglia}/${basename}` (il nome del file codificato per URL) quando `filesHost` del gruppo è un URL `https` valido (senza credenziali, query o frammento), altrimenti `null`. Le taglie sono larghezze di 100, 250, 500, 800 e 1200 pixel (mai ingrandite: un'immagine più piccola ha la sua larghezza in tutte le taglie), nello stesso formato del file caricato.
+
+### POST /v1/groups/{groupId}/media/images
+- **Autenticazione e permesso:** Bearer backoffice, `companies:update`. Limiti, oltre a quello generale: 30 upload al minuto per utente (`RATE_LIMIT_MEDIA_UPLOAD_PER_USER`), **300 al giorno per utente** (`RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY`) e **2000 al giorno per gruppo** (`RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY`, conta solo le richieste arrivate al gruppo dopo la verifica del permesso); `429 RATE_LIMITED` con `Retry-After` (fino a un giorno per le quote giornaliere). Le finestre giornaliere sono fisse (24 ore UTC).
+- **Query:** `companyId` (24 esadecimali, opzionale): l'azienda a cui appartiene l'immagine. Il **CA deve darlo** e solo per le proprie aziende (`422 companyId required` se manca, `404` se non è una sua azienda); PSA, D e SA possono ometterlo (immagine di tutto il gruppo). L'azienda deve esistere nel gruppo e non essere nel cestino (`422 companyId incorrect`). Una query con altri parametri o con `companyId` ripetuto è `422`; la query si controlla **prima** di leggere il body.
+- **Body:** `multipart/form-data` con **un solo file nel campo `file`** e nessun altro campo o parte; al massimo 10 MB. Il tipo si riconosce **dai byte** del file (JPEG, PNG o WebP), non dal tipo dichiarato né dal nome: SVG, GIF e tutto il resto sono rifiutati. L'immagine ha al massimo 40 megapixel e un lato di al più 16383 pixel.
+- **Comportamento:** l'immagine viene decodificata, raddrizzata secondo l'orientamento EXIF e **privata di ogni metadato** (EXIF, posizione, profili, commenti); si producono le cinque taglie; il nome del file è generato dal server (`<nome originale ridotto a lettere minuscole, cifre e trattini>-<8 esadecimali casuali>.<jpg|png|webp>`) e `title` e `alt` sono il nome originale senza estensione. L'immagine va **nel gruppo dell'URL** (anche per un PSA o un D), mai nel gruppo dell'utente. Non è una transazione: in caso di errore vengono rimossi **solo gli oggetti caricati da questa richiesta** (mai un oggetto preesistente con lo stesso nome: se il nome è occupato si riprova una volta con un altro suffisso) e non resta alcun documento. Ogni upload ha una scadenza complessiva di 60 secondi sullo storage; il server elabora poche immagini alla volta.
+- **Risposta:** `201` con l'immagine, header `Location` (`/v1/groups/{groupId}/media/images/{imageId}`)
+- **Errori:** comuni; `403`; `404` (gruppo fuori perimetro); `413` (più di 10 MB); `415` (la richiesta non è `multipart/form-data`, oppure il file non è un JPEG, PNG o WebP); `422` (`details`: `file` `required` senza file; `file` `unknown` file in un campo diverso da `file`; `(body)` `unknown` campi di testo o più file; `file` `incorrect` immagine danneggiata, con più di 40 megapixel o con un lato oltre 16383 pixel, o WebP animato: anche un file troncato o con avvisi del decodificatore); `400 BAD_REQUEST` (body multipart non valido); `429`; `503 SERVICE_UNAVAILABLE` se lo storage non è configurato (`MEDIA_STORAGE=disabled`, prima di leggere il body), non risponde, oppure il server ha troppi upload in corso (con `Retry-After: 5`); `422` anche per `companyId` (`required`, `incorrect`)
+
+### GET /v1/groups/{groupId}/media/images
+- **Autenticazione e permesso:** Bearer backoffice, `companies:update`
+- **Query:** `companyId` (filtra per azienda), `limit` (1–50, predefinito 50), `cursor`, `sort` (`createdAt` o `-createdAt`, predefinito `-createdAt`: le più recenti per prime; `name`, `-name`), `q` (ricerca letterale, senza distinzione di maiuscole, su nome, titolo e nome del file)
+- **Risposta:** `200` con `{ data: [immagine…], page: { limit, next } }`: solo immagini non nel cestino
+- **Errori:** comuni; `403`; `404`; `422` (parametri non validi, cursore non valido)
+
+### GET /v1/groups/{groupId}/media/images/{imageId}
+- **Autenticazione e permesso:** Bearer backoffice, `companies:update`
+- **Risposta:** `200` con l'immagine
+- **Errori:** comuni; `403`; `404 NOT_FOUND` per un'immagine inesistente, nel cestino, che non è un'immagine o di un altro gruppo; `422` per `imageId` malformato
 
 ## Gruppi (`/v1`)
 

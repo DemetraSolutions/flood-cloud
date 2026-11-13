@@ -409,6 +409,95 @@ export function array<T>(item: Schema<T>, options: ArrayOptions): Schema<T[], fa
   });
 }
 
+/**
+ * Converts a validated value, or rejects it: `convert` returns the new value, or `undefined` when the value is not acceptable (reported with `issue`).
+ * Used to normalize (an IBAN without spaces, a date as text) and to apply a check the plain schemas do not know.
+ *
+ * @param inner Schema of the incoming value.
+ * @param convert Conversion; `undefined` means the value is invalid.
+ * @param issue Issue reported for a rejected value.
+ */
+export function transform<T, U, O extends boolean>(inner: Schema<T, O>, convert: (value: T) => U | undefined, issue: ValidationIssue): Schema<U, O> {
+  return schemaOf(inner.optional, (value, path, context, depth) => {
+    const parsed = inner.parse(value, path, context, depth);
+    if (parsed === INVALID) {
+      return INVALID;
+    }
+    const converted = convert(parsed);
+    return converted === undefined ? context.report(path, issue) : converted;
+  });
+}
+
+/**
+ * Applies a check on a whole validated value (rules between the elements of a list, such as unique names): `check` returns the
+ * paths, relative to the value, of what is wrong (`''` for the value itself, `2.name` for a field of the third element), each reported with `issue`.
+ *
+ * @param inner Schema of the value.
+ * @param check Returns the relative paths of the problems, none when the value is fine.
+ * @param issue Issue reported for every path.
+ */
+export function refine<T, O extends boolean>(inner: Schema<T, O>, check: (value: T) => readonly string[], issue: ValidationIssue): Schema<T, O> {
+  return schemaOf(inner.optional, (value, path, context, depth) => {
+    const parsed = inner.parse(value, path, context, depth);
+    if (parsed === INVALID) {
+      return INVALID;
+    }
+    const problems = check(parsed);
+    for (const relative of problems) {
+      context.report(relative === '' ? path : join(path, relative), issue);
+    }
+    return problems.length === 0 ? parsed : INVALID;
+  });
+}
+
+/** Options of {@link record}. */
+export interface RecordOptions {
+  /** Most keys allowed, reported as `tooMany`. Mandatory. */
+  readonly max: number;
+  /** Pattern every key must match (`format` otherwise); keys that are operators, paths or prototype names are always `forbiddenKey`. */
+  readonly key: RegExp;
+}
+
+/**
+ * An object used as a map: any keys matching a pattern, all the values matching one schema (a map of amounts by currency code).
+ *
+ * @param value Schema of each value.
+ * @param options Size bound and key pattern.
+ */
+export function record<T>(value: Schema<T>, options: RecordOptions): Schema<Record<string, T>, false> {
+  return schemaOf(false, (input, path, context, depth) => {
+    if (!isPlainObject(input)) {
+      return context.report(path, 'type');
+    }
+    if (depth > MAX_DEPTH) {
+      return context.report(path, 'tooDeep');
+    }
+    const keys = Object.keys(input);
+    if (keys.length > options.max) {
+      return context.report(path, 'tooMany');
+    }
+    const result: Record<string, T> = {};
+    let valid = true;
+    for (const key of keys) {
+      if (isForbiddenKey(key)) {
+        valid = false;
+        context.report(join(path, keyLabel(key)), 'forbiddenKey');
+      } else if (!options.key.test(key)) {
+        valid = false;
+        context.report(join(path, keyLabel(key)), 'format');
+      } else {
+        const parsed = value.parse(input[key], join(path, key), context, depth + 1);
+        if (parsed === INVALID) {
+          valid = false;
+        } else {
+          result[key] = parsed;
+        }
+      }
+    }
+    return valid ? result : INVALID;
+  });
+}
+
 /** Options of {@link object}. */
 export interface ObjectOptions {
   /**

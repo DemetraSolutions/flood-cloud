@@ -1,0 +1,130 @@
+<header class="page-header">
+  <h1>{{ 'COMPANIES.TITLE' | t }}</h1>
+  <a *fcCan="'companies:create'" class="new" [routerLink]="newRoute()">{{ 'COMPANIES.NEW' | t }}</a>
+</header>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'COMPANIES.FILTER.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+  <fc-select
+    [label]="'COMPANIES.FILTER.STATUS' | t"
+    [placeholder]="'COMPANIES.FILTER.ALL_STATUSES' | t"
+    [options]="statusOptions()"
+    [value]="status() ?? ''"
+    (valueChange)="onFilter('status', $event)"
+  />
+  <fc-select
+    [label]="'COMPANIES.FILTER.COUNTRY' | t"
+    [placeholder]="'COMPANIES.FILTER.ALL_COUNTRIES' | t"
+    [options]="countryOptions()"
+    [value]="country() ?? ''"
+    (valueChange)="onCountry($event)"
+  />
+  @if (provinceOptions().length > 0) {
+    <fc-select
+      [label]="'COMPANIES.FILTER.PROVINCE' | t"
+      [placeholder]="'COMPANIES.FILTER.ALL_PROVINCES' | t"
+      [options]="provinceOptions()"
+      [value]="province() ?? ''"
+      (valueChange)="onFilter('province', $event)"
+    />
+  }
+  <fc-checkbox
+    [label]="'COMPANIES.FILTER.TRASHED' | t"
+    [checked]="showTrashed()"
+    (checkedChange)="onTrashed($event)"
+  />
+</form>
+
+@if (companies.error()) {
+  <fc-error-state
+    [title]="'COMPANIES.LIST_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="companies.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'COMPANIES.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="'name'"
+    [loading]="companies.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'COMPANIES.EMPTY' | t"
+    [emptyMessage]="'COMPANIES.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'companies:create'" fcEmptyAction [routerLink]="newRoute()">{{
+      'COMPANIES.NEW' | t
+    }}</a>
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="detailRoute(row)">{{ row.name }}</a>
+    </ng-template>
+    <ng-template fcCell="status" let-row>
+      @if (row.trashed) {
+        <fc-status-badge tone="danger">{{ 'COMPANIES.STATUS.TRASHED' | t }}</fc-status-badge>
+      } @else if (row.status === 'active') {
+        <fc-status-badge tone="success">{{ 'COMPANIES.STATUS.ACTIVE' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge tone="warning">{{ 'COMPANIES.STATUS.DISABLED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      @if (canAct()) {
+        <fc-actions-menu
+          [text]="'COMPANIES.ACTIONS' | t"
+          [label]="rowLabel('COMPANIES.ACTIONS_LABEL', row)"
+        >
+          @if (row.trashed) {
+            <button
+              *fcCan="'companies:trash'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('COMPANIES.ACTION.RESTORE_LABEL', row)"
+              (click)="actions.run('restore', row)"
+            >
+              {{ 'COMPANIES.ACTION.RESTORE' | t }}
+            </button>
+            <button
+              *fcCan="'companies:delete'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('COMPANIES.ACTION.DELETE_LABEL', row)"
+              (click)="actions.run('delete', row)"
+            >
+              {{ 'COMPANIES.ACTION.DELETE' | t }}
+            </button>
+          } @else {
+            <button
+              *fcCan="'companies:trash'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('COMPANIES.ACTION.TRASH_LABEL', row)"
+              (click)="actions.run('trash', row)"
+            >
+              {{ 'COMPANIES.ACTION.TRASH' | t }}
+            </button>
+          }
+        </fc-actions-menu>
+      }
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="companies.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-company-actions #actions [groupId]="groupId()" (done)="companies.reload()" />

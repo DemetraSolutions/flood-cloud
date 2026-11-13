@@ -13,6 +13,7 @@ import { TextField } from './text-field';
     autocapitalize="none"
     spellcheck="false"
     [inputmode]="inputmode()"
+    [format]="format()"
     required
     [disabled]="disabled()"
     [(value)]="value"
@@ -26,6 +27,7 @@ class Host {
   readonly disabled = signal(false);
   readonly inputmode = signal<'numeric' | null>(null);
   readonly blurs = signal(0);
+  readonly format = signal<((text: string) => string) | null>(null);
 }
 
 async function render() {
@@ -59,6 +61,21 @@ describe('TextField', () => {
     await fixture.whenStable();
     expect(host.value()).toBe('nuovo@b.it');
     expect(host.blurs()).toBe(1);
+  });
+
+  it('shows and keeps the text a format function makes of what the user types', async () => {
+    const { fixture, host, input } = await render();
+    host.format.set((text) => text.toUpperCase());
+    await fixture.whenStable();
+    input.value = 'abc';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    expect(input.value).toBe('ABC');
+    expect(host.value()).toBe('ABC');
+    input.value = 'XYZ';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    expect(host.value()).toBe('XYZ');
   });
 
   it('describes the input with hint and error, marks it invalid and announces the error', async () => {

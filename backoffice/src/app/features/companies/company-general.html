@@ -1,0 +1,134 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'COMPANIES.GENERAL.IDENTITY' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.name"
+        [label]="'COMPANIES.GENERAL.NAME' | t"
+        [error]="state.fieldError(f.name)"
+        autocomplete="organization"
+        (blurred)="f.name().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.vatNumber"
+        [label]="'COMPANIES.GENERAL.VAT_NUMBER' | t"
+        [error]="state.fieldError(f.vatNumber)"
+        autocapitalize="characters"
+        (blurred)="f.vatNumber().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.fiscalCode"
+        [label]="'COMPANIES.GENERAL.FISCAL_CODE' | t"
+        [error]="state.fieldError(f.fiscalCode)"
+        autocapitalize="characters"
+        (blurred)="f.fiscalCode().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.currency"
+        [label]="'COMPANIES.GENERAL.CURRENCY' | t"
+        [options]="currencyOptions()"
+        [error]="state.fieldError(f.currency)"
+        (blurred)="f.currency().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.GENERAL.ADDRESS' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.address.street"
+        [label]="'COMPANIES.GENERAL.STREET' | t"
+        [error]="state.fieldError(f.address.street)"
+        autocomplete="street-address"
+        (blurred)="f.address.street().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.address.postcode"
+        [label]="'COMPANIES.GENERAL.POSTCODE' | t"
+        [error]="state.fieldError(f.address.postcode)"
+        autocomplete="postal-code"
+        (blurred)="f.address.postcode().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.address.city"
+        [label]="'COMPANIES.GENERAL.CITY' | t"
+        [error]="state.fieldError(f.address.city)"
+        autocomplete="address-level2"
+        (blurred)="f.address.city().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.address.country"
+        [label]="'COMPANIES.GENERAL.COUNTRY' | t"
+        [options]="countryOptions()"
+        [error]="state.fieldError(f.address.country)"
+        (valueChange)="onCountry($event)"
+        (blurred)="f.address.country().markAsTouched()"
+      />
+      @if (areas().length > 0) {
+        <fc-select
+          [formField]="f.address.province"
+          [label]="'COMPANIES.GENERAL.PROVINCE' | t"
+          [placeholder]="'COMPANIES.NONE' | t"
+          [options]="provinceOptions()"
+          [error]="state.fieldError(f.address.province)"
+          (blurred)="f.address.province().markAsTouched()"
+        />
+      } @else {
+        <fc-text-field
+          [formField]="f.address.province"
+          [label]="'COMPANIES.GENERAL.PROVINCE' | t"
+          [error]="state.fieldError(f.address.province)"
+          (blurred)="f.address.province().markAsTouched()"
+        />
+      }
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.GENERAL.CONTACTS' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.email"
+        type="email"
+        [label]="'COMPANIES.GENERAL.EMAIL' | t"
+        [error]="state.fieldError(f.email)"
+        autocomplete="email"
+        (blurred)="f.email().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.phone"
+        type="tel"
+        [label]="'COMPANIES.GENERAL.PHONE' | t"
+        [error]="state.fieldError(f.phone)"
+        autocomplete="tel"
+        (blurred)="f.phone().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.GENERAL.RESERVED' | t }}</legend>
+    @if (!state.canReserved()) {
+      <p class="note">{{ 'COMPANIES.RESERVED_NOTE' | t }}</p>
+    }
+    <div class="grid">
+      <fc-select
+        [formField]="f.status"
+        [label]="'COMPANIES.GENERAL.STATUS' | t"
+        [options]="statusOptions()"
+        [error]="state.fieldError(f.status)"
+        (blurred)="f.status().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.expirationDate"
+        type="date"
+        [label]="'COMPANIES.GENERAL.EXPIRATION_DATE' | t"
+        [error]="state.fieldError(f.expirationDate)"
+        (blurred)="f.expirationDate().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fc-company-save section="general" />
+</form>

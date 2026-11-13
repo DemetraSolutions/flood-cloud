@@ -22,9 +22,18 @@ export interface RateLimitRules {
   readonly unauthenticatedPerIp: RateLimitRule;
   /** Browser error reports per authenticated user. */
   readonly clientErrorsPerUser: RateLimitRule;
+  /** Image uploads per authenticated user: each decodes and resizes an image and writes five objects to the storage. */
+  readonly mediaUploadPerUser: RateLimitRule;
+  /** Image uploads per authenticated user per day (a quota: the storage has no deletion in step 6B). */
+  readonly mediaUploadPerUserDaily: RateLimitRule;
+  /** Image uploads per group per day, whoever uploads them. Runs after the group is verified. */
+  readonly mediaUploadPerGroupDaily: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
   readonly apiPerUser: RateLimitRule;
 }
+
+/** Length of a daily quota window. */
+const DAY_SECONDS = 86_400;
 
 /** A request without a resolvable address shares one bucket, so it is limited rather than skipped. */
 const ip = (req: Request): string => clientIpKey(req.ip ?? 'unknown');
@@ -57,6 +66,15 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     userCredentialsPerUser: Object.freeze({ bucket: 'user-credentials:user', limit: config.rateLimitUserCredentialsPerUser, key: perUser }),
     passwordChangePerUser: Object.freeze({ bucket: 'password-change:user', limit: config.rateLimitLoginPerUsername, key: perUser }),
     clientErrorsPerUser: Object.freeze({ bucket: 'client-errors:user', limit: config.rateLimitClientErrorsPerUser, key: perUser }),
+    mediaUploadPerUser: Object.freeze({ bucket: 'media-upload:user', limit: config.rateLimitMediaUploadPerUser, key: perUser }),
+    mediaUploadPerUserDaily: Object.freeze({ bucket: 'media-upload-day:user', limit: config.rateLimitMediaUploadPerUserDaily, windowSeconds: DAY_SECONDS, key: perUser }),
+    mediaUploadPerGroupDaily: Object.freeze({
+      bucket: 'media-upload-day:group',
+      limit: config.rateLimitMediaUploadPerGroupDaily,
+      windowSeconds: DAY_SECONDS,
+      needsGroup: true,
+      key: (_req: Request, res: Response) => res.locals.groupAccess?.groupId.toHexString() ?? null,
+    }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
   });
 }

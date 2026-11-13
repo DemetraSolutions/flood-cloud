@@ -112,10 +112,29 @@ Validazione `$jsonSchema`; indice univoco parziale `vatNumber_1` (solo quando è
 ## userCredentials — credenziali del nuovo backend
 Realizzata (passo 3A, D-03): `_id` = id dell'utente, `passwordHash` (scrypt `scrypt$N$r$p$salt$hash`, facoltativo), `legacyHashFingerprint` (SHA-256 dell'hash legacy da cui deriva, o null), `passwordChangedAt`, `failedLogins`, `lockedUntil` (blocco progressivo dal 5° fallimento: 1, 2, 4, 8, poi 15 minuti; azzerati dal reset dell'amministratore), `mustChangePassword` (password provvisoria impostata da un amministratore: va cambiata al primo accesso; passo 3B), `lastLoginAt`, `createdAt`, `updatedAt`. Validazione `$jsonSchema`; nessun indice oltre `_id`.
 
-## companies — copie delle aziende (collection `mirror`, D-20)
-Realizzata (passo 5A): copia intera del documento `companies` del database del gruppo, stesso `_id`, `groupId` (ObjectId) sempre dal nome del database. Scritta solo con `replaceOne` filtrato da `{_id, groupId}`: dal comando `sync:copies` (solo development) e dal legacy nel punto in cui scrive, con `COMMON_COPY_ENABLED=true` (oggi solo development; specifica in `doc/Technical-Guide.md` §7). Nessun `$jsonSchema`. Indici: `groupId_1__id_1`, `groupId_1_name_1`. È la fonte di lettura del backend (passo 5B: scope di CA e PA, selettori, verifica dei `placeIds`), solo tramite `group-mirror.ts` con proiezione in allowlist (`_id`, `name`, `trash`, `companyId`…). Gli originali nei database dei gruppi li leggono solo gli strumenti. Il modello di dominio (`doc/Tasks.md` 6.1) arriva con l'area 6.
+## companies — aziende (originale nel database del gruppo, copia nel common, D-20)
+Realizzata come **lettura e scrittura compatibile con il legacy** (passi 5A, 5.6 e 6A): il documento resta nel formato legacy nel database `<env>_<groupId>` e se ne tiene una copia intera nel common (stesso `_id`, `groupId` ObjectId sempre dal nome del database), scritta solo con `replaceOne` filtrato da `{_id, groupId}` dal servizio di scrittura (`backend/src/shared/legacy-write/`), dal comando `sync:copies` (solo development) e dal legacy nel punto in cui scrive (`COMMON_COPY_ENABLED`). Nessun `$jsonSchema`. La lista legge le copie (solo tramite `group-mirror.ts`, campi in allowlist: `_id`, `name`, `trash`, `code`, `city`, `countryAreaCode`, `countryCode`, `status`); il dettaglio e le scritture usano l'originale del database del gruppo. Modello di dominio e route in `doc/API.md` ("Aziende") e `doc/Technical-Guide.md` (§6 "companies").
 
-Scritture dal nuovo backend (passo 5.6, servizio interno senza route, `doc/Technical-Guide.md` §7): nel database del gruppo `$set` dei soli **campi posseduti** `name`, `code`, `code2`, `address`, `postcode`, `city`, `countryAreaCode`, `countryCode`, `currencyCode`, `email`, `telephone`, `status`, `trash`, `expirationDate`, `updateDate`; mai `settings`, `fattura_elettronica`, `invoicesPS`, `invoicesPSValues`, `banks`, `ticketsSuppliers`, `medias` né chiavi sconosciute. Creazione con documento completo (`settings`, `fattura_elettronica` con 16 chiavi, liste vuote). Nessun effetto collaterale sulle altre collection. La copia si riscrive nella stessa transazione.
+**Indici** (copie nel common, tutti non univoci, perché una copia non va mai rifiutata e la partita IVA non è unica nei dati: 6 doppioni noti in produzione, `doc/Tasks.md` 6.1): `groupId_1__id_1`, `groupId_1_name_1`, `groupId_1_status_1`, `groupId_1_code_1`. L'univocità della partita IVA (`code`) tra le aziende non cestinate di un gruppo è controllata dal servizio di scrittura nella transazione (forma normalizzata: spazi tolti, maiuscolo, prefisso `IT` davanti a undici cifre). Nei database dei gruppi non si aggiungono indici (collection legacy).
+
+**Campi posseduti** (`COMPANIES_OWNED_FIELDS`, solo `$set` sul percorso foglia o sull'intero array; mai la sostituzione di `settings`, `fattura_elettronica` o `medias`):
+| Legacy | Tipo BSON | Dominio |
+|---|---|---|
+| `name`, `code`, `code2`, `address`, `postcode`, `city`, `countryAreaCode`, `countryCode`, `currencyCode` | string (`code2` anche `''`) | `name`, `vatNumber`, `fiscalCode`, `address.street/postcode/city/province/country`, `currency` |
+| `email`, `telephone` | string o `null` | `email`, `phone` |
+| `status`, `trash` | boolean | `status` (`active`/`disabled`), `trashed` (`trash` solo da cestino e ripristino) |
+| `expirationDate` | Date o `null` | `expirationDate` (mai l'epoca del legacy) |
+| `fattura_elettronica.{hub, IdTrasmittente_paese, IdTrasmittente_codice, codice_eori, email, codice_destinatario, albo_professionale, ap_numero_iscrizione, ap_provincia, ap_data_iscrizione, rea_ufficio, rea_numero, rea_capitale_sociale, rea_soci, rea_liquidazione, regime_fiscale}` | string (16 chiavi, `''` se vuote) | `eInvoicing.*` |
+| `invoicesPS`, `invoicesPSValues` | `'prefix'`/`'suffix'`/`null`; array `{name, cash}` | `invoiceNumbering.position`, `.values` |
+| `settings.global.lastInvoiceNumber`, `settings.global.discountLines`, `settings.api.cerved` | Int32 o `null`; boolean; boolean | `invoiceNumbering.lastInvoiceNumber`, `.discountLines`, `.cervedLookup` |
+| `banks` | array `{id, name, iban, abi, cab, bic, default}` (stringhe, `id` stringa generata dal server di 24 caratteri esadecimali) | `bankAccounts` |
+| `ticketsSuppliers` | array `{id, name, cuts[Int32/Double/null]}` | `mealVoucherIssuers` |
+| `settings.global.{enableLoginSignup, showPrivacyPage, showTermsPage}` e `settings.ecommerce.*` (27 chiavi: 24 boolean, `listId` string, `minAmount` `{<valuta>: {code, value}}`, `showProductRemainingQuantity` numero) | boolean, string, oggetto, Int32/Double | `customerApp.*` (`listId` → `priceListId`, `minAmount` → `minimumOrder`) |
+| `medias.images.{internalFileName, externalUrl, customersAppLogoLight, customersAppLogoDark}` | string, string, descrittore del file o `null` | `media.*` (i logo si rimuovono o si impostano da un'immagine del gruppo, passo 6B: descrittore di undici chiavi, vedi `files`) |
+- I numeri sono scritti come il driver serializza un numero JS: intero nel range Int32 → Int32, altro → Double, come il legacy.
+- **Non posseduti** (restano nel documento, mai scritti né restituiti): `groupId` (derivato dal database), `insertDate`, ogni chiave sconosciuta al primo livello, in `settings`, `settings.global|api|ecommerce`, `fattura_elettronica` e `medias`/`medias.images`, i sotto-oggetti dei descrittori dei logo (`mmThumb`…). Alla creazione il documento è completo (`fattura_elettronica` 16 chiavi con `regime_fiscale` `RF01`, `settings` con le 27 chiavi `ecommerce`, array vuoti, `invoicesPS` `null`, `medias.images` con le quattro chiavi); un blocco mancante o vuoto in un'azienda esistente è completato con i default delle chiavi non impostate dalla scrittura.
+- **Versione** (`ETag`/`If-Match`): SHA-256 di `_id` e di tutti i percorsi posseduti (tranne `updateDate`), con i tipi BSON esatti.
+- Dati sensibili: `banks[].iban/abi/cab/bic` sono restituiti a chi legge l'azienda e non compaiono mai nei log né nel registro delle attività; sono comunque copiati nella copia del common e negli snapshot di vendite e documenti del legacy.
 
 ## places — copie dei punti vendita (collection `mirror`, D-20)
 Realizzata (passo 5A): come `companies`, copia intera del documento `places` del gruppo, comprese le parti incorporate (dispositivi, sale, magazzini, integrazioni con le loro credenziali: rischio accettato in Tasks §0.3, il backend non le legge mai). Indici: `groupId_1__id_1`, `groupId_1_name_1`, `groupId_1_companyId_1`. Il modello di dominio (Tasks 7.1) arriva con l'area 7.
@@ -161,6 +180,28 @@ Realizzata (passo 2C, decisione dell'utente del 2026-11-01; rinominata `activity
 | `expiresAt` | Date | TTL: 365 giorni per `data` e `security`, 90 per `error` |
 Validazione `$jsonSchema`. Indici: `at_-1__id_-1`, `groupId_1_at_-1__id_-1`, `actor.id_1_at_-1__id_-1`, `category_1_at_-1__id_-1` (ordinamento del monitor senza ordinamento in memoria), `requestId_1`, TTL `expiresAt_1`. Gli indici precedenti senza `_id` vengono rimossi all'avvio dopo la creazione dei nuovi.
 
+## files — immagini del gruppo (database del gruppo, solo originale)
+Le immagini del Media Manager. Collection `legacy-write` del database del gruppo (`FILES_OWNED_FIELDS`): in questo passo (6B) il backend **inserisce documenti interi** con l'upload e li legge; non modifica documenti esistenti (modifica di `alt`/`title`, cestino ed eliminazione arriveranno con il dominio media). **Nessuna copia nel common** (D-20 riguarda solo `companies` e `places`). **Nessun indice**: il legacy non ne crea e `ensureIndexes` non ammette indici sui database dei gruppi.
+
+| Campo | Tipo BSON | Valore nell'upload |
+|---|---|---|
+| `_id` | ObjectId | nuovo |
+| `groupId` | ObjectId | gruppo dell'URL (accesso verificato) |
+| `basename` | string | `<slug>-<8 esadecimali>.<jpg\|png\|webp>`, anche nome dell'oggetto |
+| `name` | string | nome originale senza estensione (ripulito, al più 150 caratteri) |
+| `extension` | string | `jpg`, `png` o `webp` (dal formato reale) |
+| `dirname` | string | `/media/image` |
+| `type` | string | `image` |
+| `mimetype` | string | `image/jpeg`, `image/png` o `image/webp` (dal formato reale) |
+| `filectime` | double | `Date.now()` in millisecondi |
+| `alt`, `title` | string | uguali a `name` |
+| `trash` | boolean | `false` |
+| `insertDate`, `updateDate` | Date | istante dell'upload |
+| `createdBy` | ObjectId | utente che ha caricato l'immagine (chiave **aggiuntiva** di questo backend, decisione dell'utente del 2026-11-13) |
+| `companyId` | ObjectId o `null` | azienda proprietaria dell'immagine, `null` per un'immagine di tutto il gruppo (chiave **aggiuntiva**): il CA vede e usa solo le immagini delle proprie aziende; i documenti legacy non hanno la chiave e un CA non li vede |
+
+Chiavi e ordine come nel legacy; `createdBy` e `companyId` seguono `updateDate`. Sono **additive**: il legacy le ignora (legge solo le chiavi che conosce) e non le tocca. Un documento legacy può mancare di campi (nessuno schema): la lettura è tollerante. Gli oggetti stanno nel bucket in `<groupId>/media/image/<xs|s|m|l|xl>/<basename>` e si raggiungono con `groups.filesHost` (letto, mai scritto: `https` valido, altrimenti nessun URL). **Descrittore nei loghi dell'azienda** (`companies.medias.images.customersAppLogoLight|Dark`): `{ _id (string esadecimale), dirname, basename, extension, filename (= name), mimetype, filectime (double), mmThumb ({}), type ('image'), title, alt }` in quest'ordine. Il backend non si fida di un documento `files`, che il legacy lascia riscrivere a qualunque utente: per un logo la directory è sempre `/media/image`, il `basename` deve essere un nome semplice (un solo segmento, senza `/`, `\`, `..`, `?`, `#`, `%`, caratteri di controllo né punto iniziale), `mimetype` un `image/*` e l'estensione lettere e cifre, altrimenti l'immagine non è utilizzabile (`422`).
+
 ## Collection dei database di gruppo lette dal nuovo backend
 Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul cluster del gruppo:
 | Collection | Perché | Campi usati |
@@ -173,4 +214,4 @@ Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul clu
 ## Domande aperte
 1. `groups.dealerId`: nel legacy riferisce l'`_id` dell'utente `D` (D-09, anagrafica nella collection `dealers`, con lo stesso `_id`). Aperto: se un dealer possa avere più utenti.
 2. Migrazione di `companies` e `places`: risolta con le copie nel common (D-01, D-20), scritte dal legacy e riallineate da `sync:copies`; la dismissione delle copie nei database dei gruppi è la fase 3 (`doc/Tasks.md` 5.7).
-3. Univocità: `username` globale (D-15). Aperta quella di `vatNumber` delle aziende (`companies.code`), da decidere con l'area 6.
+3. Univocità: `username` globale (D-15). `vatNumber` delle aziende (`companies.code`): controllata dal servizio di scrittura tra le aziende non cestinate del gruppo (`409`), indice non univoco; i 6 doppioni esistenti restano (decisione del 2026-11-13, area 6).

@@ -22,13 +22,6 @@ export interface GroupReference {
   readonly counts: GroupCounts;
 }
 
-/** A company as the reference list shows it. */
-export interface CompanyReference {
-  readonly id: string;
-  readonly name: string;
-  readonly trashed: boolean;
-}
-
 /** A place as the reference list shows it. */
 export interface PlaceReference {
   readonly id: string;
@@ -43,9 +36,6 @@ const nameOf = (document: Document): string => (typeof document['name'] === 'str
 
 /** Projection of the group list: the only stored fields ever read. */
 export const GROUP_PROJECTION = Object.freeze({ name: 1, status: 1, trash: 1, dealerId: 1, demo: 1 } as const);
-
-/** Projection of the company list: the only stored fields ever read. */
-export const COMPANY_PROJECTION = Object.freeze({ name: 1, trash: 1 } as const);
 
 /** Projection of the place list: the only stored fields ever read. */
 export const PLACE_PROJECTION = Object.freeze({ name: 1, trash: 1, companyId: 1 } as const);
@@ -70,15 +60,6 @@ export function toGroupReference(document: Document, counts: GroupCounts): Group
 }
 
 /**
- * Maps a stored company to its reference representation.
- *
- * @param document The projected company document.
- */
-export function toCompanyReference(document: Document): CompanyReference {
-  return { id: (document['_id'] as ObjectId).toHexString(), name: nameOf(document), trashed: document['trash'] === true };
-}
-
-/**
  * Maps a stored place to its reference representation.
  *
  * @param document The projected place document.
@@ -90,5 +71,39 @@ export function toPlaceReference(document: Document): PlaceReference {
     name: nameOf(document),
     companyId: typeof companyId === 'object' && companyId !== null && 'toHexString' in companyId ? (companyId as ObjectId).toHexString() : null,
     trashed: document['trash'] === true,
+  };
+}
+
+/** A country of the reference list: its ISO code, its name and the areas (provinces) it lists. */
+export interface CountryReference {
+  readonly code: string;
+  readonly name: string;
+  readonly areas: ReadonlyArray<{ readonly code: string; readonly name: string }>;
+}
+
+/** The fields of a country the list reads. */
+export const COUNTRY_PROJECTION = Object.freeze({ code: 1, name: 1, areas: 1 } as const);
+
+/**
+ * Maps a document of `common.countries` to the reference country, tolerant of the legacy shapes: a country without a usable code is left out (`null`), a name that is missing is the
+ * code, `areas` that is not a list (`'none'`, `null`) is `[]`, and an area without a code is left out (its name falls back to the code).
+ *
+ * @param document The stored country.
+ * @returns The country, or `null` when it has no usable code.
+ */
+export function toCountryReference(document: Document): CountryReference | null {
+  const code: unknown = document['code'];
+  if (typeof code !== 'string' || !/^[A-Za-z]{2}$/.test(code)) {
+    return null;
+  }
+  const areas: unknown = document['areas'];
+  const name: unknown = document['name'];
+  return {
+    code: code.toUpperCase(),
+    name: typeof name === 'string' && name !== '' ? name : code.toUpperCase(),
+    areas: (Array.isArray(areas) ? areas : []).flatMap((area: unknown) => {
+      const { code: areaCode, name: areaName } = (typeof area === 'object' && area !== null ? area : {}) as { code?: unknown; name?: unknown };
+      return typeof areaCode === 'string' && areaCode !== '' ? [{ code: areaCode, name: typeof areaName === 'string' && areaName !== '' ? areaName : areaCode }] : [];
+    }),
   };
 }

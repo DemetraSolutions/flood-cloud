@@ -24,6 +24,24 @@ const counters = () => ctx.databases.common().collection<{ _id: string; count: n
 const BASE = Math.floor(Date.now() / 60_000) * 60_000;
 
 describe('rate limiter (real MongoDB)', () => {
+  it('counts a daily quota in a window of 24 hours: a request an hour later is in the same window, and the reset tells the seconds to the end of the day', async () => {
+    const DAY = 86_400;
+    const midnight = Math.floor(Date.now() / (DAY * 1000)) * DAY * 1000;
+    let now = midnight + 3_600_000;
+    const limiter = createRateLimiter(ctx.databases, () => now);
+    const first = await limiter.consume('media-upload-day:user', 'u1', 2, DAY);
+    assert.deepEqual([first.allowed, first.resetSeconds], [true, DAY - 3600]);
+    now += 3_600_000;
+    assert.equal((await limiter.consume('media-upload-day:user', 'u1', 2, DAY)).allowed, true);
+    const third = await limiter.consume('media-upload-day:user', 'u1', 2, DAY);
+    assert.deepEqual([third.allowed, third.firstExcess, third.resetSeconds], [false, true, DAY - 7200]);
+    assert.equal((await limiter.peek('media-upload-day:user', 'u1', 2, DAY)).allowed, false);
+    assert.equal((await limiter.consume('media-upload-day:user', 'u1', 2)).allowed, true, 'the same key in the one-minute window is another counter');
+    const stored = await counters().findOne({ _id: `media-upload-day:user:${createHash('sha256').update('u1').digest('hex')}:${String(midnight / 1000)}` });
+    assert.equal(stored?.count, 3);
+    assert.ok(stored!.expiresAt.getTime() > midnight + DAY * 1000);
+  });
+
   it('counts per window, reports remaining and reset, and flags only the first excess', async () => {
     const start = BASE + 10_000;
     const limiter = createRateLimiter(ctx.databases, () => start);

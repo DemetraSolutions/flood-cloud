@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Databases } from '../../../db/databases.ts';
 
-/** Length of the fixed rate limit window in seconds. */
+/** Length of the default fixed rate limit window in seconds (a rule may ask for a longer one, such as a day). */
 export const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 /** Seconds a counter outlives its window before the TTL index removes it. */
@@ -42,18 +42,20 @@ export interface RateLimiter {
    * @param bucket Name of the rule, for example `login:username`.
    * @param key The subject (username, IP, user id); hashed before it reaches the database.
    * @param limit Requests allowed per window.
+   * @param windowSeconds Length of the fixed window in seconds, {@link RATE_LIMIT_WINDOW_SECONDS} by default.
    * @returns The decision. A database failure rejects (callers fail closed).
    */
-  consume(bucket: string, key: string, limit: number): Promise<RateLimitDecision>;
+  consume(bucket: string, key: string, limit: number, windowSeconds?: number): Promise<RateLimitDecision>;
   /**
    * Reads the counter of the current window without changing it.
    *
    * @param bucket Name of the rule.
    * @param key The subject.
    * @param limit Requests allowed per window.
+   * @param windowSeconds Length of the fixed window in seconds, {@link RATE_LIMIT_WINDOW_SECONDS} by default.
    * @returns The decision for the counter as it is: `allowed` is false when it has already reached the limit.
    */
-  peek(bucket: string, key: string, limit: number): Promise<RateLimitDecision>;
+  peek(bucket: string, key: string, limit: number, windowSeconds?: number): Promise<RateLimitDecision>;
 }
 
 function isDuplicateKey(error: unknown): boolean {
@@ -70,10 +72,10 @@ function isDuplicateKey(error: unknown): boolean {
  * @returns The limiter.
  */
 export function createRateLimiter(databases: Databases, now: () => number = Date.now): RateLimiter {
-  const window = (bucket: string, key: string) => {
+  const window = (bucket: string, key: string, windowSeconds: number) => {
     const nowSeconds = Math.floor(now() / 1000);
-    const windowStart = nowSeconds - (nowSeconds % RATE_LIMIT_WINDOW_SECONDS);
-    const windowEnd = windowStart + RATE_LIMIT_WINDOW_SECONDS;
+    const windowStart = nowSeconds - (nowSeconds % windowSeconds);
+    const windowEnd = windowStart + windowSeconds;
     return {
       id: `${bucket}:${createHash('sha256').update(key).digest('hex')}:${windowStart}`,
       windowEnd,
@@ -81,8 +83,8 @@ export function createRateLimiter(databases: Databases, now: () => number = Date
     };
   };
   return {
-    consume: async (bucket, key, limit) => {
-      const { id, windowEnd, resetSeconds } = window(bucket, key);
+    consume: async (bucket, key, limit, windowSeconds = RATE_LIMIT_WINDOW_SECONDS) => {
+      const { id, windowEnd, resetSeconds } = window(bucket, key, windowSeconds);
       const filter = { _id: id };
       const update = {
         $inc: { count: 1 },
@@ -110,8 +112,8 @@ export function createRateLimiter(databases: Databases, now: () => number = Date
         firstExcess: counter.count === limit + 1,
       };
     },
-    peek: async (bucket, key, limit) => {
-      const { id, resetSeconds } = window(bucket, key);
+    peek: async (bucket, key, limit, windowSeconds = RATE_LIMIT_WINDOW_SECONDS) => {
+      const { id, resetSeconds } = window(bucket, key, windowSeconds);
       const counter = await databases.common().collection<RateLimitDocument>('rateLimits').findOne({ _id: id }, { projection: { count: 1 } });
       const count = counter?.count ?? 0;
       return { allowed: count < limit, limit, remaining: Math.max(0, limit - count), resetSeconds, firstExcess: false };

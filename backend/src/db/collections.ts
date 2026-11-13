@@ -1,4 +1,5 @@
 import { FEATURES } from '../modules/groups/features.ts';
+import { COMPANY_BLOCK_PATHS, COMPANY_WHOLE_KEYS } from '../shared/legacy-write/company-paths.ts';
 import { PROVIDERS } from '../modules/groups/group.types.ts';
 import { LEGACY_MODULES, READ_ONLY_MODULE } from '../shared/security/rbac/permission-matrix.ts';
 import { POS_OWNED_FIELDS, POS_PRICE_LISTS_PATH } from '../modules/users/pos.catalog.ts';
@@ -145,10 +146,12 @@ export const GROUPS_OWNED_FIELDS: readonly string[] = Object.freeze([
 export const GROUPS_PLACES_FIELD = 'places';
 
 /**
- * Fields of the legacy `companies` documents of a group database this backend may `$set` (`doc/Tasks.md` 5.6.3 and the legacy
- * analysis §3.2): the registry data of the company and its state. The blocks the legacy and the POS write as a whole (`settings`,
- * `fattura_elettronica`, `invoicesPS`, `invoicesPSValues`, `banks`, `ticketsSuppliers`, `medias`) and every key unknown to this
- * backend are never written, so they survive every write. `trash` is written by trash and restore only; `updateDate` by every write.
+ * Fields of the legacy `companies` documents of a group database this backend may `$set` (`doc/Tasks.md` 5.6.3, area 6 and the legacy
+ * analysis of the company): the registry data and the state of the company, and every key of its blocks as a **leaf dotted path**
+ * (`fattura_elettronica.<16 keys>`, `settings.global.<5 keys>`, `settings.api.cerved`, `settings.ecommerce.<27 keys>`, `medias.images.<4 keys>`) or a
+ * whole array (`banks`, `ticketsSuppliers`, `invoicesPSValues`) or value (`invoicesPS`). The blocks themselves (`settings`, `fattura_elettronica`,
+ * `medias`) are never written whole, so the keys the legacy or a later release adds to them survive every write. `trash` is written by trash and
+ * restore only; `updateDate` by every write.
  */
 export const COMPANIES_OWNED_FIELDS: readonly string[] = Object.freeze([
   'name',
@@ -165,6 +168,8 @@ export const COMPANIES_OWNED_FIELDS: readonly string[] = Object.freeze([
   'status',
   'trash',
   'expirationDate',
+  ...COMPANY_WHOLE_KEYS,
+  ...COMPANY_BLOCK_PATHS,
   'updateDate',
 ]);
 
@@ -194,6 +199,29 @@ export const PLACES_OWNED_FIELDS: readonly string[] = Object.freeze([
   'trash',
   'expirationDate',
   'updateDate',
+]);
+
+/**
+ * Fields of the legacy `files` documents of a group database (the images of the media manager) this backend writes (`doc/Tasks.md` area 6, step 6B): only whole
+ * new documents, inserted by the image upload (`createdBy` and `companyId` are keys of this backend, additive: the legacy ignores them); no field of an existing document is ever changed from here (editing, trash and deletion of files come with the media
+ * domain). There is no copy of this collection in the common database (D-20 covers companies and places only). The legacy creates no index on it and neither does this backend.
+ */
+export const FILES_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'groupId',
+  'basename',
+  'name',
+  'extension',
+  'dirname',
+  'type',
+  'mimetype',
+  'filectime',
+  'alt',
+  'title',
+  'trash',
+  'insertDate',
+  'updateDate',
+  'createdBy',
+  'companyId',
 ]);
 
 /**
@@ -253,6 +281,8 @@ export const COLLECTIONS = {
     // profile:legacy). The application reads companies and places from the copies in the common database.
     companies: { ownership: 'legacy-write', ownedFields: COMPANIES_OWNED_FIELDS },
     places: { ownership: 'legacy-write', ownedFields: PLACES_OWNED_FIELDS },
+    // The images of the media manager: the upload inserts whole documents (`FILES_OWNED_FIELDS`), the lists read them; the objects live in the storage bucket.
+    files: { ownership: 'legacy-write', ownedFields: FILES_OWNED_FIELDS },
     // Read only, to check that the ids a catalog of the group refers to exist.
     products: { ownership: 'legacy-read' },
     products_categories: { ownership: 'legacy-read' },

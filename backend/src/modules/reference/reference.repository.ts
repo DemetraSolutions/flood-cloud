@@ -6,8 +6,8 @@ import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import { countByGroupPipeline, assertCountedGroups, countsByGroup } from '../../shared/security/scope/group-counts.ts';
 import { countMirrorByGroups, groupMirror } from '../../shared/security/scope/group-mirror.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
-import { companiesScopeFilter, groupsScopeFilter, placesScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
-import { COMPANY_PROJECTION, GROUP_PROJECTION, PLACE_PROJECTION } from './reference.mapper.ts';
+import { groupsScopeFilter, placesScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
+import { COUNTRY_PROJECTION, GROUP_PROJECTION, PLACE_PROJECTION } from './reference.mapper.ts';
 import type { GroupCounts } from './reference.mapper.ts';
 import { REFERENCE_LIST } from './reference.list.ts';
 
@@ -31,15 +31,6 @@ export interface ReferenceRepository {
    */
   countGroupsContents(groupIds: readonly ObjectId[]): Promise<Map<string, GroupCounts>>;
   /**
-   * A page of the `companies` of a verified group (read from the copies in `common.companies`), inside the caller's perimeter.
-   *
-   * @param principal The authenticated caller.
-   * @param access Verified access to the group.
-   * @param filter Resource filter of the request.
-   * @param params Validated list parameters.
-   */
-  listCompanies(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
-  /**
    * A page of the `places` of a verified group (read from the copies in `common.places`), inside the caller's perimeter.
    *
    * @param principal The authenticated caller.
@@ -48,7 +39,14 @@ export interface ReferenceRepository {
    * @param params Validated list parameters.
    */
   listPlaces(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
+  /**
+   * The countries of `common.countries` (a legacy collection, read only): at most {@link MAX_COUNTRIES} documents, with the code, the name and the areas only.
+   */
+  listCountries(): Promise<Document[]>;
 }
+
+/** Most countries read: the world has about 250, so the bound is never reached by real data. */
+export const MAX_COUNTRIES = 400;
 
 /**
  * Builds the reference repository. Every query combines the scope filter of the caller with the filter of
@@ -62,6 +60,8 @@ export function createReferenceRepository(databases: Databases): ReferenceReposi
   const read = async (aggregate: (pipeline: Document[]) => Promise<Document[]>, match: Filter<Document>, params: ListParams, projection: Readonly<Record<string, 1>>): Promise<ListPage> =>
     pageOf(await aggregate(listPipeline(match, params, REFERENCE_LIST, projection)), params);
   return {
+    listCountries: () => databases.common().collection('countries').find({}, { projection: COUNTRY_PROJECTION, limit: MAX_COUNTRIES, maxTimeMS: LIST_MAX_TIME_MS }).toArray(),
+
     listGroups: (principal, filter, params) =>
       read(
         (pipeline) => databases.common().collection('groups').aggregate(pipeline, { maxTimeMS: LIST_MAX_TIME_MS }).toArray(),
@@ -86,14 +86,6 @@ export function createReferenceRepository(databases: Databases): ReferenceReposi
         }),
       );
     },
-
-    listCompanies: (principal, access, filter, params) =>
-      read(
-        (pipeline) => groupMirror(principal, access, databases, 'companies').aggregate(pipeline),
-        withScope(companiesScopeFilter(principal.scope), { $and: [filter, listSearch(params, REFERENCE_LIST)] }),
-        params,
-        COMPANY_PROJECTION,
-      ),
 
     listPlaces: (principal, access, filter, params) =>
       read(

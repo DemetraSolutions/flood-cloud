@@ -182,12 +182,12 @@ describe('GET /v1/groups', () => {
   });
 });
 
-describe('GET /v1/groups/{groupId}/companies', () => {
+describe('GET /v1/groups/{groupId}/companies (the compact fields the reference store reads)', () => {
   it('lists the untrashed companies of the group with the contract fields only', async () => {
     const reply = await as.call(group(0).sa, 'GET', gpath(0, 'companies'));
     assert.equal(reply.status, 200);
     assert.deepEqual(names(reply), ['', 'Reg.Ex (b+', 'company-001', 'company-002']);
-    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['id', 'name', 'trashed']);
+    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['city', 'country', 'id', 'name', 'province', 'status', 'trashed', 'vatNumber']);
     const text = JSON.stringify(reply.body);
     for (const secret of ['fattura_elettronica', 'fixture-secret', 'fixture-user', 'Via Fixture', 'banks']) {
       assert.ok(!text.includes(secret), secret);

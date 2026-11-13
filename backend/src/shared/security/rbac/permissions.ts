@@ -30,6 +30,7 @@ export const PERMISSIONS = Object.freeze({
   COMPANIES_CREATE: 'companies:create',
   COMPANIES_UPDATE: 'companies:update',
   COMPANIES_TRASH: 'companies:trash',
+  COMPANIES_DELETE: 'companies:delete',
   PLACES_READ: 'places:read',
   PLACES_CREATE: 'places:create',
   PLACES_UPDATE: 'places:update',

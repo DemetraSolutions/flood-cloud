@@ -24,6 +24,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'companies:create': FROM_SA,
   'companies:update': FROM_CA,
   'companies:trash': FROM_SA,
+  'companies:delete': FROM_SA,
   'places:read': FROM_PA,
   'places:create': FROM_CA,
   'places:update': FROM_PA,

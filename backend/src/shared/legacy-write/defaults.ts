@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
+import { E_INVOICING_KEYS } from './company-paths.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkFields, requireFields } from './fields.ts';
 import type { NewCompanyFields, NewPlaceFields } from './fields.ts';
 import { InvalidWriteInputError } from './errors.ts';
@@ -10,32 +11,13 @@ export const DEFAULT_STORAGE_NAME = 'Deposito 1';
 /** Time zone of a new place when the caller gives none (the legacy wizard's default, needed by the e-mails of the integration service). */
 export const DEFAULT_TIMEZONE = 'Europe/Rome';
 
-/** Keys of `fattura_elettronica`, which the legacy reads without checks. */
-const E_INVOICING_KEYS = [
-  'IdTrasmittente_codice',
-  'IdTrasmittente_paese',
-  'albo_professionale',
-  'ap_data_iscrizione',
-  'ap_numero_iscrizione',
-  'ap_provincia',
-  'codice_destinatario',
-  'codice_eori',
-  'email',
-  'hub',
-  'rea_capitale_sociale',
-  'rea_liquidazione',
-  'rea_numero',
-  'rea_soci',
-  'rea_ufficio',
-] as const;
-
 /** Day of the week `0` (Sunday) to `6`: the keys of `openingTime.weekGeneric`, each `{ active, values }`. */
 const WEEK_DAYS = ['0', '1', '2', '3', '4', '5', '6'] as const;
 
 /**
- * The structure the legacy reads without checks, as the intended form of the `insertOne` of the legacy, for the data of a new
- * company the write service does not own: every block complete (a company with `settings: {}` makes the XML of the invoices and the POS crash),
- * the e-invoicing keys as empty strings (`hub` is split by the sender of the invoices), the regime `RF01`.
+ * The template of the blocks of a new company, as the intended form of the `insertOne` of the legacy and of its group wizard: every block complete (a
+ * company with `settings: {}` makes the XML of the invoices and the POS crash), the e-invoicing keys as empty strings (`hub` is split by the sender of
+ * the invoices), the regime `RF01`, the arrays empty, the numbering position `null`, the media with their four keys. The caller's values are put on top of it.
  *
  * @returns Fresh objects on every call (nothing is shared between documents).
  */
@@ -43,7 +25,7 @@ function companyBlocks(): Document {
   return {
     invoicesPS: null,
     invoicesPSValues: [],
-    fattura_elettronica: { ...Object.fromEntries(E_INVOICING_KEYS.map((key) => [key, ''])), regime_fiscale: 'RF01' },
+    fattura_elettronica: Object.fromEntries(E_INVOICING_KEYS.map((key) => [key, key === 'regime_fiscale' ? 'RF01' : ''])),
     ticketsSuppliers: [],
     banks: [],
     settings: {
@@ -79,14 +61,41 @@ function companyBlocks(): Document {
         enableFidelity: false,
       },
     },
-    medias: {},
+    medias: { images: { internalFileName: '', externalUrl: '', customersAppLogoLight: null, customersAppLogoDark: null } },
   };
 }
 
 /**
- * Builds the document of a new company in the format of the legacy (`doc/Tasks.md` 5.6.3). The owned fields come from the caller, validated;
- * the rest is the intended form of the legacy `insertOne`, complete. `status` is explicit (the legacy forces it to `true`), `trash` is `false`
- * and both dates are `now`. The group is always the one of the verified access, never a value of the input.
+ * The default value of every key of a block (`fattura_elettronica`, `settings.global`, `settings.api`, `settings.ecommerce`, `medias.images`):
+ * what a write puts in the keys it does not set when it finds the block missing or empty.
+ *
+ * @param container Dotted path of the block (a key of `COMPANY_CONTAINERS`).
+ * @returns A fresh object.
+ */
+export function companyContainerDefaults(container: string): Document {
+  let value: unknown = companyBlocks();
+  for (const key of container.split('.')) {
+    value = (value as Document)[key];
+  }
+  return value as Document;
+}
+
+/** Puts a value at a dotted path of a document built by this module (every step exists in the template of a company). */
+function setPath(document: Document, path: string, value: unknown): void {
+  const keys = path.split('.');
+  const last = keys.pop() as string;
+  let target = document;
+  for (const key of keys) {
+    target = target[key] as Document;
+  }
+  target[last] = value;
+}
+
+/**
+ * Builds the document of a new company in the format of the legacy (`doc/Tasks.md` 5.6.3). The owned fields come from the caller, validated, each
+ * at its place (the dotted ones inside their block, which exists with all its keys); the rest is the intended form of the legacy `insertOne`, complete.
+ * `status` is explicit (the legacy forces it to `true`, and so turns `false` into `true`: here `false` is kept), `trash` is `false`, `expirationDate` is `null` unless given
+ * (never the epoch the legacy writes) and both dates are `now`. The group is always the one of the verified access, never a value of the input.
  *
  * @param id Id of the new company.
  * @param groupId Group of the verified access.
@@ -99,7 +108,7 @@ export function newCompanyDocument(id: ObjectId, groupId: ObjectId, input: NewCo
   const fields = checkFields(COMPANY_FIELD_KINDS, input);
   requireFields(fields, ['name']);
   const blocks = companyBlocks();
-  return {
+  const document: Document = {
     _id: id,
     groupId,
     name: '',
@@ -125,8 +134,11 @@ export function newCompanyDocument(id: ObjectId, groupId: ObjectId, input: NewCo
     expirationDate: null,
     insertDate: now,
     updateDate: now,
-    ...fields,
   };
+  for (const [path, value] of Object.entries(fields)) {
+    setPath(document, path, value);
+  }
+  return document;
 }
 
 /** A reservation e-mail setting of a new place. */

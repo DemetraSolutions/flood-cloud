@@ -18,12 +18,6 @@ export const groupsQuery = object({
 /** Validated query of the group list. */
 export type GroupsQuery = Infer<typeof groupsQuery>;
 
-/** Query of `GET /v1/groups/{groupId}/companies`; `ids` (1-100 comma-separated ObjectIds) restricts the read to those companies, still inside the caller's perimeter. */
-export const companiesQuery = object({ ...listQueryShape(REFERENCE_LIST), trashed: trashed(), ids: lookupIds });
-
-/** Validated query of the company list. */
-export type CompaniesQuery = Infer<typeof companiesQuery>;
-
 /** Query of `GET /v1/groups/{groupId}/places`: the optional `companyId` narrows to one company; `ids` (1-100 comma-separated ObjectIds) restricts the read to those places, still inside the caller's perimeter. */
 export const placesQuery = object({ ...listQueryShape(REFERENCE_LIST), trashed: trashed(), companyId: optional(objectId()), ids: lookupIds });
 

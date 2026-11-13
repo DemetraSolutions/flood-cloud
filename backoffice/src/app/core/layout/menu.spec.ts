@@ -71,6 +71,7 @@ describe('visibleMenu', () => {
       'home',
       'profile',
       'users',
+      'companies',
       'fidelity',
       'products',
       'promotions',
@@ -83,6 +84,16 @@ describe('visibleMenu', () => {
     const children = (id: string) => ids([...(menu.find((i) => i.id === id)?.children ?? [])]);
     expect(children('fidelity')).toEqual(['card-types', 'points-collections', 'prize-catalogues']);
     expect(children('products')).toEqual(['product-favorites']);
+  });
+
+  it('shows companies with companies:read in the group area', () => {
+    const only = (permission: string) => ids(visibleMenu(MENU, (p) => p === permission, allowAll));
+    expect(only('companies:read')).toContain('companies');
+    expect(only('users:read')).not.toContain('companies');
+    expect(MENU.find((item) => item.id === 'companies')).toMatchObject({
+      groupPath: 'companies',
+      labelKey: 'MENU.COMPANIES',
+    });
   });
 
   it('shows fidelity with fidelity:read, and favorites and promotions with products:read', () => {

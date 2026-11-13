@@ -1,11 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Double, ObjectId } from 'mongodb';
+import { Double, Int32, ObjectId } from 'mongodb';
 import { COMPANIES_OWNED_FIELDS, GROUPS_OWNED_FIELDS, GROUPS_PLACES_FIELD, PLACES_OWNED_FIELDS, COLLECTIONS } from '../../src/db/collections.ts';
-import { DEFAULT_STORAGE_NAME, DEFAULT_TIMEZONE, newCompanyDocument, newPlaceDocument } from '../../src/shared/legacy-write/defaults.ts';
-import { CrossClusterWriteError, InvalidWriteInputError } from '../../src/shared/legacy-write/errors.ts';
+import { DEFAULT_STORAGE_NAME, DEFAULT_TIMEZONE, companyContainerDefaults, newCompanyDocument, newPlaceDocument } from '../../src/shared/legacy-write/defaults.ts';
+import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from '../../src/shared/legacy-write/errors.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkFields, checkObjectId, requireFields } from '../../src/shared/legacy-write/fields.ts';
 import { reserveWithGoogleRecord } from '../../src/shared/legacy-write/reserve-with-google.ts';
+import { normalizeVatNumber, vatNumberFilter } from '../../src/shared/legacy-write/vat.ts';
 import { versionOf } from '../../src/shared/legacy-write/version.ts';
 
 const GROUP = ObjectId.createFromHexString('0200000000000000000000aa');
@@ -28,9 +29,17 @@ describe('legacy write: registry and allowlists', () => {
     for (const field of ['devices', 'rooms', 'storages', 'printStations', 'productionCenter', 'integrations', 'roomsSettings', 'general', 'ordering', 'openingTime', 'plan', 'groupId', '_id', 'insertDate']) {
       assert.ok(!PLACES_OWNED_FIELDS.includes(field), field);
     }
-    for (const field of ['settings', 'fattura_elettronica', 'invoicesPS', 'invoicesPSValues', 'banks', 'ticketsSuppliers', 'medias', 'groupId', '_id', 'insertDate']) {
+    // The blocks are owned key by key, never as a whole: the keys the legacy or a later release adds to them survive.
+    for (const field of ['settings', 'settings.global', 'settings.api', 'settings.ecommerce', 'fattura_elettronica', 'medias', 'medias.images', 'groupId', '_id', 'insertDate']) {
       assert.ok(!COMPANIES_OWNED_FIELDS.includes(field), field);
     }
+    for (const field of ['invoicesPS', 'invoicesPSValues', 'banks', 'ticketsSuppliers', 'fattura_elettronica.hub', 'settings.global.lastInvoiceNumber', 'settings.api.cerved', 'settings.ecommerce.minAmount', 'medias.images.customersAppLogoDark']) {
+      assert.ok(COMPANIES_OWNED_FIELDS.includes(field), field);
+    }
+    assert.equal(COMPANIES_OWNED_FIELDS.filter((field) => field.startsWith('fattura_elettronica.')).length, 16);
+    assert.equal(COMPANIES_OWNED_FIELDS.filter((field) => field.startsWith('settings.global.')).length, 5);
+    assert.equal(COMPANIES_OWNED_FIELDS.filter((field) => field.startsWith('settings.ecommerce.')).length, 27);
+    assert.equal(COMPANIES_OWNED_FIELDS.filter((field) => field.startsWith('medias.images.')).length, 4);
   });
 
   it('registers groups.places and the feed as owned, without letting the management of the group write the list of places', () => {
@@ -130,7 +139,8 @@ describe('legacy write: defaults of a new company', () => {
       ['Acme', '', '', 'IT', 'EUR', null, null],
     );
     assert.deepEqual([company['status'], company['trash'], company['expirationDate'], company['insertDate'], company['updateDate']], [true, false, null, NOW, NOW]);
-    assert.deepEqual([company['invoicesPS'], company['invoicesPSValues'], company['ticketsSuppliers'], company['banks'], company['medias']], [null, [], [], [], {}]);
+    assert.deepEqual([company['invoicesPS'], company['invoicesPSValues'], company['ticketsSuppliers'], company['banks']], [null, [], [], []]);
+    assert.deepEqual(company['medias'], { images: { internalFileName: '', externalUrl: '', customersAppLogoLight: null, customersAppLogoDark: null } });
     const invoicing = company['fattura_elettronica'] as Record<string, unknown>;
     assert.equal(Object.keys(invoicing).length, 16);
     assert.equal(invoicing['regime_fiscale'], 'RF01');
@@ -320,5 +330,211 @@ describe('legacy write: Reserve with Google record', () => {
     assert.equal(reserveWithGoogleRecord({ _id: COMPANY, companyId: COMPANY }, GROUP), null);
     assert.equal(reserveWithGoogleRecord({ _id: COMPANY, companyId: COMPANY, integrations: null }, GROUP), null);
     assert.equal(reserveWithGoogleRecord(placeOf(rwg(), { companyId: COMPANY.toHexString() }), GROUP), null);
+  });
+});
+
+describe('legacy write: the keys of the blocks of a company', () => {
+  const BANK = { id: 'a', name: 'Bank', iban: 'IT60X0542811101000000123456', abi: '', cab: '', bic: '', default: true };
+  it('checks every owned key of the blocks by its own kind', () => {
+    const ok = {
+      invoicesPS: 'suffix',
+      invoicesPSValues: [{ name: 'A', cash: true }],
+      banks: [BANK],
+      ticketsSuppliers: [{ id: 'x', name: 'Y', cuts: [5, null, 7.5] }],
+      'fattura_elettronica.hub': '',
+      'fattura_elettronica.regime_fiscale': 'RF01',
+      'settings.global.enableLoginSignup': true,
+      'settings.global.lastInvoiceNumber': 2_147_483_647,
+      'settings.api.cerved': false,
+      'settings.ecommerce.status': true,
+      'settings.ecommerce.listId': '',
+      'settings.ecommerce.minAmount': { EUR: { code: 'EUR', value: 5 }, XXX: 5 },
+      'settings.ecommerce.showProductRemainingQuantity': 2.5,
+      'medias.images.externalUrl': 'https://example.test/a.png',
+      'medias.images.customersAppLogoLight': null,
+    };
+    assert.deepEqual(checkFields(COMPANY_FIELD_KINDS, ok), ok);
+    assert.deepEqual(checkFields(COMPANY_FIELD_KINDS, { invoicesPS: null, 'settings.global.lastInvoiceNumber': null, banks: [], ticketsSuppliers: [], invoicesPSValues: [] }), { invoicesPS: null, 'settings.global.lastInvoiceNumber': null, banks: [], ticketsSuppliers: [], invoicesPSValues: [] });
+  });
+
+  it('refuses a value of the wrong kind for the keys of the blocks, naming the field only', () => {
+    const bad: Array<[string, unknown]> = [
+      ['invoicesPS', 'middle'],
+      ['invoicesPS', true],
+      ['invoicesPSValues', {}],
+      ['invoicesPSValues', [{ name: 'A' }]],
+      ['invoicesPSValues', [{ name: 'A', cash: 'yes' }]],
+      ['invoicesPSValues', [{ name: 'A', cash: true, extra: 1 }]],
+      ['invoicesPSValues', [null]],
+      ['banks', [{ ...BANK, default: 1 }]],
+      ['banks', [{ ...BANK, abi: null }]],
+      ['banks', 'x'],
+      ['ticketsSuppliers', [{ id: 'x', name: 'Y', cuts: 5 }]],
+      ['ticketsSuppliers', [{ id: 'x', name: 'Y', cuts: [-1] }]],
+      ['ticketsSuppliers', [{ id: 'x', name: 'Y', cuts: ['5'] }]],
+      ['ticketsSuppliers', [{ id: 'x', name: 'Y', cuts: [Number.NaN] }]],
+      ['fattura_elettronica.hub', null],
+      ['fattura_elettronica.rea_numero', 5],
+      ['settings.global.lastInvoiceNumber', 2_147_483_648],
+      ['settings.global.lastInvoiceNumber', -1],
+      ['settings.global.lastInvoiceNumber', 1.5],
+      ['settings.global.lastInvoiceNumber', '1'],
+      ['settings.global.discountLines', 'true'],
+      ['settings.ecommerce.status', 1],
+      ['settings.ecommerce.listId', null],
+      ['settings.ecommerce.minAmount', []],
+      ['settings.ecommerce.minAmount', null],
+      ['settings.ecommerce.minAmount', { $set: 1 }],
+      ['settings.ecommerce.showProductRemainingQuantity', -1],
+      ['settings.ecommerce.showProductRemainingQuantity', Number.POSITIVE_INFINITY],
+      ['medias.images.customersAppLogoLight', { _id: 'x' }],
+      ['medias.images.externalUrl', null],
+    ];
+    for (const [field, value] of bad) {
+      assert.throws(() => checkFields(COMPANY_FIELD_KINDS, { [field]: value }), invalid(field), field);
+    }
+    for (const field of ['settings', 'settings.global', 'settings.ecommerce.unknown', 'fattura_elettronica', 'fattura_elettronica.password', 'medias', 'medias.images', 'settings.integrations.x']) {
+      assert.throws(() => checkFields(COMPANY_FIELD_KINDS, { [field]: {} }), invalid(field), field);
+    }
+  });
+
+  it('accepts a logo as null or as the descriptor the legacy Media Manager stores, and nothing else', () => {
+    const descriptor = (): Record<string, unknown> => ({
+      _id: 'a'.repeat(24),
+      dirname: '/media/image',
+      basename: 'logo-1a2b3c4d.png',
+      extension: 'png',
+      filename: 'Logo',
+      mimetype: 'image/png',
+      filectime: new Double(1_731_490_000_123),
+      mmThumb: {},
+      type: 'image',
+      title: 'Logo',
+      alt: 'Logo',
+    });
+    const field = 'medias.images.customersAppLogoDark';
+    assert.deepEqual(checkFields(COMPANY_FIELD_KINDS, { [field]: null }), { [field]: null });
+    assert.equal(Object.keys(checkFields(COMPANY_FIELD_KINDS, { [field]: descriptor() })).length, 1);
+    assert.equal(Object.keys(checkFields(COMPANY_FIELD_KINDS, { [field]: { ...descriptor(), filectime: 1_731_490_000_123 } })).length, 1, 'a plain number is accepted too');
+    const without = (key: string) => Object.fromEntries(Object.entries(descriptor()).filter(([name]) => name !== key));
+    const reordered = (() => {
+      const { _id, ...rest } = descriptor();
+      return { ...rest, _id };
+    })();
+    const bad: unknown[] = [
+      {},
+      [],
+      'logo.png',
+      without('mmThumb'),
+      without('alt'),
+      { ...descriptor(), extra: 1 },
+      reordered,
+      { ...descriptor(), _id: 'xyz' },
+      { ...descriptor(), _id: 5 },
+      { ...descriptor(), _id: 'A'.repeat(24) },
+      { ...descriptor(), filectime: '1' },
+      { ...descriptor(), filectime: Number.NaN },
+      { ...descriptor(), filectime: new Double(Number.POSITIVE_INFINITY) },
+      { ...descriptor(), mmThumb: { x: 1 } },
+      { ...descriptor(), mmThumb: [] },
+      { ...descriptor(), mmThumb: null },
+      { ...descriptor(), type: 'video' },
+      { ...descriptor(), basename: 5 },
+      { ...descriptor(), title: null },
+    ];
+    for (const value of bad) {
+      assert.throws(() => checkFields(COMPANY_FIELD_KINDS, { [field]: value }), invalid(field));
+    }
+  });
+
+  it('has an error for a stored block that is not an object, with the name of the block only', () => {
+    const error = new MalformedDocumentError('settings.global');
+    assert.equal(error.name, 'MalformedDocumentError');
+    assert.equal(error.path, 'settings.global');
+    assert.ok(error instanceof Error);
+  });
+
+  it('builds a new company with the keys of the blocks at their place and every sibling default kept', () => {
+    const company = newCompanyDocument(
+      new ObjectId(),
+      GROUP,
+      { name: 'Acme', 'fattura_elettronica.hub': 'aruba', 'settings.ecommerce.status': true, 'settings.ecommerce.minAmount': { EUR: { code: 'EUR', value: 5 } }, 'settings.global.lastInvoiceNumber': 7, 'medias.images.externalUrl': 'https://example.test', banks: [{ id: 'b', name: '', iban: 'x', abi: '', cab: '', bic: '', default: false }], invoicesPS: 'prefix', status: false },
+      NOW,
+    );
+    const invoicing = company['fattura_elettronica'] as Record<string, unknown>;
+    assert.deepEqual([invoicing['hub'], invoicing['regime_fiscale'], invoicing['codice_eori']], ['aruba', 'RF01', '']);
+    const settings = company['settings'] as { global: Record<string, unknown>; ecommerce: Record<string, unknown> };
+    assert.deepEqual([settings.ecommerce['status'], settings.ecommerce['listId'], settings.ecommerce['minAmount'], settings.global['lastInvoiceNumber'], settings.global['discountLines']], [true, '', { EUR: { code: 'EUR', value: 5 } }, 7, false]);
+    assert.equal(((company['medias'] as { images: Record<string, unknown> }).images)['externalUrl'], 'https://example.test');
+    assert.deepEqual([company['invoicesPS'], (company['banks'] as unknown[]).length, company['status'], company['expirationDate']], ['prefix', 1, false, null]);
+    assert.equal(Object.keys(settings.ecommerce).length, 27);
+  });
+
+  it('gives a fresh copy of the default of a block', () => {
+    const first = companyContainerDefaults('settings.ecommerce');
+    assert.equal(Object.keys(first).length, 27);
+    (first['minAmount'] as Record<string, unknown>)['EUR'] = 1;
+    assert.deepEqual(companyContainerDefaults('settings.ecommerce')['minAmount'], {});
+    assert.deepEqual(Object.keys(companyContainerDefaults('fattura_elettronica')).length, 16);
+    assert.deepEqual(companyContainerDefaults('settings.api'), { cerved: false });
+    assert.deepEqual(Object.keys(companyContainerDefaults('settings.global')).length, 5);
+    assert.deepEqual(Object.keys(companyContainerDefaults('medias.images')).length, 4);
+  });
+});
+
+describe('legacy write: version of the keys of the blocks', () => {
+  const base = { _id: COMPANY, name: 'a', settings: { global: { lastInvoiceNumber: new Int32(5) }, ecommerce: { status: true } }, fattura_elettronica: { hub: 'aruba' }, banks: [{ id: 'a' }] };
+  it('changes with an owned key of a block, its type, its presence and a whole array', () => {
+    const same = versionOf('companies', base);
+    assert.equal(versionOf('companies', { ...base }), same);
+    assert.notEqual(versionOf('companies', { ...base, settings: { ...base.settings, ecommerce: { status: false } } }), same);
+    assert.notEqual(versionOf('companies', { ...base, settings: { ...base.settings, global: { lastInvoiceNumber: new Double(5) } } }), same);
+    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: {} }), same);
+    assert.notEqual(versionOf('companies', { ...base, banks: [{ id: 'b' }] }), same);
+    // Absent is not null.
+    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: { hub: null } }), same);
+    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: { hub: null } }), versionOf('companies', { ...base, fattura_elettronica: {} }));
+  });
+  it('does not change with the keys of a block the service does not own, and reads a path through something that is not an object as absent', () => {
+    const same = versionOf('companies', base);
+    assert.equal(versionOf('companies', { ...base, settings: { ...base.settings, integrations: { x: 1 }, global: { lastInvoiceNumber: new Int32(5), unknownKey: 1 } }, fattura_elettronica: { hub: 'aruba', extra: 'x' }, other: 1 }), same);
+    const absent = versionOf('companies', { _id: COMPANY, name: 'a' });
+    for (const settings of [null, 'x', [], { global: null }, { global: 'x' }, { global: [] }]) {
+      assert.equal(versionOf('companies', { _id: COMPANY, name: 'a', settings }), absent, JSON.stringify(settings));
+    }
+  });
+});
+
+describe('legacy write: VAT number normalization', () => {
+  it('trims, upper-cases, removes the spaces and drops the IT prefix of eleven digits only', () => {
+    assert.equal(normalizeVatNumber(' it 0111 4601 006 '), '01114601006');
+    assert.equal(normalizeVatNumber('IT01114601006'), '01114601006');
+    assert.equal(normalizeVatNumber('01114601006'), '01114601006');
+    assert.equal(normalizeVatNumber('IT0111460100'), 'IT0111460100');
+    assert.equal(normalizeVatNumber('ITABCDEFGHIJK'), 'ITABCDEFGHIJK');
+    assert.equal(normalizeVatNumber('de 123 456 789'), 'DE123456789');
+    assert.equal(normalizeVatNumber('   '), '');
+    // Only spaces and tabs are removed, the same two characters the database pattern allows: a Unicode space or an invisible character stays and so never matches.
+    assert.equal(normalizeVatNumber('DE\u00A0123'), 'DE\u00A0123');
+    assert.equal(normalizeVatNumber('DE\t1 2'), 'DE12');
+  });
+  it('builds a filter that matches every written form of the number and nothing else', () => {
+    const matches = (normalized: string, stored: string): boolean => {
+      const { $regex, $options } = (vatNumberFilter(normalized)['code'] as { $regex: string; $options: string });
+      return new RegExp($regex, $options).test(stored);
+    };
+    for (const stored of ['01114601006', 'IT01114601006', ' it 01114601006 ', 'IT 0111 4601 006', '0111 46010 06']) {
+      assert.ok(matches('01114601006', stored), stored);
+    }
+    for (const stored of ['01114601007', 'DE01114601006', '011146010061', '1114601006', '']) {
+      assert.equal(matches('01114601006', stored), false, stored);
+    }
+    assert.ok(matches('DE123456789', 'de 123456789'));
+    assert.equal(matches('DE123456789', 'DE\u00A0123456789'), false);
+    assert.equal(matches('DE123456789', 'DE\u200B123456789'), false);
+    assert.equal(matches('DE123456789', '123456789'), false);
+    // Characters of a pattern are literals.
+    assert.ok(matches('A.B+C', 'a.b+c'));
+    assert.equal(matches('A.B+C', 'aXbbC'), false);
   });
 });

@@ -18,10 +18,11 @@ const MIRROR_COLLECTIONS: readonly string[] = ['companies', 'places'];
 
 /**
  * The fields of each copy collection an application read may name, return or compute from: the one central allowlist.
- * The copies hold the credentials of the integrations of the places, so nothing else is ever readable.
+ * The copies hold the credentials of the integrations of the places and the bank data of the companies, so nothing else is ever readable:
+ * the companies expose, besides the compact reference (`name`, `trash`), the fields of the list of companies (`code`, `city`, `countryAreaCode`, `countryCode`, `status`).
  */
 export const MIRROR_FIELDS: Readonly<Record<MirrorCollection, ReadonlySet<string>>> = Object.freeze({
-  companies: new Set(['_id', 'name', 'trash']),
+  companies: new Set(['_id', 'name', 'trash', 'code', 'city', 'countryAreaCode', 'countryCode', 'status']),
   places: new Set(['_id', 'name', 'trash', 'companyId']),
 });
 

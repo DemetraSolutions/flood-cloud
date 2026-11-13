@@ -56,6 +56,11 @@ export class TextField {
   readonly inputmode = input<'numeric' | 'decimal' | 'tel' | null>(null);
   /** `spellcheck` attribute. */
   readonly spellcheck = input<'true' | 'false' | null>(null);
+  /**
+   * Normalises what the user types (an IBAN in capitals and groups, say): the field shows and
+   * keeps the result.
+   */
+  readonly format = input<((text: string) => string) | null>(null);
   /** Placeholder (never a replacement for the label). */
   readonly placeholder = input('');
   /** Marks the field as required. */
@@ -81,6 +86,11 @@ export class TextField {
   }
 
   protected onInput(event: Event): void {
-    this.value.set((event.target as HTMLInputElement).value);
+    const input = event.target as HTMLInputElement;
+    const text = this.format()?.(input.value) ?? input.value;
+    if (text !== input.value) {
+      input.value = text;
+    }
+    this.value.set(text);
   }
 }

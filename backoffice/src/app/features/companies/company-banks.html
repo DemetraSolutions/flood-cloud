@@ -1,0 +1,82 @@
+<form novalidate (submit)="$event.preventDefault()">
+  @if (state.fieldError(f); as problem) {
+    <p class="problem" role="alert">{{ problem }}</p>
+  }
+  @if (state.model().bankAccounts.length === 0) {
+    <p class="note">{{ 'COMPANIES.BANKS.EMPTY' | t }}</p>
+  }
+  <div class="rows">
+    @for (bank of f; track $index; let i = $index) {
+      <fieldset class="row">
+        <legend>{{ rowLabel('COMPANIES.BANKS.ROW', i) }}</legend>
+        <div class="grid">
+          <fc-text-field
+            [formField]="bank.name"
+            [label]="rowLabel('COMPANIES.BANKS.NAME', i)"
+            [error]="state.fieldError(bank.name)"
+            (blurred)="bank.name().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="bank.iban"
+            [format]="formatIban"
+            [label]="rowLabel('COMPANIES.BANKS.IBAN', i)"
+            [hint]="ibanHint(bank.iban().value())"
+            [error]="state.fieldError(bank.iban)"
+            autocapitalize="characters"
+            spellcheck="false"
+            (blurred)="bank.iban().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="bank.abi"
+            inputmode="numeric"
+            [label]="rowLabel('COMPANIES.BANKS.ABI', i)"
+            [error]="state.fieldError(bank.abi)"
+            (blurred)="bank.abi().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="bank.cab"
+            inputmode="numeric"
+            [label]="rowLabel('COMPANIES.BANKS.CAB', i)"
+            [error]="state.fieldError(bank.cab)"
+            (blurred)="bank.cab().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="bank.bic"
+            autocapitalize="characters"
+            [label]="rowLabel('COMPANIES.BANKS.BIC', i)"
+            [error]="state.fieldError(bank.bic)"
+            (blurred)="bank.bic().markAsTouched()"
+          />
+        </div>
+        <fc-checkbox
+          [label]="rowLabel('COMPANIES.BANKS.DEFAULT', i)"
+          [hint]="'COMPANIES.BANKS.DEFAULT_HINT' | t"
+          [checked]="bank.default().value()"
+          [disabled]="bank.default().disabled()"
+          (checkedChange)="setDefault(i, $event)"
+        />
+        @if (state.canWrite()) {
+          <div class="row-actions">
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('COMPANIES.BANKS.REMOVE_LABEL', i)"
+              (click)="remove(i)"
+            >
+              {{ 'COMPANIES.REMOVE' | t }}
+            </button>
+          </div>
+        }
+      </fieldset>
+    }
+  </div>
+  @if (state.canWrite()) {
+    <div>
+      <button fc-button variant="secondary" [disabled]="!canAdd()" (click)="add()">
+        {{ 'COMPANIES.BANKS.ADD' | t }}
+      </button>
+    </div>
+  }
+
+  <fc-company-save section="bankAccounts" />
+</form>

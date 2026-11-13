@@ -1,0 +1,33 @@
+<fieldset>
+  <legend>{{ label() }}</legend>
+  <div class="row">
+    <div class="preview">
+      @if (preview(); as shown) {
+        <img [src]="shown.url" [alt]="shown.label" />
+      } @else if (logo(); as current) {
+        <span>{{ current.label }}</span>
+      } @else {
+        <span>{{ 'COMPANIES.MEDIA.NO_LOGO' | t }}</span>
+      }
+    </div>
+    @if (!disabled()) {
+      <div class="actions">
+        <button fc-button variant="secondary" (click)="pickerOpen.set(true)">
+          {{ 'COMPANIES.MEDIA.CHOOSE' | t }}
+        </button>
+        @if (logo()) {
+          <button fc-button variant="ghost" (click)="remove()">
+            {{ 'COMPANIES.MEDIA.REMOVE' | t }}
+          </button>
+        }
+      </div>
+    }
+  </div>
+  <fc-media-picker
+    [groupId]="groupId()"
+    [companyId]="companyId()"
+    [open]="pickerOpen()"
+    (openChange)="pickerOpen.set($event)"
+    (picked)="choose($event)"
+  />
+</fieldset>

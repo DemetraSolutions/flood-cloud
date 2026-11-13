@@ -1,0 +1,86 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'COMPANIES.NUMBERING.SERIES' | t }}</legend>
+    <fc-select
+      [formField]="f.position"
+      [label]="'COMPANIES.NUMBERING.POSITION' | t"
+      [hint]="'COMPANIES.NUMBERING.POSITION_HINT' | t"
+      [placeholder]="'COMPANIES.NONE' | t"
+      [options]="positions()"
+      [error]="state.fieldError(f.position)"
+      (blurred)="f.position().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="f.lastInvoiceNumber"
+      type="number"
+      inputmode="numeric"
+      [label]="'COMPANIES.NUMBERING.LAST_NUMBER' | t"
+      [hint]="'COMPANIES.NUMBERING.LAST_NUMBER_HINT' | t"
+      [error]="state.fieldError(f.lastInvoiceNumber)"
+      (blurred)="f.lastInvoiceNumber().markAsTouched()"
+    />
+    @if (state.fieldError(f.values); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    <div class="rows">
+      @for (value of f.values; track $index; let i = $index) {
+        <div class="row">
+          <fc-text-field
+            [formField]="value.name"
+            [label]="rowLabel('COMPANIES.NUMBERING.SERIES_NAME', i)"
+            [error]="state.fieldError(value.name)"
+            (blurred)="value.name().markAsTouched()"
+          />
+          <fc-checkbox
+            [label]="rowLabel('COMPANIES.NUMBERING.CASH', i)"
+            [hint]="'COMPANIES.NUMBERING.CASH_HINT' | t"
+            [checked]="value.cash().value()"
+            [disabled]="value.cash().disabled()"
+            (checkedChange)="setCash(i, $event)"
+          />
+          @if (state.canWrite()) {
+            <div class="row-actions">
+              <button
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="rowLabel('COMPANIES.NUMBERING.REMOVE_LABEL', i)"
+                (click)="remove(i)"
+              >
+                {{ 'COMPANIES.REMOVE' | t }}
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+    @if (state.canWrite()) {
+      <div>
+        <button fc-button variant="secondary" [disabled]="!canAdd()" (click)="add()">
+          {{ 'COMPANIES.NUMBERING.ADD' | t }}
+        </button>
+      </div>
+    }
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.NUMBERING.OPTIONS' | t }}</legend>
+    <fc-checkbox
+      [formField]="f.discountLines"
+      [label]="'COMPANIES.NUMBERING.DISCOUNT_LINES' | t"
+      [hint]="'COMPANIES.NUMBERING.DISCOUNT_LINES_HINT' | t"
+      [error]="state.fieldError(f.discountLines)"
+      (blurred)="f.discountLines().markAsTouched()"
+    />
+    <fc-checkbox
+      [formField]="f.cervedLookup"
+      [label]="'COMPANIES.NUMBERING.CERVED' | t"
+      [hint]="
+        (state.canReserved() ? 'COMPANIES.NUMBERING.CERVED_HINT' : 'COMPANIES.RESERVED_NOTE') | t
+      "
+      [error]="state.fieldError(f.cervedLookup)"
+      (blurred)="f.cervedLookup().markAsTouched()"
+    />
+  </fieldset>
+
+  <fc-company-save section="invoiceNumbering" />
+</form>

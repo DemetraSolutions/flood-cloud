@@ -17,6 +17,10 @@ export interface RateLimitRule {
   readonly key: (req: Request, res: Response) => string | null;
   /** True when {@link key} reads the parsed body, so the route builder runs the rule after the body parser. */
   readonly needsBody?: boolean;
+  /** True when {@link key} reads the verified group (`res.locals.groupAccess`): the route builder runs the rule after the group check and the permission check. Only for routes with `group: true`. */
+  readonly needsGroup?: boolean;
+  /** Length of the fixed window in seconds; one minute when absent. A day (86400) makes the rule a daily quota. */
+  readonly windowSeconds?: number;
 }
 
 /** A request that went over a limit for the first time in its window. */
@@ -52,7 +56,7 @@ export function rateLimit(rule: RateLimitRule, deps: RateLimitDeps): RequestHand
       next();
       return;
     }
-    const decision = await deps.limiter.consume(rule.bucket, key, rule.limit);
+    const decision = await deps.limiter.consume(rule.bucket, key, rule.limit, rule.windowSeconds);
     const current = Number(res.getHeader('RateLimit-Remaining'));
     if (!(current <= decision.remaining)) {
       res.set({
@@ -96,7 +100,7 @@ export function guardAuthentication(authenticate: RequestHandler, mount: RateLim
   return async (req, res, next) => {
     const key = rule.key(req, res);
     if (key !== null) {
-      const current = await limiter.peek(rule.bucket, key, rule.limit);
+      const current = await limiter.peek(rule.bucket, key, rule.limit, rule.windowSeconds);
       if (!current.allowed) {
         throw new AppError('RATE_LIMITED', { headers: { 'Retry-After': String(current.resetSeconds) } });
       }
@@ -115,7 +119,7 @@ export function guardAuthentication(authenticate: RequestHandler, mount: RateLim
       return;
     }
     if (key !== null && failure instanceof AppError && failure.status === 401) {
-      const decision = await limiter.consume(rule.bucket, key, rule.limit);
+      const decision = await limiter.consume(rule.bucket, key, rule.limit, rule.windowSeconds);
       if (decision.firstExcess) {
         await mount.onExceeded({ rule, req, res });
       }

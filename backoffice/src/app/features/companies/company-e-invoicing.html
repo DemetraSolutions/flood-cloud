@@ -1,0 +1,144 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'COMPANIES.E_INVOICING.TRANSMISSION' | t }}</legend>
+    @if (!state.canReserved()) {
+      <p class="note">{{ 'COMPANIES.RESERVED_NOTE' | t }}</p>
+    }
+    <div class="grid">
+      <fc-select
+        [formField]="f.hub"
+        [label]="'COMPANIES.E_INVOICING.HUB' | t"
+        [placeholder]="'COMPANIES.NONE' | t"
+        [options]="hubOptions()"
+        [error]="state.fieldError(f.hub)"
+        (blurred)="f.hub().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.transmitter.country"
+        [label]="'COMPANIES.E_INVOICING.TRANSMITTER_COUNTRY' | t"
+        [error]="state.fieldError(f.transmitter.country)"
+        autocapitalize="characters"
+        (blurred)="f.transmitter.country().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.transmitter.code"
+        [label]="'COMPANIES.E_INVOICING.TRANSMITTER_CODE' | t"
+        [error]="state.fieldError(f.transmitter.code)"
+        (blurred)="f.transmitter.code().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.E_INVOICING.RECIPIENT' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.pec"
+        type="email"
+        [label]="'COMPANIES.E_INVOICING.PEC' | t"
+        [error]="state.fieldError(f.pec)"
+        (blurred)="f.pec().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.recipientCode"
+        [label]="'COMPANIES.E_INVOICING.RECIPIENT_CODE' | t"
+        [error]="state.fieldError(f.recipientCode)"
+        autocapitalize="characters"
+        (blurred)="f.recipientCode().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.eori"
+        [label]="'COMPANIES.E_INVOICING.EORI' | t"
+        [error]="state.fieldError(f.eori)"
+        (blurred)="f.eori().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.taxRegime"
+        [label]="'COMPANIES.E_INVOICING.TAX_REGIME' | t"
+        [placeholder]="'COMPANIES.NONE' | t"
+        [options]="taxRegimes"
+        [error]="state.fieldError(f.taxRegime)"
+        (blurred)="f.taxRegime().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.E_INVOICING.REGISTER' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.professionalRegister.name"
+        [label]="'COMPANIES.E_INVOICING.REGISTER_NAME' | t"
+        [error]="state.fieldError(f.professionalRegister.name)"
+        (blurred)="f.professionalRegister.name().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.professionalRegister.number"
+        [label]="'COMPANIES.E_INVOICING.REGISTER_NUMBER' | t"
+        [error]="state.fieldError(f.professionalRegister.number)"
+        (blurred)="f.professionalRegister.number().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.professionalRegister.province"
+        [label]="'COMPANIES.E_INVOICING.REGISTER_PROVINCE' | t"
+        [placeholder]="'COMPANIES.NONE' | t"
+        [options]="provinceOptions().register"
+        [error]="state.fieldError(f.professionalRegister.province)"
+        (blurred)="f.professionalRegister.province().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.professionalRegister.date"
+        type="date"
+        [label]="'COMPANIES.E_INVOICING.REGISTER_DATE' | t"
+        [error]="state.fieldError(f.professionalRegister.date)"
+        (blurred)="f.professionalRegister.date().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.E_INVOICING.REA' | t }}</legend>
+    <div class="grid">
+      <fc-select
+        [formField]="f.rea.office"
+        [label]="'COMPANIES.E_INVOICING.REA_OFFICE' | t"
+        [placeholder]="'COMPANIES.NONE' | t"
+        [options]="provinceOptions().office"
+        [error]="state.fieldError(f.rea.office)"
+        (blurred)="f.rea.office().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.rea.number"
+        [label]="'COMPANIES.E_INVOICING.REA_NUMBER' | t"
+        [error]="state.fieldError(f.rea.number)"
+        (blurred)="f.rea.number().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.rea.shareCapital"
+        inputmode="decimal"
+        [label]="'COMPANIES.E_INVOICING.REA_SHARE_CAPITAL' | t"
+        [hint]="'COMPANIES.E_INVOICING.REA_SHARE_CAPITAL_HINT' | t"
+        [error]="state.fieldError(f.rea.shareCapital)"
+        (blurred)="f.rea.shareCapital().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.rea.shareholders"
+        [label]="'COMPANIES.E_INVOICING.REA_SHAREHOLDERS' | t"
+        [placeholder]="'COMPANIES.NONE' | t"
+        [options]="shareholders"
+        [error]="state.fieldError(f.rea.shareholders)"
+        (blurred)="f.rea.shareholders().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.rea.liquidation"
+        [label]="'COMPANIES.E_INVOICING.REA_LIQUIDATION' | t"
+        [placeholder]="'COMPANIES.NONE' | t"
+        [options]="liquidation"
+        [error]="state.fieldError(f.rea.liquidation)"
+        (blurred)="f.rea.liquidation().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fc-company-save section="eInvoicing" />
+</form>

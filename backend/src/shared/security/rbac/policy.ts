@@ -11,7 +11,7 @@ const USERS = [P.USERS_READ, P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH] as c
 const USERS_DELETE = [P.USERS_DELETE] as const;
 /** The dealer registry (`doc/Tasks.md` D-09): only the PSA reaches it. */
 const DEALERS = [P.DEALERS_READ, P.DEALERS_CREATE, P.DEALERS_UPDATE] as const;
-const COMPANIES = [P.COMPANIES_READ, P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH] as const;
+const COMPANIES = [P.COMPANIES_READ, P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH, P.COMPANIES_DELETE] as const;
 /** Loyalty data and the product data kept in the group document (favorites, promotions): every role that works in a group; the user's own matrix narrows it. */
 const GROUP_DATA = [P.FIDELITY_READ, P.FIDELITY_UPDATE, P.PRODUCTS_READ, P.PRODUCTS_UPDATE] as const;
 const PLACES = [P.PLACES_READ, P.PLACES_CREATE, P.PLACES_UPDATE, P.PLACES_TRASH] as const;

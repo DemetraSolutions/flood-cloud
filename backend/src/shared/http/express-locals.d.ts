@@ -22,6 +22,8 @@ declare global {
       noCompression?: true;
       /** Validated body, query and params, set by `validateBody`, `validateQuery` and `validateParams`. */
       input?: ValidatedInput;
+      /** The version of the `If-Match` header (without quotes), set by `requireIfMatch`. */
+      ifMatch?: string;
       /** Verified group of the path, set by `requireGroupAccess`. */
       groupAccess?: GroupAccess;
     }

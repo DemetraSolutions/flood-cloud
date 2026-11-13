@@ -182,6 +182,39 @@ describe('database access cannot be bypassed outside src/db', () => {
     });
   });
 
+  describe('media (step 6B)', () => {
+    const REPOSITORY = 'modules/media/media.repository.ts';
+    const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
+
+    it('reaches the files of a group only from the media repository, through the verified group access', async () => {
+      const seen: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        const text = await readFile(file, 'utf8');
+        if (/\.collection(?:<[^>]*>)?\(\s*['"`]files['"`]/.test(text)) {
+          seen.push(path);
+          if (path === REPOSITORY) {
+            assert.ok(text.includes('groupDatabaseFor(principal, access, databases)'));
+          }
+        }
+      }
+      assert.deepEqual(seen.filter((path) => !path.startsWith('tools/') && !path.startsWith('db/')), [REPOSITORY]);
+    });
+
+    it('talks to the object storage only from the integration adapter, with the global fetch and no SDK', async () => {
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        const text = await readFile(file, 'utf8');
+        if (!path.startsWith('integrations/gcs/')) {
+          assert.ok(!/storage\.googleapis\.com|oauth2\.googleapis\.com|metadata\.google\.internal/.test(text), `${path} names a storage endpoint`);
+          assert.ok(!/@google-cloud|googleapis'/.test(text), `${path} imports a Google SDK`);
+        }
+        assert.ok(!/from 'sharp'/.test(text) || path === 'modules/media/image-processing.ts', `${path} imports sharp`);
+        assert.ok(!/from 'multer'/.test(text) || path === 'modules/media/upload.ts', `${path} imports multer`);
+      }
+    });
+  });
+
   it('recognizes the allowed entry points', () => {
     assert.equal(mayCreateDatabases(join(SRC, 'server.ts')), true);
     assert.equal(mayCreateDatabases(join(SRC, 'tools', 'x', 'main.ts')), true);

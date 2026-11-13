@@ -1,0 +1,49 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'COMPANIES.MEDIA.FILES' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.internalFileName"
+        [label]="'COMPANIES.MEDIA.INTERNAL_FILE_NAME' | t"
+        [error]="state.fieldError(f.internalFileName)"
+        (blurred)="f.internalFileName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.externalUrl"
+        type="url"
+        [label]="'COMPANIES.MEDIA.EXTERNAL_URL' | t"
+        [error]="state.fieldError(f.externalUrl)"
+        (blurred)="f.externalUrl().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.MEDIA.LOGOS' | t }}</legend>
+    <div class="grid">
+      <fc-logo-slot
+        [label]="'COMPANIES.MEDIA.LOGO_LIGHT' | t"
+        [logo]="state.model().media.customersAppLogoLight"
+        [groupId]="state.groupId()!"
+        [companyId]="state.companyId()"
+        [disabled]="!state.canWrite()"
+        (logoChange)="setLogo('customersAppLogoLight', $event)"
+      />
+      <fc-logo-slot
+        [label]="'COMPANIES.MEDIA.LOGO_DARK' | t"
+        [logo]="state.model().media.customersAppLogoDark"
+        [groupId]="state.groupId()!"
+        [companyId]="state.companyId()"
+        [disabled]="!state.canWrite()"
+        (logoChange)="setLogo('customersAppLogoDark', $event)"
+      />
+    </div>
+    @for (slot of [f.customersAppLogoLight, f.customersAppLogoDark]; track $index) {
+      @if (state.fieldError(slot); as problem) {
+        <p class="problem" role="alert">{{ problem }}</p>
+      }
+    }
+  </fieldset>
+
+  <fc-company-save section="media" />
+</form>

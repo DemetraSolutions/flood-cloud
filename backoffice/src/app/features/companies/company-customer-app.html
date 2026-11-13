@@ -1,0 +1,90 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'COMPANIES.CUSTOMER_APP.ACCESS' | t }}</legend>
+    <fc-checkbox
+      [formField]="f.enableLoginSignup"
+      [label]="'COMPANIES.CUSTOMER_APP.LOGIN_SIGNUP' | t"
+      [error]="state.fieldError(f.enableLoginSignup)"
+      (blurred)="f.enableLoginSignup().markAsTouched()"
+    />
+    <fc-checkbox
+      [formField]="f.showPrivacyPage"
+      [label]="'COMPANIES.CUSTOMER_APP.PRIVACY_PAGE' | t"
+      [error]="state.fieldError(f.showPrivacyPage)"
+      (blurred)="f.showPrivacyPage().markAsTouched()"
+    />
+    <fc-checkbox
+      [formField]="f.showTermsPage"
+      [label]="'COMPANIES.CUSTOMER_APP.TERMS_PAGE' | t"
+      [error]="state.fieldError(f.showTermsPage)"
+      (blurred)="f.showTermsPage().markAsTouched()"
+    />
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.CUSTOMER_APP.ECOMMERCE' | t }}</legend>
+    <fc-checkbox
+      [formField]="f.ecommerce.status"
+      [label]="'COMPANIES.CUSTOMER_APP.STATUS' | t"
+      [error]="state.fieldError(f.ecommerce.status)"
+      (blurred)="f.ecommerce.status().markAsTouched()"
+    />
+    <div class="grid">
+      <fc-select
+        [formField]="f.ecommerce.priceListId"
+        [label]="'COMPANIES.CUSTOMER_APP.PRICE_LIST' | t"
+        [placeholder]="'COMPANIES.NONE' | t"
+        [options]="priceListOptions()"
+        [error]="state.fieldError(f.ecommerce.priceListId)"
+        (blurred)="f.ecommerce.priceListId().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.ecommerce.showProductRemainingQuantity"
+        type="number"
+        inputmode="decimal"
+        [label]="'COMPANIES.CUSTOMER_APP.REMAINING_QUANTITY' | t"
+        [hint]="'COMPANIES.CUSTOMER_APP.REMAINING_QUANTITY_HINT' | t"
+        [error]="state.fieldError(f.ecommerce.showProductRemainingQuantity)"
+        (blurred)="f.ecommerce.showProductRemainingQuantity().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.CUSTOMER_APP.MINIMUM_ORDER' | t }}</legend>
+    @if (minimumOrderError(); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    @if (currencies().length === 0) {
+      <p class="note">{{ 'COMPANIES.CUSTOMER_APP.NO_CURRENCIES' | t }}</p>
+    }
+    <div class="grid">
+      @for (code of currencies(); track code) {
+        <fc-text-field
+          type="number"
+          inputmode="decimal"
+          [label]="'COMPANIES.CUSTOMER_APP.MINIMUM_FOR' | t: { currency: code }"
+          [value]="minimum(code)"
+          [disabled]="!state.canWrite()"
+          (valueChange)="setMinimum(code, $event)"
+        />
+      }
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'COMPANIES.CUSTOMER_APP.DISPLAY' | t }}</legend>
+    <div class="grid">
+      @for (flag of flags; track flag) {
+        <fc-checkbox
+          [formField]="f.ecommerce[flag]"
+          [label]="flagLabel(flag)"
+          [error]="state.fieldError(f.ecommerce[flag])"
+          (blurred)="f.ecommerce[flag]().markAsTouched()"
+        />
+      }
+    </div>
+  </fieldset>
+
+  <fc-company-save section="customerApp" />
+</form>

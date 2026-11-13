@@ -8,6 +8,7 @@ import {
   role,
 } from './core/auth/guards';
 import { Shell } from './core/layout/shell';
+import { leaveCompany } from './features/companies/company-leave';
 
 /**
  * List, creation and detail of users under a path prefix (the group area and the platform
@@ -154,6 +155,80 @@ const groupCatalogRoutes: Routes = [
   },
 ];
 
+/** The tabs of the company page, as child routes (the general tab is the default one). */
+const companyTabs: Routes = [
+  {
+    path: '',
+    pathMatch: 'full',
+    title: 'COMPANIES.SECTION.GENERAL',
+    loadComponent: () =>
+      import('./features/companies/company-general').then((m) => m.CompanyGeneral),
+  },
+  {
+    path: 'e-invoicing',
+    title: 'COMPANIES.SECTION.E_INVOICING',
+    loadComponent: () =>
+      import('./features/companies/company-e-invoicing').then((m) => m.CompanyEInvoicing),
+  },
+  {
+    path: 'invoice-numbering',
+    title: 'COMPANIES.SECTION.INVOICE_NUMBERING',
+    loadComponent: () =>
+      import('./features/companies/company-numbering').then((m) => m.CompanyNumbering),
+  },
+  {
+    path: 'bank-accounts',
+    title: 'COMPANIES.SECTION.BANK_ACCOUNTS',
+    loadComponent: () => import('./features/companies/company-banks').then((m) => m.CompanyBanks),
+  },
+  {
+    path: 'meal-vouchers',
+    title: 'COMPANIES.SECTION.MEAL_VOUCHERS',
+    loadComponent: () =>
+      import('./features/companies/company-meal-vouchers').then((m) => m.CompanyMealVouchers),
+  },
+  {
+    path: 'customer-app',
+    title: 'COMPANIES.SECTION.CUSTOMER_APP',
+    loadComponent: () =>
+      import('./features/companies/company-customer-app').then((m) => m.CompanyCustomerApp),
+  },
+  {
+    path: 'media',
+    title: 'COMPANIES.SECTION.MEDIA',
+    loadComponent: () => import('./features/companies/company-media').then((m) => m.CompanyMedia),
+  },
+];
+
+/**
+ * Companies of a group: the list, the page of a new company (general tab only) and the page of
+ * a company with its tabs as child routes. Leaving a page with unsaved changes asks for
+ * confirmation. Each route carries its full path so that the parameters reach the pages as
+ * inputs; the server checks the group and the company against the perimeter of the user.
+ */
+const companyRoutes: Routes = [
+  {
+    path: 'groups/:groupId/companies',
+    canMatch: [permission('companies:read')],
+    title: 'COMPANIES.TITLE',
+    loadComponent: () => import('./features/companies/companies-list').then((m) => m.CompaniesList),
+  },
+  {
+    path: 'groups/:groupId/companies/new',
+    canMatch: [permission('companies:read'), permission('companies:create')],
+    canDeactivate: [leaveCompany],
+    loadComponent: () => import('./features/companies/company-page').then((m) => m.CompanyPage),
+    children: [companyTabs[0]],
+  },
+  {
+    path: 'groups/:groupId/companies/:companyId',
+    canMatch: [permission('companies:read')],
+    canDeactivate: [leaveCompany],
+    loadComponent: () => import('./features/companies/company-page').then((m) => m.CompanyPage),
+    children: companyTabs,
+  },
+];
+
 /**
  * Record of a group: general data, features, integrations and the six catalogs, as child routes
  * of one layout page (`groups:read`; the server checks the group against the user's perimeter).
@@ -260,6 +335,7 @@ export const routes: Routes = [
           },
           ...groupSettingsRoutes,
           ...groupCatalogRoutes,
+          ...companyRoutes,
           {
             path: 'users',
             canMatch: [role('PSA', 'D'), permission('users:read')],

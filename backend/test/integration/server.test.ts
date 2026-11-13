@@ -1,11 +1,15 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { connect, createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { loadDotEnv, run, SHUTDOWN_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS } from '../../src/server.ts';
 import type { ProcessLike, RunningServer } from '../../src/server.ts';
 import { closeClusters } from '../../src/db/clusters.ts';
 import { freePort } from '../helpers/app.ts';
+import { credentialsFile, testKeyPair } from '../helpers/fake-gcs.ts';
 import { mongoEnv, singleCluster, testMongoUri } from '../helpers/mongo.ts';
 
 type Listener = (...args: unknown[]) => void;
@@ -409,5 +413,48 @@ describe('run: database lifecycle', () => {
     } finally {
       await closed(up.running);
     }
+  });
+});
+
+describe('run: media storage', () => {
+  it('starts without a storage by default, and with Google Cloud Storage through the metadata server (nothing is called at start-up)', async () => {
+    const off = await started();
+    const metadata = await started({ MEDIA_STORAGE: 'gcs', GCS_MEDIA_BUCKET: 'test-media-bucket', GCS_AUTH: 'metadata' });
+    try {
+      assert.equal((await fetch(`http://127.0.0.1:${off.port}/health/ready`)).status, 200);
+      assert.equal((await fetch(`http://127.0.0.1:${metadata.port}/health/ready`)).status, 200);
+    } finally {
+      await closed(off.running);
+      await closed(metadata.running);
+    }
+  });
+
+  it('reads the credentials file once at start-up, and exits 1 when it cannot be used, without naming the file or any key', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'media-'));
+    try {
+      const good = join(directory, 'sa.json');
+      await writeFile(good, credentialsFile(testKeyPair().privatePem));
+      const up = await started({ MEDIA_STORAGE: 'gcs', GCS_MEDIA_BUCKET: 'test-media-bucket', GCS_AUTH: 'service-account-file', GCS_SERVICE_ACCOUNT_FILE: good });
+      await closed(up.running);
+      for (const file of [join(directory, 'missing.json'), join(directory, 'broken.json')]) {
+        await writeFile(join(directory, 'broken.json'), '{"type":"service_account","private_key":"-----BEGIN PRIVATE KEY-----"}'); // gitleaks:allow (fake test value)
+        const fake = fakeProcess(mongoEnv({ PORT: '0', SHUTDOWN_DRAIN_MS: '0', MEDIA_STORAGE: 'gcs', GCS_MEDIA_BUCKET: 'test-media-bucket', GCS_AUTH: 'service-account-file', GCS_SERVICE_ACCOUNT_FILE: file }));
+        assert.equal(await run(fake.proc), undefined);
+        assert.deepEqual(fake.exits, [1]);
+        const log = fake.out.join('');
+        assert.match(log, /media storage startup failed/);
+        assert.match(log, /Storage startup failed: configuration/);
+        assert.ok(!log.includes(directory) && !log.includes('PRIVATE'));
+      }
+    } finally {
+      await rm(directory, { recursive: true });
+    }
+  });
+
+  it('exits 1 with the configuration problem when the storage settings are not valid', async () => {
+    const fake = fakeProcess(mongoEnv({ MEDIA_STORAGE: 'gcs' }));
+    assert.equal(await run(fake.proc), undefined);
+    assert.deepEqual(fake.exits, [1]);
+    assert.match(fake.err.join(''), /GCS_MEDIA_BUCKET: is required/);
   });
 });

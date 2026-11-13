@@ -5,7 +5,7 @@ import { legacyScopeIds } from '../../src/shared/security/scope/legacy-scope.ts'
 import { buildPrincipal } from '../../src/shared/security/scope/principal.ts';
 import type { StoredUser } from '../../src/shared/security/scope/principal.ts';
 import { computeScope } from '../../src/shared/security/scope/scope.ts';
-import { companiesScopeFilter, groupsScopeFilter, placesScopeFilter, usersScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
+import { companiesScopeFilter, companyInScope, groupsScopeFilter, placeInScope, placesScopeFilter, usersScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
 import type { Scope } from '../../src/shared/security/scope/scope.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 
@@ -192,6 +192,29 @@ describe('scope filters', () => {
     assert.deepEqual(companiesScopeFilter(companies), { _id: { $in: [c1, c2] } });
     assert.deepEqual(companiesScopeFilter(places), NOTHING);
     assert.deepEqual(companiesScopeFilter({ kind: 'none' }), NOTHING);
+  });
+
+  it('tells whether a company is inside a scope exactly as the companies filter does', () => {
+    for (const scope of [{ kind: 'platform' }, dealer, { kind: 'group', groupId: g1 }] as Scope[]) {
+      assert.equal(companyInScope(scope, fixtureId('company', 99)), true);
+    }
+    assert.equal(companyInScope(companies, c1), true);
+    assert.equal(companyInScope(companies, c2), true);
+    assert.equal(companyInScope(companies, fixtureId('company', 99)), false);
+    assert.equal(companyInScope(places, c1), false);
+    assert.equal(companyInScope({ kind: 'none' }, c1), false);
+  });
+
+  it('tells whether a place is inside a scope', () => {
+    for (const scope of [{ kind: 'platform' }, dealer, { kind: 'group', groupId: g1 }] as Scope[]) {
+      assert.equal(placeInScope(scope, p1, undefined), true);
+    }
+    assert.equal(placeInScope(companies, fixtureId('place', 99), c1), true);
+    assert.equal(placeInScope(companies, p1, fixtureId('company', 99)), false);
+    assert.equal(placeInScope(companies, p1, 'x'), false);
+    assert.equal(placeInScope(places, p1, undefined), true);
+    assert.equal(placeInScope(places, fixtureId('place', 99), c1), false);
+    assert.equal(placeInScope({ kind: 'none' }, p1, c1), false);
   });
 
   it('places', () => {

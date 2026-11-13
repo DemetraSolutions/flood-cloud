@@ -5,12 +5,15 @@ export const SYNC_ISSUES_TTL_DAYS = 180;
 
 /**
  * Indexes of `common.companies`, the mirror of the `companies` collections of the group databases: by group and `_id`
- * (the reconciliation scans one group in `_id` order) and by group and name. Non-unique on purpose: a copy must never be
- * refused. There is no `$jsonSchema`; the copy command validates in the application.
+ * (the reconciliation scans one group in `_id` order), by group and name, by group and status (the filter of the list) and by group and
+ * VAT number (`code`, the search of the list). All non-unique on purpose: a copy must never be refused, and the VAT number of the
+ * companies is not unique in the data (the check is made by the write service, `doc/Tasks.md` 6.1). There is no `$jsonSchema`; the copy command validates in the application.
  */
 export const COMPANIES_MIRROR_INDEXES: readonly IndexSpec[] = Object.freeze([
   { name: 'groupId_1__id_1', key: { groupId: 1, _id: 1 } },
   { name: 'groupId_1_name_1', key: { groupId: 1, name: 1 } },
+  { name: 'groupId_1_status_1', key: { groupId: 1, status: 1 } },
+  { name: 'groupId_1_code_1', key: { groupId: 1, code: 1 } },
 ]);
 
 /** Indexes of `common.places`, the mirror of the `places` collections of the group databases: as the companies plus by company. */

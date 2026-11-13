@@ -101,7 +101,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **D-21** Cancellazione definitiva nel legacy (`deleteMany` dal cestino): **la copia nel common si rimuove** nello stesso punto in cui il legacy cancella. Il comando `sync:copies` del nuovo backend invece non cancella mai (copia solo lo stato attuale; le copie senza originale si segnalano). Decisione dell'utente del 2026-11-12.
 - [x] **D-22** Il server di punto vendita è un'applicazione separata, fuori dallo scope: questo progetto comprende solo il backend cloud e il backoffice. Decisione dell'utente del 2026-11-01.
 - [x] **D-23** Nessuna superficie dedicata al server di punto vendita: l'app separata usa le stesse API del backoffice (`/v1`). La superficie `/store/v1` prevista da `doc/Architecture.md` §4 e `doc/Security-Model.md` §3 e §5 è eliminata. Decisione dell'utente del 2026-11-01.
-- [ ] **D-24** Credenziale con cui l'app del server di punto vendita chiama le API `/v1`. Va decisa quando si integra l'app; oggi usa l'API key del gruppo, condivisa da tutti i negozi. Opzioni:
+- [ ] **D-24** Credenziale con cui l'app del server di punto vendita chiama le API `/v1`. Va decisa quando si integra l'app; oggi usa l'API key del gruppo, condivisa da tutti i negozi. *Indicazione dell'utente del 2026-11-13: si decide e si integra con l'area 7 (punti vendita).* Opzioni:
   - **login di un utente:** il refresh scade dopo 7 giorni di inattività o 30 di durata massima, quindi il negozio resta bloccato dopo un lungo offline; la password resta salvata sul server del negozio; gli utenti `E` non sono ammessi;
   - **credenziale di dispositivo per punto vendita**, accettata dalle stesse route con scope fisso sul punto vendita.
 - [x] **D-25** Multicluster MongoDB: più cluster, ciascuno con connessione di lettura/scrittura e analytics; login e dati comuni sempre sul cluster comune; ogni gruppo indica il proprio cluster con `groups.dataCluster` (solo l'id; assente ⇒ cluster di default). Finché il legacy è attivo i gruppi restano sul cluster comune; nessuna transazione tra cluster (per i gruppi su altri cluster la copia di companies e places si affida alla riconciliazione). Dettagli in `doc/Architecture.md` §3.2.1. Decisione dell'utente del 2026-11-06, realizzata.
@@ -601,28 +601,48 @@ Campi di `eInvoicing`:
 - `rea { office, number, shareCapital, shareholders SU|SM, liquidation LS|LN }`;
 - `professionalRegister { name, province, number, date }`.
 
-Restano nel documento (e nella sua copia), fuori dal modello di dominio e non esposti, fino ai rispettivi domini: `invoicesPS`, `invoicesPSValues`, `banks`, `ticketsSuppliers`, `settings.*` (globali, e-commerce, Cerved), `medias`.
+**Decisioni dell'utente del 2026-11-13** (analisi completa del legacy nella sessione del 2026-11-13):
+- **Modello completo:** si gestiscono **tutti** i dati della company del legacy ("se faccio un salvataggio dal nuovo backoffice il dato deve essere identico e gestibile"): oltre alla tabella, `invoicesPS`, `invoicesPSValues`, `settings.global.*` (`discountLines`, `lastInvoiceNumber`, `enableLoginSignup`, `showPrivacyPage`, `showTermsPage`), `settings.api.cerved`, `settings.ecommerce.*` (27 chiavi, `minAmount` per valuta), `banks`, `ticketsSuppliers`, `medias.images.*`. Tipi BSON identici al legacy (stringhe `''` in `fattura_elettronica`, array sempre presenti, interi o `null`); le chiavi sconosciute si conservano. Gli errori del vecchio backoffice non si replicano (hub azzerato, `minAmount` svuotato, scadenza 1970).
+- **Salvataggio:** una sotto-risorsa per scheda (Generale, Fattura elettronica, Numerazione fatture, Banche, Buoni pasto, App clienti ed e-commerce, Media), ciascuna con `If-Match`, **e** un salvataggio unico dell'intera azienda.
+- **Permessi:** come la matrice. PSA, D e SA creano, modificano e cestinano nel proprio perimetro; il CA modifica tutte le schede della propria azienda, senza creare né cestinare; `hub`, `IdTrasmittente_*`, `status` ed `expirationDate` solo PSA e D.
+- **Hub:** lista chiusa, `aruba` e `aruba__<id>` di un dealer esistente; il PSA sceglie qualsiasi valore ammesso, il D solo `aruba` o il proprio; un valore attuale non ammesso per il D resta invariato se il D non lo cambia. Nessuna verifica Aruba lato server in questa area.
+- **P.IVA:** univocità controllata dal servizio (`409` se una P.IVA nuova o cambiata è già usata da un'altra azienda non nel cestino del gruppo); in produzione esistono 6 doppioni (13 aziende in 5 gruppi, conteggio in sola lettura del 2026-11-13) che restano; indice **non** univoco `groupId + code`.
+- **IBAN:** validato con il checksum in scrittura, visibile a chi legge l'azienda, mai nei log.
+- **`minAmount`:** si modificano le valute del gruppo; le chiavi di valute non più presenti si conservano.
+- **Revisione di sicurezza del passo 6A (decisioni dell'utente del 2026-11-13):**
+  - (a) nuovo permesso `companies:delete` per `DELETE …/companies/{companyId}`, con gli stessi ruoli e tetti di `companies:trash` (PSA, D, SA; mai CA e PA), derivato dal modulo `companies` della matrice come `users:delete`;
+  - (b) `invoiceNumbering.cervedLookup` (`settings.api.cerved`) è un campo riservato a PSA e D come `hub` e `status`: un valore invariato è accettato, uno cambiato dà `403 notAllowed`, alla creazione si confronta con il default (`false`);
+  - (c) la corsa sull'univocità della partita IVA (due transazioni concorrenti) è un rischio accettato, senza collection di lock.
+- **Media** (decisioni del 2026-11-13, dopo l'analisi dell'upload legacy: in produzione il legacy copia l'originale in tutte e 5 le taglie, con `Content-Encoding: gzip`): stesso bucket GCS e stessi percorsi (`<groupId>/media/image/<xs|s|m|l|xl>/<basename>`) e documento nella collection `files` del gruppo come il legacy; ridimensionamento reale con `sharp` (nuova dipendenza approvata) alle larghezze 100/250/500/800/1200 senza ingrandire, stesso formato; solo JPEG, PNG e WebP verificati dai magic bytes, al massimo 10 MB e 40 megapixel (SVG e GIF rifiutati); nome del file generato dal server (nome originale ridotto a lettere, cifre e trattini, più un suffisso casuale ed estensione dal formato reale); upload nel gruppo dell'URL; credenziali GCS con Workload Identity su GKE e un service account dedicato con permessi minimi in sviluppo (file indicato da variabile d'ambiente), via `fetch` senza SDK; upload ed elenco delle immagini ammessi a chi ha un permesso di modifica di un'entità con immagini (oggi `companies:update`). Il passo 6B comprende upload ed elenco per la scelta dei loghi; modifica, cestino e cancellazione dei file arrivano con il dominio media.
 
 Task:
-- [ ] **6.1.1** Tipi, mapper e validatori fiscali (P.IVA, codice fiscale, codice destinatario, PEC, regime fiscale), rigorosi in scrittura e tolleranti in lettura.
-- [ ] **6.1.2** Indici del common: `groupId + status`, `groupId + name`; `vatNumber` univoco per gruppo sulle aziende non nel cestino (D-15), dopo la verifica dei duplicati esistenti.
+- [x] **6.1.1** Tipi, mapper e validatori fiscali (P.IVA, codice fiscale, codice destinatario, PEC, regime fiscale), rigorosi in scrittura e tolleranti in lettura. *Passo 6A: tabella unica di mapping legacy ↔ dominio (`company.mapper.ts`), validatori di P.IVA, codice fiscale, IBAN, BIC, ABI/CAB, codice destinatario, regimi fiscali e province (`validators.ts`).*
+- [x] **6.1.2** Indici del common: `groupId + status`, `groupId + name`; `vatNumber` univoco per gruppo sulle aziende non nel cestino (D-15), dopo la verifica dei duplicati esistenti. *Passo 6A, secondo la decisione del 2026-11-13: indici non univoci `groupId_1_status_1`, `groupId_1_name_1` (già presente) e `groupId_1_code_1`; l'univocità è controllata dal servizio di scrittura nella transazione (`409 taken`).*
 
 ### 6.2 Backend
-- [ ] **6.2.1** Elenco delle aziende di un gruppo nello scope: filtri per stato, cestino, paese e provincia, ricerca, paginazione a cursore.
-- [ ] **6.2.2** Lista compatta per i dati di riferimento (`id`, `name`, `status`, `trashed`) con `ETag`.
-- [ ] **6.2.3** Dettaglio; CA solo sulle proprie aziende (`404` fuori scope).
-- [ ] **6.2.4** Creazione (PSA e D; da confermare per SA) tramite il servizio 5.6.1.
-- [ ] **6.2.5** Modifica parziale dei dati anagrafici e fiscali con validazione; `groupId` immutabile; `hub`, `status` ed `expirationDate` solo PSA e D.
-- [ ] **6.2.6** Cestino e ripristino; i punti vendita collegati mantengono il riferimento e l'interfaccia lo segnala.
-- [ ] **6.2.7** Test di isolamento e di compatibilità con il legacy (documento rileggibile dal legacy dopo ogni scrittura).
+- [x] **6.2.1** Elenco delle aziende di un gruppo nello scope: filtri per stato, cestino, paese e provincia, ricerca, paginazione a cursore. *Passo 6A: `GET /v1/groups/{groupId}/companies` (filtri `status`, `country`, `province`, `trashed`, `ids`, ricerca su nome e P.IVA).*
+- [x] **6.2.2** Lista compatta per i dati di riferimento (`id`, `name`, `status`, `trashed`) con `ETag`. *Passo 6A: è la stessa route, spostata dal modulo `reference` a `companies`, con `id`, `name`, `trashed` invariati per lo `ReferenceStore`.*
+- [x] **6.2.3** Dettaglio; CA solo sulle proprie aziende (`404` fuori scope). *Passo 6A: letto dal documento del database del gruppo, `ETag` forte = versione di `If-Match`.*
+- [x] **6.2.4** Creazione (PSA e D; da confermare per SA) tramite il servizio 5.6.1. *Passo 6A: PSA, D e SA (decisione del 2026-11-13), `201` con `Location` ed `ETag`.*
+- [x] **6.2.5** Modifica parziale dei dati anagrafici e fiscali con validazione; `groupId` immutabile; `hub`, `status` ed `expirationDate` solo PSA e D. *Passo 6A: `PATCH` come salvataggio unico di tutti i campi e blocchi e sei `PUT` per scheda, tutti con `If-Match`; `hub`, `transmitter`, `status` ed `expirationDate` solo PSA e D (un valore invariato è accettato).*
+- [x] **6.2.6** Cestino e ripristino; i punti vendita collegati mantengono il riferimento e l'interfaccia lo segnala. *Passo 6A: `POST …/trash` e `…/restore`, più `DELETE` dal cestino (`409 referenced` se un punto vendita, anche cestinato, la usa); i punti vendita mantengono il riferimento.*
+- [x] **6.2.7** Test di isolamento e di compatibilità con il legacy (documento rileggibile dal legacy dopo ogni scrittura). *Passo 6A: test di isolamento per ruolo e gruppo, di compatibilità dei tipi BSON con il legacy (documento originale e copia identica), `412` per una scrittura del legacy tra `GET` e `PATCH`.*
 
 ### 6.3 Backoffice
-- [ ] **6.3.1** Elenco aziende con filtri nell'URL.
-- [ ] **6.3.2** Dettaglio e modifica con le schede Generale e Dati fiscali; errori `422` sui campi.
-- [ ] **6.3.3** Aziende nello store dei dati di riferimento (4.5.3), usate da filtri e select.
+- [x] **6.3.1** Elenco aziende con filtri nell'URL. *Passo 6C: `groups/:groupId/companies` con `q`, `status`, `trashed`, `country`, `province`, paginazione a cursore, ordinamento per nome, cestino, ripristino ed eliminazione (dal cestino, con conferma) per permesso; la versione (`If-Match`) si legge dal dettaglio prima di ogni azione; voce di menu "Aziende" per chi ha `companies:read`.*
+- [x] **6.3.2** Dettaglio e modifica con le schede Generale e Dati fiscali; errori `422` sui campi. *Passo 6C: tutte le sette schede come route figlie (Generale, Fattura elettronica, Numerazione fatture con il Cerved, Banche, Buoni pasto, App clienti ed e-commerce, Media), "Salva" per scheda (`PATCH` per la scheda Generale, `PUT` per i blocchi) e "Salva tutto" (`PATCH` unico), stato delle schede nella pagina, conferma prima di uscire con modifiche non salvate, errori `422`, `409`, `403` e `412` come da specifica, scelta e caricamento dei loghi dalla libreria dei media.*
+- [x] **6.3.3** Aziende nello store dei dati di riferimento (4.5.3), usate da filtri e select. *Passo 6C: ogni scrittura sulle aziende (creazione, nome o stato, cestino, ripristino, eliminazione) invalida le aziende del gruppo nello `ReferenceStore`; paesi e province da `GET /v1/countries` (`Countries`), valute e listini dai dati del gruppo.*
+
+Passi dell'area (proposta del 2026-11-13): **6A** backend dell'azienda (6.1, 6.2, tutte le schede tranne l'upload dei media); **6B** upload dei media (collection `files`, GCS, `sharp`); **6C** backoffice (6.3); **6D** chiusura (6.4).
+
+*Passo 6B realizzato (2026-11-13, confermato dall'utente):* adattatore Google Cloud Storage (`src/integrations/gcs/`, `fetch`, nessun SDK), upload ed elenco delle immagini di un gruppo (`POST`/`GET /v1/groups/{groupId}/media/images`, più `GET …/{imageId}` per il `Location`) con `sharp`, collection `files` nel registro come `legacy-write` (senza indici: i database dei gruppi non ne ammettono), loghi dell'azienda da `{ imageId }`, nuove variabili `MEDIA_STORAGE`, `GCS_MEDIA_BUCKET`, `GCS_AUTH`, `GCS_SERVICE_ACCOUNT_FILE` e `RATE_LIMIT_MEDIA_UPLOAD_PER_USER`. Documentazione: `doc/Technical-Guide.md` §6 "media", `doc/API.md` "Media", `doc/Data-Model.md` `files`. Il punto 6.4 resta aperto.
+
+*Revisione di sicurezza del 6B (2026-11-13), correzioni applicate:* rollback per generation e MD5, `failOn` predefinito di sharp, gate sugli upload, decodifica unica e limite di lato (16383), quote giornaliere (utente 300, gruppo 2000), descrittore del logo con directory fissa e nome semplice, token invalidato su 401, `redirect: 'error'`, scadenza complessiva, gestione dell'insert ambiguo, titoli ripuliti. **Decisione D1 dell'utente:** le immagini hanno un proprietario (`createdBy`, `companyId`), il CA vede e usa solo le immagini delle proprie aziende. **Letture per il 6C:** `GET /v1/countries` e `GET /v1/groups/{groupId}/companies/e-invoicing-hubs`. Non realizzato: un test del timeout di 10 secondi delle pipeline sharp (non riproducibile senza rallentare la suite); il timeout della richiesta intera resta quello di `REQUEST_TIMEOUT_MS`.
+
+*Passo 6C realizzato (2026-11-13, confermato dall'utente):* backoffice delle aziende (6.3.1–6.3.3), documentato in `doc/Technical-Guide.md` §11.15.
 
 ### 6.4 Chiusura
-- [ ] **6.4.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`companies`); conferma dell'utente.
+- [x] **6.4.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`companies`); conferma dell'utente. *Confermato dall'utente il 2026-11-13.*
 
 ---
 

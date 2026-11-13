@@ -6,10 +6,10 @@ import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { parseIds } from '../group-lookup/lookup.schemas.ts';
 import { REFERENCE_LIST } from './reference.list.ts';
-import { toCompanyReference, toGroupReference, toPlaceReference } from './reference.mapper.ts';
-import type { CompanyReference, GroupCounts, GroupReference, PlaceReference } from './reference.mapper.ts';
+import { toCountryReference, toGroupReference, toPlaceReference } from './reference.mapper.ts';
+import type { CountryReference, GroupCounts, GroupReference, PlaceReference } from './reference.mapper.ts';
 import type { ReferenceRepository } from './reference.repository.ts';
-import type { CompaniesQuery, GroupsQuery, PlacesQuery } from './reference.schemas.ts';
+import type { GroupsQuery, PlacesQuery } from './reference.schemas.ts';
 
 /** One page of mapped reference items. */
 export interface ReferencePage<T> {
@@ -30,14 +30,6 @@ export interface ReferenceService {
    */
   listGroups(principal: AuthPrincipal, query: GroupsQuery): Promise<ReferencePage<GroupReference>>;
   /**
-   * Lists the companies of a verified group inside the caller's perimeter (untrashed ones by default), optionally only the given `ids`; ids outside the perimeter are never returned.
-   *
-   * @param principal The authenticated caller.
-   * @param access Verified access to the group.
-   * @param query Validated query.
-   */
-  listCompanies(principal: AuthPrincipal, access: GroupAccess, query: CompaniesQuery): Promise<ReferencePage<CompanyReference>>;
-  /**
    * Lists the places of a verified group inside the caller's perimeter (untrashed ones by default),
    * optionally of one company or of the given `ids`; elements outside the perimeter are never returned (a company outside it yields an empty page).
    *
@@ -46,6 +38,10 @@ export interface ReferenceService {
    * @param query Validated query.
    */
   listPlaces(principal: AuthPrincipal, access: GroupAccess, query: PlacesQuery): Promise<ReferencePage<PlaceReference>>;
+  /**
+   * The countries with their areas, sorted by name (then code), for the forms. The same for every caller.
+   */
+  listCountries(): Promise<ReferencePage<CountryReference>>;
 }
 
 /** The trash condition of a request: untrashed unless `trashed=true`. */
@@ -82,16 +78,6 @@ export function createReferenceService(repository: ReferenceRepository): Referen
       return { items: items.map((item) => toGroupReference(item, counts.get((item['_id'] as ObjectId).toHexString())!)), page };
     },
 
-    listCompanies: async (principal, access, query) => {
-      const conditions: Filter<Document>[] = [trashFilter(query.trashed)];
-      const ids = parseIds(query.ids);
-      if (ids !== null) {
-        conditions.push({ _id: { $in: ids } });
-      }
-      const { items, page } = await repository.listCompanies(principal, access, { $and: conditions }, listParamsOf(query, REFERENCE_LIST));
-      return { items: items.map(toCompanyReference), page };
-    },
-
     listPlaces: async (principal, access, query) => {
       const conditions: Filter<Document>[] = [trashFilter(query.trashed)];
       if (query.companyId !== undefined) {
@@ -103,6 +89,13 @@ export function createReferenceService(repository: ReferenceRepository): Referen
       }
       const { items, page } = await repository.listPlaces(principal, access, { $and: conditions }, listParamsOf(query, REFERENCE_LIST));
       return { items: items.map(toPlaceReference), page };
+    },
+
+    listCountries: async () => {
+      const items = (await repository.listCountries())
+        .flatMap((document) => toCountryReference(document) ?? [])
+        .sort((a, b) => a.name.localeCompare(b.name) || a.code.localeCompare(b.code));
+      return { items, page: { limit: items.length, next: null } };
     },
   };
 }

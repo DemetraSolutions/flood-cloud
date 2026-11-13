@@ -191,7 +191,7 @@ describe('sync-copies --apply: initial load and idempotence', () => {
       assert.ok(issue['documentId'] instanceof ObjectId && issue['groupId'] instanceof ObjectId);
     }
     const names = async (collection: string) => (await common().collection(collection).indexes()).map((index) => index.name).sort();
-    assert.deepEqual(await names('companies'), ['_id_', 'groupId_1__id_1', 'groupId_1_name_1']);
+    assert.deepEqual(await names('companies'), ['_id_', 'groupId_1__id_1', 'groupId_1_code_1', 'groupId_1_name_1', 'groupId_1_status_1']);
     assert.deepEqual(await names('places'), ['_id_', 'groupId_1__id_1', 'groupId_1_companyId_1', 'groupId_1_name_1']);
     assert.deepEqual(await names('syncIssues'), ['_id_', 'detectedAt_ttl', 'kind_1_detectedAt_-1', 'runId_1']);
     const ttl = (await common().collection('syncIssues').indexes()).find((index) => index.name === 'detectedAt_ttl')!;

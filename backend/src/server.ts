@@ -5,6 +5,8 @@ import type { AddressInfo } from 'node:net';
 import type { MongoClient } from 'mongodb';
 import { createApp } from './app.ts';
 import { createBackofficeModules } from './composition.ts';
+import { createMediaStorage } from './integrations/gcs/index.ts';
+import type { MediaStorage } from './integrations/gcs/index.ts';
 import { loadConfig } from './config.ts';
 import type { Config } from './config.ts';
 import { closeClusters, connectClusters, createClusterClients } from './db/clusters.ts';
@@ -137,6 +139,18 @@ export async function run(
   }
   const openClusters = clusters;
 
+  // The credentials file of the media storage is read here, once: a file that cannot be used stops the server, never a request.
+  let mediaStorage: MediaStorage | null;
+  try {
+    mediaStorage = await createMediaStorage(config.media);
+  } catch (error) {
+    // A StorageError says only what failed (never a path or a key), so it can be logged whole.
+    logger.error('media storage startup failed', { error });
+    await closeClients(openClusters);
+    proc.exit(1);
+    return undefined;
+  }
+
   let shuttingDown = false;
   const activityLog = createActivityLog({
     databases,
@@ -144,7 +158,7 @@ export async function run(
     retentionDays: config.activityLogRetentionDays,
     errorRetentionDays: config.activityLogErrorRetentionDays,
   });
-  const backoffice = createBackofficeModules({ config, databases, activityLog, logger });
+  const backoffice = createBackofficeModules({ config, databases, activityLog, logger, mediaStorage });
   const app = createApp({
     config,
     logger,

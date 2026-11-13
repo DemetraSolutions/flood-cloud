@@ -103,6 +103,50 @@ export function companiesScopeFilter(scope: Scope): Filter<Document> {
 }
 
 /**
+ * Whether a company is inside a perimeter, for the reads that load one document by id instead of filtering a list: the same rule as
+ * {@link companiesScopeFilter} (the group itself having been verified already).
+ *
+ * @param scope Scope of the caller.
+ * @param companyId Id of the company.
+ * @returns `true` for the platform, a dealer and a group administrator; for a company administrator only the companies of the scope; never for the other scopes.
+ */
+export function companyInScope(scope: Scope, companyId: ObjectId): boolean {
+  switch (scope.kind) {
+    case 'platform':
+    case 'dealer':
+    case 'group':
+      return true;
+    case 'companies':
+      return [...scope.companyIds].some((id) => id.equals(companyId));
+    case 'places':
+    case 'none':
+      return false;
+  }
+}
+
+/**
+ * Whether a place is inside a perimeter, for the reads that load one document by id: the same rule as {@link placesScopeFilter}.
+ *
+ * @param scope Scope of the caller.
+ * @param placeId Id of the place.
+ * @param companyId The `companyId` stored on the place (any value: a stored one may not be an id).
+ */
+export function placeInScope(scope: Scope, placeId: ObjectId, companyId: unknown): boolean {
+  switch (scope.kind) {
+    case 'platform':
+    case 'dealer':
+    case 'group':
+      return true;
+    case 'companies':
+      return companyId instanceof ObjectId && [...scope.companyIds].some((id) => id.equals(companyId));
+    case 'places':
+      return [...scope.placeIds].some((id) => id.equals(placeId));
+    case 'none':
+      return false;
+  }
+}
+
+/**
  * Filter restricting `places` of a group database (already resolved from a verified group
  * access) to the places inside a perimeter. Combine with {@link withScope}.
  *

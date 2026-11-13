@@ -207,4 +207,48 @@ describe('mountRoutes: middleware and compress options', () => {
     assert.match(mountError([route({ compress: true })]), /compress can only be false/);
     mountRoutes(express.Router(), [route({ middleware: [handler], compress: false })], withLimit);
   });
+
+  it('accepts a multipart handler on a route that reads a body, and rejects it elsewhere or when it is not a function', () => {
+    mountRoutes(express.Router(), [route({ method: 'POST', multipart: handler })], withLimit);
+    mountRoutes(express.Router(), [route({ method: 'PUT', multipart: handler, path: '/a' }), route({ method: 'PATCH', multipart: handler, path: '/b' })], withLimit);
+    assert.match(mountError([route({ method: 'POST', multipart: 'upload' })]), /multipart must be a function and only POST, PUT and PATCH routes read a body/);
+    assert.match(mountError([route({ method: 'GET', multipart: handler })]), /multipart must be a function and only POST, PUT and PATCH routes read a body/);
+    assert.match(mountError([route({ method: 'DELETE', multipart: handler })]), /multipart must be a function/);
+  });
+
+  it('rejects a rate limit rule that needs the group on a route that has none, and accepts it on a user route with a group', () => {
+    const groupRule = { bucket: 'g', limit: 5, needsGroup: true, key: () => 'k' };
+    assert.match(mountError([route({ rateLimit: [groupRule] })]), /a rate limit rule that needs the group requires a user route declaring group: true/);
+    assert.match(mountError([route({ auth: { kind: 'user', permission: 'groups:read' }, rateLimit: [groupRule] })]), /needs the group requires a user route declaring group: true|group|authenticate/);
+    const user = { kind: 'user', permission: 'groups:read', group: true } as const;
+    mountRoutes(express.Router(), [route({ auth: user, path: '/groups/:groupId/x', rateLimit: [groupRule] })], {
+      ...withLimit,
+      allowedAuth: ['user'],
+      authenticate: () => undefined,
+      groupAccess: { groups: { findAccess: async () => null, resolveCluster: () => 'cluster0' }, onCrossGroupAccess: () => undefined },
+    });
+  });
+
+  it('runs the multipart handler instead of the JSON guard and parser', async () => {
+    const router = express.Router();
+    const seen: string[] = [];
+    mountRoutes(
+      router,
+      [route({ method: 'POST', multipart: (_req: unknown, _res: unknown, next: () => void) => (seen.push('multipart'), next()), handler: (req: { body?: unknown }, res: { json(value: unknown): void }) => res.json({ parsed: req.body !== undefined }) })],
+      withLimit,
+    );
+    const app = express().use(router);
+    const server = app.listen(0);
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    try {
+      const { port } = server.address() as { port: number };
+      const response = await fetch(`http://127.0.0.1:${port}/things`, { method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=x' }, body: '--x--' });
+      assert.equal(response.status, 200, 'a JSON-only route would answer 415');
+      assert.deepEqual(await response.json(), { parsed: false });
+      assert.deepEqual(seen, ['multipart']);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });
