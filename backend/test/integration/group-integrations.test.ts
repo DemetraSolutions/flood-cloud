@@ -1,5 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import type { Document } from 'mongodb';
 import { openCatalogOffice } from '../helpers/catalogs.ts';
 import type { CatalogOffice } from '../helpers/catalogs.ts';
@@ -42,8 +43,14 @@ describe('the integration keys of a group', () => {
 
   it('are replaced and removed with null; removing a key that is not set changes nothing', async () => {
     const other = 'another-key-0123456789';
+    const mark0 = t.office.activity.entries.length;
     assert.equal((await patch(t.office.cluster.psa, { integrations: { yellgo: { apiKey: other } } })).body.data.integrations.yellgo.apiKeySet, true);
     assert.equal((await t.stored(0))['settings'].integrations.yellgo.apiKey, other);
+    // The replacement is in the log: it names the provider whose key changed, never the key, its hash or its length.
+    const replaced = t.office.activity.entries.slice(mark0).filter((entry) => entry.action === 'group.updated').at(-1)!;
+    assert.deepEqual(replaced.changes!.map((change) => [change.field, change.before, change.after]), [['integrationKeysChanged.yellgo', undefined, true]]);
+    const logged = JSON.stringify([replaced, t.office.logEvents]);
+    assert.ok(!logged.includes(other) && !logged.includes(createHash('sha256').update(other).digest('hex')));
     const removed = await patch(t.office.cluster.psa, { integrations: { yellgo: { apiKey: null } } });
     assert.deepEqual(removed.body.data.integrations.yellgo, { enabled: true, apiKeySet: false });
     assert.deepEqual((await t.stored(0))['settings'].integrations.yellgo, { status: true, apiKey: null });

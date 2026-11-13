@@ -21,6 +21,7 @@ Documentazione di progetto da conoscere prima di agire:
 | `doc/Technical-Guide.md` | documentazione tecnica del backend realizzato (mantenuta a ogni passo) |
 | `doc/API.md` | riferimento di tutte le API (mantenuto a ogni passo) |
 | `doc/Public-API.md` | documentazione delle API pubbliche per gli integratori esterni (mantenuta a ogni passo) |
+| `doc/Tasks.md` | piano dei task, decisioni (D-nn) e stato dei passi |
 
 **Il progetto legacy è solo un riferimento funzionale.** Si consulta per capire *cosa* faceva il sistema (`doc/Legacy-Analysis.md`), mai per copiarne il *come*:
 - non copiare codice, struttura o pattern dal legacy: ogni parte si riprogetta;

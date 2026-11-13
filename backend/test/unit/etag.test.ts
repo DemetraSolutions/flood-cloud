@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Request, Response } from 'express';
-import { canonicalJson, etagOf, sendRevalidated } from '../../src/shared/http/etag.ts';
+import { canonicalJson, etagOf, sendRevalidated, sendRevalidatedPage } from '../../src/shared/http/etag.ts';
 
 function exchange(ifNoneMatch?: string) {
   const headers = new Map<string, string>();
@@ -55,5 +55,26 @@ describe('sendRevalidated', () => {
     const { req, res, sent } = exchange('W/"stale"');
     sendRevalidated(req, res, data);
     assert.equal(sent.status, 200);
+  });
+});
+
+describe('sendRevalidatedPage', () => {
+  const items = [{ id: 'a' }];
+  const page = { limit: 50, next: null };
+  const tag = etagOf({ data: items, page });
+
+  it('sends items and page with the tag of the whole body, or 304 to a matching If-None-Match', () => {
+    const plain = exchange();
+    sendRevalidatedPage(plain.req, plain.res, items, page);
+    assert.deepEqual([plain.headers.get('ETag'), plain.headers.get('Cache-Control'), plain.sent.status, plain.sent.body], [tag, 'no-store', 200, { data: items, page }]);
+    const cached = exchange(tag);
+    sendRevalidatedPage(cached.req, cached.res, items, page);
+    assert.deepEqual([cached.sent.status, cached.sent.ended, cached.sent.body], [304, true, undefined]);
+  });
+
+  it('changes the tag with the pagination', () => {
+    const other = exchange();
+    sendRevalidatedPage(other.req, other.res, items, { limit: 50, next: 'abc' });
+    assert.notEqual(other.headers.get('ETag'), tag);
   });
 });

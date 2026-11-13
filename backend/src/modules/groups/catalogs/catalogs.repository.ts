@@ -1,5 +1,5 @@
 import type { Collection, Document, Filter, ObjectId } from 'mongodb';
-import { COLLECTIONS, GROUPS_OWNED_CATALOGS } from '../../../db/collections.ts';
+import { GROUPS_OWNED_CATALOGS, GROUPS_OWNED_FIELDS } from '../../../db/collections.ts';
 import type { Databases } from '../../../db/databases.ts';
 import { LIST_MAX_TIME_MS } from '../../../shared/http/list.ts';
 import type { ContainerChange } from './catalog.ts';
@@ -64,7 +64,7 @@ const unsafeKey = (key: string): boolean => key === '' || key.includes('.') || k
  * @throws {Error} If a path is outside the owned catalogs.
  */
 export function buildCatalogUpdate(changes: readonly ContainerChange[]): CatalogUpdate {
-  const owned = new Set(COLLECTIONS.common.groups.ownedFields);
+  const owned = new Set(GROUPS_OWNED_FIELDS);
   const set: Record<string, unknown> = {};
   const unset: Record<string, ''> = {};
   const assertOwned = (path: string): void => {

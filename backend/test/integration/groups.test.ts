@@ -86,7 +86,7 @@ describe('GET /v1/groups/{groupId}', () => {
     assert.deepEqual(failure(await as.call(office.cluster.psa, 'GET', `/groups/${hex(new ObjectId())}`)), notFound);
   });
 
-  it('carries an ETag and revalidation, answers 304 to a matching If-None-Match and a new tag after a change; other responses have none', async () => {
+  it('carries an ETag and revalidation, answers 304 to a matching If-None-Match and a new tag after a change; the list has its own tag', async () => {
     const token = await as.tokenOf(office.cluster.psa);
     const first = await office.call('GET', path(0), token);
     const tag = first.headers.get('etag')!;
@@ -108,7 +108,8 @@ describe('GET /v1/groups/{groupId}', () => {
     assert.notEqual(changed.headers.get('etag'), tag);
     await changed.text();
     const list = await office.call('GET', '/groups', token);
-    assert.deepEqual([list.headers.get('etag'), list.headers.get('cache-control')], [null, 'no-store']);
+    assert.match(list.headers.get('etag')!, /^W\//);
+    assert.equal(list.headers.get('cache-control'), 'no-store');
     await list.text();
   });
 });

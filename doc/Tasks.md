@@ -129,21 +129,23 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
 - **Indici esistenti:** solo `_id_` ovunque, più `userName_1` (unique) su `users`.
 
 ### 0.5 Documentazione da aggiornare (richiede la richiesta esplicita dell'utente, `GEMINI.md` §7)
-- [ ] **0.5.1** `doc/Legacy-Analysis.md`, correzioni:
+- [x] **0.5.1** `doc/Legacy-Analysis.md`, correzioni:
   - i ruoli `X` e `L` non esistono, esiste `API`;
   - il JWT scade dopo `TOKEN_DURATION_DAYS` giorni;
   - `databaseHost` apre un client per ogni richiesta;
   - `ms-integration-service` lavora sugli stessi database;
   - l'ambiente si chiama `NODE_ENV`.
-- [ ] **0.5.2** `doc/Architecture.md` §3: coesistenza con il legacy e strategia di sincronizzazione (D-01, D-03).
-- [ ] **0.5.3** `doc/Data-Model.md`:
+  *Fatto il 2026-11-13.*
+- [x] **0.5.2** `doc/Architecture.md` §3: coesistenza con il legacy e strategia di sincronizzazione (D-01, D-03). *Fatto il 2026-11-13: nuovo §3.4.*
+- [x] **0.5.3** `doc/Data-Model.md`:
   - `users` e `groups` compatibili con i documenti legacy;
   - `companies` e `places` nel common come copie dei documenti dei gruppi (D-20);
   - nuove collection `userCredentials` e `syncIssues`;
   - risposte alle domande aperte.
+  *Fatto il 2026-11-13: verificato, aggiunte solo le risposte alle domande aperte e il riferimento a `COMMON_COPY_ENABLED`.*
 - [x] **0.5.4** `doc/Security-Model.md`: compatibilità di password e dati personali legacy (D-04, D-05), sessioni legacy (D-11). *Fatto il 2026-11-12 con l'aggiornamento del documento.*
-- [ ] **0.5.5** `GEMINI.md` e `AGENTS.md`: aggiungere `doc/Tasks.md` alla tabella dei documenti.
-- [ ] **0.5.6** `doc/Product-Scope.md`, `doc/Architecture.md` §4, `doc/Security-Model.md` §3 e §5, `doc/Data-Model.md` (collection `storeServer*`): eliminare la superficie `/store/v1` e indicare che l'app del server di punto vendita è separata e usa le API `/v1` (D-22, D-23, D-24). *Il 2026-11-12 aggiornati `doc/Security-Model.md`, `doc/Data-Model.md` e `doc/API.md`; restano `doc/Product-Scope.md` e `doc/Architecture.md` §4.*
+- [x] **0.5.5** `GEMINI.md` e `AGENTS.md`: aggiungere `doc/Tasks.md` alla tabella dei documenti. *Fatto il 2026-11-13.*
+- [x] **0.5.6** `doc/Product-Scope.md`, `doc/Architecture.md` §4, `doc/Security-Model.md` §3 e §5, `doc/Data-Model.md` (collection `storeServer*`): eliminare la superficie `/store/v1` e indicare che l'app del server di punto vendita è separata e usa le API `/v1` (D-22, D-23, D-24). *Il 2026-11-12 aggiornati `doc/Security-Model.md`, `doc/Data-Model.md` e `doc/API.md`; restano `doc/Product-Scope.md` e `doc/Architecture.md` §4. Fatto il 2026-11-13: verificati e allineati entrambi.*
 
 ### 0.6 Rischi del legacy in produzione (fuori da questo repository)
 - [ ] **0.6.1** Valutare la rotazione delle credenziali Atlas: oggi sono scritte nel repository legacy (ConfigMap, `launch.json`). Dopo una rotazione vanno aggiornati il legacy e il `.env` locale (D-02).
@@ -210,7 +212,7 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
   - risponde `422` con dettagli per campo.
 - [x] **1.5.2** Parametri delle liste: `limit` (default 50, massimo 200), `cursor` opaco, `sort` in allowlist, ricerca `q` con escape della regex lato server e lunghezza limitata.
 - [x] **1.5.3** Paginazione a cursore con ordinamento stabile (spareggio su `_id`), ordinamento applicato **prima** della pagina (nel legacy i punti vendita erano ordinati solo dentro la pagina).
-- [ ] **1.5.4** Supporto a `ETag` e `If-None-Match` (`304`) per le liste compatte usate come cache dal backoffice. *Realizzato (helper `shared/http/etag.ts`) solo per il dettaglio del gruppo (4.3.1); restano le liste compatte.*
+- [x] **1.5.4** Supporto a `ETag` e `If-None-Match` (`304`) per le liste compatte usate come cache dal backoffice. *Realizzato: helper `shared/http/etag.ts` (`sendRevalidated` per il dettaglio del gruppo, `sendRevalidatedPage` per le liste); `ETag` debole sull'intero body e `304` su `GET /v1/groups`, `companies`, `places` e tutte le `lookup/*`; il confronto viene dopo autenticazione, permesso e validazione.*
 
 ### 1.6 Infrastruttura di test del backend
 - [x] **1.6.1** MongoDB locale usa e getta (docker compose, replica set a un nodo per le transazioni), database `test_<casuale>` con pulizia.
@@ -481,24 +483,25 @@ Task:
 ### 4.5 Backoffice
 - [x] **4.5.1** Selettore del gruppo per PSA e D, con il gruppo nell'URL `/groups/:groupId/...` (D-10), voce "Tutti i gruppi" e vista trasversale degli utenti (passo 3D e richiesta dell'utente del 2026-11-06).
 - [x] **4.5.2** Feature nel client: menu, route e sezioni condizionati dalle feature del gruppo corrente (guard e direttiva).
-- [ ] **4.5.3** *(prime letture compatte e selettore del gruppo già realizzati nel passo 3D)* Store dei dati di riferimento del gruppo (sostituisce lo store in memoria del legacy):
+- [x] **4.5.3** *(prime letture compatte e selettore del gruppo già realizzati nel passo 3D)* Store dei dati di riferimento del gruppo (sostituisce lo store in memoria del legacy):
   - liste compatte per gruppo, con ETag;
   - riconvalida all'avvio e al cambio di gruppo;
   - invalidazione dopo ogni creazione, modifica o cancellazione;
   - estendibile ad altre entità (categorie, utenti…).
+  - *Fatto: `ReferenceStore` (`core/reference`), una pagina per gruppo, lista e parametri con il proprio `ETag`; tabella `REFERENCE_ENDPOINTS` per aggiungere entità; invalidazione dopo le scritture sui listini; svuotato al logout. Documentazione in `doc/Technical-Guide.md` §11.14. Le aziende e i punti vendita non hanno ancora scritture nel backoffice (6.3.3, 7.3.3).*
 - [x] **4.5.4** Elenco gruppi con conteggi e dettaglio espandibile (aziende e punti vendita). *Fatto l'elenco con i conteggi (4.4.2); il dettaglio espandibile è sostituito dalla scheda del gruppo (4.5.5).*
 - [x] **4.5.5** Dettaglio e modifica del gruppo con la scheda delle feature; pagina "Account › Gruppo" per il SA.
 
 ### 4.6 Chiusura
-- [ ] **4.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`groups`). *Aggiornati per il backend (passi 4B, 4B-bis, 4U); restano le pagine del backoffice (4C).*
-- [ ] **4.6.2** Revisione del `security_expert`; conferma dell'utente.
+- [x] **4.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`groups`). *Aggiornati per il backend (passi 4B, 4B-bis, 4U) e per le pagine del backoffice (4C: Technical-Guide §11.11–§11.14).*
+- [x] **4.6.2** Revisione del `security_expert`; conferma dell'utente. *Revisione del security_expert del 2026-11-13 senza bloccanti; I-1 corretto; M-1 accettato dall'utente (conteggi visibili senza users:read).*
 
 ---
 
 ## 5. Aziende e punti vendita nel common: migrazione e sincronizzazione
 Strategia in §0.3 (D-01, D-20). I task di 5.3 si fanno nel repository legacy `cloud-commerce-platform-server`, con il suo rilascio; tutti gli altri in questo repository.
 
-> Passo **5A** (2026-11-12): realizzati 5.1, 5.2, 5.4 e 5.5.1/5.5.3 con il comando `npm run sync:copies` (`doc/Technical-Guide.md` §7). Decisioni dell'utente del 2026-11-12: il comando **copia solo lo stato attuale e non cancella mai**; gira **solo in development**, mai in produzione; i database senza documento del gruppo sono solo segnalati; nel legacy la scrittura nel common è semplice (nel punto in cui scrive, scrive lo stesso dato anche nel common), senza altri cambi di comportamento. Caricamento eseguito su development. Passo **5B** (stesso giorno, decisione dell'utente): il backend legge aziende e punti vendita dalle copie del common (`group-mirror.ts`). Restano: 5.3 (repository legacy), 5.5.2 (worker, da decidere), 5.6, 5.7, 5.8.2.
+> Passo **5A** (2026-11-12): realizzati 5.1, 5.2, 5.4 e 5.5.1/5.5.3 con il comando `npm run sync:copies` (`doc/Technical-Guide.md` §7). Decisioni dell'utente del 2026-11-12: il comando **copia solo lo stato attuale e non cancella mai**; gira **solo in development**, mai in produzione; i database senza documento del gruppo sono solo segnalati; nel legacy la scrittura nel common è semplice (nel punto in cui scrive, scrive lo stesso dato anche nel common), senza altri cambi di comportamento. Caricamento eseguito su development. Passo **5B** (stesso giorno, decisione dell'utente): il backend legge aziende e punti vendita dalle copie del common (`group-mirror.ts`). Restano: 5.3 (repository legacy), 5.5.2 (chiuso il 2026-11-13: niente worker), 5.6, 5.7, 5.8.2.
 
 ### 5.1 Prerequisiti
 - [x] **5.1.1** Verificare la versione di MongoDB e le transazioni tra database diversi sul cluster Atlas, con i loro limiti di durata.
@@ -512,20 +515,27 @@ Strategia in §0.3 (D-01, D-20). I task di 5.3 si fanno nel repository legacy `c
 - [x] **5.2.4** Specifica del blocco di copia (passi, transazione, errori), scritta prima di toccare il legacy e validata dal `security_expert`.
 
 ### 5.3 Doppia scrittura nel legacy (repository legacy)
-- [ ] **5.3.1** Blocco di copia unico (§0.3, punto 1):
+- [x] **5.3.1** Blocco di copia unico (§0.3, punto 1):
   - lettura degli `_id` coinvolti prima della scrittura;
   - scrittura originale invariata;
   - rilettura dei documenti interi e `replaceOne` con upsert nel common, `groupId` sempre dal nome del database;
   - rimozione della copia per le cancellazioni (D-21).
-- [ ] **5.3.2** companies: `insertOne`, `updateOne`, `updateMany` e `deleteMany` in transazione con il blocco di copia.
-- [ ] **5.3.3** places: `insertOne`, `updateOne`, `updateMany` e `deleteMany` in transazione con il blocco di copia. Valgono anche per gli aggiornamenti del POS: `devices.<i>.info`, `rooms`, `suspendedToday`. La `session` va passata a ogni operazione, compresi gli aggiornamenti di `groups.places[]` e `reserve_with_google`.
-- [ ] **5.3.4** `groups/generate`: inserimento di azienda e punto vendita dentro la transazione, con il blocco di copia.
+- [x] **5.3.2** companies: `insertOne`, `updateOne`, `updateMany` e `deleteMany` in transazione con il blocco di copia.
+- [x] **5.3.3** places: `insertOne`, `updateOne`, `updateMany` e `deleteMany` in transazione con il blocco di copia. Valgono anche per gli aggiornamenti del POS: `devices.<i>.info`, `rooms`, `suspendedToday`. La `session` va passata a ogni operazione, compresi gli aggiornamenti di `groups.places[]` e `reserve_with_google`.
+- [x] **5.3.4** `groups/generate`: inserimento di azienda e punto vendita dentro la transazione, con il blocco di copia.
 - [ ] **5.3.5** `updateOne` eseguito sull'`_id` risolto prima della scrittura; con `upsert` si copia anche il documento creato.
-- [ ] **5.3.6** Blocco di `$out` e `$merge` nelle `aggregate` del legacy.
-- [ ] **5.3.7** Nessun errore silenziato: se la copia fallisce, la transazione si annulla e la richiesta risponde con un errore; il motivo va nel log.
-- [ ] **5.3.8** Interruttore da variabile d'ambiente per attivare la copia ambiente per ambiente (prima development, poi produzione).
-- [ ] **5.3.9** Test del blocco di copia su replica set locale: ogni tipo di scrittura, filtri arbitrari, scritture concorrenti, errore della copia con annullamento.
-- [ ] **5.3.10** Rilascio in development, verifica con la riconciliazione (5.5), poi rilascio in produzione.
+- [x] **5.3.6** Blocco di `$out` e `$merge` nelle `aggregate` del legacy. *Rifiuto di `$out`/`$merge` nelle aggregate dei servizi companies e places del legacy (decisione dell'utente del 2026-11-13).*
+- [x] **5.3.7** Nessun errore silenziato: se la copia fallisce, la transazione si annulla e la richiesta risponde con un errore; il motivo va nel log.
+- [x] **5.3.8** Interruttore da variabile d'ambiente per attivare la copia ambiente per ambiente (prima development, poi produzione).
+- [x] **5.3.9** Test del blocco di copia su replica set locale: ogni tipo di scrittura, filtri arbitrari, scritture concorrenti, errore della copia con annullamento.
+- [ ] **5.3.10** Rilascio in development, verifica con la riconciliazione (5.5), poi rilascio in produzione. *Per decisione dell'utente del 2026-11-13 la produzione resta spenta (`COMMON_COPY_ENABLED` non attivo).*
+  *Stato al 2026-11-13: realizzati nel legacy (non committati) il modulo `modules/CommonCopy.mjs` e la copia nei 10 punti di scrittura, attiva solo con `COMMON_COPY_ENABLED=true`. Secondo la regola dell'utente ("scrivere lo stesso dato anche in common", nessun'altra modifica al legacy):*
+  - *companies e `updateMany`/`deleteMany` dei places: scrittura originale e copia nella stessa transazione, con gli `_id` letti col filtro prima della scrittura;*
+  - *`insertOne` e `updateOne` dei places: la copia entra nella transazione che il legacy già usa. L'`updateOne` del legacy resta fuori transazione (difetto preesistente): se la copia fallisce l'aggiornamento resta salvato e la riconciliazione lo segnala;*
+  - *`groups/generate`: gli inserimenti di azienda e punto vendita restano fuori transazione come nel legacy; le copie si scrivono nella transazione del gruppo, rileggendo gli originali fuori da essa;*
+  - *5.3.5 (`updateOne` sull'`_id` risolto) e 5.3.6 non applicati: cambierebbero il comportamento del legacy; nel codice non ci sono `$out` né `$merge`;*
+  - *rifiuto con 400 di un `groupId` non esadecimale nelle scritture di companies e places, anche a interruttore spento; vecchi router e modelli rimossi; prove: 16 casi;*
+  - *prove: 14 casi (poi 16) su replica set locale usa-e-getta (ogni scrittura, cestino, cancellazione, errore della copia con annullamento, interruttore spento, `groupId` non valido, `generate`); `sync:copies` in development senza differenze.*
 
 ### 5.4 Caricamento iniziale (nuovo backend)
 - [x] **5.4.1** Comando CLI idempotente, da eseguire dopo l'attivazione della doppia scrittura:
@@ -536,17 +546,18 @@ Strategia in §0.3 (D-01, D-20). I task di 5.3 si fanno nel repository legacy `c
 
 ### 5.5 Riconciliazione (nuovo backend)
 - [x] **5.5.1** Comando che confronta, gruppo per gruppo, il database del gruppo e il common: insiemi di `_id` e hash del documento con `groupId` normalizzato. Ripara le differenze e scrive le discordanze in `syncIssues`.
-- [ ] **5.5.2** Esecuzione periodica nel ruolo `worker` (`doc/Architecture.md` §7), con istanza unica e frequenza da decidere. Allarme se trova differenze: indicano un percorso di scrittura non coperto.
+- [x] **5.5.2** Esecuzione periodica nel ruolo `worker` (`doc/Architecture.md` §7), con istanza unica e frequenza da decidere. Allarme se trova differenze: indicano un percorso di scrittura non coperto. *Chiuso per decisione dell'utente del 2026-11-13: niente worker periodico per ora, solo il comando `npm run sync:copies`.*
 - [x] **5.5.3** Test su replica set locale: copie mancanti, diverse o in eccesso; gruppi nuovi; database rimossi.
 
 ### 5.6 Scritture dal nuovo backend (fase 2)
-- [ ] **5.6.1** Servizio di scrittura in **transazione** con la stessa regola del legacy:
+- [x] **5.6.1** Servizio di scrittura in **transazione** con la stessa regola del legacy:
   - nel database del gruppo, `$set` dei soli campi posseduti, nel formato legacy;
   - poi rilettura del documento intero e copia nel common.
-- [ ] **5.6.2** Effetti collaterali che il legacy si aspetta: aggiornamento di `groups.places[]` alla creazione e alla cancellazione di un punto vendita; nessuna modifica a `reserve_with_google`.
-- [ ] **5.6.3** Default compatibili per i documenti creati dal nuovo backend: le strutture che il legacy legge senza controlli (`general`, `openingTime`, `settings.*`…), verificate sul codice legacy.
-- [ ] **5.6.4** Politica sui conflitti con modifiche concorrenti dal legacy: `If-Match` lato nuovo backend e ultimo scrittore vince lato legacy, oppure modifica disabilitata nel backoffice legacy (da decidere).
-- [ ] **5.6.5** Test: le parti incorporate non possedute (`devices`, `rooms`, `storages`, impostazioni, integrazioni) sopravvivono a ogni scrittura.
+  - *Realizzato il 2026-11-13 come servizio interno **senza route**, usato dall'area 6 (aziende) e dall'area 7 (punti vendita): `backend/src/shared/legacy-write/`, `doc/Technical-Guide.md` §7.*
+- [x] **5.6.2** Effetti collaterali che il legacy si aspetta: aggiornamento di `groups.places[]` alla creazione e alla cancellazione di un punto vendita; nessuna modifica a `reserve_with_google`. *Decisione dell'utente del 2026-11-13: `groups.places[]` ricalcolato per intero a ogni scrittura di un punto vendita (creazione, modifica, cestino, ripristino, eliminazione; tutti i punti vendita, cestinati inclusi, `$set`); `reserve_with_google`: `deleteOne` al cestino e all'eliminazione, upsert al ripristino solo se l'integrazione è attiva e completa, nulla a creazione e modifica. Realizzato nel servizio, senza route.*
+- [x] **5.6.3** Default compatibili per i documenti creati dal nuovo backend: le strutture che il legacy legge senza controlli (`general`, `openingTime`, `settings.*`…), verificate sul codice legacy. *Decisione dell'utente del 2026-11-13: forma voluta dell'`insertOne` del legacy, senza i campi copiati per errore, più `timezone: 'Europe/Rome'`, `weekGeneric` a sette voci e almeno un deposito. Realizzato nel servizio, senza route.*
+- [x] **5.6.4** Politica sui conflitti con modifiche concorrenti dal legacy: `If-Match` lato nuovo backend e ultimo scrittore vince lato legacy, oppure modifica disabilitata nel backoffice legacy. *Decisione dell'utente del 2026-11-13: `If-Match` nel nuovo backend, ultimo scrittore vince nel legacy; da realizzare con la fase 2.*
+- [x] **5.6.5** Test: le parti incorporate non possedute (`devices`, `rooms`, `storages`, impostazioni, integrazioni) sopravvivono a ogni scrittura.
 
 ### 5.7 Dismissione (fase 3)
 - [ ] **5.7.1** Checklist di passaggio:
@@ -556,8 +567,8 @@ Strategia in §0.3 (D-01, D-20). I task di 5.3 si fanno nel repository legacy `c
   - rimozione delle copie nei database dei gruppi.
 
 ### 5.8 Chiusura
-- [ ] **5.8.1** `doc/Technical-Guide.md` (comandi, riconciliazione, allarmi) e `doc/Data-Model.md`.
-- [ ] **5.8.2** Revisione del `security_expert` (privilegi, guardie, blocco di copia); conferma dell'utente.
+- [x] **5.8.1** `doc/Technical-Guide.md` (comandi, riconciliazione, allarmi) e `doc/Data-Model.md`.
+- [x] **5.8.2** Revisione del `security_expert` (privilegi, guardie, blocco di copia); conferma dell'utente. *Revisione del 2026-11-13: nuovo backend approvato; i rilievi bloccanti del legacy (B1, B2) corretti; gli altri rilievi del legacy non si correggono: le nuove API non accettano query MongoDB dal client (indicazione dell'utente del 2026-11-13).*
 
 ---
 

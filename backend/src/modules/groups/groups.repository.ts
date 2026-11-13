@@ -1,5 +1,5 @@
 import type { Collection, Document, Filter, ObjectId } from 'mongodb';
-import { COLLECTIONS } from '../../db/collections.ts';
+import { GROUPS_OWNED_FIELDS } from '../../db/collections.ts';
 import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
 import { API_KEY_SET_PROJECTION, GROUP_PROJECTION, fromLegacy } from './group.mapper.ts';
@@ -49,7 +49,7 @@ function containersOf(paths: readonly string[]): string[] {
  */
 export function createManagedGroupsRepository(databases: Databases): ManagedGroupsRepository {
   const groups = (): Collection<Document> => databases.common().collection('groups');
-  const owned = new Set(COLLECTIONS.common.groups.ownedFields);
+  const owned = new Set(GROUPS_OWNED_FIELDS);
   return {
     findById: async (id) => {
       // An aggregation, not a `find`, so that whether each integration key is set is computed in the database and the keys themselves are never loaded.

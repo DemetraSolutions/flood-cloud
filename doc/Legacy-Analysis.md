@@ -12,17 +12,18 @@ Numeri: ~42k righe JS, 1081 commit, **nessun test**, Node 20 (Dockerfile su Node
 ## 2. Gerarchia e attori
 - **Platform Super Admin** (`PSA`) e **Dealer/rivenditore** (`D`): gestiscono la piattaforma e più gruppi clienti.
 - **Group** = tenant (organizzazione cliente, appartiene a un dealer) → **Company** (soggetto giuridico, dati fiscali) → **Place** (punto vendita/locale, con `devices[]`, `storages[]`, `rooms[]`).
-- **User**: utenti del backoffice e operatori di cassa, legati a group/company/place. Ruoli visti nel codice: `PSA`, `D`, `SA`, `CA`, `PA`, `X`, `L` (significato esatto da confermare). Permessi per modulo `permissions.<modulo>.{r,w}`.
+- **User**: utenti del backoffice e operatori di cassa, legati a group/company/place. Ruoli: `PSA`, `D`, `SA`, `CA`, `PA`, `E` e `API`. I ruoli `X` e `L` non esistono. `API` esiste nel codice ma nessun utente lo usa (profilazione del 2026-11-01): nel nuovo progetto è eliminato e lo sostituiscono le API key pubbliche (D-07). Permessi per modulo `permissions.<modulo>.{r,w}`.
 - **Contact**: clienti finali e fornitori, con carte fedeltà; alcuni hanno un `account` (login lato cliente/e-commerce).
 - **F-Lite**: linea prodotto separata con propri account e proprio JWT (`flite/`).
 
 ## 3. Multi-tenancy
 - **Un database per tenant**: `<prefix><env>_<groupId>`; database comuni `<prefix><env>_common`, `..._flite_common`, `..._queue` (coda e-fatture).
+- L'ambiente si chiama `NODE_ENV` (default `development`): la variabile compone i nomi dei database. Nel nuovo progetto è `APP_ENV`, obbligatoria e senza default.
 - Il tenant si ricava da `groupId` dell'utente del JWT o dall'header `Apikey` che corrisponde a `groups.apiKey`. PSA e dealer possono forzare il tenant con `?groupId=`.
 - Lo scope per company/place **non è centralizzato**: ogni controller lo ricostruisce da filtri inviati dal client.
 - `companies` e `places` stanno nei database dei gruppi: estrarre tutti i punti vendita (es. per un dealer) richiede di interrogare ogni database. Nel nuovo progetto passano nel common (`doc/Architecture.md` §3.2).
-- Esiste un'opzione `group.databaseHost` (host dedicato) che il codice ignora: **eliminata** nel nuovo progetto.
-- I POS dei negozi (in realtà il server di punto vendita) si autenticano con l'unica API key del gruppo, condivisa da tutti i negozi; gli amministratori con un JWT di fatto senza scadenza.
+- Esiste un'opzione `group.databaseHost` (host dedicato): quando è valorizzata il codice apre un nuovo client MongoDB **per ogni richiesta**, senza riuso della connessione. **Eliminata** nel nuovo progetto: al suo posto `dataCluster` (`doc/Architecture.md` §3.2.1).
+- I POS dei negozi (in realtà il server di punto vendita) si autenticano con l'unica API key del gruppo, condivisa da tutti i negozi; gli amministratori con un JWT che scade dopo `TOKEN_DURATION_DAYS` giorni (valore di configurazione, senza refresh).
 
 ## 4. Domini funzionali (servizi `ms/`)
 | Area | Servizi legacy | Collection principali |
@@ -49,6 +50,7 @@ Codice morto da non considerare: `__ms-query-service`, cartelle root `routers/`,
 ## 6. Job e deploy
 - La stessa immagine gira in tre ruoli scelti da variabili d'ambiente: **api**, **stats** (su replica analitica), **cron** (una sola replica). Deploy su GKE via GitHub Actions; un servizio stats su Cloud Run.
 - Job: coda e-fatture Aruba con rate limit per hub (auth < 1/min, upload ≤ 55/h, stato < 12/min), pulizia file temporanei, pulizia log oltre 90 giorni, pulizia contatti.
+- `ms-integration-service` (integrazioni, code e job) lavora sugli **stessi database** dell'API: durante la coesistenza anch'esso resta attivo sui dati condivisi (`doc/Architecture.md` §3.4).
 - Event bus in processo (`insert_sales` → invio a servizio esterno).
 
 ## 7. Problemi da non ripetere

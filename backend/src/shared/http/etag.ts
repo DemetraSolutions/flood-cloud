@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Request, Response } from 'express';
-import { sendData } from './envelope.ts';
+import { sendData, sendPage } from './envelope.ts';
+import type { PageInfo } from './envelope.ts';
 
 /** `Cache-Control` of a revalidated resource: never stored by the browser; the backoffice keeps its own in-memory copy and revalidates it with `If-None-Match`. */
 export const REVALIDATE_CACHE_CONTROL = 'no-store';
@@ -55,12 +56,36 @@ function matches(header: string | undefined, etag: string): boolean {
  * @param data Payload; it must already be mapped to its public representation.
  */
 export function sendRevalidated(req: Request, res: Response, data: unknown): void {
-  const etag = etagOf(data);
+  if (!revalidate(req, res, etagOf(data))) {
+    sendData(res, data);
+  }
+}
+
+/**
+ * Sends a list envelope `{ data, page }` with an `ETag` and `Cache-Control: no-store`, like
+ * {@link sendRevalidated}. The tag is computed on the whole body (items and pagination), so it follows the
+ * page the caller asked for; the items are already filtered to the perimeter of the caller, therefore two
+ * callers with different perimeters never share a tag. A matching `If-None-Match` gives `304` with no body.
+ * Only the compact reference lists that the backoffice caches use this.
+ *
+ * @param req Express request.
+ * @param res Express response.
+ * @param items Items of the page, already mapped to their public representation.
+ * @param page Pagination metadata.
+ */
+export function sendRevalidatedPage(req: Request, res: Response, items: readonly unknown[], page: PageInfo): void {
+  if (!revalidate(req, res, etagOf({ data: items, page: { limit: page.limit, next: page.next } }))) {
+    sendPage(res, items, page);
+  }
+}
+
+/** Sets `ETag` and `Cache-Control`; answers `304` and returns `true` when `If-None-Match` matches, otherwise returns `false`. */
+function revalidate(req: Request, res: Response, etag: string): boolean {
   res.setHeader('ETag', etag);
   res.setHeader('Cache-Control', REVALIDATE_CACHE_CONTROL);
   if (matches(req.get('if-none-match'), etag)) {
     res.status(304).end();
-    return;
+    return true;
   }
-  sendData(res, data);
+  return false;
 }

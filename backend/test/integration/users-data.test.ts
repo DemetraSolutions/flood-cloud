@@ -168,9 +168,10 @@ describe('POST: the complete legacy document of every role', () => {
     // The response shows the picture and whether there is a PIN, never the PIN; the log keeps neither.
     const data = reply.body.data;
     assert.deepEqual([data.pinSet, data.hasAvatar, data.avatar, data.pos.options.favoritesId, data.shiftTime.weeks[1].from], [true, true, dataUrl('png', PNG), 'fav-1', '2026-06-01T00:00:00.000Z']);
-    assert.ok(!JSON.stringify(reply.body).includes('4321'));
+    // Quoted: a hex id or a date can contain the digits, never a whole string value equal to the PIN.
+    assert.ok(!JSON.stringify(reply.body).includes('"4321"'));
     const logged = JSON.stringify(office.activity.entries.at(-1));
-    assert.ok(!logged.includes('4321') && !logged.includes(dataUrl('png', PNG)));
+    assert.ok(!logged.includes('"4321"') && !logged.includes(dataUrl('png', PNG)));
     assert.ok(logged.includes('"pinSet"') && logged.includes('avatarHash'));
   });
 });

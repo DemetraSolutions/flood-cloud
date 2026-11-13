@@ -133,7 +133,7 @@ Endpoint REST a risorse (`doc/API-Guidelines.md`); **nessuna query, filtro, upda
 
 ## 10. Protezioni HTTP, file, segreti e log
 - **Header** (middleware proprio): `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cross-Origin-Resource-Policy: same-origin`, niente `X-Powered-By`.
-- **Cache**: **tutte** le risposte sono `Cache-Control: no-store`, compreso il dettaglio del gruppo, che porta in più un `ETag` debole per la rivalidazione (`If-None-Match` ⇒ `304`) della copia che il backoffice tiene solo in memoria.
+- **Cache**: **tutte** le risposte sono `Cache-Control: no-store`, compresi il dettaglio del gruppo e le liste compatte di riferimento (elenco dei gruppi, aziende, punti vendita, letture `lookup/*`, 1.5.4), che portano in più un `ETag` debole per la rivalidazione (`If-None-Match` ⇒ `304`) della copia che il backoffice tiene solo in memoria, calcolato dopo autenticazione, gruppo, permesso e validazione sul body già filtrato per il chiamante.
 - **CORS**: allowlist esatta di origini per ambiente, solo su `/v1`, senza credenziali; nessun header CORS su `/public/v1` e `/health`.
 - **Backoffice**: servito con CSP stretta (`script-src 'self'`, stili con nonce per richiesta, `connect-src` solo verso l'URL delle API, `frame-ancestors 'none'`, Trusted Types obbligatori), HSTS e header analoghi; token in memoria e refresh in `sessionStorage` (§4); nessun segreto nella build.
 - **Timeout** delle richieste (default 30 s) e `trust proxy` impostato sul numero esatto di proxy.

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { API, backend, provideApiTesting } from '../../../../testing/api';
+import { ReferenceStore } from '../../../core/reference/reference-store';
 import { CatalogsApi } from './catalogs-api';
 
 describe('CatalogsApi', () => {
@@ -48,5 +49,43 @@ describe('CatalogsApi', () => {
     expect(request.request.method).toBe('DELETE');
     request.flush(null, { status: 204, statusText: 'No Content' });
     await expect(result).resolves.toBeUndefined();
+  });
+
+  describe('reference store', () => {
+    const NO_CONTENT = { status: 204, statusText: 'No Content' };
+
+    it('invalidates the price lists after a create, a change, a replace or a delete', async () => {
+      const service = api();
+      const invalidate = vi.spyOn(TestBed.inject(ReferenceStore), 'invalidate');
+      const writes = [
+        service.create('g1', 'price-lists', {}),
+        service.patch('g1', 'price-lists', 'p1', {}),
+        service.put('g1', 'price-lists', 'p1', {}),
+        service.remove('g1', 'price-lists', 'p1'),
+      ];
+      const requests = backend().match(() => true);
+      expect(requests).toHaveLength(4);
+      requests.forEach((request) =>
+        request.request.method === 'DELETE'
+          ? request.flush(null, NO_CONTENT)
+          : request.flush({ data: {} }),
+      );
+      await Promise.all(writes);
+      expect(invalidate.mock.calls).toEqual(Array(4).fill(['g1', 'price-lists']));
+    });
+
+    it('does not invalidate on the catalogs it does not keep, nor when the write fails', async () => {
+      const service = api();
+      const invalidate = vi.spyOn(TestBed.inject(ReferenceStore), 'invalidate');
+      const done = service.create('g1', 'taxes', {});
+      backend().expectOne(`${API}/v1/groups/g1/taxes`).flush({ data: {} });
+      await done;
+      const failed = service.remove('g1', 'price-lists', 'p1').catch(() => 'failed');
+      backend()
+        .expectOne(`${API}/v1/groups/g1/price-lists/p1`)
+        .flush(null, { status: 409, statusText: 'Conflict' });
+      expect(await failed).toBe('failed');
+      expect(invalidate).not.toHaveBeenCalled();
+    });
   });
 });

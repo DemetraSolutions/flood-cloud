@@ -42,6 +42,7 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 | `doc/Technical-Guide.md` | Documentazione tecnica del backend realizzato (mantenuta a ogni passo) |
 | `doc/API.md` | Riferimento di tutte le API delle due superfici (mantenuto a ogni passo) |
 | `doc/Public-API.md` | Documentazione delle API pubbliche per gli integratori esterni (mantenuta a ogni passo) |
+| `doc/Tasks.md` | Piano dei task, decisioni (D-nn) e stato dei passi |
 
 ## Sottoagenti disponibili
 

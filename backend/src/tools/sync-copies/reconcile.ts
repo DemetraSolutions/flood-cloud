@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 import type { AnyBulkWriteOperation, ClientSession, Collection, Document } from 'mongodb';
-import { documentSize, expectedCopy, hasCorrectGroupId, sameDocument } from './documents.ts';
+import { EXACT_TYPES, expectedCopy, sameDocument } from '../../shared/legacy-write/copy-rule.ts';
+import { documentSize, hasCorrectGroupId } from './documents.ts';
 import type { IssueKind, IssueSink, SyncCollection } from './issues.ts';
 import { mergeById } from './merge.ts';
 import type { WithObjectId } from './merge.ts';
@@ -69,13 +70,6 @@ interface Pending {
 }
 
 const OBJECT_ID_ONLY = { _id: { $type: 'objectId' } } as const;
-
-/**
- * Read options that keep the BSON numeric types as they are stored (`Double`, `Int32`, `Long` wrappers instead of JS
- * numbers): without them a whole-number double would be written back as an int32 and the copy would not be an exact
- * mirror. The copy block of the legacy must read with the same options, or every comparison would find a difference.
- */
-export const EXACT_TYPES = Object.freeze({ promoteValues: false, promoteLongs: false, bsonRegExp: true });
 
 /** What a block did to one id: the kind seen at write time (the copy may have changed since the comparison). */
 interface Written {

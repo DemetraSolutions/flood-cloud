@@ -8,7 +8,7 @@
 - Date ISO 8601 UTC, importi in centesimi interi, identificativi stringa.
 - Codici d'errore: tabella in `doc/API-Guidelines.md` §5. Le route di un modulo che il gruppo non ha acceso rispondono `403 FEATURE_DISABLED` (qualunque sia il ruolo, PSA e D compresi), dopo il controllo del gruppo e del permesso.
 - Ogni risposta porta `X-Request-Id`, generato dal server (un valore inviato dal client non viene riutilizzato).
-- Ogni risposta è `Cache-Control: no-store`; `GET /v1/groups/{groupId}` porta in più `ETag` (debole) e risponde `304` a un `If-None-Match` corrispondente, per la copia in memoria del backoffice (vedi la sua descrizione).
+- Ogni risposta è `Cache-Control: no-store`; `GET /v1/groups/{groupId}` e le liste compatte di riferimento (vedi "Liste") portano in più `ETag` (debole) e rispondono `304` a un `If-None-Match` corrispondente, per la copia in memoria del backoffice.
 - Errori comuni a ogni percorso: `404 NOT_FOUND` (percorso inesistente), `405 METHOD_NOT_ALLOWED` con `Allow` (metodo non previsto), `400 BAD_REQUEST` (percorso o richiesta malformati). Sulle route con body: `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE` (limite di default 100 KB), `415 UNSUPPORTED_MEDIA_TYPE` (content type diverso da `application/json` UTF-8 o body compresso).
 
 ## Liste
@@ -18,6 +18,7 @@ Le collezioni paginate rispondono `200` con `{ "data": [ … ], "page": { "limit
 - `sort`: uno dei nomi ammessi dalla risorsa (allowlist), con prefisso `-` per l'ordine decrescente; ogni risorsa dichiara il proprio default. Un valore fuori elenco è `422` (`enum`).
 - `q`: testo di ricerca, 1–64 caratteri (spazi ai bordi rimossi), cercato come testo letterale, senza distinzione tra maiuscole e minuscole, nei campi indicati dalla risorsa.
 - Parametri sconosciuti o ripetuti sono `422`. Le query hanno un tempo massimo di 5 secondi.
+- **`ETag` e `304` sulle liste compatte di riferimento** (usate dal backoffice come cache in memoria): `GET /v1/groups`, `GET /v1/groups/{groupId}/companies`, `GET /v1/groups/{groupId}/places` e le letture `GET /v1/groups/{groupId}/lookup/*` (`products`, `product-categories`, `customers`, `contact-groups`, `price-lists`). Queste risposte portano `ETag: W/"…"` (debole, SHA-256 dell'intero body, `data` e `page`) e `Cache-Control: no-store`; con `If-None-Match` contenente il tag (anche `*` o un elenco) la risposta è `304` **senza body**. Il tag è calcolato sulla risposta già filtrata per il chiamante: due utenti con perimetri diversi hanno tag diversi, e un'altra pagina (`limit`, `cursor`, `sort`, `q`, filtri) dà un altro tag. Il confronto avviene **dopo** autenticazione, gruppo, permesso e validazione: un `If-None-Match` non produce mai un `304` al posto di `401`, `403`, `404` o `422`. Le altre liste (utenti, dealer, servizi, registro attività, cataloghi del gruppo) non hanno `ETag`.
 
 ## Endpoint di servizio
 Fuori dalle superfici API, per le sonde di GKE.
@@ -510,6 +511,7 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
   ```
   `status` è `active` o `suspended`; `dealerId` è `null` se il gruppo non ha dealer; `demo` è `false` se non è un gruppo demo. `counts` riporta, per aziende, punti vendita e utenti del gruppo, gli elementi attivi (`active`: `trash` diverso da `true`) e quelli nel cestino (`trashed`: `trash: true`); lo `status` dell'utente non conta. Aziende e punti vendita sono contati sulle copie del database comune, gli utenti sugli utenti con quel `groupId`; un gruppo vuoto ha tutti zeri. I conteggi sono calcolati solo per i gruppi della pagina restituita (quindi dentro il perimetro del chiamante) con tre aggregazioni per richiesta; non sono presenti in `GET /v1/groups/{groupId}`.
 - **Errori:** comuni; `403 FORBIDDEN` anche per i filtri riservati
+- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
 
 ### GET /v1/groups/{groupId}/companies
 - **Superficie:** backoffice
@@ -527,6 +529,7 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
   }
   ```
 - **Errori:** comuni; `404 NOT_FOUND`
+- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
 
 ### GET /v1/groups/{groupId}/places
 - **Superficie:** backoffice
@@ -545,6 +548,7 @@ Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del ba
   }
   ```
 - **Errori:** comuni; `404 NOT_FOUND`
+- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
 
 ## Gruppi (`/v1`)
 
@@ -674,6 +678,7 @@ Rappresentazione del gruppo:
   { "data": [{ "id": "665f1c2e9b1d4a0012ab34f0", "name": "Shampoo", "type": "product" }], "page": { "limit": 50, "next": null } }
   ```
 - **Errori:** comuni; `403 FORBIDDEN`; `404` (gruppo fuori perimetro); `422` (parametri o cursore non validi)
+- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
 - `/services` resta invariato (permesso `users:read` e feature `services`, per la scheda utente).
 
 ### GET /v1/groups/{groupId}/lookup/price-lists
@@ -684,6 +689,7 @@ Rappresentazione del gruppo:
   { "data": [{ "id": "665f1c2e9b1d4a0012ab34f0", "name": "Listino 1", "enabled": true, "isDefault": true }] }
   ```
 - **Errori:** comuni; `403 FORBIDDEN`; `404` (gruppo fuori perimetro)
+- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
 
 ## Cataloghi del gruppo (`/v1`)
 

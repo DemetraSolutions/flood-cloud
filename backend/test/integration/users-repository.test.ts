@@ -135,7 +135,8 @@ describe('findByUsernameForLogin', () => {
 
   it('does not read the other secrets of the user for the login', async () => {
     const found = (await repository.findByUsernameForLogin('user-005'))!;
-    assert.equal(JSON.stringify(found).includes('1234'), false);
+    // Quoted: a random hex id can contain the digits, never a whole string value equal to the PIN.
+    assert.equal(JSON.stringify(found).includes('"1234"'), false);
     assert.equal(JSON.stringify(found).includes('token-005'), false);
   });
 });

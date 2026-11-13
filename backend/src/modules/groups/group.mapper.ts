@@ -378,8 +378,10 @@ export function toResponse(group: Group, includeCluster: boolean): GroupResponse
  * The catalogs have their own events.
  *
  * @param group The group.
+ * @param keysChanged Providers whose key the request set, replaced or removed. They are listed as `integrationKeysChanged.<provider>: true`
+ *   (only in the "after" snapshot), so a replacement shows in the log even though "is a key set" stays `true`; never the key, its hash or its length.
  */
-export function changeSnapshot(group: Group): Record<string, unknown> {
+export function changeSnapshot(group: Group, keysChanged: readonly Provider[] = []): Record<string, unknown> {
   return {
     name: group.name,
     description: group.description,
@@ -390,5 +392,6 @@ export function changeSnapshot(group: Group): Record<string, unknown> {
     enabledIntegrations: Object.fromEntries(PROVIDERS.map((provider) => [provider, group.integrations[provider].enabled])),
     // Named so that the redaction of keys (`apikey`) does not hide it: only whether a key is set, never the key.
     integrationKeysConfigured: Object.fromEntries(PROVIDERS.map((provider) => [provider, group.integrations[provider].apiKeySet])),
+    ...(keysChanged.length === 0 ? {} : { integrationKeysChanged: Object.fromEntries(keysChanged.map((provider) => [provider, true])) }),
   };
 }

@@ -12,7 +12,7 @@ import type { SessionsRepository } from '../sessions/sessions.repository.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import { changesOf, forbiddenFields } from './group-changes.ts';
 import { changeSnapshot, toLegacyUpdate, toResponse } from './group.mapper.ts';
-import type { Group, GroupChanges, GroupResponse } from './group.types.ts';
+import type { Group, GroupChanges, GroupResponse, Provider } from './group.types.ts';
 import type { ManagedGroupsRepository } from './groups.repository.ts';
 import type { PatchGroupBody } from './groups.schemas.ts';
 
@@ -230,7 +230,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         resource: { type: 'group', id: access.groupId.toHexString() },
         action: 'group.updated',
         before: changeSnapshot(before),
-        after: changeSnapshot(after),
+        after: changeSnapshot(after, (Object.entries(changes.integrations ?? {}) as Array<[Provider, { apiKey?: string | null }]>).filter(([, state]) => state.apiKey !== undefined).map(([provider]) => provider)),
         requestId: client.requestId,
         ...(client.ip === null ? {} : { ip: client.ip }),
       });

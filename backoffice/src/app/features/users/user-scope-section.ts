@@ -1,10 +1,9 @@
-import { httpResource } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, resource, signal } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
-import { ApiPage } from '../../core/api/api.types';
 import { HasFeature } from '../../core/groups/has-feature';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { ReferenceApi, ReferenceItem } from '../../core/reference/reference-api';
+import { ReferenceStore } from '../../core/reference/reference-store';
 import { Select } from '../../shared/ui/select/select';
 import { ReferenceLoader, ReferencePicker } from './reference-picker';
 import { UserFormState } from './user-form-state';
@@ -24,20 +23,20 @@ import { hasGroupDuties } from './user-model';
 export class UserScopeSection {
   protected readonly state = inject(UserFormState);
   private readonly reference = inject(ReferenceApi);
+  private readonly store = inject(ReferenceStore);
   protected readonly form = this.state.userForm;
 
   protected readonly showCompanyFilter = computed(
     () => this.state.groupId() !== undefined && this.state.canReadCompanies(),
   );
   protected readonly companyFilter = signal('');
-  private readonly companiesResource = httpResource<ApiPage<ReferenceItem>>(() =>
-    this.showCompanyFilter() && this.state.scopeKind() === 'places'
-      ? {
-          url: `/v1/groups/${encodeURIComponent(this.state.groupId() as string)}/companies`,
-          params: { limit: 200 },
-        }
-      : undefined,
-  );
+  private readonly companiesResource = resource({
+    params: () =>
+      this.showCompanyFilter() && this.state.scopeKind() === 'places'
+        ? (this.state.groupId() as string)
+        : undefined,
+    loader: ({ params }) => this.store.page(params, 'companies', { limit: 200 }),
+  });
   protected readonly companyOptions = computed(() =>
     (this.companiesResource.hasValue() ? this.companiesResource.value().data : []).map(
       (company) => ({ value: company.id, label: company.name }),

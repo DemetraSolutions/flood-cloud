@@ -1,5 +1,5 @@
 import { httpResource } from '@angular/common/http';
-import { Component, computed, inject, input, linkedSignal, output } from '@angular/core';
+import { Component, computed, inject, input, linkedSignal, output, resource } from '@angular/core';
 import {
   disabled,
   form,
@@ -15,6 +15,7 @@ import { ApiError } from '../../../core/api/api-error';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { TPipe } from '../../../core/i18n/t-pipe';
 import { ReferenceApi, ReferenceItem } from '../../../core/reference/reference-api';
+import { ReferenceStore } from '../../../core/reference/reference-store';
 import { fieldErrorMessage, focusFirstError } from '../../../shared/forms/form-errors';
 import { Button } from '../../../shared/ui/button/button';
 import { Checkbox } from '../../../shared/ui/checkbox/checkbox';
@@ -84,6 +85,7 @@ export class CardTypeEditor {
   protected readonly i18n = inject(I18nService);
   private readonly api = inject(CatalogsApi);
   private readonly reference = inject(ReferenceApi);
+  private readonly store = inject(ReferenceStore);
   protected readonly perimeter = inject(PlacePerimeter);
 
   /** Group the card type belongs to. */
@@ -140,9 +142,10 @@ export class CardTypeEditor {
   });
 
   // Price lists and points collections of the group, for the choices.
-  private readonly priceLists = httpResource<ApiData<PriceListRef[]>>(
-    () => `/v1/groups/${encodeURIComponent(this.groupId())}/lookup/price-lists`,
-  );
+  private readonly priceLists = resource({
+    params: () => this.groupId(),
+    loader: ({ params }) => this.store.page<PriceListRef>(params, 'price-lists'),
+  });
   private readonly collections = httpResource<ApiData<PointsCollection[]>>(() =>
     this.api.url(this.groupId(), 'fidelity/points-collections'),
   );

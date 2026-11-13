@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiPage } from '../api/api.types';
+import { referenceParams } from './reference-params';
+import { ReferenceStore } from './reference-store';
 
 /** A group as listed by `GET /v1/groups`. */
 export interface GroupRef {
@@ -32,6 +34,7 @@ export interface ReferenceQuery {
 
 /** Compact reads of a group for the selectors of favorites and promotions (`products:read`). */
 export type LookupKind = 'products' | 'product-categories' | 'customers' | 'contact-groups';
+// `companies`, `places` and `lookup` reads go through the {@link ReferenceStore}.
 
 /** Most ids a compact read resolves in one request. */
 export const MAX_LOOKUP_IDS = 100;
@@ -49,10 +52,12 @@ export const MAX_PERIMETER_PAGES = 20;
  * Minimal reference reads used by selectors: groups, and the companies, stores and services of a
  * group.
  * Results are cursor pages sorted by name; the backend limits them to the user's perimeter.
+ * The reads of companies, stores and `lookup` lists are served by the {@link ReferenceStore}.
  */
 @Service()
 export class ReferenceApi {
   private readonly http = inject(HttpClient);
+  private readonly store = inject(ReferenceStore);
 
   /** One page of the groups visible to the current user. */
   groups(query: ReferenceQuery = {}): Promise<ApiPage<GroupRef>> {
@@ -61,12 +66,12 @@ export class ReferenceApi {
 
   /** One page of the companies of a group. */
   companies(groupId: string, query: ReferenceQuery = {}): Promise<ApiPage<ReferenceItem>> {
-    return this.page<ReferenceItem>(`/v1/groups/${encodeURIComponent(groupId)}/companies`, query);
+    return this.store.page(groupId, 'companies', withDefaultLimit(query));
   }
 
   /** One page of the stores of a group, optionally of one company. */
   places(groupId: string, query: ReferenceQuery = {}): Promise<ApiPage<ReferenceItem>> {
-    return this.page<ReferenceItem>(`/v1/groups/${encodeURIComponent(groupId)}/places`, query);
+    return this.store.page(groupId, 'places', withDefaultLimit(query));
   }
 
   /** One page of the services of a group (needs the `services` feature and `users:read`). */
@@ -130,10 +135,7 @@ export class ReferenceApi {
     kind: LookupKind,
     query: ReferenceQuery = {},
   ): Promise<ApiPage<ReferenceItem>> {
-    return this.page<ReferenceItem>(
-      `/v1/groups/${encodeURIComponent(groupId)}/lookup/${kind}`,
-      query,
-    );
+    return this.store.page(groupId, kind, withDefaultLimit(query));
   }
 
   /**
@@ -194,20 +196,11 @@ export class ReferenceApi {
   }
 
   private page<T>(url: string, query: ReferenceQuery): Promise<ApiPage<T>> {
-    const params: Record<string, string | number> = { limit: query.limit ?? REFERENCE_PAGE_SIZE };
-    const text = query.q?.trim();
-    if (text) {
-      params['q'] = text;
-    }
-    if (query.cursor) {
-      params['cursor'] = query.cursor;
-    }
-    if (query.companyId) {
-      params['companyId'] = query.companyId;
-    }
-    if (query.ids !== undefined && query.ids.length > 0) {
-      params['ids'] = query.ids.join(',');
-    }
+    const params = referenceParams(withDefaultLimit(query));
     return firstValueFrom(this.http.get<ApiPage<T>>(url, { params }));
   }
+}
+
+function withDefaultLimit(query: ReferenceQuery): ReferenceQuery {
+  return { ...query, limit: query.limit ?? REFERENCE_PAGE_SIZE };
 }

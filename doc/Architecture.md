@@ -66,13 +66,23 @@ Schema delle collection del common: `doc/Data-Model.md`. I domini operativi si d
 - I repository dei dati di gruppo ricevono il `Db` del gruppo già risolto e non possono aprirne altri.
 - Le transazioni tra common e database del gruppo sono possibili solo se stanno sullo stesso cluster (replica set) e si usano solo dove serve atomicità.
 
+### 3.4 Coesistenza con il legacy e sincronizzazione
+Il nuovo backend lavora sugli stessi cluster e database del legacy, che resta attivo durante la transizione (backend, backoffice, POS e `ms-integration-service`). Il legacy chiama l'ambiente `NODE_ENV`; il nuovo backend `APP_ENV`, con gli stessi valori (`development`, `production`). Regole in `doc/Tasks.md` §0.2 (D-03), strategia in §0.3 (D-01).
+- **`users` e `groups`** sono condivise: restano nel formato legacy e la traduzione nel modello di dominio sta solo nei repository, con scritture `$set`/`$unset` dei campi posseduti e nessun indice univoco né `$jsonSchema` sulle collection condivise. I dati di sicurezza stanno in collection nuove (`userCredentials`, `sessions`).
+- **`companies` e `places`**: gli originali restano nei database dei gruppi, perché il legacy li legge anche con `$lookup`. Nel common ci sono **copie intere** dei documenti (D-20), con lo stesso `_id` e `groupId` sempre dal nome del database.
+- **Scrittura delle copie dal legacy**: il legacy scrive la copia nel common nella stessa transazione della scrittura originale, e rimuove la copia quando cancella (D-21). È controllata da `COMMON_COPY_ENABLED=true` e oggi è attiva **solo in development**; la produzione resta spenta per decisione dell'utente del 2026-11-13.
+- **Lettura**: il nuovo backend legge aziende e punti vendita **solo dalle copie** del common, mai dagli originali.
+- **Riconciliazione**: `npm run sync:copies` confronta e ripara le copie. Solo development (`--env production` è rifiutato), copia solo lo stato attuale e **non cancella mai** (le copie senza originale si segnalano in `syncIssues`). Si lancia a mano: decisione dell'utente del 2026-11-13, nessun worker periodico per ora.
+- **Scritture dal nuovo backend** (fase 2): servizio interno realizzato (5.6, `shared/legacy-write/`), senza route fino alle aree 6 e 7; `If-Match` contro i conflitti di modifica (decisione dell'utente del 2026-11-13), nel legacy vale l'ultimo scrittore.
+- Con più cluster (§3.2.1) la scrittura transazionale delle copie vale solo per i gruppi sul cluster comune; per gli altri resta la riconciliazione (D-25).
+
 ## 4. Superfici API
 | Superficie | Prefisso | Credenziale | CORS | Note |
 |---|---|---|---|---|
 | Backoffice | `/v1` | Bearer `fc_at_…` + refresh | allowlist origini del backoffice | ruoli PSA, D, SA, CA, PA |
 | Pubblica | `/public/v1` | `X-Api-Key: fc_pk_…` | chiuso | scope sul gruppo; rate limit e quote |
 
-Nessuna superficie per il server di punto vendita (D-23): l'app separata usa `/v1`, con credenziale da decidere (D-24).
+Nessuna superficie `/store/v1` per il server di punto vendita: è un'app separata, fuori scope (D-22), che usa le API `/v1` (D-23); la credenziale è una decisione aperta (D-24).
 
 Lo stesso dominio (es. prodotti) può essere esposto su più superfici con permessi e campi diversi: il service è unico, cambiano route, autenticazione e mapper di risposta. Le regole REST sono in `doc/API-Guidelines.md`; il riferimento degli endpoint in `doc/API.md`.
 

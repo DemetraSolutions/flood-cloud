@@ -105,14 +105,16 @@ describe('database access cannot be bypassed outside src/db', () => {
 
   describe('companies and places', () => {
     const MIRROR = 'shared/security/scope/group-mirror.ts';
+    // The write service of companies and places (doc/Tasks.md 5.6): the only other file that names the collections, the originals and their copies together.
+    const WRITER = 'shared/legacy-write/companies-places.writer.ts';
     const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
 
     it('reads the copies in common.companies and common.places only through group-mirror.ts', async () => {
       let seen = false;
       for (const file of await filesUnder(SRC)) {
         const path = posix(file);
-        if (path.startsWith('db/') || path.startsWith('tools/')) {
-          // The tools read the originals in the group databases; only sync-copies may touch the copies (checked below).
+        if (path.startsWith('db/') || path.startsWith('tools/') || path === WRITER) {
+          // The tools read the originals in the group databases; only sync-copies may touch the copies (checked below); the writer is checked in its own test.
           continue;
         }
         const names = [...(await readFile(file, 'utf8')).matchAll(/\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/g)].map((match) => match[0]);
@@ -128,7 +130,7 @@ describe('database access cannot be bypassed outside src/db', () => {
     it('has no file outside group-mirror.ts, src/db and tools/sync-copies that names the common database and a copy collection', async () => {
       for (const file of await filesUnder(SRC)) {
         const path = posix(file);
-        if (path === MIRROR || path.startsWith('db/') || path.startsWith('tools/sync-copies/')) {
+        if (path === MIRROR || path === WRITER || path.startsWith('db/') || path.startsWith('tools/sync-copies/')) {
           continue;
         }
         const text = await readFile(file, 'utf8');
@@ -156,6 +158,21 @@ describe('database access cannot be bypassed outside src/db', () => {
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
       assert.equal([...text.matchAll(/\.aggregate\(/g)].length, 2);
+    });
+
+    it('lets only the write service write companies and places, in a transaction, from a verified group access', async () => {
+      const writers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path === WRITER) {
+          const text = await readFile(file, 'utf8');
+          writers.push(path);
+          assert.ok(text.includes('groupDatabaseFor(principal, access, databases)'), 'the writer opens the group database from the verified access');
+          assert.ok(text.includes('databases.transaction('), 'the writer runs in a transaction');
+          assert.ok(!/\.group\(/.test(text) && !text.includes('analytics'), 'the writer neither opens a group database by itself nor uses the analytics connection');
+        }
+      }
+      assert.deepEqual(writers, [WRITER]);
     });
 
     it('keeps the copies away from the analytics connection', async () => {

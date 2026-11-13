@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { sendPage } from '../../shared/http/envelope.ts';
+import { sendRevalidatedPage } from '../../shared/http/etag.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
 import type { CompaniesQuery, GroupsQuery, PlacesQuery } from './reference.schemas.ts';
 import type { ReferenceService } from './reference.service.ts';
@@ -18,17 +18,17 @@ export interface ReferenceController {
  */
 export function createReferenceController(service: ReferenceService): ReferenceController {
   return {
-    listGroups: async (_req, res) => {
+    listGroups: async (req, res) => {
       const { items, page } = await service.listGroups(res.locals.auth!, inputOf<GroupsQuery>(res, 'query'));
-      sendPage(res, items, page);
+      sendRevalidatedPage(req, res, items, page);
     },
-    listCompanies: async (_req, res) => {
+    listCompanies: async (req, res) => {
       const { items, page } = await service.listCompanies(res.locals.auth!, res.locals.groupAccess!, inputOf<CompaniesQuery>(res, 'query'));
-      sendPage(res, items, page);
+      sendRevalidatedPage(req, res, items, page);
     },
-    listPlaces: async (_req, res) => {
+    listPlaces: async (req, res) => {
       const { items, page } = await service.listPlaces(res.locals.auth!, res.locals.groupAccess!, inputOf<PlacesQuery>(res, 'query'));
-      sendPage(res, items, page);
+      sendRevalidatedPage(req, res, items, page);
     },
   };
 }

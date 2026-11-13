@@ -119,6 +119,7 @@ export const GROUPS_OWNED_CATALOGS: readonly string[] = Object.freeze([
  * the state flags (`demo`, `status`, `trash`), the feature flags, the languages, the statistics settings, the
  * enabled state and the key (set only, never read back) of each integration, the catalogs of {@link GROUPS_OWNED_CATALOGS} and
  * `updateDate`. Everything else (`apiKey`, `databaseHost`, `filesHost`, `type`, `plan`, `expirationDate`, `places`) belongs to the legacy.
+ * The management of the group (and its catalogs) writes only these: the registry adds {@link GROUPS_PLACES_FIELD} for the write service of places.
  */
 export const GROUPS_OWNED_FIELDS: readonly string[] = Object.freeze([
   'name',
@@ -137,6 +138,86 @@ export const GROUPS_OWNED_FIELDS: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * The list `[{ _id, insertDate }]` of the places of the group in the `groups` document, which the write service of companies and places
+ * recalculates in full on every write of a place (`doc/Tasks.md` 5.6.2). It is registered as owned, but it is not in {@link GROUPS_OWNED_FIELDS}:
+ * the management of the group and its catalogs can never write it.
+ */
+export const GROUPS_PLACES_FIELD = 'places';
+
+/**
+ * Fields of the legacy `companies` documents of a group database this backend may `$set` (`doc/Tasks.md` 5.6.3 and the legacy
+ * analysis §3.2): the registry data of the company and its state. The blocks the legacy and the POS write as a whole (`settings`,
+ * `fattura_elettronica`, `invoicesPS`, `invoicesPSValues`, `banks`, `ticketsSuppliers`, `medias`) and every key unknown to this
+ * backend are never written, so they survive every write. `trash` is written by trash and restore only; `updateDate` by every write.
+ */
+export const COMPANIES_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'name',
+  'code',
+  'code2',
+  'address',
+  'postcode',
+  'city',
+  'countryAreaCode',
+  'countryCode',
+  'currencyCode',
+  'email',
+  'telephone',
+  'status',
+  'trash',
+  'expirationDate',
+  'updateDate',
+]);
+
+/**
+ * Fields of the legacy `places` documents of a group database this backend may `$set`: the registry data of the place and its state
+ * (`doc/Tasks.md` 5.6.3 and the legacy analysis §3.2). `devices`, `rooms`, `storages`, `printStations`, `productionCenter`, the
+ * configuration blocks (`general`, `receipt`, `ordering`, `roomsSettings`, `openingTime`…), `integrations` and every unknown key are
+ * never written: the POS and the legacy replace them whole, so writing them from here would corrupt them. `plan` is not included
+ * (only PSA may set it in the legacy: left out until a route needs it). `trash` is written by trash and restore only.
+ */
+export const PLACES_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'name',
+  'address',
+  'postcode',
+  'city',
+  'countryAreaCode',
+  'countryCode',
+  'contact',
+  'email',
+  'telephone',
+  'companyId',
+  'listId',
+  'ecommerceListId',
+  'invoicePS',
+  'timezone',
+  'status',
+  'trash',
+  'expirationDate',
+  'updateDate',
+]);
+
+/**
+ * Fields of the `reserve_with_google` documents of the common database (the feed of Reserve with Google, read by the legacy
+ * integration service) this backend may `$set`: the whole record, written only when a place is restored with the integration
+ * active and complete. The record is removed (`deleteOne` on `{ groupId, placeId }`) when the place is trashed or deleted.
+ */
+export const RESERVE_WITH_GOOGLE_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'groupId',
+  'companyId',
+  'placeId',
+  'category',
+  'name',
+  'telephone',
+  'url',
+  'geo.latitude',
+  'geo.longitude',
+  'geo.address.streetAddress',
+  'geo.address.locality',
+  'geo.address.postalCode',
+  'geo.address.country',
+]);
+
+/**
  * Ownership registry of every collection the backend touches (`doc/Tasks.md` 0.1 and 0.2).
  * A new collection must be registered here before any code can use it.
  */
@@ -151,8 +232,10 @@ export const COLLECTIONS = {
         { name: 'dealerId_1', key: { dealerId: 1 } },
       ],
     },
-    groups: { ownership: 'legacy-write', ownedFields: GROUPS_OWNED_FIELDS },
+    groups: { ownership: 'legacy-write', ownedFields: [...GROUPS_OWNED_FIELDS, GROUPS_PLACES_FIELD] },
     countries: { ownership: 'legacy-read' },
+    // The Reserve with Google feed of the places: only the write service of places touches it (restore: upsert; trash and delete: deleteOne).
+    reserve_with_google: { ownership: 'legacy-write', ownedFields: RESERVE_WITH_GOOGLE_OWNED_FIELDS },
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
     activityEvents: { ownership: 'new', indexes: ACTIVITY_EVENTS_INDEXES },
     dealers: { ownership: 'new', indexes: DEALERS_INDEXES, validator: DEALERS_VALIDATOR },
@@ -165,9 +248,11 @@ export const COLLECTIONS = {
     sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
   },
   group: {
-    // Read only by the tools (sync:copies, profile:legacy): the application reads companies and places from the copies in the common database.
-    companies: { ownership: 'legacy-read' },
-    places: { ownership: 'legacy-read' },
+    // Written only by the write service of companies and places (`shared/legacy-write`, `$set` of the owned fields, plus insert and delete of
+    // whole documents, decided in `doc/Tasks.md` 5.6) in a transaction with the copy in the common database; read by the tools (sync:copies,
+    // profile:legacy). The application reads companies and places from the copies in the common database.
+    companies: { ownership: 'legacy-write', ownedFields: COMPANIES_OWNED_FIELDS },
+    places: { ownership: 'legacy-write', ownedFields: PLACES_OWNED_FIELDS },
     // Read only, to check that the ids a catalog of the group refers to exist.
     products: { ownership: 'legacy-read' },
     products_categories: { ownership: 'legacy-read' },

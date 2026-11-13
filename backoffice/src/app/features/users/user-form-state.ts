@@ -1,5 +1,14 @@
 import { httpResource } from '@angular/common/http';
-import { computed, effect, inject, linkedSignal, Service, Signal, signal } from '@angular/core';
+import {
+  computed,
+  effect,
+  inject,
+  linkedSignal,
+  resource,
+  Service,
+  Signal,
+  signal,
+} from '@angular/core';
 import {
   apply,
   disabled,
@@ -18,6 +27,7 @@ import { GroupFeatures } from '../../core/groups/group-features';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { SUPPORTED_LANGUAGES } from '../../core/i18n/language';
 import { ReferenceApi, ReferenceItem } from '../../core/reference/reference-api';
+import { ReferenceStore } from '../../core/reference/reference-store';
 import { SessionService } from '../../core/session/session.service';
 import { Role } from '../../core/session/session.types';
 import {
@@ -71,6 +81,7 @@ export interface FavoritesRef {
 export class UserFormState {
   private readonly api = inject(UsersApi);
   private readonly reference = inject(ReferenceApi);
+  private readonly store = inject(ReferenceStore);
   private readonly session = inject(SessionService);
   private readonly features = inject(GroupFeatures);
   readonly i18n = inject(I18nService);
@@ -335,11 +346,14 @@ export class UserFormState {
 
   // Groups data the POS section needs.
   readonly canReadFavorites = computed(() => this.session.can('products:read'));
-  private readonly priceListsResource = httpResource<ApiData<PriceList[]>>(() => {
-    const groupId = this.groupId();
-    return this.user() !== null && this.posApplies() && groupId !== undefined
-      ? `/v1/groups/${encodeURIComponent(groupId)}/lookup/price-lists`
-      : undefined;
+  private readonly priceListsResource = resource({
+    params: () => {
+      const groupId = this.groupId();
+      return this.user() !== null && this.posApplies() && groupId !== undefined
+        ? groupId
+        : undefined;
+    },
+    loader: ({ params }) => this.store.page<PriceList>(params, 'price-lists'),
   });
   private readonly favoritesResource = httpResource<ApiData<FavoritesRef[]>>(() => {
     const groupId = this.groupId();

@@ -31,8 +31,8 @@ export function actors(office: Backoffice) {
     return tokens.get(key)!;
   };
   /** A request as `actor`, with its JSON body read (`undefined` for an empty one). */
-  const call = async (actor: ObjectId, method: string, path: string, body?: unknown): Promise<Reply<any>> => {
-    const response = await office.call(method, path, await tokenOf(actor), body);
+  const call = async (actor: ObjectId, method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<Reply<any>> => {
+    const response = await office.call(method, path, await tokenOf(actor), body, headers);
     const text = await response.text();
     return { status: response.status, headers: response.headers, body: text === '' ? undefined : JSON.parse(text) };
   };
