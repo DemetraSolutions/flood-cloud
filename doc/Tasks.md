@@ -92,7 +92,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **D-12** Refresh token del backoffice nel **body** della risposta (niente cookie), conservato dal backoffice in `sessionStorage` (sopravvive al ricaricamento, per singola scheda); access token solo in memoria. Mitigazioni: CSP stretta con Trusted Types, rotazione a ogni uso con rilevamento del riuso. Riportata in `doc/Security-Model.md` §4 e §12.1. Decisione dell'utente del 2026-11-02.
 - [x] **D-13** Feature flag del gruppo: catalogo confermato con tutte le feature di 4.1 (`delivery` e `customersApp` restano, gestibili dal PSA); le feature valgono anche per PSA e D quando lavorano in un gruppo; `plan`, `type` ed `expirationDate` del gruppo sono deprecati (conservati, mai letti né esposti). Chi modifica cosa: nome, descrizione, lingue e impostazioni statistiche PSA, D, SA; feature e integrazioni PSA e D; `demo` solo PSA. Decisione dell'utente del 2026-11-06.
 - [x] **D-14** Cancellazione degli utenti: cestino (`trash`) e, dal cestino, eliminazione definitiva ammessa a PSA, D e SA nel proprio perimetro e con le regole anti-escalation (permesso `users:delete`); il database è condiviso, quindi l'utente sparisce anche dal legacy. Decisione dell'utente del 2026-11-02.
-- [x] **D-15** Univocità dello username: globale, confrontando NFKC, spazi e minuscole, per gli username nuovi o cambiati; i duplicati esistenti (§0.4.1) restano. Decisione dell'utente del 2026-11-02. L'univocità di `vatNumber` (`companies.code`) si decide con l'area 6.
+- [x] **D-15** Univocità dello username: globale, confrontando NFKC, spazi e minuscole, per gli username nuovi o cambiati; i duplicati esistenti (§0.4.1) restano. Decisione dell'utente del 2026-11-02. `vatNumber` (`companies.code`): **univoco nel gruppo** tra le aziende non nel cestino (indice univoco parziale, `409` sui doppioni nuovi), dopo la verifica dei duplicati esistenti nei dati; decisione dell'utente del 2026-11-13, da realizzare nell'area 6.
 - [x] **D-16** Valori ammessi di `APP_ENV`: `development` e `production`, come i database esistenti. Decisione dell'utente del 2026-11-01.
 - [x] **D-17** Login solo con username: corrispondenza esatta, altrimenti senza maiuscole se esiste un solo utente con lo stesso username normalizzato. Email e telefono no (duplicati, §0.4.1). Decisione dell'utente del 2026-11-02.
 - [ ] **D-18** Onboarding: preset per tipologia (risto, retail, beauty) e struttura minima del database di un gruppo nuovo richiesta dal legacy.
@@ -148,8 +148,8 @@ Profilazione in sola lettura di `development_*` e, con consenso esplicito dell'u
 - [x] **0.5.6** `doc/Product-Scope.md`, `doc/Architecture.md` §4, `doc/Security-Model.md` §3 e §5, `doc/Data-Model.md` (collection `storeServer*`): eliminare la superficie `/store/v1` e indicare che l'app del server di punto vendita è separata e usa le API `/v1` (D-22, D-23, D-24). *Il 2026-11-12 aggiornati `doc/Security-Model.md`, `doc/Data-Model.md` e `doc/API.md`; restano `doc/Product-Scope.md` e `doc/Architecture.md` §4. Fatto il 2026-11-13: verificati e allineati entrambi.*
 
 ### 0.6 Rischi del legacy in produzione (fuori da questo repository)
-- [ ] **0.6.1** Valutare la rotazione delle credenziali Atlas: oggi sono scritte nel repository legacy (ConfigMap, `launch.json`). Dopo una rotazione vanno aggiornati il legacy e il `.env` locale (D-02).
-- [ ] **0.6.2** Valutare correzioni urgenti nel legacy:
+- [ ] **0.6.1** Valutare la rotazione delle credenziali Atlas: oggi sono scritte nel repository legacy (ConfigMap, `launch.json`). Dopo una rotazione vanno aggiornati il legacy e il `.env` locale (D-02). *Decisione dell'utente del 2026-11-13: la valuta e la esegue l'utente fuori da questo progetto; non blocca le aree successive.*
+- [x] **0.6.2** Valutare correzioni urgenti nel legacy. *Decisione dell'utente del 2026-11-13: rimandate, il legacy non si tocca; rischi accettati fino alla dismissione (5.7).*
   - `signup` pubblico, che crea utenti con qualsiasi ruolo;
   - con la sola API key di un POS si elencano tutti i gruppi con le loro API key e si modificano utenti di altri tenant;
   - `?groupId=` di un dealer non verificato;
@@ -523,7 +523,7 @@ Strategia in §0.3 (D-01, D-20). I task di 5.3 si fanno nel repository legacy `c
 - [x] **5.3.2** companies: `insertOne`, `updateOne`, `updateMany` e `deleteMany` in transazione con il blocco di copia.
 - [x] **5.3.3** places: `insertOne`, `updateOne`, `updateMany` e `deleteMany` in transazione con il blocco di copia. Valgono anche per gli aggiornamenti del POS: `devices.<i>.info`, `rooms`, `suspendedToday`. La `session` va passata a ogni operazione, compresi gli aggiornamenti di `groups.places[]` e `reserve_with_google`.
 - [x] **5.3.4** `groups/generate`: inserimento di azienda e punto vendita dentro la transazione, con il blocco di copia.
-- [ ] **5.3.5** `updateOne` eseguito sull'`_id` risolto prima della scrittura; con `upsert` si copia anche il documento creato.
+- [x] **5.3.5** `updateOne` eseguito sull'`_id` risolto prima della scrittura; con `upsert` si copia anche il documento creato. *Decisione dell'utente del 2026-11-13: non si applica; l'`updateOne` dei places resta fuori transazione come nel legacy e le discrepanze le segnala la riconciliazione (5.5).*
 - [x] **5.3.6** Blocco di `$out` e `$merge` nelle `aggregate` del legacy. *Rifiuto di `$out`/`$merge` nelle aggregate dei servizi companies e places del legacy (decisione dell'utente del 2026-11-13).*
 - [x] **5.3.7** Nessun errore silenziato: se la copia fallisce, la transazione si annulla e la richiesta risponde con un errore; il motivo va nel log.
 - [x] **5.3.8** Interruttore da variabile d'ambiente per attivare la copia ambiente per ambiente (prima development, poi produzione).
@@ -605,7 +605,7 @@ Restano nel documento (e nella sua copia), fuori dal modello di dominio e non es
 
 Task:
 - [ ] **6.1.1** Tipi, mapper e validatori fiscali (P.IVA, codice fiscale, codice destinatario, PEC, regime fiscale), rigorosi in scrittura e tolleranti in lettura.
-- [ ] **6.1.2** Indici del common: `groupId + status`, `groupId + name`; `vatNumber` univoco per gruppo solo dopo D-15.
+- [ ] **6.1.2** Indici del common: `groupId + status`, `groupId + name`; `vatNumber` univoco per gruppo sulle aziende non nel cestino (D-15), dopo la verifica dei duplicati esistenti.
 
 ### 6.2 Backend
 - [ ] **6.2.1** Elenco delle aziende di un gruppo nello scope: filtri per stato, cestino, paese e provincia, ricerca, paginazione a cursore.
