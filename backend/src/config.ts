@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { Secret } from './shared/security/secret.ts';
 
 /** Execution environments accepted for `APP_ENV`. */
@@ -45,6 +46,8 @@ export interface Config {
   readonly appEnv: AppEnv;
   /** TCP port to listen on (`PORT`). */
   readonly port: number;
+  /** Address to bind (`HOST`): an IP literal or a hostname; `undefined` binds every interface. */
+  readonly host: string | undefined;
   /**
    * The configured MongoDB clusters by id. Single-cluster mode (`MONGODB_CLUSTERS` unset) has just `cluster0`,
    * built from `MONGODB_URI` and `MONGODB_ANALYTICS_URI`; otherwise one entry per listed id, built from
@@ -108,6 +111,8 @@ export interface Config {
   readonly rateLimitStoreActivationPerIp: number;
   /** Activation code creations, cancellations and key revocations per minute allowed to a user (`RATE_LIMIT_STORE_KEY_ADMIN_PER_USER`). */
   readonly rateLimitStoreKeyAdminPerUser: number;
+  /** Files host written in the `filesHost` of the groups the onboarding creates (`GROUP_FILES_HOST`, an `https` URL without trailing slash), `''` when unset. */
+  readonly groupFilesHost: string;
   /** Minutes an activation code of a store key stays valid (`STORE_ACTIVATION_CODE_TTL_MINUTES`). */
   readonly storeActivationCodeTtlMinutes: number;
   /** Image uploads per minute allowed to a user (`RATE_LIMIT_MEDIA_UPLOAD_PER_USER`): each decodes and resizes an image and writes five objects. */
@@ -165,6 +170,26 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1']);
 function optionalVariable(env: Env, variable: string): string | undefined {
   const raw = env[variable];
   return raw === '' ? undefined : raw;
+}
+
+/** A DNS hostname: dot-separated labels of letters, digits and inner hyphens, at most 253 characters overall. */
+const HOSTNAME = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
+
+/**
+ * Reads the optional `HOST` variable (the address the server binds) and records an issue if it is neither an IP literal nor a hostname.
+ *
+ * @returns The host, or `undefined` when unset (bind every interface) or after recording an issue.
+ */
+function readHost(env: Env, issues: ConfigIssue[]): string | undefined {
+  const raw = optionalVariable(env, 'HOST');
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (isIP(raw) === 0 && !HOSTNAME.test(raw)) {
+    issues.push({ variable: 'HOST', reason: 'must be an IP address or a hostname' });
+    return undefined;
+  }
+  return raw;
 }
 
 /**
@@ -253,6 +278,26 @@ function checkOrigin(entry: string, appEnv: string | undefined): string | undefi
     return undefined;
   }
   return 'https is required (http is allowed only for localhost and 127.0.0.1 when APP_ENV=development)';
+}
+
+/**
+ * Reads `GROUP_FILES_HOST`, the host of the files of the groups the onboarding creates: unset is `''`; a value must be an `https` URL without credentials, query or fragment.
+ *
+ * @returns The URL without the trailing slashes, `''` when unset, or `undefined` after recording an issue.
+ */
+function readFilesHost(env: Env, issues: ConfigIssue[]): string | undefined {
+  const raw = optionalVariable(env, 'GROUP_FILES_HOST');
+  if (raw === undefined) {
+    return '';
+  }
+  if (URL.canParse(raw)) {
+    const url = new URL(raw);
+    if (url.protocol === 'https:' && url.username === '' && url.password === '' && url.search === '' && url.hash === '') {
+      return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+    }
+  }
+  issues.push({ variable: 'GROUP_FILES_HOST', reason: 'must be an https URL without credentials, query or fragment' });
+  return undefined;
 }
 
 /** Shape of a Google Cloud Storage bucket name (3 to 63 characters, lower case letters, digits, dashes, underscores and dots, starting and ending with a letter or a digit). */
@@ -503,6 +548,8 @@ export function loadConfig(env: Env): Config {
   // 0 asks the operating system for a free port: the tests use it so no other process can take the port between choosing and binding it.
   const port = readInteger(env, issues, 'PORT', 3000, 0, 65535);
 
+  const host = readHost(env, issues);
+
   const trustProxy = readInteger(env, issues, 'TRUST_PROXY', 0, 0, 5);
 
   const corsRaw = env['CORS_ALLOWED_ORIGINS'] ?? '';
@@ -549,6 +596,7 @@ export function loadConfig(env: Env): Config {
   const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
   const storeActivationCodeTtlMinutes = readInteger(env, issues, 'STORE_ACTIVATION_CODE_TTL_MINUTES', 1440, 5, 10080);
+  const groupFilesHost = readFilesHost(env, issues);
   const media = readMedia(env, issues);
   const activityLogRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_RETENTION_DAYS', 365, 1, 3650);
   const activityLogErrorRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_ERROR_RETENTION_DAYS', 90, 1, 3650);
@@ -614,6 +662,7 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp === undefined ||
     rateLimitStoreKeyAdminPerUser === undefined ||
     storeActivationCodeTtlMinutes === undefined ||
+    groupFilesHost === undefined ||
     media === undefined ||
     activityLogRetentionDays === undefined ||
     activityLogErrorRetentionDays === undefined
@@ -624,6 +673,7 @@ export function loadConfig(env: Env): Config {
   return Object.freeze({
     ...database,
     port,
+    host,
     trustProxy,
     corsAllowedOrigins: Object.freeze(corsAllowedOrigins),
     accessTokenTtlSeconds,
@@ -650,6 +700,7 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp,
     rateLimitStoreKeyAdminPerUser,
     storeActivationCodeTtlMinutes,
+    groupFilesHost,
     media,
     activityLogRetentionDays,
     activityLogErrorRetentionDays,

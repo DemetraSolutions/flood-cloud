@@ -92,6 +92,7 @@ describe('the requests of a store key', () => {
       ['GET', `/groups/${g}`],
       ['GET', `/groups/${g}/users`],
       ['GET', '/groups'],
+      ['POST', '/groups', { group: { name: 'x' } }],
       ['GET', '/me'],
       ['GET', '/activity-log'],
       ['GET', '/dealers'],
@@ -121,7 +122,9 @@ describe('the requests of a store key', () => {
     const revoked = await world.activate(other());
     await call(world.office.cluster.psa, 'DELETE', world.keyPath(0, other()));
     const bodies = new Set<string>();
-    const forged = `fc_sk_${store.key.slice(6, 48)}A`;
+    // Always a different last symbol (a base64url symbol can share its meaning with another when the last bits are padding): the forged key is never the real one.
+    const real = store.key.slice(0, 48);
+    const forged = `${real.slice(0, -1)}${real.endsWith('A') ? 'B' : 'A'}`;
     for (const [name, headers] of [
       ['no header', {}],
       ['not Bearer', { authorization: `Basic ${store.key}` }],

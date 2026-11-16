@@ -45,14 +45,14 @@ export function emptyAsNull<T>(inner: Schema<T | null>): Schema<T | null> {
 }
 
 /** A free text of the e-invoicing data: trimmed, at most `max` characters, `null` or `''` for none. */
-const freeText = (max: number) => emptyAsNull(nullable(string({ max, trim: true })));
+export const freeText = (max: number) => emptyAsNull(nullable(string({ max, trim: true })));
 
 /** A text that must satisfy a check, or `null`/`''` for none; the value kept is the one `normalize` returns (`undefined` rejects it with `format`). */
-const checkedText = (max: number, normalize: (text: string) => string | undefined) => emptyAsNull(nullable(transform(string({ max, trim: true }), normalize, 'format')));
+export const checkedText = (max: number, normalize: (text: string) => string | undefined) => emptyAsNull(nullable(transform(string({ max, trim: true }), normalize, 'format')));
 
 export const alpha2 = () => string({ min: 2, max: 2, pattern: /^[A-Z]{2}$/ });
 const province = () => emptyAsNull(nullable(enumOf(ITALIAN_PROVINCES)));
-const upperIf = (valid: (text: string) => boolean) => (text: string): string | undefined => (valid(text.toUpperCase()) ? text.toUpperCase() : undefined);
+export const upperIf = (valid: (text: string) => boolean) => (text: string): string | undefined => (valid(text.toUpperCase()) ? text.toUpperCase() : undefined);
 
 /** `part` of the object is required (a whole block) or optional (a modification). */
 export type Part = <T>(schema: Schema<T>) => Schema<T>;

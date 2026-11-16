@@ -155,3 +155,6 @@ export function isValidCalendarDate(value: string): boolean {
   const date = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
+
+/** What a VAT number or fiscal code of a country other than Italy may be: printable ASCII, without spaces at the ends (no invisible or non-ASCII characters, which would defeat the uniqueness check). */
+export const PRINTABLE_ASCII = /^[\x21-\x7E](?:[\x20-\x7E]*[\x21-\x7E])?$/;

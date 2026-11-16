@@ -508,6 +508,13 @@ export const routes: Routes = [
           ...userRoutes('platform/users', [role('PSA'), permission('users:read')]),
           ...dealerRoutes,
           {
+            path: 'tools/new-customer',
+            canMatch: [role('PSA', 'D'), permission('groups:create')],
+            title: 'NEW_CUSTOMER.TITLE',
+            loadComponent: () =>
+              import('./features/new-customer/new-customer').then((m) => m.NewCustomer),
+          },
+          {
             path: 'activity-log',
             canMatch: [permission('activityLog:read')],
             title: 'ACTIVITY.TITLE',

@@ -180,10 +180,15 @@ export async function run(
   try {
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(config.port, () => {
+      const listening = (): void => {
         server.off('error', reject);
         resolve();
-      });
+      };
+      if (config.host === undefined) {
+        server.listen(config.port, listening);
+      } else {
+        server.listen(config.port, config.host, listening);
+      }
     });
   } catch (error) {
     logger.error('server failed to start', { error });

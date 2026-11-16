@@ -1,3 +1,4 @@
+import { Role } from '../session/session.types';
 import { MENU, MenuItem, visibleMenu } from './menu';
 
 const allowAll = (): boolean => true;
@@ -114,6 +115,19 @@ describe('visibleMenu', () => {
     expect(only('fidelity:read')).not.toContain('promotions');
     expect(only('products:read')).toEqual(expect.arrayContaining(['products', 'promotions']));
     expect(only('products:read')).not.toContain('fidelity');
+  });
+
+  it('shows "Strumenti › Nuovo cliente" to platform administrators and dealers with groups:create', () => {
+    const tools = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role).find((i) => i.id === 'tools');
+    expect(ids([...(tools('PSA', 'groups:create')?.children ?? [])])).toEqual(['new-customer']);
+    expect(tools('D', 'groups:create')).toBeDefined();
+    expect(tools('SA', 'groups:create')).toBeUndefined();
+    expect(tools('PSA', 'groups:read')).toBeUndefined();
+    expect(MENU.find((i) => i.id === 'tools')?.children?.[0]).toMatchObject({
+      route: '/tools/new-customer',
+      labelKey: 'MENU.NEW_CUSTOMER',
+    });
   });
 
   it('shows entries limited to some roles only to those roles', () => {

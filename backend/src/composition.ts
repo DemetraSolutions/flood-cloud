@@ -62,7 +62,7 @@ import { createPlacesController } from './modules/places/places.controller.ts';
 import { createPlacesRepository } from './modules/places/places.repository.ts';
 import { createPlacesRoutes } from './modules/places/places.routes.ts';
 import { createPlacesService } from './modules/places/places.service.ts';
-import { createIdempotencyStore } from './shared/http/idempotency.ts';
+import { createIdempotencyStore, idempotencyBodyKey } from './shared/http/idempotency.ts';
 import { createReferenceController } from './modules/reference/reference.controller.ts';
 import { createReferenceRepository } from './modules/reference/reference.repository.ts';
 import { createReferenceRoutes } from './modules/reference/reference.routes.ts';
@@ -74,7 +74,12 @@ import { createStoreKeysRepository } from './modules/store-keys/store-keys.repos
 import { createStoreKeysRoutes } from './modules/store-keys/store-keys.routes.ts';
 import { createStoreKeysService } from './modules/store-keys/store-keys.service.ts';
 import { createStoreStateReader } from './modules/store-keys/store-state.ts';
-import { companiesPlacesReader, companiesPlacesWriter } from './shared/legacy-write/companies-places.writer.ts';
+import { companiesPlacesReader, companiesPlacesWriter, groupCreationWriter } from './shared/legacy-write/companies-places.writer.ts';
+import { issueGroupCreationAccess } from './shared/security/scope/group-access.ts';
+import { createOnboardingController } from './modules/groups/onboarding.controller.ts';
+import { createOnboardingRepository } from './modules/groups/onboarding.repository.ts';
+import { createOnboardingRoutes } from './modules/groups/onboarding.routes.ts';
+import { createOnboardingService } from './modules/groups/onboarding.service.ts';
 import { createCredentialsRepository } from './modules/users/credentials.repository.ts';
 import { createGroupDirectoryRepository } from './modules/users/group-directory.repository.ts';
 import { createGroupOptionsReader } from './modules/users/group-options.ts';
@@ -194,7 +199,20 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       newId: () => randomBytes(12).toString('hex'),
     }),
   );
-  const idempotency = createIdempotencyStore(databases, now);
+  const idempotency = createIdempotencyStore(databases, idempotencyBodyKey(versionKey), now);
+  const onboarding = createOnboardingController(
+    createOnboardingService({
+      repository: createOnboardingRepository(databases),
+      users: usersService,
+      directory: companiesRepository,
+      newAccess: (principal) => issueGroupCreationAccess(principal, databases),
+      writerFor: (principal, access) => groupCreationWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
+      activityLog,
+      transaction: (work) => databases.transaction(work),
+      filesHost: config.groupFilesHost,
+      now,
+    }),
+  );
   const storeKeysState = createStoreStateReader({ groups, databases });
   const storeKeysRepository = createStoreKeysRepository(databases);
   const storeKeysService = createStoreKeysService({
@@ -225,7 +243,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
-    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController),
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
       ...createCatalogRoutes(catalogsService, CATALOGS),
       ...createGroupServicesRoutes(groupServices),
       ...createLookupRoutes(lookup),

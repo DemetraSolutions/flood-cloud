@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
-import type { ClientSession, Collection, Document } from 'mongodb';
+import type { ClientSession, Collection, Db, Document } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
-import { groupDatabaseFor } from '../security/scope/group-access.ts';
+import { groupCreationDatabase, groupDatabaseFor } from '../security/scope/group-access.ts';
 import type { GroupAccess } from '../security/scope/group-access.ts';
 import type { AuthPrincipal, ScopeHolder } from '../security/scope/principal.ts';
 import { companyInScope, placeInScope } from '../security/scope/scope-filters.ts';
@@ -305,7 +305,7 @@ function completionOf(current: Document, set: Document, containers: readonly str
  * @throws {UnknownClusterError} If the cluster of the access is not configured.
  */
 export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAccess, databases: Databases, options: WriterOptions): CompaniesPlacesWriter {
-  return createWriter(principal, access, databases, options);
+  return createWriter(principal, groupDatabaseFor(principal, access, databases), access, databases, options).writer;
 }
 
 /**
@@ -317,12 +317,54 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
  * @param databases Database accessor.
  */
 export function companiesPlacesReader(principal: ScopeHolder, access: GroupAccess, databases: Databases, options: Pick<WriterOptions, 'versionKey'>): Pick<CompaniesPlacesWriter, 'read'> {
-  const { read } = createWriter(principal, access, databases, options);
+  const { read } = createWriter(principal, groupDatabaseFor(principal, access, databases), access, databases, options).writer;
   return { read };
 }
 
-function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Databases, options: WriterOptions): CompaniesPlacesWriter {
-  const groupDb = groupDatabaseFor(principal, access, databases);
+/**
+ * A step of the creation of a customer: it runs inside the transaction of the caller, with the session of that transaction, and writes nothing outside it.
+ * The outcome is the one of {@link CompaniesPlacesWriter.createCompany} and {@link CompaniesPlacesWriter.createPlace}.
+ */
+export type CreationStep = (session: ClientSession) => Promise<WriteOutcome>;
+
+/** The first company and the first place of a group that is being created (`doc/Tasks.md` area 8), as steps of the transaction that creates the group. */
+export interface GroupCreationWriter {
+  /**
+   * The creation of the first company, with the same document, check and copy as {@link CompaniesPlacesWriter.createCompany}, in the transaction of the caller.
+   *
+   * @param fields The owned fields of the company: `name` is required.
+   * @returns The step to run in the transaction.
+   * @throws {InvalidWriteInputError} If a field is not allowed, invalid or missing (before any write).
+   */
+  insertCompany(fields: NewCompanyFields): CreationStep;
+  /**
+   * The creation of the first place, with the same document, check, copy and `groups.places[]` as {@link CompaniesPlacesWriter.createPlace}, in the transaction of the caller.
+   * The group document must already be written in the same transaction.
+   *
+   * @param fields The owned fields of the place: `name` and `companyId` are required.
+   * @returns The step to run in the transaction.
+   * @throws {InvalidWriteInputError} If a field is not allowed, invalid or missing (before any write).
+   */
+  insertPlace(fields: NewPlaceFields): CreationStep;
+}
+
+/**
+ * Opens the creation steps of the first company and place of a group that does not exist yet, from the access {@link issueGroupCreationAccess} gave to this caller. It is not a
+ * way to write into a group that exists: the access is refused by every other opener, and this one takes only that kind of access.
+ *
+ * @param principal The authenticated caller the creation access was issued to.
+ * @param access The creation access.
+ * @param databases Database accessor.
+ * @param options The key of the versions, the clock and the limit.
+ * @returns The steps.
+ * @throws {Error} If the access is not a creation access of this caller.
+ */
+export function groupCreationWriter(principal: AuthPrincipal, access: GroupAccess, databases: Databases, options: WriterOptions): GroupCreationWriter {
+  const { insertCompany, insertPlace } = createWriter(principal, groupCreationDatabase(principal, access, databases), access, databases, options);
+  return { insertCompany, insertPlace };
+}
+
+function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, databases: Databases, options: WriterOptions): { readonly writer: CompaniesPlacesWriter } & GroupCreationWriter {
   const groupId = access.groupId;
   const versionKey = options.versionKey;
   const clock = options.now ?? (() => new Date());
@@ -445,6 +487,32 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
       return outcome;
     });
   const none = async (): Promise<void> => undefined;
+  /** The creation of a company, as a step of a transaction: the document is built (and the input checked) here, before the transaction starts. */
+  const insertCompany = (fields: NewCompanyFields): CreationStep => {
+    const id = new ObjectId();
+    const document = newCompanyDocument(id, groupId, fields, clock());
+    return async (session) => {
+      if (await vatNumberTaken(document['code'] as string, id, session)) {
+        return VAT_TAKEN;
+      }
+      await original('companies').insertOne(document, { session });
+      return mirror('companies', id, session);
+    };
+  };
+  /** The creation of a place, as a step of a transaction. */
+  const insertPlace = (fields: NewPlaceFields): CreationStep => {
+    const id = new ObjectId();
+    const document = newPlaceDocument(id, groupId, fields, clock());
+    return async (session) => {
+      if (!(await companyIsUsable(document['companyId'] as ObjectId, session))) {
+        return COMPANY_NOT_FOUND;
+      }
+      await original('places').insertOne(document, { session });
+      const written = await mirror('places', id, session);
+      await recalculatePlaces(session);
+      return written;
+    };
+  };
   const placeEffects = async (session: ClientSession, feed: (() => Promise<void>) | null): Promise<void> => {
     if (feed !== null) {
       await feed();
@@ -452,7 +520,7 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
     await recalculatePlaces(session);
   };
 
-  return {
+  const writer: CompaniesPlacesWriter = {
     currentVersion: async (kind, id) => {
       const document = await original(kind).findOne({ _id: checkObjectId(id, 'id') }, { ...EXACT_TYPES });
       return document === null ? null : versionOf(kind, document, versionKey);
@@ -483,31 +551,9 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
       return { trashed: company['trash'] === true, invoiceSeries: list.map((entry) => entry.name), series: list };
     },
 
-    createCompany: async (fields) => {
-      const id = new ObjectId();
-      const document = newCompanyDocument(id, groupId, fields, clock());
-      return run(async (session) => {
-        if (await vatNumberTaken(document['code'] as string, id, session)) {
-          return VAT_TAKEN;
-        }
-        await original('companies').insertOne(document, { session });
-        return mirror('companies', id, session);
-      });
-    },
+    createCompany: async (fields) => run(insertCompany(fields)),
 
-    createPlace: async (fields) => {
-      const id = new ObjectId();
-      const document = newPlaceDocument(id, groupId, fields, clock());
-      return run(async (session) => {
-        if (!(await companyIsUsable(document['companyId'] as ObjectId, session))) {
-          return COMPANY_NOT_FOUND;
-        }
-        await original('places').insertOne(document, { session });
-        const written = await mirror('places', id, session);
-        await recalculatePlaces(session);
-        return written;
-      });
-    },
+    createPlace: async (fields) => run(insertPlace(fields)),
 
     updateCompany: async (id, expected, changes) => {
       const set = checkChanges(COMPANY_FIELD_KINDS, changes);
@@ -601,6 +647,7 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
         return { outcome: 'deleted', id };
       }),
   };
+  return { writer, insertCompany, insertPlace };
 }
 
 /**

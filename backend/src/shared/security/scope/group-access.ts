@@ -6,6 +6,7 @@ import type { Databases } from '../../../db/databases.ts';
 import { featuresOf } from '../../../modules/groups/features.ts';
 import type { FeatureFlags } from '../../../modules/groups/features.ts';
 import { AppError } from '../../http/errors.ts';
+import { hasPermission } from '../rbac/policy.ts';
 import type { PermissionDecisionHook } from '../rbac/require-permission.ts';
 import type { GroupsRepository } from './groups.repository.ts';
 import type { AuthPrincipal, ScopeHolder } from './principal.ts';
@@ -169,5 +170,60 @@ export function assertVerifiedGroupAccess(principal: ScopeHolder, access: GroupA
  */
 export function groupDatabaseFor(principal: ScopeHolder, access: GroupAccess, databases: Databases): Db {
   assertVerifiedGroupAccess(principal, access);
+  return databases.group(access.groupId, access.clusterId);
+}
+
+/** The accesses issued to create a group, with the user they were issued to: {@link groupCreationDatabase} accepts nothing else. */
+const creations = new WeakMap<GroupAccess, ObjectId>();
+
+/**
+ * Issues the access to a group that does not exist yet, for the onboarding of a new customer (`doc/Tasks.md` area 8). The id is generated here (never taken from the
+ * client), the group is on the cluster of the common database (D-25: the transaction that creates it spans the common and the group database, so there is no choice of cluster),
+ * and only a caller who holds `groups:create` gets one. It is **not** an access {@link groupDatabaseFor} accepts: it opens the group database only through
+ * {@link groupCreationDatabase}, for the user it was issued to, so it can never be used to write into a group that exists.
+ *
+ * @param principal The authenticated caller.
+ * @param databases Database accessor (for the cluster of the common database).
+ * @returns The access, with a new group id.
+ * @throws {Error} If the caller does not hold `groups:create` (a bug: the route has already required it).
+ */
+export function issueGroupCreationAccess(principal: AuthPrincipal, databases: Pick<Databases, 'commonCluster'>): GroupAccess {
+  if (!hasPermission(principal, 'groups:create')) {
+    throw new Error('Group creation access requested without the permission to create groups');
+  }
+  const access: GroupAccess = Object.freeze({ groupId: new ObjectId(), clusterId: databases.commonCluster, crossGroup: true, features: featuresOf(undefined) });
+  creations.set(access, principal.userId);
+  return access;
+}
+
+/**
+ * Checks that an access is a creation access issued to this caller (see {@link issueGroupCreationAccess}): every write that depends on the new group
+ * (its database, its administrator) asks for it first, so none can be aimed at a group that exists.
+ *
+ * @param principal The authenticated caller the access was issued to.
+ * @param access The creation access.
+ * @throws {Error} If the access is not a creation access or was issued to another user.
+ */
+export function assertGroupCreationAccess(principal: AuthPrincipal, access: GroupAccess): void {
+  const owner = creations.get(access);
+  if (owner === undefined || !owner.equals(principal.userId)) {
+    throw new Error('Group database requested without a group creation access');
+  }
+}
+
+/**
+ * Opens the database of a group being created, with an access from {@link issueGroupCreationAccess}.
+ *
+ * @param principal The authenticated caller the access was issued to.
+ * @param access The creation access.
+ * @param databases Database accessor.
+ * @returns The group's database, on the cluster of the common database.
+ * @throws {Error} If the access is not a creation access, was issued to another user, or is not on the cluster of the common database.
+ */
+export function groupCreationDatabase(principal: AuthPrincipal, access: GroupAccess, databases: Databases): Db {
+  assertGroupCreationAccess(principal, access);
+  if (access.clusterId !== databases.commonCluster) {
+    throw new Error('Group database requested without a group creation access');
+  }
   return databases.group(access.groupId, access.clusterId);
 }

@@ -16,7 +16,7 @@ export const MAX_TIME_SLOTS = 48;
 /** The time of day, `HH:mm`. */
 const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-const featuresShape = Object.fromEntries(FEATURES.map((feature) => [feature, optional(boolean())])) as { readonly [K in Feature]: Schema<boolean, true> };
+export const featuresShape = Object.fromEntries(FEATURES.map((feature) => [feature, optional(boolean())])) as { readonly [K in Feature]: Schema<boolean, true> };
 
 /** The state of one integration in a request: switched on or off, and its key set (`null` removes it). The key is never returned. */
 const integrationState = object({ enabled: optional(boolean()), apiKey: optional(nullable(string({ min: 16, max: 256, pattern: API_KEY_PATTERN, normalize: false }))) });

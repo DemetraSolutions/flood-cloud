@@ -1081,6 +1081,41 @@ Rappresentazione del gruppo:
 - **Errori:** comuni; `403`; `404`
 - **Cache:** `ETag` e `304`
 
+## Nuovo cliente (`/v1`, passo 8A)
+
+Sostituisce il form "Nuovo cliente" e `groups/generate` del legacy: **una sola operazione atomica e idempotente** che crea il gruppo, il suo super amministratore (SA), la prima azienda, il primo punto vendita e i reparti, in una transazione sul cluster comune. Il gruppo nasce sempre sul cluster comune (D-25): `dataCluster` non è accettato.
+
+### POST /v1/groups
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `groups:create` (nel tetto di PSA e D soltanto: SA, CA, PA ed E `403`)
+- **Header:** `Idempotency-Key` obbligatorio (UUID, vedi "Idempotenza" in "Punti vendita"): la stessa chiave con lo stesso body dà la stessa risposta e **non crea un secondo gruppo**; con un body diverso `409` (`issue: "reused"`). Una richiesta che fallisce libera la chiave. Limite per utente come le creazioni di utenti (ogni creazione calcola un hash scrypt): oltre la soglia `429 RATE_LIMITED` con `Retry-After`
+- **Body** (`application/json`, massimo 32 KB; allowlist: ogni chiave non elencata è `422` `unknown`):
+  - `group`: `name` (1–200, obbligatorio); `features` (facoltativo, oggetto con le 15 feature del catalogo, ognuna booleana e facoltativa: libere per PSA e D; senza indicazione valgono `cash` e `productsVariants` accese, le altre spente); `demo` (booleano, **solo PSA**); `dealerId` (24 esadecimali, **solo PSA**).
+  - `company`: `name` (1–150) e `vatNumber` (1–30) obbligatori; `address` con `street`, `postcode`, `city`, `country` (ISO alpha-2 maiuscolo) obbligatori e `province` facoltativa; `fiscalCode`, `email`, `phone` facoltativi; `eInvoicing` facoltativo con `recipientCode` (6–7 caratteri alfanumerici, maiuscolo), `pec` (indirizzo e-mail). Il form non ha l'hub di fatturazione: è sempre vuoto (`hub` è `422` `unknown`).
+  - `place`: `name` (1–150, l'insegna) obbligatorio; `address` facoltativo (`street`, `postcode`, `city` obbligatori e `province` facoltativa: è la casella "dati diversi dall'azienda" del form; senza, il punto vendita ha l'indirizzo dell'azienda; il paese è quello dell'azienda); `contactName`, `email`, `phone` facoltativi; `plan` (`basic`, `advanced`, `enterprice`, `tgm-secondary`, `desk-secondary`; senza `advanced`); `expirationDate` (data-ora ISO 8601 UTC, oppure una sola data `2030-12-31` che vale la fine di quel giorno, 23:59:59 `Europe/Rome`; senza, il 31 dicembre dell'anno corrente alle 23:59:59 `Europe/Rome`; `null` non è ammesso).
+  - `user`: l'SA del nuovo gruppo, con `username` (stesse regole dello username, univoco senza distinguere maiuscole, D-15) e `password` (**provvisoria**, policy D-19: 12–128 caratteri) obbligatori; `firstName`, `lastName`, `email`, `phone` facoltativi. L'SA deve cambiare la password al primo accesso.
+  - `taxes`: da 1 a 30 aliquote `{ rate (0–100), department (1–99) }`, ciascuna con il proprio reparto (reparti ripetuti `422` `incorrect` su `taxes.<i>.department`).
+  - **Mai accettati**: `role`, permessi, `status`, `apiKey`, `dataCluster`, id, `groupId`, né altri campi.
+  ```json
+  { "group": { "name": "Nuovo Cliente", "features": { "rooms": true } },
+    "company": { "name": "Cliente Srl", "vatNumber": "00743110157", "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" }, "eInvoicing": { "recipientCode": "ABC1234" } },
+    "place": { "name": "Insegna Centro", "plan": "advanced" },
+    "user": { "username": "mario.rossi", "password": "provvisoria-lunga", "firstName": "Mario", "lastName": "Rossi" },
+    "taxes": [{ "rate": 10, "department": 1 }, { "rate": 22, "department": 2 }] }
+  ```
+- **Regole per ruolo** (`403 FORBIDDEN` con `details` `{ field, issue: "notAllowed" }` per ogni campo non ammesso): il **dealer** è sempre il dealer del gruppo e dell'SA (`group.dealerId` `403`); non può creare un gruppo `demo` (`group.demo`), né scegliere il piano `desk-secondary` (`place.plan`). Il **PSA** può indicare un `dealerId` (un dealer attivo e non nel cestino, altrimenti `404 NOT_FOUND`) o nessuno.
+- **Regole sui dati** (`422`, tutti i campi insieme): paese esistente e provincia tra quelle del paese; partita IVA italiana con cifra di controllo (all'estero 2–30 caratteri ASCII stampabili) e codice fiscale italiano valido (maiuscolo); **un'azienda italiana ha almeno uno tra `eInvoicing.recipientCode` e `eInvoicing.pec`** (`company.eInvoicing.recipientCode` `required`); la provincia dell'indirizzo del punto vendita è del paese dell'azienda; password secondo D-19 (`user.password` con `tooShort`, `tooLong`, `sameAsUsername`).
+- **Cosa viene creato**, in una sola transazione (o tutto o niente, **database del gruppo compreso**: le collection nascono con gli inserimenti): il gruppo nel formato legacy con tutte le chiavi che i lettori del legacy e del POS leggono senza controlli (feature, sette integrazioni spente, un listino predefinito, EUR, unità `pz`, tre regole di magazzino standard, aliquote, regole delle carte fedeltà, `fidelity`), l'SA con la matrice completa del suo ruolo, le opzioni della cassa con il listino predefinito e l'ambito di tutto il gruppo, l'azienda e il punto vendita con la loro copia nel common e `groups.places[]`, un reparto per aliquota nel database del gruppo. `groups.apiKey` (la chiave del gruppo che usano il POS e le app legacy) è generata dal server con 256 bit casuali: **non è mai restituita, né registrata, né accettata come credenziale da questo backend** (`401`).
+- **Header particolari:** `Location: /v1/groups/{groupId}`
+- **Risposta:** `201`
+  ```json
+  { "data": { "groupId": "665f1c2e9b1d4a0012ab34a1", "companyId": "665f1c2e9b1d4a0012ab34c1", "placeId": "665f1c2e9b1d4a0012ab34e1", "userId": "665f1c2e9b1d4a0012ab34f1" } }
+  ```
+  Mai la password né la chiave del gruppo. Le risorse si leggono con le route di gruppo, azienda, punto vendita e utente.
+- **Registro attività:** `group.created`, `company.created`, `place.created` e `user.created` (con l'id del nuovo gruppo), senza password, chiavi né hash.
+- **Errori:** comuni; `403` (ruolo, campi riservati), `404` (dealer inesistente, disattivato o nel cestino), `409` (`user.username` `taken`; chiave di idempotenza riusata con un altro body o richiesta con la stessa chiave in corso), `413` (oltre 32 KB), `415`, `422` (`Idempotency-Key` mancante o non valido, regole sopra), `429`
+- **Username proposto (8.1.4):** il wizard propone lo username dal nome e cognome come il legacy (`nome.cognome` in minuscolo, senza spazi) e ne verifica la disponibilità con `GET /v1/usernames/{username}/availability` (`users:create`, nel tetto di PSA e D, stessa regola D-15 della creazione, 15 richieste al minuto): il suggerimento è del client, il server non ne aggiunge uno.
+
 ## Cataloghi del gruppo (`/v1`)
 
 Undici elenchi custoditi nel documento del gruppo, ciascuno una sotto-risorsa REST di `/v1/groups/{groupId}`. Sono **route di gruppo** (stesso controllo di perimetro e stessi `404` della sezione precedente; un gruppo sospeso o nel cestino solo per il PSA). Regole comuni:

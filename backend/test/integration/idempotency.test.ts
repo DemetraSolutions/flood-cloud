@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { ObjectId } from 'mongodb';
-import { IDEMPOTENCY_IN_PROGRESS_MS, IDEMPOTENCY_TTL_MS, createIdempotencyStore, idempotent } from '../../src/shared/http/idempotency.ts';
+import { IDEMPOTENCY_IN_PROGRESS_MS, IDEMPOTENCY_TTL_MS, createIdempotencyStore, idempotencyBodyKey, idempotent } from '../../src/shared/http/idempotency.ts';
 import type { IdempotencyRequest } from '../../src/shared/http/idempotency.ts';
 import { AppError } from '../../src/shared/http/errors.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { withHooks } from '../helpers/legacy-write.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
@@ -13,6 +14,7 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 import { startPlacesWorld } from '../helpers/places.ts';
 import type { PlacesWorld } from '../helpers/places.ts';
 
+const BODY_KEY = idempotencyBodyKey(TEST_VERSION_KEY);
 let ctx: TestDatabases;
 let world: PlacesWorld;
 const dealer = () => world.office.cluster.dealerA;
@@ -123,7 +125,7 @@ describe('the record of the idempotency keys', () => {
   });
 
   it('says what a key stands for: new, busy while the first request runs, replay when it is done, mismatch for another body', async () => {
-    const store = createIdempotencyStore(ctx.databases);
+    const store = createIdempotencyStore(ctx.databases, BODY_KEY);
     const request = entry();
     const first = await store.begin(request);
     assert.equal(first.kind, 'new');
@@ -139,7 +141,7 @@ describe('the record of the idempotency keys', () => {
 
   it('frees a key whose time is over even before the index removes it, and a key that disappeared while it was looked up', async () => {
     let clock = Date.now();
-    const store = createIdempotencyStore(ctx.databases, () => clock);
+    const store = createIdempotencyStore(ctx.databases, BODY_KEY, () => clock);
     const request = entry();
     await store.begin(request);
     clock += IDEMPOTENCY_IN_PROGRESS_MS + 1;
@@ -147,17 +149,17 @@ describe('the record of the idempotency keys', () => {
     const gone = entry();
     await store.begin(gone);
     let lost = false;
-    const racing = createIdempotencyStore(withHooks(ctx.databases, { common: { idempotencyKeys: { findOne: async (call) => (lost ? call() : ((lost = true), (await keys().deleteMany({ key: gone.key })), null)) } } }));
+    const racing = createIdempotencyStore(withHooks(ctx.databases, { common: { idempotencyKeys: { findOne: async (call) => (lost ? call() : ((lost = true), (await keys().deleteMany({ key: gone.key })), null)) } } }), BODY_KEY);
     assert.equal((await racing.begin(gone)).kind, 'new');
   });
 
   it('lets an error that is not a duplicate key go', async () => {
-    const broken = createIdempotencyStore(withHooks(ctx.databases, { common: { idempotencyKeys: { insertOne: async () => { throw new Error('boom'); } } } }));
+    const broken = createIdempotencyStore(withHooks(ctx.databases, { common: { idempotencyKeys: { insertOne: async () => { throw new Error('boom'); } } } }), BODY_KEY);
     await assert.rejects(() => broken.begin(entry()), /boom/);
   });
 
   it('keeps nothing for a handler that answers with an error status or sends nothing, and keeps a replay without headers', async () => {
-    const store = createIdempotencyStore(ctx.databases);
+    const store = createIdempotencyStore(ctx.databases, BODY_KEY);
     const run = async (handler: (res: Response) => void, key: string) => {
       const sent: unknown[] = [];
       const res = {

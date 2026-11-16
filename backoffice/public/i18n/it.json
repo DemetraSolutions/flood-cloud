@@ -49,7 +49,9 @@
     "PRODUCT_FAVORITES": "Preferiti",
     "PROMOTIONS": "Promozioni",
     "COMPANIES": "Aziende",
-    "PLACES": "Punti vendita"
+    "PLACES": "Punti vendita",
+    "TOOLS": "Strumenti",
+    "NEW_CUSTOMER": "Nuovo cliente"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -2970,6 +2972,86 @@
       "IMPORT_TOO_LARGE": "Il file è troppo grande.",
       "IMPORT_INVALID": "Il file non è un oggetto JSON.",
       "IMPORTED": "Impostazioni caricate nel modulo: {applied} valori applicati, {ignored} ignorati. Salva per confermarle."
+    }
+  },
+  "NEW_CUSTOMER": {
+    "TITLE": "Nuovo cliente",
+    "CREATE": "Crea configurazione",
+    "CREATED": "Cliente creato.",
+    "CHOOSE": "Scegli",
+    "NO_DEALER": "Nessun dealer",
+    "TAXES": "Aliquote e reparti:",
+    "TAX": "Reparto {department}: {rate}%",
+    "FEATURES": "Funzionalità del gruppo",
+    "SECTION": {
+      "CUSTOMER": "Nuovo cliente",
+      "COMPANY_CONTACTS": "Contatti azienda",
+      "PLACE": "Punto vendita",
+      "PLACE_CONTACTS": "Contatti punto vendita",
+      "TYPE": "Tipologia",
+      "ADMIN": "Super amministratore",
+      "SERVICES": "Moduli di servizio"
+    },
+    "TYPE": {
+      "RISTO": "Ristorazione",
+      "RETAIL": "Retail",
+      "BEAUTY": "Beauty"
+    },
+    "FIELD": {
+      "GROUP_NAME": "Nome gruppo",
+      "DEALER": "Dealer",
+      "DEMO": "Gruppo demo",
+      "DEMO_HINT": "Solo per le prove: non è un cliente.",
+      "COMPANY_NAME": "Ragione sociale",
+      "VAT_NUMBER": "P.IVA",
+      "FISCAL_CODE": "Codice fiscale",
+      "RECIPIENT_CODE": "Codice destinatario",
+      "RECIPIENT_HINT": "Per un'azienda italiana serve almeno uno tra codice destinatario e PEC.",
+      "PEC": "PEC",
+      "STREET": "Indirizzo",
+      "POSTCODE": "CAP",
+      "CITY": "Città",
+      "COUNTRY": "Paese",
+      "PROVINCE": "Provincia",
+      "PHONE": "Telefono",
+      "EMAIL": "E-mail",
+      "PLACE_NAME": "Insegna",
+      "OTHER_ADDRESS": "Dati diversi dall'azienda",
+      "OTHER_ADDRESS_HINT": "Senza, il punto vendita ha l'indirizzo dell'azienda.",
+      "PLACE_STREET": "Indirizzo del punto vendita",
+      "PLACE_POSTCODE": "CAP del punto vendita",
+      "PLACE_CITY": "Città del punto vendita",
+      "PLACE_PROVINCE": "Provincia del punto vendita",
+      "CONTACT_NAME": "Referente",
+      "PLACE_PHONE": "Telefono del punto vendita",
+      "PLACE_EMAIL": "E-mail del punto vendita",
+      "TYPE": "Tipologia",
+      "TYPE_HINT": "Preimposta le funzionalità e le aliquote: non viene salvata.",
+      "FIRST_NAME": "Nome",
+      "LAST_NAME": "Cognome",
+      "USER_PHONE": "Telefono del super amministratore",
+      "USER_EMAIL": "E-mail del super amministratore",
+      "USERNAME": "Username",
+      "PASSWORD": "Password provvisoria",
+      "PASSWORD_HINT": "Da 12 a 128 caratteri. Il super amministratore dovrà cambiarla al primo accesso.",
+      "PLAN": "Piano",
+      "EXPIRATION": "Data di scadenza",
+      "EXPIRATION_HINT": "Fino alle 23:59:59 (ora italiana) del giorno indicato."
+    },
+    "SUMMARY": {
+      "TITLE": "Cliente creato",
+      "INTRO": "Il gruppo, il super amministratore, l'azienda e il punto vendita sono stati creati.",
+      "GROUP": "Gruppo",
+      "COMPANY": "Azienda",
+      "PLACE": "Punto vendita",
+      "USER": "Super amministratore",
+      "PASSWORD": "Password provvisoria",
+      "PASSWORD_NOTE": "La password si mostra solo ora: consegnala al cliente, che dovrà cambiarla al primo accesso.",
+      "ANOTHER": "Crea un altro cliente"
+    },
+    "ERROR": {
+      "DEALER_NOT_FOUND": "Il dealer scelto non esiste o non è più attivo.",
+      "RATE_LIMITED_WAIT": "Troppe creazioni: riprova tra {seconds} secondi."
     }
   }
 }

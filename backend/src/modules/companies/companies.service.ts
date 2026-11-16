@@ -24,7 +24,7 @@ import type { CompaniesRepository, GroupLists } from './companies.repository.ts'
 import { leafWrites, setValueAt, toCompany, toCompanySummary, valueAt } from './company.mapper.ts';
 import type { Company, CompanyCreation, CompanyPatch, CompanySummary, ImageReference, MediaLogo } from './company.types.ts';
 import { ARUBA_HUB, HUB, mayChooseHub } from './hubs.ts';
-import { isValidItalianFiscalCode, isValidItalianVatNumber } from './validators.ts';
+import { PRINTABLE_ASCII, isValidItalianFiscalCode, isValidItalianVatNumber } from './validators.ts';
 
 /** A company with the version of its stored document: the `ETag` of the response and the `If-Match` of the next write. */
 export interface CompanyResult {
@@ -132,9 +132,6 @@ const CREATION_DEFAULTS: Readonly<Record<string, unknown>> = {
 
 /** The blocks of the representation, which the activity log names as a whole. */
 const BLOCKS = ['eInvoicing', 'invoiceNumbering', 'bankAccounts', 'mealVoucherIssuers', 'customerApp', 'media'] as const;
-
-/** What a VAT number or fiscal code of a country other than Italy may be: printable ASCII, without spaces at the ends (no invisible or non-ASCII characters, which would defeat the uniqueness check). */
-const PRINTABLE_ASCII = /^[\x21-\x7E](?:[\x20-\x7E]*[\x21-\x7E])?$/;
 
 const NO_LISTS: GroupLists = { currencies: new Set(), priceLists: new Set(), taxes: new Set(), favorites: new Map() };
 

@@ -30,7 +30,7 @@ describe('compressionMiddleware', () => {
     );
     app.use('/routes', router);
     app.get('/small', (_req, res) => void res.type('text/plain').send('a'.repeat(COMPRESSION_THRESHOLD_BYTES - 1)));
-    server = app.listen(0);
+    server = app.listen(0, '127.0.0.1');
     await new Promise<void>((resolve) => server.once('listening', () => resolve()));
     port = (server.address() as AddressInfo).port;
   });

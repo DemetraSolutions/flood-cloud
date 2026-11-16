@@ -62,7 +62,7 @@ export async function startApp(
     readiness: { isShuttingDown: () => false, checks: [] },
     ...overrides,
   });
-  const server = app.listen(0);
+  const server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', () => resolve()));
   return {
     baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
@@ -86,9 +86,8 @@ export async function startApp(
 export async function freePort(): Promise<number> {
   const { createServer } = await import('node:net');
   const probe = createServer();
-  // Wildcard bind, like every test server: a 127.0.0.1-only bind may get a port another test process holds on the
-  // wildcard address (both binds succeed), and anything listening there would steal that server's requests.
-  await new Promise<void>((resolve) => probe.listen(0, () => resolve()));
+  // Explicit 127.0.0.1, like every test server: on the same address the kernel never hands out a port already taken.
+  await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', () => resolve()));
   const { port } = probe.address() as AddressInfo;
   await new Promise<void>((resolve) => probe.close(() => resolve()));
   return port;

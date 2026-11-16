@@ -189,6 +189,16 @@ describe('loadConfig', () => {
     }
   });
 
+  it('validates HOST as an IP address or a hostname and leaves it unset by default', () => {
+    assert.equal(loadConfig(validEnv()).host, undefined);
+    for (const value of ['127.0.0.1', '::1', 'localhost', 'api.example.com', 'a-b.c1']) {
+      assert.equal(loadConfig(validEnv({ HOST: value })).host, value, value);
+    }
+    for (const value of ['-bad', 'bad-', 'a..b', 'a b', 'host/path', 'host:80', 'a'.repeat(64), `${'a.'.repeat(130)}a`]) {
+      assert.match(reasonFor(validEnv({ HOST: value }), 'HOST') ?? '', /IP address or a hostname/, value);
+    }
+  });
+
   it('validates PORT', () => {
     for (const value of ['65536', '1e3', '0x10', ' 80', '+80', '-1', '8.5', '9'.repeat(30)]) {
       assert.match(reasonFor(validEnv({ PORT: value }), 'PORT') ?? '', /between 0 and 65535/, value);
@@ -334,6 +344,7 @@ describe('empty values', () => {
   it('treat an optional variable as unset, as copied from .env.example', () => {
     const optional = [
       'PORT',
+      'HOST',
       'MONGODB_SERVER_SELECTION_TIMEOUT_MS',
       'MONGODB_MAX_POOL_SIZE',
       'DB_NAME_PREFIX',

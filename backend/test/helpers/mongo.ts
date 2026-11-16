@@ -188,6 +188,7 @@ export function mongoEnv(overrides: Record<string, string | undefined> = {}): Re
   issuedPrefixes.add(prefix);
   return validEnv({
     MONGODB_URI: testMongoUri(),
+    HOST: '127.0.0.1',
     DB_NAME_PREFIX: prefix,
     MONGODB_SERVER_SELECTION_TIMEOUT_MS: '2000',
     ...overrides,

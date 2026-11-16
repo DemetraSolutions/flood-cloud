@@ -22,15 +22,21 @@ function fakeProcess(env: Record<string, string | undefined>, loadEnvFile: (path
   const err: string[] = [];
   const exits: number[] = [];
   const listeners = new Map<string, Listener>();
+  let signalExit: () => void = () => undefined;
+  /** Settles at the first `exit` call, so tests wait for the shutdown instead of guessing how long it takes. */
+  const exited = new Promise<void>((resolve) => (signalExit = resolve));
   const proc: ProcessLike = {
     env,
     stdout: { write: (text) => out.push(text) },
     stderr: { write: (text) => err.push(text) },
     loadEnvFile,
-    exit: (code) => void exits.push(code),
+    exit: (code) => {
+      exits.push(code);
+      signalExit();
+    },
     on: (event, listener) => void listeners.set(event, listener),
   };
-  return { proc, out, err, exits, listeners };
+  return { proc, out, err, exits, exited, listeners };
 }
 
 function errnoError(code: string): Error {
@@ -119,7 +125,7 @@ describe('run', () => {
 
   it('exits 1 when the port cannot be bound', async () => {
     const blocker = createServer();
-    await new Promise<void>((resolve) => blocker.listen(0, () => resolve()));
+    await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', () => resolve()));
     const busy = (blocker.address() as { port: number }).port;
     try {
       const fake = fakeProcess(mongoEnv({ PORT: String(busy) }));
@@ -193,17 +199,36 @@ describe('run', () => {
     }
   });
 
+  it('binds the configured HOST, and every interface when it is unset', async () => {
+    const bound = await started();
+    const unbound = await started({ HOST: '' });
+    try {
+      assert.equal((bound.running.server.address() as AddressInfo).address, '127.0.0.1');
+      assert.match((unbound.running.server.address() as AddressInfo).address, /^(::|0\.0\.0\.0)$/);
+    } finally {
+      await closed(bound.running);
+      await closed(unbound.running);
+    }
+  });
+
   it('fails readiness immediately on SIGTERM but keeps serving during the drain, then closes; a second signal is ignored', async () => {
-    const { running, port, out, exits, listeners } = await started({ SHUTDOWN_DRAIN_MS: '300' });
+    const { running, port, out, exits, exited, listeners } = await started({ SHUTDOWN_DRAIN_MS: '300' });
     const sigterm = listeners.get('SIGTERM') as Listener;
-    sigterm();
-    sigterm();
-    const ready = await fetch(`http://127.0.0.1:${port}/health/ready`);
-    assert.equal(ready.status, 503);
-    assert.equal(running.server.listening, true);
-    assert.deepEqual(exits, []);
-    await new Promise<void>((resolve) => running.server.once('close', () => resolve()));
-    await new Promise((resolve) => setImmediate(resolve));
+    // The drain timer runs on the mocked clock: it fires only when the test ticks it, however slow the machine is.
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      sigterm();
+      sigterm();
+      const ready = await fetch(`http://127.0.0.1:${port}/health/ready`);
+      assert.equal(ready.status, 503);
+      assert.equal(running.server.listening, true);
+      assert.deepEqual(exits, []);
+      mock.timers.tick(300);
+    } finally {
+      mock.timers.reset();
+    }
+    await exited;
+    assert.equal(running.server.listening, false);
     assert.deepEqual(exits, [0]);
     assert.match(out.join(''), /shutdown already in progress/);
   });
@@ -336,7 +361,7 @@ describe('run: database lifecycle', () => {
 
   it('closes the client when the port cannot be bound', async () => {
     const blocker = createServer();
-    await new Promise<void>((resolve) => blocker.listen(0, () => resolve()));
+    await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', () => resolve()));
     const busy = (blocker.address() as { port: number }).port;
     try {
       const fake = fakeProcess(mongoEnv({ PORT: String(busy) }));

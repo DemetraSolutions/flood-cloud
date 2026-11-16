@@ -48,7 +48,7 @@ describe('image upload handler and the gate', () => {
     const app = express();
     app.post('/up', imageUpload(() => true, gate), handler);
     app.use(errorHandler(memoryLogger().logger, recordingErrorReporter().reporter));
-    const server = app.listen(0);
+    const server = app.listen(0, '127.0.0.1');
     await new Promise<void>((resolve) => server.once('listening', resolve));
     const { port } = server.address() as { port: number };
     return { url: `http://127.0.0.1:${String(port)}/up`, close: () => new Promise<void>((resolve) => (server.closeAllConnections(), server.close(() => resolve()))) };

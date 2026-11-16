@@ -238,7 +238,7 @@ describe('mountRoutes: middleware and compress options', () => {
       withLimit,
     );
     const app = express().use(router);
-    const server = app.listen(0);
+    const server = app.listen(0, '127.0.0.1');
     await new Promise<void>((resolve) => server.once('listening', resolve));
     try {
       const { port } = server.address() as { port: number };

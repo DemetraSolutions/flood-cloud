@@ -13,10 +13,11 @@ import { companyOf, minimalCompany, toNewDocument } from '../dealers/dealer.mapp
 import type { DealersRepository } from '../dealers/dealers.repository.ts';
 import { buildPasswordChange } from '../../shared/security/password-change.ts';
 import { checkPasswordPolicy } from '../../shared/security/password-policy.ts';
-import { flagsOf } from '../../shared/security/rbac/permission-matrix.ts';
+import { defaultMatrix, flagsOf } from '../../shared/security/rbac/permission-matrix.ts';
 import type { Role } from '../../shared/security/rbac/permissions.ts';
-import { manageableRoles } from '../../shared/security/rbac/policy.ts';
+import { hasPermission, manageableRoles } from '../../shared/security/rbac/policy.ts';
 import { canManageUser, checkUserChange, holdsEverythingOf, inheritedMatrix } from '../../shared/security/rbac/user-management.ts';
+import { assertGroupCreationAccess } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { usersScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
@@ -34,8 +35,8 @@ import { applyPosPatch, diffPos } from './pos.mapper.ts';
 import type { Pos } from './pos.catalog.ts';
 import { applyShiftTime, diffShiftTime, emptyShiftTime, shiftTimeIssues } from './shift-time.ts';
 import { applyPermissions, changeViewOf, permissionChanges, scopeReferenceIssues, scopeShapeIssues, storedChangeView, violationError } from './user-access.ts';
-import { DEFAULT_LANGUAGE, OWNED_PERMISSION_MODULES, toLegacyDocument, toLegacyUpdate, toResponse } from './user.mapper.ts';
-import type { User, UserChanges, UserResponse } from './user.types.ts';
+import { DEFAULT_LANGUAGE, OWNED_PERMISSION_MODULES, fromLegacy, toLegacyDocument, toLegacyUpdate, toResponse } from './user.mapper.ts';
+import type { LegacyUserDocument, User, UserChanges, UserResponse } from './user.types.ts';
 import { USERS_LIST } from './users.list.ts';
 import type { UsersRepository } from './users.repository.ts';
 import { GROUP_ROLES, PLATFORM_ROLES } from './users.schemas.ts';
@@ -60,6 +61,36 @@ export interface UserListing {
 
 /** Writes of the transaction that creates a user, run after the user and his credentials were written: it receives the session and the id of the new user. */
 export type AlongsideWrite = (session: ClientSession, userId: ObjectId) => Promise<void>;
+
+/** What the onboarding of a customer gives for the first administrator (SA) of the new group. */
+export interface GroupAdminInput {
+  readonly username: string;
+  /** The provisional password: it must be replaced at the first access. */
+  readonly password: string;
+  readonly firstName: string | null;
+  readonly lastName: string | null;
+  readonly email: string | null;
+  readonly phone: string | null;
+  /** The creation access to the new group (`issueGroupCreationAccess`): the only way to name the group, so the administrator cannot be created in one that exists. */
+  readonly access: GroupAccess;
+  /** The dealer of the group, `null` for none. */
+  readonly dealerId: ObjectId | null;
+  /** The default price list of the new group: the POS options of the user name it. */
+  readonly priceListId: string;
+}
+
+/** The first administrator of a new group, ready to be written inside the transaction that creates the group. */
+export interface GroupAdminStep {
+  readonly id: ObjectId;
+  /** What the activity log records of the user (no secret). */
+  readonly snapshot: Readonly<Record<string, unknown>>;
+  /**
+   * Writes the user and his credentials (the scrypt hash, with the flag that forces the change of the password) with the session of the caller's transaction.
+   *
+   * @throws {AppError} `CONFLICT` (`username` `taken`) when another user took the name in the meantime (the unique index of the legacy decides).
+   */
+  run(session: ClientSession): Promise<void>;
+}
 
 /** Body of a creation, group or platform. */
 export type CreateUserBody = CreateGroupUserBody | CreatePlatformUserBody;
@@ -102,6 +133,16 @@ export interface UsersService {
    * @throws {AppError} `VALIDATION_ERROR` (scope, references, password policy), `FORBIDDEN` (role, permissions), `CONFLICT` (username taken).
    */
   create(principal: AuthPrincipal, area: UserArea, body: CreateUserBody, client: ClientContext, alongside?: AlongsideWrite): Promise<UserResponse>;
+  /**
+   * Prepares the first administrator of a group that is being created (area 8): checks the password policy (D-19) and the username (D-15), hashes the password and builds the complete
+   * legacy document of an SA with the whole matrix of his role, the POS data of his role with the default price list, and the scope of the whole group. Nothing is written: the caller runs
+   * the returned step in its own transaction, so the user exists only if the whole customer does. Only a caller who creates groups (`groups:create`: PSA, D) gets one.
+   *
+   * @param principal The authenticated caller.
+   * @param input The data of the user and of the group.
+   * @throws {AppError} `FORBIDDEN` (role), `VALIDATION_ERROR` (password policy), `CONFLICT` (username taken).
+   */
+  prepareGroupAdmin(principal: AuthPrincipal, input: GroupAdminInput): Promise<GroupAdminStep>;
   /**
    * Modifies a user (JSON Merge Patch). A change of role, scope, status or permissions (the POS app switch and grants included, not the POS options) ends his sessions and empties his legacy tokens (D-11).
    *
@@ -336,10 +377,10 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       ...(metadata === undefined ? {} : { metadata }),
     });
 
-  const passwordFor = async (password: string, username: string): Promise<Extract<Awaited<ReturnType<typeof buildPasswordChange>>, { ok: true }>> => {
+  const passwordFor = async (password: string, username: string, field = 'password'): Promise<Extract<Awaited<ReturnType<typeof buildPasswordChange>>, { ok: true }>> => {
     const change = await buildPasswordChange(password, { username, pepper: config.legacyPasswordPepper, legacyCoexistence: config.legacyPasswordCoexistence });
     if (!change.ok) {
-      throw validationError(change.issues.map((issue) => ({ field: 'password', issue })));
+      throw validationError(change.issues.map((issue) => ({ field, issue })));
     }
     return change;
   };
@@ -527,6 +568,79 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         });
       }
       return toResponse(created.user);
+    },
+
+    prepareGroupAdmin: async (principal, input) => {
+      // Only the creation of a customer gives a group its administrator: PSA and dealers, who create groups and manage the role SA, on the group they are creating.
+      assertGroupCreationAccess(principal, input.access);
+      if (!hasPermission(principal, 'groups:create')) {
+        throw new AppError('FORBIDDEN');
+      }
+      const access = input.access;
+      // The policy first: a weak password must not be a way to find out which usernames exist.
+      const policy = checkPasswordPolicy(input.password, { username: input.username });
+      if (!policy.ok) {
+        throw validationError(policy.issues.map((issue) => ({ field: 'user.password', issue })));
+      }
+      if (await users.isUsernameTaken(input.username)) {
+        throw new AppError('CONFLICT', { details: [{ field: 'user.username', issue: 'taken' }] });
+      }
+      const change = await passwordFor(input.password, input.username, 'user.password');
+      const id = new ObjectId();
+      const now = date();
+      // Everything his role can have: the groups of the legacy form give the SA the whole matrix, and he manages the permissions of his group.
+      const role = defaultMatrix('SA');
+      const permissions = { status: true, modules: Object.fromEntries(OWNED_PERMISSION_MODULES.map((name) => [name, flagsOf(role, name)])) };
+      // Defense in depth: nobody creates an administrator who can do more than himself.
+      if (!holdsEverythingOf(principal, changeViewOf({ userId: id, role: 'SA', groupId: access.groupId, companyIds: [], placeIds: [], matrix: { status: true, modules: role.modules } }))) {
+        throw new AppError('FORBIDDEN');
+      }
+      const started = inheritedPos(null, 'SA');
+      const pos = { ...started, options: { ...started.options, priceLists: [{ priceListId: input.priceListId, enabled: true, isDefault: true }] } };
+      const document = toLegacyDocument(
+        {
+          id,
+          username: input.username,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone,
+          role: 'SA',
+          groupId: access.groupId.toHexString(),
+          dealerId: input.dealerId === null ? null : input.dealerId.toHexString(),
+          companyIds: [],
+          placeIds: [],
+          status: 'active',
+          language: DEFAULT_LANGUAGE,
+          hiddenInStats: false,
+          description: null,
+          avatar: null,
+          pin: null,
+          serviceIds: [],
+          permissions,
+          pos,
+          shiftTime: emptyShiftTime(),
+          legacyPasswordHash: change.legacyHash,
+        },
+        now,
+      );
+      const created = fromLegacy(document as LegacyUserDocument);
+      return {
+        id,
+        snapshot: { ...snapshot(created.user), password: 'set' },
+        run: async (session) => {
+          try {
+            await users.insert(document, session);
+            await credentials.upsertPassword(
+              id,
+              { passwordHash: change.passwordHash, legacyHashFingerprint: change.legacyHashFingerprint, passwordChanged: true, mustChangePassword: true, now },
+              session,
+            );
+          } catch (error) {
+            throw error instanceof MongoServerError && error.code === 11000 ? new AppError('CONFLICT', { details: [{ field: 'user.username', issue: 'taken' }] }) : error;
+          }
+        },
+      };
     },
 
     update: async (principal, area, userId, patch, client) => {

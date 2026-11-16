@@ -232,9 +232,8 @@ export async function startFakeGcs(): Promise<FakeGcs> {
       }
     })();
   });
-  // Same wildcard bind as every other test server: a socket bound only to 127.0.0.1 may receive a port that another
-  // test process already holds on the wildcard address, and then steals its 127.0.0.1 requests.
-  await new Promise<void>((resolve) => server.listen(0, () => resolve()));
+  // Explicit 127.0.0.1, like every test server: on the same address the kernel never hands out a port already taken.
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
   const origin = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
   return Object.assign(fake, { baseUrl: origin, tokenUrl: `${origin}/token`, metadataUrl: `${origin}/computeMetadata/v1/instance/service-accounts/default/token` });
 }

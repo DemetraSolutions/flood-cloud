@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac, hkdfSync } from 'node:crypto';
 import type { Request, RequestHandler } from 'express';
 import { ObjectId } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
@@ -33,7 +33,7 @@ export interface IdempotencyRequest {
   readonly route: string;
   /** The key sent by the client, in lower case. */
   readonly key: string;
-  /** SHA-256 (hexadecimal) of the canonical JSON of the body. */
+  /** Keyed fingerprint (HMAC-SHA256, hexadecimal) of the canonical JSON of the body: see {@link IdempotencyStore.fingerprint}. */
   readonly bodyHash: string;
 }
 
@@ -50,6 +50,11 @@ export type IdempotencyBegin =
 
 /** The record of the keys in use (`common.idempotencyKeys`): a unique index on principal, route and key makes the first request win. */
 export interface IdempotencyStore {
+  /**
+   * The fingerprint of a body: HMAC-SHA256 of its canonical JSON with a key of the server. Not a plain hash on purpose: a body can carry a secret (the provisional password of the
+   * administrator of a new customer), and an unkeyed hash kept in the database would let whoever reads it guess the secret offline.
+   */
+  fingerprint(body: unknown): string;
   /** Reserves the key for a request, or says what the key already stands for. */
   begin(request: IdempotencyRequest): Promise<IdempotencyBegin>;
   /** Keeps the response of a finished request for 24 hours. */
@@ -67,12 +72,24 @@ interface KeyDocument extends IdempotencyRequest {
 }
 
 /**
+ * The key of the body fingerprints, derived with HKDF-SHA256 from `VERSION_HMAC_KEY` under its own label, so no new variable is needed and the key is never the one that signs the
+ * versions. Records written with the previous (unkeyed SHA-256) fingerprint are never matched again: they expire with their 24 hours.
+ *
+ * @param versionKey The decoded `VERSION_HMAC_KEY`.
+ * @returns 32 bytes.
+ */
+export function idempotencyBodyKey(versionKey: Buffer): Buffer {
+  return Buffer.from(hkdfSync('sha256', versionKey, '', 'flood/idempotency-body/v1', 32));
+}
+
+/**
  * Builds the store over `common.idempotencyKeys`.
  *
  * @param databases Database accessor.
+ * @param bodyKey Key of the body fingerprints ({@link idempotencyBodyKey}).
  * @param now Clock in milliseconds (the system clock by default).
  */
-export function createIdempotencyStore(databases: Databases, now: () => number = Date.now): IdempotencyStore {
+export function createIdempotencyStore(databases: Databases, bodyKey: Buffer, now: () => number = Date.now): IdempotencyStore {
   const keys = () => databases.common().collection<KeyDocument>('idempotencyKeys');
   const begin = async (request: IdempotencyRequest): Promise<IdempotencyBegin> => {
     const at = now();
@@ -100,6 +117,7 @@ export function createIdempotencyStore(databases: Databases, now: () => number =
     return existing.state === 'done' ? { kind: 'replay', response: existing.response as StoredResponse } : { kind: 'busy' };
   };
   return {
+    fingerprint: (body) => createHmac('sha256', bodyKey).update(canonicalJson(body)).digest('hex'),
     begin,
     complete: async (id, response) => {
       await keys().updateOne({ _id: id }, { $set: { state: 'done', response, expiresAt: new Date(now() + IDEMPOTENCY_TTL_MS) } });
@@ -133,7 +151,7 @@ export function idempotent(store: IdempotencyStore, handler: RequestHandler): Re
       principal: res.locals.auth!.userId.toHexString(),
       route: `${req.method} ${req.baseUrl}${req.path}`,
       key: raw.trim().toLowerCase(),
-      bodyHash: createHash('sha256').update(canonicalJson(req.body ?? null)).digest('hex'),
+      bodyHash: store.fingerprint(req.body ?? null),
     });
     if (begun.kind === 'replay') {
       const { status, body, location, etag } = begun.response;

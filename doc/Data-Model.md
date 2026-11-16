@@ -34,6 +34,7 @@ Realizzata (passi 4B e 4B-bis) come **lettura e scrittura compatibile con il leg
 | `dataCluster` | `dataCluster` | id del cluster MongoDB con il database del gruppo (decisione del 2026-11-06); assente ⇒ cluster di default; letto dal nuovo backend, scritto dalla creazione dei gruppi (area 8); esposto solo al PSA |
 | `insertDate`, `updateDate` | `createdAt`, `updatedAt` | `updateDate` è anche la versione per la concorrenza ottimistica delle scritture dei cataloghi |
 - **Campi posseduti** (`GROUPS_OWNED_FIELDS` e `GROUPS_OWNED_CATALOGS` in `backend/src/db/collections.ts`, solo `$set`/`$unset`): `name`, `description`, `demo`, `status`, `trash`, `settings.<feature>`, `settings.languages`, `settings.stats.openingTime|compressProductsCategories|timeSlots`, `settings.integrations.<provider>.status|apiKey`, `updateDate` e ogni percorso sotto `priceLists`, `taxes`, `currencies`, `measureUnits`, `warehouseRules`, `fidelityCardRules`, `fidelity.cardsTypes`, `fidelity.pointsCollections`, `fidelity.prizeCatalogues`, `productsFavorites`, `promotions`. Mai la sostituzione di `settings` o del documento.
+- **Creazione** (passo 8A, `POST /v1/groups`, `newGroupDocument`): il documento intero di un nuovo gruppo si **inserisce** in una transazione (le chiavi sono tutte quelle del legacy `groups/generate`: `name`, `description: ''`, `databaseHost: ''`, `filesHost` da `GROUP_FILES_HOST`, `type: null`, `settings` con le 15 feature (`cash` e `productsVariants` accese, le altre come scelte nel form) più `languages: null`, `stats.openingTime: null` e `integrations` con i 7 provider `{ status: false, apiKey: null }`, `status: true`, `demo`, `dealerId` (ObjectId o `null`), `apiKey`, un listino predefinito (`Listino 1`), `taxes[]`, `currencies.EUR` (`&euro;`), `measureUnits` con `pz`, tre `warehouseRules` standard (`Carico standard`, `Scarico standard`, `Reso standard`, tutte `default: true`), `fidelityCardRules.EUR`, `fidelity` vuoto, `expirationDate: null`, `places[]` ricalcolato, `trash: false`, `insertDate`, `updateDate`; mai `dataCluster`, `plan`). **`apiKey`**: 64 caratteri esadecimali da 256 bit casuali, scritta una sola volta, mai letta, restituita, registrata né accettata come credenziale; la usano solo il POS e le app legacy. È tra i campi "solo inserimento" (`GROUPS_INSERT_ONLY_FIELDS` in `db/collections.ts`: `apiKey`, `databaseHost`, `filesHost`, `type`, `expirationDate`, `insertDate`, `places`), che nessun `$set` può scrivere.
 - **Non gestiti** (restano nel documento, mai letti né scritti): `apiKey` del gruppo, `databaseHost`, `filesHost`, `type`, `plan`, `expirationDate` (deprecati, D-13), `places[]` (derivato dal dominio dei punti vendita, non esposto), i provider di integrazione sconosciuti, ogni altra chiave non elencata (anche dentro gli elementi dei cataloghi). Un documento può superare i 16 MiB solo per scritture altrui: il nuovo backend rifiuta scritture che lo portano oltre 8 MiB.
 - Indici: il nuovo backend non ne aggiunge (sulle collection legacy sono vietati indici univoci e TTL).
 
@@ -235,6 +236,22 @@ Le immagini del Media Manager. Collection `legacy-write` del database del gruppo
 | `companyId` | ObjectId o `null` | azienda proprietaria dell'immagine, `null` per un'immagine di tutto il gruppo (chiave **aggiuntiva**): il CA vede e usa solo le immagini delle proprie aziende; i documenti legacy non hanno la chiave e un CA non li vede |
 
 Chiavi e ordine come nel legacy; `createdBy` e `companyId` seguono `updateDate`. Sono **additive**: il legacy le ignora (legge solo le chiavi che conosce) e non le tocca. Un documento legacy può mancare di campi (nessuno schema): la lettura è tollerante. Gli oggetti stanno nel bucket in `<groupId>/media/image/<xs|s|m|l|xl>/<basename>` e si raggiungono con `groups.filesHost` (letto, mai scritto: `https` valido, altrimenti nessun URL). **Descrittore nei loghi dell'azienda** (`companies.medias.images.customersAppLogoLight|Dark`): `{ _id (string esadecimale), dirname, basename, extension, filename (= name), mimetype, filectime (double), mmThumb ({}), type ('image'), title, alt }` in quest'ordine. Il backend non si fida di un documento `files`, che il legacy lascia riscrivere a qualunque utente: per un logo la directory è sempre `/media/image`, il `basename` deve essere un nome semplice (un solo segmento, senza `/`, `\`, `..`, `?`, `#`, `%`, caratteri di controllo né punto iniziale), `mimetype` un `image/*` e l'estensione lettere e cifre, altrimenti l'immagine non è utilizzabile (`422`).
+
+## products_departments — reparti del gruppo (database del gruppo, solo inserimento)
+I reparti che il POS legge senza guardia (`department.tax.value`). Collection `legacy-write` del database del gruppo (`PRODUCTS_DEPARTMENTS_OWNED_FIELDS`): in questo passo (8A) il backend **inserisce documenti interi** nella transazione che crea il gruppo, uno per aliquota; non li legge né li modifica (la loro gestione è del dominio dei prodotti). La collection non si crea prima: nasce con l'inserimento. Nessun indice, come nel legacy.
+
+| Campo | Tipo BSON | Valore alla creazione |
+|---|---|---|
+| `_id` | ObjectId | nuovo |
+| `groupId` | ObjectId | il gruppo nuovo (chiave **aggiuntiva**: il legacy non la scrive, e la ignora) |
+| `code` | Int32 | il reparto dell'aliquota (1–99); nel legacy era `undefined` per le aliquote diverse da 4, 10 e 22 |
+| `tax` | oggetto | copia dell'aliquota di `groups.taxes`: `{ id, value, department, description: null, natura: null }` (`value` Int32 se intero, Double altrimenti) |
+| `name` | oggetto | `{ it: "Reparto <code>" }` |
+| `description` | oggetto | `{ it: "" }` |
+| `medias` | oggetto | `{ images: {} }` |
+| `placesAvailability` | array | `[]` |
+| `status`, `trash` | booleani | `true`, `false` |
+| `insertDate`, `updateDate` | Date | istante della creazione |
 
 ## Collection dei database di gruppo lette dal nuovo backend
 Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul cluster del gruppo:

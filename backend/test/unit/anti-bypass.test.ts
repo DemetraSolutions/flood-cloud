@@ -182,6 +182,54 @@ describe('database access cannot be bypassed outside src/db', () => {
     });
   });
 
+  describe('the creation of a customer (area 8)', () => {
+    const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
+
+    it('issues the access to a new group only from the composition root, and opens the database of a new group only from the access file, the write service of companies and places and the onboarding repository', async () => {
+      const issuers: string[] = [];
+      const openers: string[] = [];
+      const departments: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        const text = await readFile(file, 'utf8');
+        if (text.includes('issueGroupCreationAccess(')) {
+          issuers.push(path);
+        }
+        if (text.includes('groupCreationDatabase(')) {
+          openers.push(path);
+        }
+        if (/\.collection(?:<[^>]*>)?\(\s*['"`]products_departments['"`]/.test(text)) {
+          departments.push(path);
+        }
+      }
+      assert.deepEqual(issuers.sort(), ['composition.ts', 'shared/security/scope/group-access.ts']);
+      assert.deepEqual(openers.sort(), ['modules/groups/onboarding.repository.ts', 'shared/legacy-write/companies-places.writer.ts', 'shared/security/scope/group-access.ts']);
+      assert.deepEqual(departments, ['modules/groups/onboarding.repository.ts']);
+    });
+
+    it('prepares the administrator of a new group only from the onboarding service', async () => {
+      const callers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path !== 'modules/users/users.service.ts' && (await readFile(file, 'utf8')).includes('prepareGroupAdmin(')) {
+          callers.push(path);
+        }
+      }
+      assert.deepEqual(callers, ['modules/groups/onboarding.service.ts']);
+    });
+
+    it('generates and writes the api key of a group only in the creation of a customer', async () => {
+      const named: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (/newGroupApiKey|\bapiKey:\s*input\.apiKey/.test(await readFile(file, 'utf8'))) {
+          named.push(path);
+        }
+      }
+      assert.deepEqual(named.sort(), ['modules/groups/onboarding.documents.ts', 'modules/groups/onboarding.service.ts']);
+    });
+  });
+
   describe('media (step 6B)', () => {
     const REPOSITORY = 'modules/media/media.repository.ts';
     const posix = (file: string): string => relative(SRC, file).split('\\').join('/');

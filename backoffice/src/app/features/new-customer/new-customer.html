@@ -1,0 +1,369 @@
+<h1>{{ 'NEW_CUSTOMER.TITLE' | t }}</h1>
+
+@if (created(); as done) {
+  <section class="summary" aria-labelledby="summary-heading">
+    <h2 id="summary-heading" tabindex="-1">{{ 'NEW_CUSTOMER.SUMMARY.TITLE' | t }}</h2>
+    <p>{{ 'NEW_CUSTOMER.SUMMARY.INTRO' | t }}</p>
+    <dl>
+      <div>
+        <dt>{{ 'NEW_CUSTOMER.SUMMARY.GROUP' | t }}</dt>
+        <dd>
+          <a [routerLink]="['/groups', done.ids.groupId, 'settings']">{{ done.ids.groupId }}</a>
+        </dd>
+      </div>
+      <div>
+        <dt>{{ 'NEW_CUSTOMER.SUMMARY.COMPANY' | t }}</dt>
+        <dd>
+          <a [routerLink]="['/groups', done.ids.groupId, 'companies', done.ids.companyId]">{{
+            done.ids.companyId
+          }}</a>
+        </dd>
+      </div>
+      <div>
+        <dt>{{ 'NEW_CUSTOMER.SUMMARY.PLACE' | t }}</dt>
+        <dd>
+          <a [routerLink]="['/groups', done.ids.groupId, 'places', done.ids.placeId]">{{
+            done.ids.placeId
+          }}</a>
+        </dd>
+      </div>
+      <div>
+        <dt>{{ 'NEW_CUSTOMER.SUMMARY.USER' | t }}</dt>
+        <dd>
+          <a [routerLink]="['/groups', done.ids.groupId, 'users', done.ids.userId]">{{
+            done.username
+          }}</a>
+        </dd>
+      </div>
+      <div>
+        <dt>{{ 'NEW_CUSTOMER.SUMMARY.PASSWORD' | t }}</dt>
+        <dd class="password">
+          <output>{{ done.password }}</output>
+          <button fc-button variant="ghost" (click)="copyPassword(done.password)">
+            {{ 'PASSWORD_GENERATOR.COPY' | t }}
+          </button>
+        </dd>
+      </div>
+    </dl>
+    <p class="note">{{ 'NEW_CUSTOMER.SUMMARY.PASSWORD_NOTE' | t }}</p>
+    <div class="actions">
+      <button fc-button (click)="startOver()">{{ 'NEW_CUSTOMER.SUMMARY.ANOTHER' | t }}</button>
+    </div>
+  </section>
+} @else {
+  @let f = customerForm;
+  <form novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+    }
+
+    <fieldset>
+      <legend>{{ 'NEW_CUSTOMER.SECTION.CUSTOMER' | t }}</legend>
+      <fc-text-field
+        [formField]="f.groupName"
+        [label]="'NEW_CUSTOMER.FIELD.GROUP_NAME' | t"
+        [error]="error(f.groupName)"
+        (blurred)="f.groupName().markAsTouched()"
+      />
+      @if (isPlatform()) {
+        <fc-select
+          [formField]="f.dealerId"
+          [label]="'NEW_CUSTOMER.FIELD.DEALER' | t"
+          [placeholder]="'NEW_CUSTOMER.NO_DEALER' | t"
+          [options]="dealerOptions()"
+          [error]="error(f.dealerId)"
+          (blurred)="f.dealerId().markAsTouched()"
+        />
+        <fc-checkbox
+          [formField]="f.demo"
+          [label]="'NEW_CUSTOMER.FIELD.DEMO' | t"
+          [hint]="'NEW_CUSTOMER.FIELD.DEMO_HINT' | t"
+        />
+      }
+      <fc-text-field
+        [formField]="f.companyName"
+        [label]="'NEW_CUSTOMER.FIELD.COMPANY_NAME' | t"
+        autocomplete="organization"
+        [error]="error(f.companyName)"
+        (blurred)="f.companyName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.vatNumber"
+        [label]="'NEW_CUSTOMER.FIELD.VAT_NUMBER' | t"
+        autocapitalize="characters"
+        [error]="error(f.vatNumber)"
+        (blurred)="f.vatNumber().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.fiscalCode"
+        [label]="'NEW_CUSTOMER.FIELD.FISCAL_CODE' | t"
+        autocapitalize="characters"
+        [error]="error(f.fiscalCode)"
+        (blurred)="f.fiscalCode().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.recipientCode"
+        [label]="'NEW_CUSTOMER.FIELD.RECIPIENT_CODE' | t"
+        [hint]="'NEW_CUSTOMER.FIELD.RECIPIENT_HINT' | t"
+        autocapitalize="characters"
+        [error]="error(f.recipientCode)"
+        (blurred)="f.recipientCode().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.pec"
+        type="email"
+        [label]="'NEW_CUSTOMER.FIELD.PEC' | t"
+        [error]="error(f.pec)"
+        (blurred)="f.pec().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.street"
+        [label]="'NEW_CUSTOMER.FIELD.STREET' | t"
+        autocomplete="street-address"
+        [error]="error(f.street)"
+        (blurred)="f.street().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.postcode"
+        [label]="'NEW_CUSTOMER.FIELD.POSTCODE' | t"
+        autocomplete="postal-code"
+        [error]="error(f.postcode)"
+        (blurred)="f.postcode().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.city"
+        [label]="'NEW_CUSTOMER.FIELD.CITY' | t"
+        autocomplete="address-level2"
+        [error]="error(f.city)"
+        (blurred)="f.city().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.country"
+        [label]="'NEW_CUSTOMER.FIELD.COUNTRY' | t"
+        [options]="countryOptions()"
+        [error]="error(f.country)"
+        (valueChange)="onCountry($event)"
+        (blurred)="f.country().markAsTouched()"
+      />
+      @if (areas().length > 0) {
+        <fc-select
+          [formField]="f.province"
+          [label]="'NEW_CUSTOMER.FIELD.PROVINCE' | t"
+          [placeholder]="'NEW_CUSTOMER.CHOOSE' | t"
+          [options]="provinceOptions()"
+          [error]="error(f.province)"
+          (blurred)="f.province().markAsTouched()"
+        />
+      } @else {
+        <fc-text-field
+          [formField]="f.province"
+          [label]="'NEW_CUSTOMER.FIELD.PROVINCE' | t"
+          [error]="error(f.province)"
+          (blurred)="f.province().markAsTouched()"
+        />
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ 'NEW_CUSTOMER.SECTION.COMPANY_CONTACTS' | t }}</legend>
+      <fc-text-field
+        [formField]="f.companyPhone"
+        type="tel"
+        [label]="'NEW_CUSTOMER.FIELD.PHONE' | t"
+        autocomplete="tel"
+        [error]="error(f.companyPhone)"
+        (blurred)="f.companyPhone().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.companyEmail"
+        type="email"
+        [label]="'NEW_CUSTOMER.FIELD.EMAIL' | t"
+        autocomplete="email"
+        [error]="error(f.companyEmail)"
+        (blurred)="f.companyEmail().markAsTouched()"
+      />
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ 'NEW_CUSTOMER.SECTION.PLACE' | t }}</legend>
+      <fc-text-field
+        [formField]="f.placeName"
+        [label]="'NEW_CUSTOMER.FIELD.PLACE_NAME' | t"
+        [error]="error(f.placeName)"
+        (blurred)="f.placeName().markAsTouched()"
+      />
+      <fc-checkbox
+        [formField]="f.otherAddress"
+        [label]="'NEW_CUSTOMER.FIELD.OTHER_ADDRESS' | t"
+        [hint]="'NEW_CUSTOMER.FIELD.OTHER_ADDRESS_HINT' | t"
+      />
+      @if (model().otherAddress) {
+        <fc-text-field
+          [formField]="f.placeStreet"
+          [label]="'NEW_CUSTOMER.FIELD.PLACE_STREET' | t"
+          [error]="error(f.placeStreet)"
+          (blurred)="f.placeStreet().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="f.placePostcode"
+          [label]="'NEW_CUSTOMER.FIELD.PLACE_POSTCODE' | t"
+          [error]="error(f.placePostcode)"
+          (blurred)="f.placePostcode().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="f.placeCity"
+          [label]="'NEW_CUSTOMER.FIELD.PLACE_CITY' | t"
+          [error]="error(f.placeCity)"
+          (blurred)="f.placeCity().markAsTouched()"
+        />
+        @if (areas().length > 0) {
+          <fc-select
+            [formField]="f.placeProvince"
+            [label]="'NEW_CUSTOMER.FIELD.PLACE_PROVINCE' | t"
+            [placeholder]="'NEW_CUSTOMER.CHOOSE' | t"
+            [options]="provinceOptions()"
+            [error]="error(f.placeProvince)"
+            (blurred)="f.placeProvince().markAsTouched()"
+          />
+        } @else {
+          <fc-text-field
+            [formField]="f.placeProvince"
+            [label]="'NEW_CUSTOMER.FIELD.PLACE_PROVINCE' | t"
+            [error]="error(f.placeProvince)"
+            (blurred)="f.placeProvince().markAsTouched()"
+          />
+        }
+      }
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ 'NEW_CUSTOMER.SECTION.PLACE_CONTACTS' | t }}</legend>
+      <fc-text-field
+        [formField]="f.contactName"
+        [label]="'NEW_CUSTOMER.FIELD.CONTACT_NAME' | t"
+        [error]="error(f.contactName)"
+        (blurred)="f.contactName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.placePhone"
+        type="tel"
+        [label]="'NEW_CUSTOMER.FIELD.PLACE_PHONE' | t"
+        [error]="error(f.placePhone)"
+        (blurred)="f.placePhone().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.placeEmail"
+        type="email"
+        [label]="'NEW_CUSTOMER.FIELD.PLACE_EMAIL' | t"
+        [error]="error(f.placeEmail)"
+        (blurred)="f.placeEmail().markAsTouched()"
+      />
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ 'NEW_CUSTOMER.SECTION.TYPE' | t }}</legend>
+      <fc-select
+        [formField]="f.type"
+        [label]="'NEW_CUSTOMER.FIELD.TYPE' | t"
+        [hint]="'NEW_CUSTOMER.FIELD.TYPE_HINT' | t"
+        [options]="typeOptions"
+        (valueChange)="onType($event)"
+      />
+      <p class="taxes">
+        <span>{{ 'NEW_CUSTOMER.TAXES' | t }}</span>
+        @for (tax of taxes(); track tax.department) {
+          <span class="tax">{{ taxLabel(tax) }}</span>
+        }
+      </p>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ 'NEW_CUSTOMER.SECTION.ADMIN' | t }}</legend>
+      <fc-text-field
+        [formField]="f.firstName"
+        [label]="'NEW_CUSTOMER.FIELD.FIRST_NAME' | t"
+        autocomplete="off"
+        [error]="error(f.firstName)"
+        (valueChange)="onFirstName($event)"
+        (blurred)="f.firstName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.lastName"
+        [label]="'NEW_CUSTOMER.FIELD.LAST_NAME' | t"
+        autocomplete="off"
+        [error]="error(f.lastName)"
+        (valueChange)="onLastName($event)"
+        (blurred)="f.lastName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.userPhone"
+        type="tel"
+        [label]="'NEW_CUSTOMER.FIELD.USER_PHONE' | t"
+        autocomplete="off"
+        [error]="error(f.userPhone)"
+        (blurred)="f.userPhone().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.userEmail"
+        type="email"
+        [label]="'NEW_CUSTOMER.FIELD.USER_EMAIL' | t"
+        autocomplete="off"
+        [error]="error(f.userEmail)"
+        (blurred)="f.userEmail().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.username"
+        [label]="'NEW_CUSTOMER.FIELD.USERNAME' | t"
+        autocomplete="off"
+        autocapitalize="none"
+        spellcheck="false"
+        [hint]="usernameHint()"
+        [error]="usernameError()"
+        (valueChange)="onUsernameEdited()"
+        (blurred)="f.username().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.password"
+        type="password"
+        autocomplete="new-password"
+        [label]="'NEW_CUSTOMER.FIELD.PASSWORD' | t"
+        [hint]="'NEW_CUSTOMER.FIELD.PASSWORD_HINT' | t"
+        [error]="error(f.password)"
+        (blurred)="f.password().markAsTouched()"
+      />
+      <fc-password-generator (generated)="onGenerated($event)" />
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ 'NEW_CUSTOMER.SECTION.SERVICES' | t }}</legend>
+      <fc-select
+        [formField]="f.plan"
+        [label]="'NEW_CUSTOMER.FIELD.PLAN' | t"
+        [options]="planOptions()"
+        [error]="error(f.plan)"
+        (valueChange)="onPlan($event)"
+        (blurred)="f.plan().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.expirationDate"
+        type="date"
+        [label]="'NEW_CUSTOMER.FIELD.EXPIRATION' | t"
+        [hint]="'NEW_CUSTOMER.FIELD.EXPIRATION_HINT' | t"
+        [error]="error(f.expirationDate)"
+        (blurred)="f.expirationDate().markAsTouched()"
+      />
+      <fieldset class="features">
+        <legend>{{ 'NEW_CUSTOMER.FEATURES' | t }}</legend>
+        @for (name of featureNames; track name) {
+          <fc-checkbox [formField]="f.features[name]" [label]="featureLabel(name)" />
+        }
+      </fieldset>
+    </fieldset>
+
+    <div class="actions">
+      <button fc-button type="submit" [loading]="submitting()">
+        {{ 'NEW_CUSTOMER.CREATE' | t }}
+      </button>
+    </div>
+  </form>
+}

@@ -154,6 +154,23 @@ export const MENU: readonly MenuItem[] = [
     permission: 'products:read',
   },
   {
+    id: 'tools',
+    labelKey: 'MENU.TOOLS',
+    icon: 'settings',
+    route: '/tools/new-customer',
+    roles: ['PSA', 'D'],
+    children: [
+      {
+        id: 'new-customer',
+        labelKey: 'MENU.NEW_CUSTOMER',
+        icon: 'plus',
+        route: '/tools/new-customer',
+        permission: 'groups:create',
+        roles: ['PSA', 'D'],
+      },
+    ],
+  },
+  {
     id: 'activity-log',
     labelKey: 'MENU.ACTIVITY_LOG',
     icon: 'log',

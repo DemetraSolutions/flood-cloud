@@ -143,7 +143,7 @@ describe('requireGroupAccess and reportCrossGroupAccess', () => {
       res.json({ groupId: hex(res.locals.groupAccess!.groupId), clusterId: res.locals.groupAccess!.clusterId });
     });
     app.use(errorHandler(memoryLogger().logger, recordingErrorReporter().reporter));
-    server = app.listen(0);
+    server = app.listen(0, '127.0.0.1');
     await new Promise<void>((resolve) => server.once('listening', () => resolve()));
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });

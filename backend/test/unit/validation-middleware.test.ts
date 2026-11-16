@@ -31,7 +31,7 @@ before(async () => {
   });
   app.get('/unvalidated', (_req, res) => void res.json(inputOf(res, 'body')));
   app.use(errorHandler(memoryLogger().logger, recordingErrorReporter().reporter));
-  server = app.listen(0);
+  server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', () => resolve()));
   base = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
 });
