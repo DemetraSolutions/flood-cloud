@@ -1,0 +1,14 @@
+:host {
+  display: block;
+  max-inline-size: 60rem;
+}
+
+.hint {
+  color: var(--color-text-muted);
+}
+
+.releases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

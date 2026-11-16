@@ -809,3 +809,4 @@ Ogni area parte con l'analisi del `legacy_analyst` (skill `legacy-module-analysi
 - **Statistiche e report**, log, cestino, diagnostica.
 - **Integrazioni:** pagamenti (Satispay, Dojo, Flood Pay), canali (EasyAppear, Yellgo, LeggiMenu, Plateform, Cooperto, Qodeup), Reserve with Google, gestionali alberghieri, Cerved.
 - **Piattaforma:** paesi e province, attivazioni e canoni, release, fLite, app pubbliche (prenotazioni, Flood Pay).
+  - *Release (decisione del 2026-11-16, solo backoffice):* pagina statica `/releases` per PSA e D con le note da 0.1.0-beta-3 a 1.21.0 (dati tipati nel backoffice, `Technical-Guide.md` §11.18), link di download esterno come nel legacy, card dell'ultima release in home. Nessuna API: l'eventuale download autenticato dal backend resta fuori dal piano.

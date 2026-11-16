@@ -1,0 +1,9 @@
+:host {
+  display: block;
+  max-inline-size: 60rem;
+  margin-block-start: var(--space-5);
+}
+
+p {
+  margin-block-start: var(--space-3);
+}

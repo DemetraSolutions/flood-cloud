@@ -130,6 +130,21 @@ describe('visibleMenu', () => {
     });
   });
 
+  it('shows "Release" after the tools and only to platform administrators and dealers', () => {
+    const idsOf = (role: Role | undefined) => ids(visibleMenu(MENU, allowAll, allowAll, role));
+    expect(idsOf('PSA')).toContain('releases');
+    expect(idsOf('D')).toContain('releases');
+    for (const role of ['SA', 'CA', 'PA', 'E', undefined] as const) {
+      expect(idsOf(role)).not.toContain('releases');
+    }
+    const order = MENU.map((item) => item.id);
+    expect(order.indexOf('releases')).toBe(order.indexOf('tools') + 1);
+    expect(MENU.find((i) => i.id === 'releases')).toMatchObject({
+      route: '/releases',
+      labelKey: 'MENU.RELEASES',
+    });
+  });
+
   it('shows entries limited to some roles only to those roles', () => {
     const items: MenuItem[] = [
       { id: 'p', labelKey: 'P', icon: 'home', route: '/p', roles: ['PSA'] },

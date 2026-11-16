@@ -515,6 +515,13 @@ export const routes: Routes = [
               import('./features/new-customer/new-customer').then((m) => m.NewCustomer),
           },
           {
+            path: 'releases',
+            canMatch: [role('PSA', 'D')],
+            title: 'RELEASES.TITLE',
+            loadComponent: () =>
+              import('./features/releases/releases-page').then((m) => m.ReleasesPage),
+          },
+          {
             path: 'activity-log',
             canMatch: [permission('activityLog:read')],
             title: 'ACTIVITY.TITLE',

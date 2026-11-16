@@ -1,10 +1,19 @@
-import { Component } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { TPipe } from '../../core/i18n/t-pipe';
+import { SessionService } from '../../core/session/session.service';
+import { LatestRelease } from '../releases/latest-release';
 
-/** Placeholder home page; replaced by the real dashboard in later steps. */
+/** Home page; platform administrators and dealers also see the latest release. */
 @Component({
   selector: 'fc-home',
-  imports: [TPipe],
+  imports: [LatestRelease, TPipe],
   templateUrl: './home.html',
 })
-export class Home {}
+export class Home {
+  private readonly session = inject(SessionService);
+
+  protected readonly showRelease = computed(() => {
+    const role = this.session.me()?.role;
+    return role === 'PSA' || role === 'D';
+  });
+}

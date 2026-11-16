@@ -1,0 +1,7 @@
+<h1>{{ 'RELEASES.TITLE' | t }}</h1>
+<p class="hint">{{ 'RELEASES.HINT' | t }}</p>
+<div class="releases">
+  @for (release of releases; track release.version) {
+    <fc-release-notes [release]="release" [level]="2" />
+  }
+</div>

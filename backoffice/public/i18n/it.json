@@ -51,7 +51,8 @@
     "COMPANIES": "Aziende",
     "PLACES": "Punti vendita",
     "TOOLS": "Strumenti",
-    "NEW_CUSTOMER": "Nuovo cliente"
+    "NEW_CUSTOMER": "Nuovo cliente",
+    "RELEASES": "Release"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -2973,6 +2974,19 @@
       "IMPORT_INVALID": "Il file non è un oggetto JSON.",
       "IMPORTED": "Impostazioni caricate nel modulo: {applied} valori applicati, {ignored} ignorati. Salva per confermarle."
     }
+  },
+  "RELEASES": {
+    "TITLE": "Release",
+    "HINT": "Note di rilascio dell’app del punto vendita, dalla versione più recente.",
+    "LATEST": "Ultima release",
+    "ALL": "Tutte le release",
+    "VERSION": "Versione {version}",
+    "HOTFIX": "Hotfix {number} del {date}",
+    "FEATURES": "Novità",
+    "FIXES": "Correzioni",
+    "NOTES": "Note",
+    "DOWNLOAD": "Scarica la versione {version}",
+    "NEW_TAB": "(si apre in una nuova scheda)"
   },
   "NEW_CUSTOMER": {
     "TITLE": "Nuovo cliente",

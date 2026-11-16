@@ -1,0 +1,73 @@
+@let r = release();
+<article [attr.aria-labelledby]="headingId()">
+  <header>
+    <div [id]="headingId()" class="version" role="heading" [attr.aria-level]="level()">
+      {{ 'RELEASES.VERSION' | t: { version: r.version } }}
+    </div>
+    @if (date(); as releaseDate) {
+      <time [attr.datetime]="r.date">{{ releaseDate }}</time>
+    }
+    @if (hotfix(); as hotfixLabel) {
+      <time class="hotfix" [attr.datetime]="r.hotfix?.date">{{ hotfixLabel }}</time>
+    }
+    @if (r.downloadable) {
+      <a class="download" [href]="downloadUrl()" target="_blank" rel="noopener noreferrer">
+        {{ 'RELEASES.DOWNLOAD' | t: { version: r.version } }}
+        <fc-icon name="external" />
+        <span class="visually-hidden">{{ 'RELEASES.NEW_TAB' | t }}</span>
+      </a>
+    }
+  </header>
+
+  @if (r.notes; as notes) {
+    <section class="notes" aria-labelledby="{{ headingId() }}-notes">
+      <div
+        [id]="headingId() + '-notes'"
+        class="section-title"
+        role="heading"
+        [attr.aria-level]="sectionLevel()"
+      >
+        {{ 'RELEASES.NOTES' | t }}
+      </div>
+      @for (note of notes; track $index) {
+        <p>{{ note }}</p>
+      }
+    </section>
+  }
+
+  @if (r.features.length > 0) {
+    <section aria-labelledby="{{ headingId() }}-features">
+      <div
+        [id]="headingId() + '-features'"
+        class="section-title"
+        role="heading"
+        [attr.aria-level]="sectionLevel()"
+      >
+        {{ 'RELEASES.FEATURES' | t }}
+      </div>
+      <ul>
+        @for (item of r.features; track $index) {
+          <li>{{ item }}</li>
+        }
+      </ul>
+    </section>
+  }
+
+  @if (r.fixes.length > 0) {
+    <section aria-labelledby="{{ headingId() }}-fixes">
+      <div
+        [id]="headingId() + '-fixes'"
+        class="section-title"
+        role="heading"
+        [attr.aria-level]="sectionLevel()"
+      >
+        {{ 'RELEASES.FIXES' | t }}
+      </div>
+      <ul>
+        @for (item of r.fixes; track $index) {
+          <li>{{ item }}</li>
+        }
+      </ul>
+    </section>
+  }
+</article>

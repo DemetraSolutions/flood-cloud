@@ -171,6 +171,13 @@ export const MENU: readonly MenuItem[] = [
     ],
   },
   {
+    id: 'releases',
+    labelKey: 'MENU.RELEASES',
+    icon: 'release',
+    route: '/releases',
+    roles: ['PSA', 'D'],
+  },
+  {
     id: 'activity-log',
     labelKey: 'MENU.ACTIVITY_LOG',
     icon: 'log',
