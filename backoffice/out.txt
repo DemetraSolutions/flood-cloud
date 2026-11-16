@@ -1,0 +1,187 @@
+❯ Building...
+✔ Building...
+Application bundle generation complete. [1.448 seconds] - 2026-11-13T18:39:48.212Z
+
+
+ RUN  v5.0.5 /Users/davidebausach/projects/flood/flood-cloud/backoffice
+      Coverage enabled with v8
+
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  19:39:48
+   Duration  1.62s (tests 50%, environment 20%, transform 13%, setup 9%, import 7%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   31.22 |    39.23 |   30.41 |   31.49 |                   
+ app/core          |   23.52 |      100 |      40 |   23.52 |                   
+  storage.ts       |   23.52 |      100 |      40 |   23.52 | 9-27,42-43,57-70  
+ app/core/api      |   79.68 |     65.3 |   85.71 |   80.64 |                   
+  ...nterceptor.ts |      70 |       50 |      50 |   77.77 | 16,20             
+  ...nterceptor.ts |   83.33 |       50 |     100 |      80 | 12                
+  api-error.ts     |   78.04 |    70.27 |   85.71 |   78.04 | ...91,107,111,152 
+  field-issues.ts  |     100 |       50 |     100 |     100 | 54-55             
+ app/core/auth     |      50 |        0 |       0 |      50 |                   
+  return-url.ts    |      50 |        0 |       0 |      50 | 15-23             
+ app/core/config   |   17.39 |       12 |       0 |   14.28 |                   
+  app-config.ts    |   17.39 |       12 |       0 |   14.28 | 23-39,45-58       
+ app/core/groups   |   24.81 |     20.9 |   32.14 |   23.25 |                   
+  group-context.ts |      75 |    51.28 |   81.81 |   73.68 | ...61,76,82-90,96 
+  ...p-features.ts |    2.17 |     4.22 |       0 |    1.11 | 24-29,46-228      
+ app/core/i18n     |   31.57 |    27.02 |    7.14 |   27.45 |                   
+  dictionary.ts    |       0 |        0 |       0 |       0 | 13-41             
+  format.ts        |       0 |        0 |       0 |       0 | 16                
+  i18n.service.ts  |      40 |    45.45 |       0 |   36.36 | 33-77             
+  language.ts      |      25 |        0 |       0 |   27.27 | 15-38             
+ ...core/reference |    34.9 |    26.08 |   31.57 |   32.32 |                   
+  countries.ts     |   69.23 |    54.54 |   33.33 |      75 | 30-39             
+  ...nce-params.ts |       0 |        0 |       0 |       0 | 11-28             
+  ...ence-store.ts |      35 |    26.08 |   33.33 |   33.33 | ...60,165,173-226 
+ app/core/session  |   24.02 |    16.66 |    23.8 |   23.25 |                   
+  ...nterceptor.ts |   69.56 |    56.25 |      75 |      75 | 32,41,44,47,49    
+  ...on-storage.ts |   11.11 |        0 |       0 |   11.11 | 16-83             
+  ...on.service.ts |    18.6 |    10.93 |   13.33 |    17.6 | ...01-148,168-318 
+ ...ures/companies |    5.45 |    16.53 |    5.04 |    3.71 |                   
+  companies-api.ts |   10.34 |    27.27 |       0 |     7.4 | 32-164            
+  ...ny-banks.html |       0 |        0 |       0 |       0 | 1-82              
+  company-banks.ts |   22.72 |       30 |    8.33 |   14.28 | 27-66             
+  ...omer-app.html |       0 |        0 |       0 |       0 | 1-90              
+  ...stomer-app.ts |   14.81 |    42.85 |    7.14 |    4.76 | 25-77             
+  ...nvoicing.html |       0 |        0 |       0 |       0 | 1-144             
+  ...-invoicing.ts |   15.15 |       50 |    8.33 |       8 | 47-86             
+  ...any-errors.ts |   88.88 |    66.66 |     100 |    87.5 | 26                
+  ...-general.html |       0 |        0 |       0 |       0 | 1-134             
+  ...ny-general.ts |   12.12 |       50 |    6.25 |       4 | 24-67             
+  ...vouchers.html |       0 |        0 |       0 |       0 | 1-71              
+  ...l-vouchers.ts |   23.07 |       30 |    6.25 |   16.66 | 25-67             
+  ...ny-media.html |       0 |        0 |       0 |       0 | 1-49              
+  company-media.ts |   44.44 |       60 |   33.33 |      25 | 21-29             
+  company-model.ts |    4.93 |        0 |       0 |    5.26 | 140-499           
+  ...umbering.html |       0 |        0 |       0 |       0 | 1-86              
+  ...-numbering.ts |   22.72 |     37.5 |    8.33 |   14.28 | 27-67             
+  ...ny-options.ts |     100 |       75 |     100 |     100 | 17                
+  ...any-page.html |       0 |        0 |       0 |       0 | 1-89              
+  company-page.ts  |   11.42 |    35.29 |    8.33 |    3.33 | 34,39-100         
+  company-save.ts  |   26.66 |     37.5 |      50 |   11.11 | 15-24,38-41       
+  company-state.ts |    1.02 |     3.03 |       0 |    0.56 | 89-453            
+  company.types.ts |   66.66 |      100 |       0 |   66.66 | 206               
+  iban.ts          |       0 |        0 |       0 |       0 | 8-36              
+  logo-slot.html   |       0 |        0 |       0 |       0 | 1-30              
+  logo-slot.ts     |   19.23 |    23.07 |      20 |    9.09 | 33-73             
+  ...a-picker.html |       0 |        0 |       0 |       0 | 1-81              
+  media-picker.ts  |    6.49 |    19.35 |    7.14 |    2.81 | 43-151            
+  media-upload.ts  |   17.39 |    14.28 |       0 |   14.28 | 24-58,65-88       
+ ...eatures/groups |      25 |        0 |       0 |      25 |                   
+  languages.ts     |      25 |        0 |       0 |      25 | 17-20             
+ ...eatures/places |   39.28 |    52.33 |   38.95 |   41.19 |                   
+  ...schedule.html |       0 |        0 |       0 |       0 | 1-79              
+  ...s-schedule.ts |    8.88 |    33.33 |    3.44 |    3.12 | 31-139            
+  ...d-values.html |       0 |        0 |       0 |       0 | 1-17              
+  keyed-values.ts  |   19.04 |       50 |   16.66 |    6.25 | 23-56             
+  lookup-loader.ts |      10 |        0 |       0 |      10 | 21-30             
+  ...delivery.html |       0 |      100 |       0 |       0 | 1-22              
+  ...e-delivery.ts |   22.72 |       60 |   11.11 |   14.28 | 25-52             
+  place-errors.ts  |   78.57 |    33.33 |     100 |      75 | 27,34,43          
+  ...lds-view.html |   63.33 |      100 |       0 |      70 | 13-21,32,43       
+  ...ields-view.ts |   74.28 |    68.75 |   74.19 |   77.96 | ...44,157,174-185 
+  place-fields.ts  |   96.72 |    76.59 |     100 |   96.36 | 428,434           
+  ...-general.html |       0 |        0 |       0 |       0 | 1-187             
+  place-general.ts |    6.25 |    42.85 |    2.77 |    1.96 | 34-119            
+  place-hours.html |       0 |        0 |       0 |       0 | 1-26              
+  place-hours.ts   |   41.66 |       60 |      25 |      25 | 24-31             
+  place-kiosk.html |       0 |      100 |       0 |       0 | 1-22              
+  place-kiosk.ts   |   18.51 |    42.85 |    8.33 |      10 | 29-71             
+  place-leave.ts   |      50 |      100 |       0 |     100 |                   
+  ...-license.html |       0 |        0 |       0 |       0 | 1-41              
+  place-license.ts |   36.36 |       60 |      50 |   16.66 | 23-29             
+  place-media.html |       0 |      100 |       0 |       0 | 1-21              
+  place-media.ts   |      40 |       60 |      25 |      20 | 23-32             
+  place-model.ts   |   51.93 |    33.33 |   58.33 |   51.26 | ...17-619,626-748 
+  place-page.html  |   63.29 |    64.28 |       0 |   70.58 | ...19,26,37,40-45 
+  place-page.ts    |   62.85 |    76.47 |      50 |   56.66 | 73-100            
+  ...payments.html |       0 |      100 |       0 |       0 | 1-13              
+  ...e-payments.ts |      35 |       60 |   22.22 |   30.76 | 29-72             
+  ...printing.html |       0 |        0 |       0 |       0 | 1-21              
+  ...e-printing.ts |   14.28 |    42.85 |      25 |    4.34 | 23-55             
+  ...rvations.html |       0 |      100 |       0 |       0 | 1-14              
+  ...servations.ts |      25 |       60 |    12.5 |   16.66 | 25-48             
+  place-save.ts    |     100 |    93.75 |     100 |     100 | 23                
+  ...scalar-tab.ts |   30.76 |       60 |      50 |   16.66 | 14-17,23          
+  ...ordering.html |       0 |        0 |       0 |       0 | 1-82              
+  ...f-ordering.ts |    12.5 |     37.5 |    3.84 |    7.69 | 40-125            
+  place-state.ts   |   80.24 |    54.67 |   70.58 |   80.47 | ...30,532,540-548 
+  ...e-tables.html |       0 |      100 |       0 |       0 | 1-13              
+  place-tables.ts  |   29.41 |       60 |   14.28 |      20 | 23-51             
+  place.types.ts   |   83.33 |      100 |       0 |   83.33 | 161               
+  places-api.ts    |   41.66 |    73.33 |      40 |   38.23 | ...00,132-190,206 
+  ...g-transfer.ts |       8 |        0 |       0 |       8 | 14-18,29-67       
+  rows-editor.html |   57.89 |    66.66 |   33.33 |   63.41 | 4,13-40,49        
+  rows-editor.ts   |   63.63 |    72.22 |   35.29 |   59.25 | 60,68,84-104      
+ ...atures/profile |    7.07 |       20 |     3.7 |     4.1 |                   
+  profile-api.ts   |   22.22 |       60 |       0 |   14.28 | 22-45             
+  sessions.html    |       0 |        0 |       0 |       0 | 1-45              
+  sessions.ts      |    8.92 |    16.66 |    5.26 |    4.34 | 27-39,62-139      
+ ...features/users |   83.33 |       50 |     100 |   83.33 |                   
+  users-errors.ts  |   83.33 |       50 |     100 |   83.33 | 44                
+ app/shared/forms  |   72.72 |    61.11 |      60 |   71.42 |                   
+  form-errors.ts   |   72.72 |    61.11 |      60 |   71.42 | 56,72-87          
+ ...ed/ui/checkbox |      80 |    81.81 |   83.33 |   88.88 |                   
+  checkbox.html    |      64 |       50 |      50 |      75 | 18,22-23          
+  checkbox.ts      |     100 |    88.88 |     100 |     100 | 35                
+ ...confirm-dialog |   90.62 |    85.71 |      25 |     100 |                   
+  ...m-dialog.html |      85 |       50 |       0 |     100 | 15-19             
+ .../ui/data-table |    7.19 |    27.77 |    6.25 |    3.92 |                   
+  data-table.html  |       0 |        0 |       0 |       0 | 1-92              
+  data-table.ts    |   13.33 |    27.27 |      20 |     3.7 | 21,25-71          
+  ...-templates.ts |   18.75 |    56.25 |       0 |   13.04 | 23-49,61-69,81-83 
+ ...ared/ui/dialog |   77.27 |    76.47 |      50 |   73.33 |                   
+  dialog.html      |   89.47 |      100 |       0 |     100 |                   
+  dialog.ts        |      68 |    76.47 |      75 |    61.9 | 48-50,53-62       
+ ...ui/empty-state |   23.52 |       50 |     100 |   14.28 |                   
+  empty-state.html |       0 |        0 |     100 |       0 | 1-5               
+  empty-state.ts   |   57.14 |       60 |     100 |   33.33 | 14-16             
+ ...ui/error-state |    12.9 |    35.29 |      50 |    5.88 |                   
+  error-state.html |       0 |        0 |       0 |       0 | 1-14              
+  error-state.ts   |      40 |    54.54 |     100 |   16.66 | 19-27             
+ .../ui/form-error |   30.76 |       60 |   33.33 |      20 |                   
+  form-error.ts    |   30.76 |       60 |   33.33 |      20 | 11,26-32          
+ ...ared/ui/select |   84.48 |    83.33 |   83.33 |   91.66 |                   
+  select.html      |      75 |    66.66 |      50 |   84.21 | 23,27-28          
+  select.ts        |     100 |    88.88 |     100 |     100 | 45                
+ ...ed/ui/skeleton |   26.66 |       60 |   33.33 |   16.66 |                   
+  skeleton.html    |       0 |      100 |     100 |       0 | 1-3               
+  skeleton.ts      |   44.44 |       60 |   33.33 |   33.33 | 14-16             
+ ...i/status-badge |     100 |    91.66 |     100 |     100 |                   
+  ...us-badge.html |     100 |       50 |     100 |     100 | 2                 
+ .../ui/text-field |   87.71 |    88.46 |   71.42 |    92.5 |                   
+  text-field.html  |   79.16 |       75 |      50 |   91.66 | 22                
+  text-field.ts    |   93.93 |     90.9 |      80 |   92.85 | 86,93             
+ ...ed/ui/textarea |    8.33 |    27.27 |   14.28 |    3.22 |                   
+  textarea.html    |       0 |        0 |       0 |       0 | 1-24              
+  textarea.ts      |   17.39 |    33.33 |      20 |    5.55 | 26-58             
+ ...hared/ui/toast |   70.58 |      100 |    37.5 |      75 |                   
+  toast.service.ts |   70.58 |      100 |    37.5 |      75 | 49-59             
+ app/shared/util   |   17.64 |        0 |       0 |   17.64 |                   
+  debouncer.ts     |      10 |        0 |       0 |      10 | 22-32             
+  idempotency.ts   |   28.57 |        0 |       0 |   28.57 | 18-27             
+ testing           |   86.81 |     51.8 |      90 |   87.35 |                   
+  api.ts           |     100 |       50 |     100 |     100 | 48                
+  companies.ts     |   66.66 |        0 |       0 |   66.66 | 35-101            
+  forms.ts         |     100 |       50 |     100 |     100 | 33                
+  places-tabs.ts   |      96 |      100 |     100 |      96 | 30                
+  places.ts        |   83.59 |    50.66 |      88 |   84.42 | 260-302,418-421   
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 31.22% ( 1431/4583 )
+Branches     : 39.23% ( 796/2029 )
+Functions    : 30.41% ( 337/1108 )
+Lines        : 31.49% ( 1105/3508 )
+================================================================================
+ERROR: Coverage for lines (31.49%) does not meet global threshold (100%)
+ERROR: Coverage for functions (30.41%) does not meet global threshold (100%)
+ERROR: Coverage for statements (31.22%) does not meet global threshold (100%)
+ERROR: Coverage for branches (39.23%) does not meet global threshold (100%)

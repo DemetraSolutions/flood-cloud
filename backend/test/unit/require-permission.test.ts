@@ -93,7 +93,7 @@ describe('user routes: authenticate, beforePermission, permission, handler', () 
     current = principalOf('PA');
     const denied = await call('/places', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'x' });
     assert.deepEqual(denied, { status: 403, code: 'FORBIDDEN' });
-    current = principalOf('CA');
+    current = principalOf('D');
     assert.deepEqual(await call('/places', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'x' }), { status: 415, code: 'UNSUPPORTED_MEDIA_TYPE' });
     assert.equal((await call('/places', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"a":1}' })).status, 201);
   });

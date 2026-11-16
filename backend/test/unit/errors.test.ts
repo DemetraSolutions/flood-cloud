@@ -16,6 +16,8 @@ describe('AppError', () => {
       assert.deepEqual(error.headers, {});
     }
     assert.equal(ERROR_STATUS.SERVICE_UNAVAILABLE, 503);
+    assert.equal(ERROR_STATUS.STORE_DISABLED, 403);
+    assert.equal(DEFAULT_MESSAGES.STORE_DISABLED, 'Store not operational');
   });
 
   it('accepts a message, details and headers', () => {

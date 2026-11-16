@@ -1,0 +1,160 @@
+<header class="page-header">
+  <h1>{{ 'PLACES.TITLE' | t }}</h1>
+  <a *fcCan="'places:create'" class="new" [routerLink]="newRoute()">{{ 'PLACES.NEW' | t }}</a>
+</header>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'PLACES.FILTER.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+  @if (companyOptions().length > 0) {
+    <fc-select
+      [label]="'PLACES.FILTER.COMPANY' | t"
+      [placeholder]="'PLACES.FILTER.ALL_COMPANIES' | t"
+      [options]="companyOptions()"
+      [value]="companyId() ?? ''"
+      (valueChange)="onFilter('companyId', $event)"
+    />
+  }
+  <fc-select
+    [label]="'PLACES.FILTER.STATUS' | t"
+    [placeholder]="'PLACES.FILTER.ALL_STATUSES' | t"
+    [options]="statusOptions()"
+    [value]="status() ?? ''"
+    (valueChange)="onFilter('status', $event)"
+  />
+  <fc-select
+    [label]="'PLACES.FILTER.PLAN' | t"
+    [placeholder]="'PLACES.FILTER.ALL_PLANS' | t"
+    [options]="planOptions()"
+    [value]="plan() ?? ''"
+    (valueChange)="onFilter('plan', $event)"
+  />
+  <fc-select
+    [label]="'PLACES.FILTER.COUNTRY' | t"
+    [placeholder]="'PLACES.FILTER.ALL_COUNTRIES' | t"
+    [options]="countryOptions()"
+    [value]="country() ?? ''"
+    (valueChange)="onCountry($event)"
+  />
+  @if (provinceOptions().length > 0) {
+    <fc-select
+      [label]="'PLACES.FILTER.PROVINCE' | t"
+      [placeholder]="'PLACES.FILTER.ALL_PROVINCES' | t"
+      [options]="provinceOptions()"
+      [value]="province() ?? ''"
+      (valueChange)="onFilter('province', $event)"
+    />
+  }
+  <fc-checkbox
+    [label]="'PLACES.FILTER.TRASHED' | t"
+    [checked]="showTrashed()"
+    (checkedChange)="onTrashed($event)"
+  />
+</form>
+
+@if (places.error()) {
+  <fc-error-state
+    [title]="'PLACES.LIST_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="places.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'PLACES.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="'name'"
+    [loading]="places.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'PLACES.EMPTY' | t"
+    [emptyMessage]="'PLACES.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'places:create'" fcEmptyAction [routerLink]="newRoute()">{{ 'PLACES.NEW' | t }}</a>
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="detailRoute(row)">{{ row.name }}</a>
+    </ng-template>
+    <ng-template fcCell="expirationDate" let-row>
+      @if (canRenew() && !row.trashed) {
+        <fc-place-renewal [groupId]="groupId()" [place]="row" (renewed)="places.reload()" />
+      } @else {
+        {{ row.expirationDate?.slice(0, 10) }}
+      }
+    </ng-template>
+    <ng-template fcCell="status" let-row>
+      @if (row.trashed) {
+        <fc-status-badge tone="danger">{{ 'PLACES.STATUS.TRASHED' | t }}</fc-status-badge>
+      } @else if (row.status === 'active') {
+        <fc-status-badge tone="success">{{ 'PLACES.STATUS.ACTIVE' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge tone="warning">{{ 'PLACES.STATUS.DISABLED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      @if (canAct()) {
+        <fc-actions-menu
+          [text]="'PLACES.ACTIONS' | t"
+          [label]="rowLabel('PLACES.ACTIONS_LABEL', row)"
+        >
+          @if (row.trashed) {
+            <button
+              *fcCan="'places:trash'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('PLACES.ACTION.RESTORE_LABEL', row)"
+              (click)="actions.run('restore', row)"
+            >
+              {{ 'PLACES.ACTION.RESTORE' | t }}
+            </button>
+            <button
+              *fcCan="'places:delete'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('PLACES.ACTION.DELETE_LABEL', row)"
+              (click)="actions.run('delete', row)"
+            >
+              {{ 'PLACES.ACTION.DELETE' | t }}
+            </button>
+          } @else {
+            <button
+              *fcCan="'places:create'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('PLACES.ACTION.DUPLICATE_LABEL', row)"
+              (click)="actions.run('duplicate', row)"
+            >
+              {{ 'PLACES.ACTION.DUPLICATE' | t }}
+            </button>
+            <button
+              *fcCan="'places:trash'"
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="rowLabel('PLACES.ACTION.TRASH_LABEL', row)"
+              (click)="actions.run('trash', row)"
+            >
+              {{ 'PLACES.ACTION.TRASH' | t }}
+            </button>
+          }
+        </fc-actions-menu>
+      }
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="places.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-place-actions #actions [groupId]="groupId()" (done)="onDone($event)" />

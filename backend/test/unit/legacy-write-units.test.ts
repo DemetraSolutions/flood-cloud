@@ -2,9 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Double, Int32, ObjectId } from 'mongodb';
 import { COMPANIES_OWNED_FIELDS, GROUPS_OWNED_FIELDS, GROUPS_PLACES_FIELD, PLACES_OWNED_FIELDS, COLLECTIONS } from '../../src/db/collections.ts';
-import { DEFAULT_STORAGE_NAME, DEFAULT_TIMEZONE, companyContainerDefaults, newCompanyDocument, newPlaceDocument } from '../../src/shared/legacy-write/defaults.ts';
+import { DEFAULT_PLAN, DEFAULT_STORAGE_NAME, DEFAULT_TIMEZONE, companyContainerDefaults, newCompanyDocument, newPlaceDocument, placeContainerDefaults } from '../../src/shared/legacy-write/defaults.ts';
 import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from '../../src/shared/legacy-write/errors.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkFields, checkObjectId, requireFields } from '../../src/shared/legacy-write/fields.ts';
+import { SETTING_LEGACY_PATHS } from '../../src/shared/legacy-write/place-settings.ts';
 import { reserveWithGoogleRecord } from '../../src/shared/legacy-write/reserve-with-google.ts';
 import { normalizeVatNumber, vatNumberFilter } from '../../src/shared/legacy-write/vat.ts';
 import { versionOf } from '../../src/shared/legacy-write/version.ts';
@@ -26,9 +27,15 @@ describe('legacy write: registry and allowlists', () => {
   });
 
   it('never owns the blocks of the POS and of the legacy', () => {
-    for (const field of ['devices', 'rooms', 'storages', 'printStations', 'productionCenter', 'integrations', 'roomsSettings', 'general', 'ordering', 'openingTime', 'plan', 'groupId', '_id', 'insertDate']) {
+    // What the POS writes and what is kept for the integrations is never owned, and neither is a whole block: the owned keys are the leaves.
+    for (const field of ['devices', 'rooms', 'storages', 'printStations', 'productionCenter', 'integrations', 'server', 'connectorAddress', 'platform', 'roomsSettings', 'general', 'ordering', 'receipt', 'openingTime', 'delivery', 'delivery.time', 'groupId', '_id', 'insertDate']) {
       assert.ok(!PLACES_OWNED_FIELDS.includes(field), field);
     }
+    assert.ok(!PLACES_OWNED_FIELDS.some((field) => /^(devices|rooms|storages|printStations|productionCenter|integrations|server|connectorAddress)(\.|$)/.test(field) || field.startsWith('platform.') && field !== 'platform.sentry'));
+    for (const field of ['plan', 'status', 'expirationDate', 'platform.sentry', 'general.priceLists', 'openingTime.weekGeneric', 'openingTime.daySpecial', 'delivery.time.weekGeneric', 'delivery.time.daySpecial', 'timezone', 'invoicePS', 'listId', 'ecommerceListId', 'companyId']) {
+      assert.ok(PLACES_OWNED_FIELDS.includes(field), field);
+    }
+    assert.equal(PLACES_OWNED_FIELDS.length, 17 + 1 + 6 + SETTING_LEGACY_PATHS.length + 1);
     // The blocks are owned key by key, never as a whole: the keys the legacy or a later release adds to them survive.
     for (const field of ['settings', 'settings.global', 'settings.api', 'settings.ecommerce', 'fattura_elettronica', 'medias', 'medias.images', 'groupId', '_id', 'insertDate']) {
       assert.ok(!COMPANIES_OWNED_FIELDS.includes(field), field);
@@ -176,33 +183,55 @@ describe('legacy write: defaults of a new company', () => {
 describe('legacy write: defaults of a new place', () => {
   const place = (): Record<string, unknown> => newPlaceDocument(new ObjectId(), GROUP, { name: 'Shop', companyId: COMPANY }, NOW);
 
-  it('builds one complete template with every block the POS and the legacy read', () => {
+  it('builds one complete template in the form the old backoffice saves, with every block the POS and the legacy read', () => {
     const document = place();
     for (const block of [
-      'openingTime', 'platform', 'server', 'general', 'paymentTypes', 'receipt', 'prebilling', 'ordering', 'roomsSettings', 'selfOrdering', 'advancedReport', 'appointment',
-      'deliveryTakeAway', 'delivery', 'externalDisplay', 'integrations', 'medias', 'devices', 'rooms', 'storages', 'printStations', 'productionCenter',
+      'openingTime', 'platform', 'server', 'connectorAddress', 'general', 'paymentTypes', 'receipt', 'prebilling', 'ordering', 'roomsSettings', 'selfOrdering', 'payments', 'advancedReport', 'appointment',
+      'deliveryTakeAway', 'kiosk', 'fidelity', 'tgm', 'delivery', 'externalDisplay', 'integrations', 'medias', 'devices', 'rooms', 'storages', 'printStations', 'productionCenter',
     ]) {
       assert.ok(block in document, block);
     }
-    assert.equal(Object.keys(document['general'] as object).length, 31);
-    assert.equal(Object.keys(document['receipt'] as object).length, 24);
-    assert.equal(Object.keys(document['prebilling'] as object).length, 12);
-    assert.equal(Object.keys(document['ordering'] as object).length, 74);
-    for (const optional of ['kiosk', 'fidelity', 'tgm', 'payments', 'plan']) {
-      assert.ok(!(optional in document), optional);
+    for (const [block, size] of [['general', 31], ['receipt', 26], ['prebilling', 12], ['ordering', 74], ['roomsSettings', 31], ['kiosk', 40], ['deliveryTakeAway', 19], ['delivery', 8], ['appointment', 8], ['selfOrdering', 5], ['payments', 4], ['fidelity', 5], ['tgm', 5], ['externalDisplay', 5]] as const) {
+      assert.equal(Object.keys(document[block] as object).length, size, block);
     }
-    assert.deepEqual([document['groupId'], document['companyId'], document['status'], document['trash'], document['expirationDate'], document['insertDate'], document['updateDate']], [GROUP, COMPANY, true, false, null, NOW, NOW]);
+    assert.equal(Object.keys((document['medias'] as { images: object }).images).length, 9);
+    assert.deepEqual(
+      [document['groupId'], document['companyId'], document['status'], document['plan'], document['trash'], document['expirationDate'], document['insertDate'], document['updateDate'], document['listId'], document['ecommerceListId'], document['invoicePS']],
+      [GROUP, COMPANY, true, DEFAULT_PLAN, false, null, NOW, NOW, null, null, null],
+    );
+    assert.equal(DEFAULT_PLAN, 'basic');
+    assert.equal(Object.keys(document).length, 49);
   });
 
-  it('has a time zone, seven opening days and a reachable cash storage', () => {
+  it('takes the differences between the insert of the legacy and the form of the backoffice from the form: numberFontSize, the non-fiscal taxes, one invoice copy, five exits, the deprecated keys', () => {
+    const document = place();
+    const ordering = document['ordering'] as Record<string, unknown>;
+    assert.deepEqual([ordering['numberFontSize'], 'notesFontSize' in ordering], ['2-1', false]);
+    const receipt = document['receipt'] as Record<string, unknown>;
+    assert.deepEqual([receipt['noFiscalTaxes'], receipt['noFiscalTaxesTotal'], receipt['invoiceQt']], [false, false, 1]);
+    const rooms = document['roomsSettings'] as Record<string, unknown>;
+    assert.equal(rooms['exitsNumber'], 5);
+    // The deprecated keys are computed from the blocks that replaced them, as the form does.
+    assert.deepEqual([rooms['delivery'], rooms['deliveryAutoOrderingTime'], rooms['deliverySendPrebillingOnSave'], rooms['tableGroupName'], rooms['tableGroups']], [false, null, false, false, { status: false, name: false, autoCreateFirst: false, mergeProductsPrint: false }]);
+    assert.equal((document['kiosk'] as Record<string, unknown>)['mode'], 'sale');
+    assert.deepEqual(document['payments'], { defaultType: 'cash', cheque: false, tickets: false, paymentDiscount: false });
+    assert.deepEqual(document['connectorAddress'], '');
+    assert.equal(((document['prebilling'] as Record<string, unknown>)['sequentialNumberFontSize']), '1-1');
+    assert.deepEqual((document['deliveryTakeAway'] as Record<string, unknown>)['deliveryListId'], '');
+  });
+
+  it('has a time zone, seven opening days and seven delivery days, and a reachable cash storage', () => {
     const document = place();
     assert.equal(document['timezone'], DEFAULT_TIMEZONE);
     assert.equal(DEFAULT_TIMEZONE, 'Europe/Rome');
-    const week = (document['openingTime'] as { weekGeneric: Record<string, unknown> }).weekGeneric;
-    assert.deepEqual(Object.keys(week), ['0', '1', '2', '3', '4', '5', '6']);
-    for (const day of Object.values(week)) {
-      assert.deepEqual(day, { active: false, values: [] });
+    const weeks = [(document['openingTime'] as { weekGeneric: Record<string, unknown> }).weekGeneric, ((document['delivery'] as { time: { weekGeneric: Record<string, unknown> } }).time).weekGeneric];
+    for (const week of weeks) {
+      assert.deepEqual(Object.keys(week), ['0', '1', '2', '3', '4', '5', '6']);
+      for (const day of Object.values(week)) {
+        assert.deepEqual(day, { active: false, values: [] });
+      }
     }
+    assert.deepEqual([(document['openingTime'] as { daySpecial: unknown }).daySpecial, ((document['delivery'] as { time: { daySpecial: unknown } }).time).daySpecial], [{}, {}]);
     const storages = document['storages'] as Array<Record<string, unknown>>;
     assert.equal(storages.length, 1);
     assert.ok(storages[0]!['id'] instanceof ObjectId);
@@ -219,12 +248,25 @@ describe('legacy write: defaults of a new place', () => {
       assert.equal(reservation[key]!['templateId'], null, key);
     }
     assert.equal((document['appointment'] as { email: { templateId: unknown } }).email.templateId, null);
-    assert.deepEqual((document['openingTime'] as { daySpecial: unknown }).daySpecial, {});
     const integrations = document['integrations'] as Record<string, Record<string, unknown>>;
     for (const name of ['floodPay', 'bizerba', 'googleMaps', 'reserveWithGoogle', 'easyappear', 'leggimenu', 'yellgo', 'plateform', 'cooperto', 'dojo', 'satispay', 'qodeup', 'tomatoai', 'keenon', 'tsh', 'phlex']) {
       assert.equal(integrations[name]!['status'], false, name);
     }
     assert.deepEqual(Object.keys(integrations['floodPay']!), ['status', 'stripe', 'qrCodePayment', 'tapToPay']);
+  });
+
+  it('has no credential: every secret of the integrations is empty', () => {
+    const secrets: unknown[] = [];
+    const walk = (value: unknown, key: string): void => {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        Object.entries(value).forEach(([name, inner]) => walk(inner, name));
+      } else if (['apiKey', 'privateKey', 'webhookPrivateKey', 'publicKey', 'appToken', 'password', 'username', 'secret', 'id', 'activationCode', 'keyId', 'storeId', 'structureId', 'propertyId'].includes(key)) {
+        secrets.push(value);
+      }
+    };
+    walk(place()['integrations'], 'integrations');
+    assert.ok(secrets.length >= 14);
+    assert.ok(secrets.every((secret) => secret === null));
   });
 
   it('does not reproduce the fields the legacy copied by mistake', () => {
@@ -235,12 +277,48 @@ describe('legacy write: defaults of a new place', () => {
     assert.equal(reservation['untilHours'], null);
     assert.deepEqual(reservation['webWidget'], { status: false, color: '#000000', brightness: 'light' });
     assert.deepEqual((document['integrations'] as { floodPay: { stripe: unknown } }).floodPay.stripe, { publicKey: null, privateKey: null, webhookPrivateKey: null });
+    assert.equal('locationId' in ((document['integrations'] as { plateform: object }).plateform), false);
   });
 
-  it('takes the owned fields from the caller and names the first storage', () => {
-    const document = newPlaceDocument(new ObjectId(), GROUP, { name: 'Shop', companyId: COMPANY, timezone: 'Europe/London', status: false, countryCode: 'GB', storageName: 'Main' }, NOW);
-    assert.deepEqual([document['timezone'], document['status'], document['countryCode']], ['Europe/London', false, 'GB']);
+  it('takes the owned fields from the caller, the dotted ones inside their block, and names the first storage', () => {
+    const week = Object.fromEntries(['0', '1', '2', '3', '4', '5', '6'].map((day) => [day, { active: true, values: [{ start: '09:00', end: '18:00' }] }]));
+    const document = newPlaceDocument(
+      new ObjectId(),
+      GROUP,
+      {
+        name: 'Shop',
+        companyId: COMPANY,
+        timezone: 'Europe/London',
+        status: false,
+        plan: 'advanced',
+        countryCode: 'GB',
+        storageName: 'Main',
+        expirationDate: new Date('2030-01-01T00:00:00.000Z'),
+        'platform.sentry': true,
+        'general.priceLists': [{ id: 'a', allYouCanEat: false, ayceCode1: null, ayceCode2: null }],
+        'openingTime.weekGeneric': week,
+        'openingTime.daySpecial': { '2026-12-25': { closed: true, values: [] } },
+        'delivery.time.weekGeneric': week,
+        'delivery.time.daySpecial': {},
+      },
+      NOW,
+    );
+    assert.deepEqual([document['timezone'], document['status'], document['countryCode'], document['plan'], document['expirationDate']], ['Europe/London', false, 'GB', 'advanced', new Date('2030-01-01T00:00:00.000Z')]);
     assert.equal((document['storages'] as Array<Record<string, unknown>>)[0]!['name'], 'Main');
+    assert.deepEqual(document['platform'], { sentry: true });
+    assert.deepEqual((document['general'] as { priceLists: unknown }).priceLists, [{ id: 'a', allYouCanEat: false, ayceCode1: null, ayceCode2: null }]);
+    assert.equal(Object.keys(document['general'] as object).length, 31);
+    assert.deepEqual((document['openingTime'] as { weekGeneric: unknown; daySpecial: unknown }), { weekGeneric: week, daySpecial: { '2026-12-25': { closed: true, values: [] } } });
+    assert.deepEqual(((document['delivery'] as { time: { weekGeneric: unknown } }).time).weekGeneric, week);
+  });
+
+  it('gives the default of every key of a block a write completes', () => {
+    assert.deepEqual(placeContainerDefaults('platform'), { sentry: false });
+    assert.equal(Object.keys(placeContainerDefaults('general')).length, 31);
+    assert.deepEqual(Object.keys(placeContainerDefaults('openingTime')), ['weekGeneric', 'daySpecial']);
+    assert.deepEqual(Object.keys(placeContainerDefaults('delivery')), ['time', 'step', 'maxContemporary', 'radius', 'margin', 'minAmount', 'lat', 'lng']);
+    assert.deepEqual(Object.keys(placeContainerDefaults('delivery.time')), ['weekGeneric', 'daySpecial']);
+    assert.notEqual(placeContainerDefaults('general'), placeContainerDefaults('general'));
   });
 
   it('shares nothing between two documents and refuses invalid input', () => {
@@ -251,6 +329,8 @@ describe('legacy write: defaults of a new place', () => {
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a' } as never, NOW), invalid('companyId'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { companyId: COMPANY } as never, NOW), invalid('name'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, devices: [] } as never, NOW), invalid('devices'));
+    assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, 'platform.ip': true } as never, NOW), invalid('platform.ip'));
+    assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, 'openingTime.weekGeneric': { '0': {} } } as never, NOW), invalid('openingTime.weekGeneric'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, storageName: '' }, NOW), invalid('storageName'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, storageName: 3 as never }, NOW), invalid('storageName'));
   });

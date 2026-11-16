@@ -42,10 +42,19 @@ export class CompaniesApi {
     return `${this.baseUrl(groupId)}/${encodeURIComponent(companyId)}`;
   }
 
-  /** Creates a company (`201`). */
-  async create(groupId: string, body: object): Promise<VersionedCompany> {
+  /**
+   * Creates a company (`201`).
+   *
+   * @param groupId Group of the company.
+   * @param body The data of the company.
+   * @param key The `Idempotency-Key` of this submission (the same one on every retry of it).
+   */
+  async create(groupId: string, body: object, key: string): Promise<VersionedCompany> {
     const response = await firstValueFrom(
-      this.http.post<ApiData<CompanyRecord>>(this.baseUrl(groupId), body, { observe: 'response' }),
+      this.http.post<ApiData<CompanyRecord>>(this.baseUrl(groupId), body, {
+        headers: new HttpHeaders({ 'Idempotency-Key': key }),
+        observe: 'response',
+      }),
     );
     this.store.invalidate(groupId, 'companies');
     return versioned(response);

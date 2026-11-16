@@ -58,6 +58,7 @@ Fuori dalle superfici API, per le sonde di GKE.
 > **Password provvisoria.** Quando un amministratore crea l'utente o ne reimposta la password, il login risponde con `passwordChangeRequired: true` (come `GET /v1/me`). Finché la password non è cambiata, tutte le route con Bearer rispondono `403 PASSWORD_CHANGE_REQUIRED`, **tranne** `GET /v1/me`, `PUT /v1/me/password`, `POST /v1/auth/logout`, `POST /v1/auth/logout-all` e `POST /v1/client-errors`. Il client porta l'utente alla schermata di cambio password; dopo il cambio la sessione corrente resta valida e il flag torna `false`.
 > Le risposte che contengono token non sono mai compresse.
 > **Header comuni:** dove è applicato un rate limit la risposta porta `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` (secondi alla riapertura della finestra); oltre il limite `429 RATE_LIMITED` aggiunge `Retry-After` (secondi).
+> **Server di punto vendita.** L'app del negozio chiama le stesse route con una **chiave di negozio** (`Authorization: Bearer fc_sk_…`, sezione "Chiave di negozio" più sotto), ma solo quelle che la ammettono (oggi `GET /v1/groups/{groupId}/places/{placeId}` e `GET /v1/store-context`): ogni altra route risponde `403 FORBIDDEN` a una chiave di negozio. Una chiave valida con un punto vendita non operativo riceve `403 STORE_DISABLED`.
 > **Errori delle route con Bearer:** `401 UNAUTHENTICATED` (token assente, malformato, sconosciuto o revocato), `401 TOKEN_EXPIRED` (access token scaduto: il client esegue il refresh), `403 FORBIDDEN` (permesso mancante).
 
 ### POST /v1/auth/login
@@ -493,7 +494,7 @@ Le richieste di creazione e modifica accettano `permissions` come `{ "modules": 
 
 ## Dati di riferimento (`/v1`)
 
-Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del backoffice, per esempio il gruppo, le aziende e i punti vendita nel perimetro di un utente. Le aree gruppi, aziende e punti vendita le estendono con le route di gestione complete (le aziende sono in "Aziende"). Parametri di lista comuni (`limit`, `cursor`, `sort`, `q`: vedi "Liste"); `sort` ammette solo `name` (default, anche `-name`), `q` cerca nel nome. Errori comuni a queste letture: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR` (parametri non validi, `cursor`/`format` per un cursore non valido).
+Letture **compatte** (id, nome, stato) pensate per alimentare i selettori del backoffice, per esempio il gruppo, le aziende e i punti vendita nel perimetro di un utente. Le aree gruppi, aziende e punti vendita le estendono con le route di gestione complete (le aziende sono in "Aziende", i punti vendita in "Punti vendita"). Parametri di lista comuni (`limit`, `cursor`, `sort`, `q`: vedi "Liste"); `sort` ammette solo `name` (default, anche `-name`), `q` cerca nel nome. Errori comuni a queste letture: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR` (parametri non validi, `cursor`/`format` per un cursore non valido).
 
 ### GET /v1/groups
 - **Superficie:** backoffice
@@ -523,23 +524,7 @@ La lista compatta delle aziende (che alimenta i selettori e lo store dei dati di
 - **Errori:** comuni
 
 ### GET /v1/groups/{groupId}/places
-- **Superficie:** backoffice
-- **Autenticazione e permesso:** Bearer backoffice, `places:read`
-- **Ruoli:** i ruoli con il permesso, nel proprio perimetro
-- **Parametri di percorso:** `groupId` (come sopra)
-- **Query:** parametri di lista; `trashed` (default `false`); `companyId` (24 caratteri esadecimali) per limitare a un'azienda. Un'azienda fuori dal perimetro del chiamante non dà errore: la lista è **vuota**. `ids` (da 1 a 100 id separati da virgola, come per le aziende) risolve i nomi dei punti vendita già scelti, sempre nel perimetro del chiamante (un id fuori perimetro non è restituito); `422` se malformato o oltre 100.
-- **Risposta:** `200`; `companyId` è `null` se il punto vendita non ha azienda
-  ```json
-  {
-    "data": [
-      { "id": "665f1c2e9b1d4a0012ab34b3", "name": "Punto Vendita Centro", "companyId": "665f1c2e9b1d4a0012ab34b2", "trashed": false },
-      { "id": "665f1c2e9b1d4a0012ab34b4", "name": "Punto Vendita Nord", "companyId": null, "trashed": false }
-    ],
-    "page": { "limit": 50, "next": null }
-  }
-  ```
-- **Errori:** comuni; `404 NOT_FOUND`
-- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
+La lista dei punti vendita (che alimenta i selettori e lo store dei dati di riferimento del backoffice) è descritta in "Punti vendita", con gli stessi campi `id`, `name`, `companyId` e `trashed` più quelli aggiunti dal passo 7A (stessa route, stesso percorso).
 
 ## Aziende (`/v1`)
 
@@ -593,6 +578,7 @@ Mapping dei nomi: `vatNumber` = `code`, `fiscalCode` = `code2` (`''` e `null` si
 ### POST /v1/groups/{groupId}/companies
 - **Autenticazione e permesso:** Bearer backoffice, `companies:create`
 - **Ruoli:** PSA, D e SA (CA e PA `403`); il gruppo viene dal percorso
+- **Header:** `Idempotency-Key` obbligatorio (UUID; stesse regole dei punti vendita, vedi "Idempotenza" in "Punti vendita")
 - **Body** (`application/json`, massimo 64 KB): `name` (1–150), `vatNumber` (1–30), `address` (`street` 1–150, `postcode` 1–20, `city` 1–100, `country` ISO alpha-2 maiuscolo **obbligatori**, `province` opzionale fino a 10) sono obbligatori; opzionali `fiscalCode`, `currency` (default `EUR`), `email`, `phone` (fino a 30), `status` (`active` default), `expirationDate` (data o istante ISO 8601, `null` di default: mai l'epoca del legacy) e i blocchi `eInvoicing`, `invoiceNumbering`, `bankAccounts`, `mealVoucherIssuers`, `customerApp`, `media` con i campi che si vogliono impostare (gli altri hanno i default del legacy: `fattura_elettronica` con le 16 chiavi `''` e `regime_fiscale` `RF01`, `settings` completo con le 27 chiavi `ecommerce`, `banks`, `ticketsSuppliers` e `invoicesPSValues` vuoti, `invoicesPS` `null`, `medias.images` con le quattro chiavi). Gli id di banche e fornitori non si inviano alla creazione (li genera il server: 24 caratteri esadecimali); un id inviato è `422 incorrect`.
   ```json
   { "name": "Azienda Esempio Srl", "vatNumber": "01114601006", "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" },
@@ -660,6 +646,223 @@ Rigorose in scrittura, tolleranti in lettura. Un campo si controlla quando **cam
 - **`mealVoucherIssuers`:** fino a 50; `name` 1–100; `cuts` fino a 50 numeri ≥ 0 o `null` (importo libero).
 - **`customerApp.ecommerce`:** l'insieme esatto delle chiavi (27 con `priceListId` e `minimumOrder`), booleani e numeri ≥ 0; `minimumOrder` ha al più 10 valute (codici di 3 lettere maiuscole).
 - I numeri interi nell'intervallo Int32 sono scritti come Int32, gli altri come Double (come il legacy).
+
+## Punti vendita (`/v1`)
+
+Passo 7A: il punto vendita (`places` del gruppo) con le schede **Generale**, **Licenza** e **Orari**, la lista, la creazione, il cestino, l'eliminazione e la duplicazione. Le schede delle impostazioni (cassa, stampe, pagamenti, sale, prenotazioni, asporto, self ordering, kiosk, appuntamenti, display, fidelity, tabacchi, media: passo 7B, vedi "Impostazioni del punto vendita") sono nella stessa rappresentazione; la chiave di negozio (passo 7C) arriva dopo. Come per le aziende, le scritture passano dal servizio di scrittura (transazione sul database del gruppo e sulla copia del common, `groups.places` ricalcolato, `reserve_with_google`), con gli stessi tipi BSON che scrive il vecchio backoffice (`prepareData`); tutto ciò che il backend non possiede (`devices`, `rooms`, `storages`, `printStations`, `productionCenter`, `integrations`, `server`, `connectorAddress`, `roomsSettings.reservation.suspendedToday`, ogni chiave sconosciuta o storica) **non viene mai restituito né toccato**. Tutte le route sono **route di gruppo** (`groupId` verificato rispetto al perimetro prima del permesso). Un punto vendita inesistente, di un altro gruppo o fuori dal perimetro (un CA raggiunge i punti vendita delle proprie aziende, un PA il proprio) è lo stesso `404`. Errori comuni: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN`, `403 PASSWORD_CHANGE_REQUIRED`, `404 NOT_FOUND`, `413 PAYLOAD_TOO_LARGE` (body oltre 256 KB), `415`, `422 VALIDATION_ERROR` (per campo; `unknown` per le proprietà non previste, `forbiddenKey` per gli operatori).
+
+**Permessi per ruolo.** Solo **PSA e D creano e duplicano** i punti vendita (`places:create` è nel loro tetto soltanto: il SA non li crea, `403`). PSA, D e SA leggono, modificano, mettono nel cestino ed eliminano nel proprio perimetro (la matrice dell'utente restringe il SA); il CA e il PA leggono e modificano (tutte le schede del punto vendita, il CA quelli delle proprie aziende, il PA il proprio) ma non creano né cestinano né eliminano (`403`). `places:trash` e il nuovo `places:delete` sono nel tetto di PSA, D e SA soltanto. Un utente con la matrice legacy `places.w` ottiene solo i permessi del tetto del proprio ruolo.
+
+**Idempotenza.** `POST …/places` e `POST …/places/{placeId}/duplicate` (come `POST …/companies`) richiedono l'header **`Idempotency-Key`** con un UUID: senza è `422` (`field: "Idempotency-Key"`, `issue: "required"`), non valido `422` `format`. La stessa chiave con lo stesso body dà **la stessa risposta salvata** (stato, body, `Location`, `ETag`) e non crea nulla; la stessa chiave con un body diverso dà `409` (`issue: "reused"`); mentre la prima richiesta è ancora in corso una seconda con la stessa chiave dà `409`. Le chiavi sono per utente e per route (percorso compreso) e durano 24 ore; una richiesta che fallisce libera la chiave, così si può rinviare. La risposta salvata è quella già priva di credenziali.
+
+**Campi riservati.** `license.plan` e `license.sentry`: solo PSA; **alla creazione il piano lo sceglie anche il D, ma solo tra `basic`, `advanced`, `enterprice` e `tgm-secondary`**: `desk-secondary` è del solo PSA, anche alla creazione (`403 notAllowed` per il D). `license.expirationDate` e `license.status`: PSA e D. Per i ruoli non ammessi un valore **diverso** da quello attuale dà `403 FORBIDDEN` con `details: [{ "field": "license.plan", "issue": "notAllowed" }, …]`; rimandare il valore attuale è accettato (così il salvataggio unico può rinviare l'intero oggetto). Alla creazione il confronto è con i default (`plan` `basic`, `expirationDate` `null`, `status` `active`, `sentry` `false`). Un piano storico (`professional`, `''`) resta finché un PSA non lo cambia, e si può rimandare invariato.
+
+**Rappresentazione** (la restituiscono `GET`, `POST`, `PATCH`, le `PUT`, `trash`, `restore` e `duplicate`; oltre ai campi qui sotto ci sono i tredici blocchi delle impostazioni del passo 7B, descritti più avanti; i campi che il documento non ha o ha di tipo sbagliato sono `null`, `false` o `[]`, mai un `500`, nemmeno sui `null` che il legacy lascia sull'indirizzo di un punto vendita cestinato):
+```json
+{
+  "data": {
+    "id": "665f1c2e9b1d4a0012ab34b3", "groupId": "665f1c2e9b1d4a0012ab34a1",
+    "name": "Bar Roma", "companyId": "665f1c2e9b1d4a0012ab34b2",
+    "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" },
+    "contactName": "Mario Rossi", "email": "bar@esempio.it", "phone": "+39 02 1234567",
+    "priceListId": "665f…", "ecommercePriceListId": null, "invoiceSeries": "FE",
+    "priceLists": [{ "id": "665f…", "allYouCanEat": true, "ayceCode1": "12", "ayceCode2": null }],
+    "trashed": false, "createdAt": "2026-01-15T10:00:00.000Z", "updatedAt": "2026-11-13T09:30:00.000Z",
+    "license": { "plan": "advanced", "expirationDate": "2030-01-01T00:00:00.000Z", "status": "active", "sentry": false },
+    "openingHours": {
+      "timezone": "Europe/Rome",
+      "week": { "0": { "active": false, "values": [] }, "1": { "active": true, "values": [{ "start": "09:00", "end": "18:00" }] }, "2": "…", "3": "…", "4": "…", "5": "…", "6": "…" },
+      "special": { "2026-12-25": { "closed": true, "values": [] } },
+      "deliveryTime": { "week": { "0": "…", "…": "…" }, "special": {} }
+    }
+  }
+}
+```
+Mapping dei nomi: `address.street/postcode/city/province/country` = `address/postcode/city/countryAreaCode/countryCode`, `contactName` = `contact`, `phone` = `telephone`, `priceListId` = `listId`, `ecommercePriceListId` = `ecommerceListId`, `invoiceSeries` = `invoicePS` (il nome di una serie dell'azienda, `null`, oppure `false` dove il legacy lo ha memorizzato così: un valore che si può rimandare invariato ma non impostare), `priceLists` = `general.priceLists`, `trashed` = `trash`, `license.plan/expirationDate/status/sentry` = `plan/expirationDate/status/platform.sentry` (`plan` è il valore memorizzato così com'è, anche storico; `status` `active`/`disabled` dal booleano), `openingHours.timezone` = `timezone`, `week` = `openingTime.weekGeneric` (sempre le sette chiavi `0` = domenica … `6`, ciascuna `{ active, values: [{ start, end }] }` con orari `HH:mm`), `special` = `openingTime.daySpecial` (solo le chiavi `YYYY-MM-DD`, `{ closed, values }`), `deliveryTime` = `delivery.time` (stessa forma).
+
+### GET /v1/groups/{groupId}/places
+- **Autenticazione e permesso:** Bearer backoffice, `places:read`
+- **Ruoli:** PSA, D e SA nel proprio perimetro, CA i punti vendita delle proprie aziende, PA il proprio
+- **Query:** parametri di lista (`sort`: `name`, default, `-name`, `expirationDate`, `-expirationDate`; l'ordinamento è applicato **prima** della paginazione, con l'id come spareggio stabile; senza data i punti vendita vengono per primi in ordine crescente e per ultimi in ordine decrescente; `q` cerca nel nome e nella città, come testo letterale senza distinguere le maiuscole); `trashed` (`true` per il cestino; default `false`); `companyId`; `ids` (da 1 a 100 id separati da virgola, duplicati e maiuscole ignorati: risolve i punti vendita già scelti, sempre nel perimetro; un id fuori perimetro non è restituito); `status` (`active`, `disabled`); `plan` (il piano memorizzato, `^[A-Za-z0-9_-]{1,30}$`); `country` (ISO alpha-2 maiuscolo); `province` (1–10 caratteri). Un'azienda fuori dal perimetro del chiamante non dà errore: la lista è **vuota**. Letta dalle copie nel database common.
+- **Risposta:** `200`; `companyId`, `plan`, `city`, `province`, `country` ed `expirationDate` sono `null` se mancanti o di tipo sbagliato
+  ```json
+  { "data": [ { "id": "665f1c2e9b1d4a0012ab34b3", "name": "Bar Roma", "companyId": "665f1c2e9b1d4a0012ab34b2", "trashed": false, "plan": "advanced", "status": "active", "city": "Milano", "province": "MI", "country": "IT", "expirationDate": "2030-01-01T00:00:00.000Z" } ], "page": { "limit": 50, "next": null } }
+  ```
+  `id`, `name`, `companyId` e `trashed` sono i campi che usa `ReferenceStore` del backoffice, invariati.
+- **Errori:** comuni; `404 NOT_FOUND` (gruppo); `422` per parametri non validi (`cursor`/`format` per un cursore non valido per l'ordinamento)
+- **Cache:** `ETag` debole e `304` con `If-None-Match` (vedi "Liste")
+
+### POST /v1/groups/{groupId}/places
+- **Autenticazione e permesso:** Bearer backoffice, `places:create`
+- **Ruoli:** PSA e D (SA, CA e PA `403`); il gruppo viene dal percorso
+- **Header:** `Idempotency-Key` obbligatorio (vedi "Idempotenza")
+- **Body** (`application/json`, massimo 256 KB): `name` (1–150), `companyId` (24 esadecimali: un'azienda **del gruppo**, non nel cestino e nel perimetro del chiamante) e `address` (`street` 1–150, `postcode` 1–20, `city` 1–100, `country` ISO alpha-2 maiuscolo **obbligatori**, `province` opzionale fino a 10) sono obbligatori; opzionali `contactName` (fino a 100), `email`, `phone` (fino a 30), `priceListId`, `ecommercePriceListId`, `invoiceSeries`, `priceLists` (fino a 50 elementi `{ id, allYouCanEat?, ayceCode1?, ayceCode2? }` con id univoci), `license` (`plan`, `expirationDate`, `status`, `sentry`) e `openingHours` (`timezone`, `week`, `special`, `deliveryTime`) con i campi che si vogliono impostare. **Il documento creato è il punto vendita completo nella forma che salva il vecchio backoffice**, con tutti i blocchi e i loro default (impostazioni di cassa, stampe, pagamenti, sale e prenotazioni, asporto e consegna, self ordering, kiosk con `mode` `sale`, appuntamenti, display, fidelity, tabacchi, media, `integrations.*` con tutti gli interruttori spenti e nessuna credenziale, `platform: { sentry }`, `server: { ip: null }`), `plan` `basic`, `timezone` `Europe/Rome`, le due settimane (orari e consegna) di sette giorni chiusi, **un deposito** `{ id, name: "Deposito 1", cash: true, ecommerce: false }`, `status` `active`, `expirationDate` `null` (mai l'epoca del legacy). Il listino delle vendite scelto è sempre tra i listini del punto vendita (`priceLists`), come fa il vecchio backoffice.
+  ```json
+  { "name": "Bar Roma", "companyId": "665f1c2e9b1d4a0012ab34b2", "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" },
+    "priceListId": "665f…", "license": { "plan": "advanced", "expirationDate": "2030-01-01" } }
+  ```
+- **Header particolari:** `Location: /v1/groups/{groupId}/places/{placeId}` e `ETag`
+- **Risposta:** `201` con il punto vendita (rappresentazione completa)
+- **Errori:** comuni; `403 FORBIDDEN` (SA, CA, PA; D con `notAllowed` sui campi riservati); `409` (chiave riusata con un altro body o richiesta con la stessa chiave in corso); `422` (`Idempotency-Key` mancante o non valido, regole di validazione più sotto; `companyId` `incorrect` se l'azienda non è del gruppo, è nel cestino, non esiste o è fuori dal perimetro)
+
+### GET /v1/groups/{groupId}/places/{placeId}
+- **Autenticazione e permesso:** Bearer backoffice, `places:read`; oppure la **chiave di negozio** del punto vendita (solo il proprio: qualunque altro `placeId` o gruppo è `404` identico; `403 STORE_DISABLED` se il punto vendita non è operativo), con la stessa rappresentazione e lo stesso `ETag`
+- **Risposta:** `200` con il punto vendita (anche nel cestino), `ETag` forte = versione del documento del **database del gruppo** (non della copia), cioè quella che `If-Match` si aspetta. **Non restituisce mai** `integrations`, le credenziali dei dispositivi, `server.ip`, `connectorAddress`, né `devices`, `rooms`, `storages`.
+- **Errori:** comuni; `404 NOT_FOUND` identico per punto vendita inesistente, di un altro gruppo o fuori dal perimetro; `422` per `placeId` malformato
+
+### PATCH /v1/groups/{groupId}/places/{placeId}
+Il **salvataggio unico** delle schede Generale, Licenza e Orari: qualsiasi sottoinsieme dei campi e dei blocchi.
+- **Autenticazione e permesso:** Bearer backoffice, `places:update`; **`If-Match` obbligatorio**
+- **Body** (massimo 256 KB): gli stessi campi della creazione, tutti opzionali (`address`, `license` e `openingHours` accettano un sottoinsieme dei propri campi, anche `deliveryTime`); gli elenchi e le settimane (`priceLists`, `openingHours.week`, `openingHours.deliveryTime.week`) sono sostituiti **per intero**, i giorni speciali (`special`) si sostituiscono come mappa (le date non inviate vengono rimosse, le chiavi che non sono date restano); un body vuoto è `422` (`(body)` `required`). Si scrivono solo i campi il cui valore **differisce** da quello memorizzato: rimandare l'intero oggetto ricevuto da `GET` non cambia nulla (e restituisce lo stesso `ETag`). Ogni valore si scrive **per percorso puntato** (`general.priceLists`, `platform.sentry`, `openingTime.weekGeneric`…): le altre chiavi dei blocchi, anche scritte dal POS o dal legacy, restano com'erano; un blocco mancante o vuoto viene completato con i default delle chiavi che la richiesta non imposta.
+- **Perimetro del cambio di azienda:** `companyId` può cambiare solo verso un'azienda dello stesso gruppo, non nel cestino e nel perimetro del chiamante (il CA solo tra le proprie aziende, il PA non può cambiarla): altrimenti `422 incorrect`.
+- **Risposta:** `200` con il punto vendita aggiornato e il nuovo `ETag`
+- **Errori:** comuni; `403` (`notAllowed`); `404`; `409 CONFLICT` (un blocco del documento memorizzato che non è un oggetto, per esempio `platform: "web"` quando si scrive `license.sentry`: nulla viene scritto); `412 PRECONDITION_FAILED` (versione cambiata, anche da una scrittura del legacy a un campo posseduto dopo la lettura; **una scrittura del POS** su `devices[i].info`, `rooms`, `suspendedToday` o altre chiavi non possedute **non** cambia la versione); `422` (`If-Match` mancante o non valido, regole di validazione)
+- Ogni scrittura registra `place.updated` nel registro delle attività con i **nomi** dei campi o blocchi cambiati (`license`, `openingHours`, `address.city`, `priceLists`…) e mai i valori.
+
+### PUT /v1/groups/{groupId}/places/{placeId}/license
+### PUT …/opening-hours
+Sostituiscono **un blocco intero**, con le stesse regole, gli stessi errori e la stessa risposta di `PATCH` (`If-Match` obbligatorio, `places:update`; per la licenza valgono i campi riservati). Il body è il blocco come lo restituisce `GET`, con **tutte** le chiavi obbligatorie: `license` → `{ plan, expirationDate, status, sentry }` (il piano è un testo: i valori ammessi si controllano solo se cambia); `opening-hours` → `{ timezone, week, special, deliveryTime: { week, special } }` (le settimane con tutti e sette i giorni).
+  ```json
+  { "plan": "advanced", "expirationDate": "2031-01-01", "status": "active", "sentry": false }
+  ```
+
+### POST /v1/groups/{groupId}/places/{placeId}/trash
+### POST /v1/groups/{groupId}/places/{placeId}/restore
+- **Autenticazione e permesso:** Bearer backoffice, `places:trash`; **`If-Match` obbligatorio**; senza body
+- **Ruoli:** PSA, D e SA (CA e PA `403`). Il cestino **revoca la chiave di negozio** del punto vendita (motivo `placeTrashed`; il ripristino non la restituisce: serve una nuova attivazione) e mette `trash: true` e **non azzera l'indirizzo** (il difetto del legacy non si replica), toglie il punto vendita dal feed di Reserve with Google e ricalcola `groups.places`; il ripristino rimette il feed solo se l'integrazione è attiva e completa. Registrano `place.trashed` e `place.restored`.
+- **Risposta:** `200` con il punto vendita e il nuovo `ETag`
+- **Errori:** comuni; `404`; `409 CONFLICT` se è già nel cestino (`trash`) o non lo è (`restore`); `412`; `422` (`If-Match`)
+
+### DELETE /v1/groups/{groupId}/places/{placeId}
+- **Autenticazione e permesso:** Bearer backoffice, `places:delete` (stessi ruoli e tetti di `places:trash`: PSA, D e SA, mai CA e PA); **`If-Match` obbligatorio**
+- **Comportamento:** elimina per sempre un punto vendita **dal cestino** (database del gruppo, copia, feed di Reserve with Google e `groups.places`, nella stessa transazione). Revoca anche l'eventuale chiave di negozio rimasta (`placeDeleted`). Registra `place.deleted`. Il controllo dei riferimenti riguarda solo gli utenti; restano altri riferimenti all'id che l'eliminazione non toglie: `tgm.placeId` dei punti vendita secondari, `placesIds` di promozioni e tipi di carta nel documento del gruppo, `storages[].id` nei movimenti di magazzino, vendite e documenti.
+- **Risposta:** `204` senza body
+- **Errori:** comuni; `404`; `409 CONFLICT` se non è nel cestino, oppure con `details: [{ "field": "users", "issue": "referenced" }]` se un utente del gruppo, anche nel cestino, ha ancora il punto vendita nel proprio perimetro (`placeId` o `placesId`); `412`; `422` (`If-Match`)
+
+### POST /v1/groups/{groupId}/places/{placeId}/duplicate
+- **Autenticazione e permesso:** Bearer backoffice, `places:create` (nel tetto di PSA e D soltanto: SA, CA e PA `403`); `Idempotency-Key` obbligatorio (vedi "Idempotenza"); senza body e senza `If-Match`
+- **Comportamento:** replica **tutto** il punto vendita, "perché serve a riportare una situazione uguale": ogni chiave, i dispositivi, le sale, i depositi **con gli stessi id** (come il legacy), le integrazioni con le loro credenziali (copiate sul server, **mai restituite** né scritte nei log) e le chiavi che il backend non conosce. Cambiano solo `_id`, `insertDate` e `updateDate` (adesso), `trash: false`, `groupId` (quello verificato) e il nome, che è `<nome> (Copy)` come nel legacy. Nella stessa transazione: inserimento, copia nel common, feed di Reserve with Google (come l'`insertOne` del legacy, se l'integrazione è attiva e completa) e `groups.places`. **La chiave di negozio** (passo 7C) **non si copia mai**: va creata di nuovo per il nuovo punto vendita. Registra `place.duplicated` con l'id dell'origine nei metadati (`sourceId`). **Attenzione:** la copia condivide con l'origine le credenziali dei pagamenti (Stripe, Satispay, Dojo, Plateform…), quelle della cassa automatica e gli id di dispositivi e depositi, quindi pagamenti e movimenti possono confluire sugli stessi account e identificativi: dopo una duplicazione vanno riviste le integrazioni. Un D che duplica copia anche `platform.sentry` (che solo il PSA imposta) e un `plan` storico o `desk-secondary` dell'origine: è lo stato di un punto vendita del suo gruppo, non una scelta nuova.
+- **Header particolari:** `Location: /v1/groups/{groupId}/places/{nuovo id}` e `ETag`
+- **Risposta:** `201` con il nuovo punto vendita (rappresentazione completa, senza credenziali)
+- **Errori:** comuni; `403`; `404`; `409 CONFLICT` se il punto vendita di origine è nel cestino, se la chiave è già usata con un'altra richiesta o ancora in corso, oppure con `details: [{ "field": "companyId", "issue": "incorrect" }]` se la sua azienda non esiste o è nel cestino
+
+### GET /v1/groups/{groupId}/places/{placeId}/invoice-series
+- **Autenticazione e permesso:** Bearer backoffice, `places:update` (PSA, D, SA, CA e PA); scope come il punto vendita (un punto vendita fuori dal perimetro del chiamante è `404`, come per il dettaglio)
+- **Comportamento:** le serie di fatturazione (`invoicesPSValues`) dell'azienda **attuale** del punto vendita, per scegliere `invoiceSeries` nella scheda Generale. Il PA, che non ha `companies:read`, le legge comunque; non restituisce nient'altro dell'azienda.
+- **Risposta:** `200`, `{ "data": [{ "name": "FE", "cash": true }, { "name": "NC", "cash": false }] }`, nell'ordine memorizzato, senza paginazione; `[]` se l'azienda non ha serie o non esiste; `cash` è `true` solo se il valore memorizzato lo è
+- **Errori:** comuni; `403`; `404`; `422` (`placeId`)
+- **Cache:** `ETag` e `304`
+
+### Impostazioni del punto vendita (passo 7B)
+Le schede delle impostazioni sono **tredici blocchi** della rappresentazione del punto vendita (`GET`), parte del `PATCH` unico e della creazione, e ciascuno ha la propria `PUT` che lo sostituisce per intero. Tutte le `PUT` richiedono `If-Match` e il permesso `places:update` (CA i punti vendita delle proprie aziende, PA il proprio), hanno le stesse regole, gli stessi errori e la stessa risposta del `PATCH` e registrano `place.updated` con i **nomi** dei blocchi cambiati (`cashSettings`, `printing`, `payments`, `tables`, `reservations`, `delivery`, `selfOrdering`, `kiosk`, `appointments`, `externalDisplay`, `fidelity`, `tobacco`, `media`), mai i valori. Le impostazioni non dipendono dalle feature del gruppo: il backend non rifiuta una scrittura perché una scheda è nascosta (lo fa il backoffice). Come per il resto: un campo si valida solo quando **cambia**, un blocco rimandato com'è non scrive nulla, e ogni chiave si scrive sul **proprio percorso** con i tipi BSON del vecchio backoffice (interi Int32 o `null`, numeri Int32 se interi e Double altrimenti, stringhe vuote dove le scrive il form): le chiavi sconosciute o storiche (`ordering.fontSize`, `ordering.sequentialNumber`, `payments.paymentDiscountAuto`…) restano e non sono mai restituite.
+
+| Blocco | `PUT` | Chiavi legacy |
+|---|---|---|
+| `cashSettings` | `…/settings/cash` | `general.*` tranne `priceLists`, e `advancedReport.logs` (`advancedReportLogs`) |
+| `printing` | `…/settings/printing` | `receipt`, `prebilling`, `ordering` (oggetti `printing.receipt`, `.prebilling`, `.ordering`) |
+| `payments` | `…/settings/payments` | `payments` (`defaultType`, `cheque`, `tickets`, `paymentDiscount`) e `paymentTypes` (`payments.paymentTypes`) |
+| `tables` | `…/settings/tables` | `roomsSettings.*` tranne `reservation` |
+| `reservations` | `…/settings/reservations` | `roomsSettings.reservation.*`, **`suspendedToday` compreso** |
+| `delivery` | `…/settings/delivery` | `deliveryTakeAway` (`delivery.takeAway`) e `delivery` tranne `time` (che è in `openingHours.deliveryTime`) |
+| `selfOrdering` | `…/settings/self-ordering` | `selfOrdering` |
+| `kiosk` | `…/settings/kiosk` | `kiosk` |
+| `appointments` | `…/settings/appointments` | `appointment` |
+| `externalDisplay` | `…/settings/external-display` | `externalDisplay` |
+| `fidelity` | `…/settings/fidelity` | `fidelity` |
+| `tobacco` | `…/settings/tobacco` | `tgm` |
+| `media` | `…/media` | `medias.images.*` |
+
+- **Forme.** I nomi dei campi sono quelli del legacy dentro il blocco. Interruttori booleani; testi `null` se vuoti (`value || null`); interi `null` o numeri; `font` `R-C` con R e C da 1 a 3; colori `#rrggbb`; orari `HH:mm` o `null`; enumerazioni chiuse (`ordering.productsSorting` `cart`/`alphabetical`/`position`, `cashSettings.localWarehouseOutOfStock` `disabled`/`enabled`/`alert`, `receiptsCancellation` `sync`/`notSync`/`null`, `payments.defaultType` `cash`/`electronic`, `delivery.takeAway.sendOrderOnSave*` `ask`/`never`/`always`, `kiosk.mode` `sale`/`catalog`, `kiosk.catalogLayout` `cols-4`/`cols-3`/`list`, i `*Placeholder` `none`/`optional`/`required`, `fidelity.type` `advanced`/`base`/`null`, `appointments.type` `single`/`multiple`, `reservations.webWidget.brightness` `light`/`dark`/`auto`). Un valore memorizzato fuori forma si legge come il default del form (mai un `500`). **La forma di orari `HH:mm`, font e colori si controlla solo quando il valore cambia** (`422` `pattern`, nel service): un valore storico rimandato invariato è accettato; lo schema fissa solo i limiti di lunghezza.
+- **Elenchi e mappe, tutti con limiti** (al più 500 elementi, salvo i limiti indicati): `workshiftNames` (20 testi), `tables.tipValues` (20 `{ type: 'v'|'p', value }`), `tables.tableGroups` (`{ status, name, autoCreateFirst }`; la forma booleana storica si legge come `status`), `reservations.timeBlocks` (50 `{ weekDays: 0–6 univoci, start, end }`), `payments.paymentTypes` (50), `delivery.takeAway.shippingCosts` (50 `{ taxed, toKm }`), `delivery.minAmount` (valute di 3 lettere maiuscole, 10), `selfOrdering.priceListsConfig` (per listino, 50), `kiosk.productsCategories`, i cinque testi del kiosk per lingua (`{ it: '…' }`, 20 lingue di 2 lettere). Le mappe per valuta, lingua o listino rifiutano operatori, percorsi e chiavi di prototipo (`forbiddenKey`).
+- **Chiavi copiate (deprecate).** Il server calcola, come il form, `roomsSettings.delivery`, `deliveryAutoOrderingTime` e `deliverySendPrebillingOnSave` (copie di `deliveryTakeAway`) e `roomsSettings.tableGroups` (oggetto intero con `mergeProductsPrint`, copia di `ordering.mergeProductsPrint`) e `tableGroupName`: si scrivono a ogni scrittura delle chiavi che copiano e non fanno parte di nessuna richiesta.
+- **`payments.paymentTypes`.** Gli `id` sono stabili: un elemento con `id` deve essere uno di quelli del punto vendita (altrimenti `422 incorrect` su `payments.paymentTypes.N.id`, anche se ripetuto); un elemento senza `id` ne riceve uno dal server nella forma dell'`createId` del vecchio backoffice (7 caratteri base 36, un numero a 32 bit, il tempo in millisecondi). `electronicInvoiceMode` è `MP01`–`MP23` o `null` (`fattura_elettronica.ModalitaPagamento`).
+- **Riferimenti, verificati dove cambiano:** i `templateId` (`reservations.*.templateId`, `appointments.email.templateId`) sono ObjectId di `email_templates` del gruppo (`incorrect`); `delivery.takeAway.deliveryListId`/`takeAwayListId`, `kiosk.listId` e le chiavi di `selfOrdering.priceListsConfig` sono listini **attivi** del gruppo; `delivery.minAmount` ha valute del gruppo (le altre valute già presenti restano); `kiosk.upsellingCategoryId`, `kiosk.productsCategories[]._id` e le categorie di `priceListsConfig` esistono in `products_categories` e non sono nel cestino; i testi del kiosk sono in lingue del gruppo (`settings.languages`, `it` se manca: le lingue già presenti restano e i testi inviati si fondono con quelli memorizzati); `tobacco.companyId` e `tobacco.placeId`: un valore invariato è sempre accettato; uno cambiato è un'azienda del gruppo non nel cestino e nel perimetro del chiamante (per il PA, che non ha aziende nello scope, quella del proprio punto vendita) e un punto vendita del gruppo **non nel cestino** e nel perimetro (per il PA, il proprio). Se la stessa richiesta cambia `companyId` e questo è rifiutato, le regole che dipendono dall'azienda (`tobacco.companyId`, immagini) usano l'azienda che il punto vendita ha, mai quella rifiutata. Il PA salva quindi tutte le schede del proprio punto vendita. Valori `incorrect` come per gli altri campi.
+- **`selfOrdering.additionalInfo` e `additionalInfoLabel`:** nei 26 documenti in cui sono oggetti (forma multilingua storica) si leggono `null` e il valore memorizzato **resta com'è** finché il client non invia un testo.
+- **`media`:** `internalFileName`, `internalFileNameLogo` (nome di file semplice o vuoto), `externalUrl`, `externalUrlLogo` (URL `http(s)` o vuoto) e i cinque spazi immagine `logoLight`, `coverLight`, `logoKiosk`, `coverKiosk`, `productPlaceholderKiosk`: `null`, `{ "imageId": "<24 esadecimali>" }` di un'immagine del gruppo (il server costruisce il descrittore dal file memorizzato come per i loghi delle aziende) oppure il descrittore invariato; un altro descrittore è `422 notAllowed`. **Regola del 6B:** un CA o un PA può usare solo le immagini dell'azienda del punto vendita (`companyId` dell'immagine uguale; per il PA l'azienda del proprio punto vendita), gli altri ruoli qualunque immagine del gruppo.
+- **Campi riservati** (`403 notAllowed` per un valore diverso dall'attuale, accettato se uguale; alla creazione il confronto è con il default `false`): **`appointments.webWidgetStatus`**, solo PSA e D. Nessun altro campo delle impostazioni è riservato: le impostazioni tecniche del dealer (`platform.sentry` è la licenza, `server.ip`, `connectorAddress`, le integrazioni) restano fuori dal modello.
+- **Concorrenza.** I percorsi delle impostazioni sono posseduti: una scrittura **del POS** a `roomsSettings.reservation.suspendedToday` (o a qualunque altra chiave posseduta) tra `GET` e `PUT` dà `412`, mentre una a `devices.<i>.info`, `rooms`, `storages` o `integrations` no.
+
+### Regole di validazione dei punti vendita
+Rigorose in scrittura, tolleranti in lettura. Un campo si controlla quando **cambia** (o alla creazione): un punto vendita con dati legacy che non rispettano una regola resta modificabile in ciò che la regola non tocca.
+- **Azienda:** `companyId` è un'azienda del gruppo, non nel cestino e nel perimetro del chiamante; un'azienda che non esiste, di un altro gruppo, nel cestino o fuori perimetro è `422` con `issue: "incorrect"` sul campo `companyId` (non `404`: la risorsa è il punto vendita).
+- **Paese e provincia:** come per le aziende (`address.country` esiste in `countries`; `address.province` è `''` o una delle aree del paese quando le elenca; `incorrect`). `email` come per le aziende, `phone` fino a 30 caratteri.
+- **Listini:** `priceListId`, `ecommercePriceListId` (`null`/`''` per nessuno) e gli `id` di `priceLists` sono l'id di un listino **attivo** del gruppo (`incorrect`; un listino già usato dal punto vendita non si rigiudica quando rimandato invariato). `priceLists` ha id univoci (`incorrect`).
+- **Serie delle fatture:** `invoiceSeries` è `null`/`''` oppure il `name` di una serie (`invoicePS`) **dell'azienda che il punto vendita avrà** (`incorrect`); `false` si accetta solo invariato.
+- **Licenza:** `plan` è uno tra `basic`, `advanced`, `enterprice`, `tgm-secondary`, `desk-secondary` quando cambia (`incorrect`); `expirationDate` data o istante ISO 8601 oppure `null`; `status` `active`/`disabled`; `sentry` booleano.
+- **Orari:** `timezone` è un fuso IANA di `Intl.supportedValuesOf('timeZone')` (più `UTC`) quando cambia (`incorrect`). Gli orari dei turni sono `HH:mm` (`format`, con il percorso `openingHours.week.3.values.0.start`) e le date dei giorni speciali sono `YYYY-MM-DD` che esistono (`format`), controllati **solo per i giorni che cambiano**; al più 8 turni al giorno e 400 giorni speciali per ognuno dei due calendari (`tooMany`); la settimana ha sempre i sette giorni `0`–`6` (`required`).
+- I numeri interi nell'intervallo Int32 sono scritti come Int32, gli altri come Double (come il legacy).
+
+## Chiave di negozio (`/v1`)
+
+La credenziale con cui il **server di punto vendita** (app separata, D-22) chiama il cloud (D-24, passo 7C; `doc/Security-Model.md` §5): **una chiave per punto vendita**, una sola attiva (una nuova attivazione revoca subito la precedente), **nessuna scadenza fino a revoca**. Si gestisce solo da PSA e D (`storeKeys:read`, `storeKeys:manage`, nel tetto dei due ruoli: SA, CA e PA ricevono `403`; un D fuori dai propri gruppi `404`). Le route di gestione sono di gruppo (`group: true`), con `:placeId` di un punto vendita del gruppo non nel cestino (altrimenti `404`).
+
+> **Flusso.** 1) Dal backoffice PSA o D genera un **codice di attivazione** del punto vendita (valido 24 ore, un solo uso, mostrato una sola volta). 2) Il tecnico lo digita sull'app del server di negozio. 3) L'app lo scambia, senza credenziali, con `POST /v1/store-activations` e riceve la **chiave** (`fc_sk_…`, mostrata una sola volta). 4) Da qui ogni richiesta porta `Authorization: Bearer fc_sk_…`. Se l'app perde la risposta dello scambio, il codice è consumato: ne serve uno nuovo. Lo stesso vale per un `5xx` sullo scambio: la transazione può essere stata completata (la chiave precedente già revocata e la nuova creata) senza che l'app abbia ricevuto il segreto; serve un nuovo codice, e la chiave creata e mai consegnata resta attiva finché il nuovo scambio non la sostituisce.
+>
+> **Requisiti per l'app del negozio** (fuori scope, vincolanti per chi la scrive): conservare la chiave nel **keystore del sistema operativo** (Keychain, DPAPI, Android Keystore, libsecret); usare la **verifica TLS obbligatoria**; non scrivere mai la chiave nei log né mandarla ai dispositivi del negozio; **non cancellarla** su `403 STORE_DISABLED` (la chiave è buona, il punto vendita è solo temporaneamente non operativo e riprende da solo); considerarla persa solo su `401`.
+>
+> **Stati del negozio a ogni richiesta.** `401 UNAUTHENTICATED` (identico) per chiave assente, malformata, sconosciuta o revocata, o gruppo inesistente: serve una nuova attivazione. `403 STORE_DISABLED` (nulla è revocato) per gruppo sospeso o nel cestino, punto vendita disattivato o con licenza scaduta (`expirationDate` passata rispetto all'orologio del server), azienda nel cestino: riprende da solo con la riattivazione, il ripristino o il rinnovo. Un punto vendita nel cestino (anche dal legacy) o eliminato **revoca** la chiave (`401`): un punto vendita ripristinato non la riottiene. `403 FORBIDDEN` per una route che non ammette il negozio; `404` per un punto vendita o un gruppo che non sono il suo. Limite: 600 richieste al minuto per chiave (`429` con `Retry-After`), contate a ogni richiesta di una chiave attiva, anche quelle rifiutate con `403` e quelle di un negozio bloccato. Le risposte portano il contesto del negozio solo in `GET /v1/store-context`.
+
+### GET /v1/groups/{groupId}/places/{placeId}/store-key
+- **Autenticazione e permesso:** Bearer backoffice, `storeKeys:read` (PSA e D)
+- **Risposta:** `200`
+  ```json
+  { "data": {
+    "status": "active",
+    "key": { "id": "6650…", "hint": "fc_sk_AbC1…", "activatedAt": "2026-11-13T10:00:00.000Z", "activatedBy": { "id": "…", "role": "D" },
+      "installation": { "userAgent": "…", "appVersion": "2.0.1", "platform": "windows" },
+      "lastSeenAt": "2026-11-13T12:31:00.000Z", "lastSeenIp": "203.0.113.7" },
+    "pendingActivation": { "createdAt": "…", "expiresAt": "…", "createdBy": { "id": "…", "role": "PSA" } },
+    "lastRevoked": { "revokedAt": "…", "reason": "replaced" }
+  } }
+  ```
+  `status` è `none` (mai attivata, o l'ultima è revocata: `key: null`) o `active`; `pendingActivation` è `null` senza un codice valido (un codice scaduto non si mostra); `lastRevoked` (`reason`: `revoked`, `replaced`, `placeTrashed`, `placeDeleted`) è `null` se nessuna chiave è mai stata revocata. Mai la chiave né il suo hash.
+- **Errori:** comuni; `403`; `404`; `422` (`placeId`)
+
+### POST /v1/groups/{groupId}/places/{placeId}/store-key/activation-codes
+- **Autenticazione e permesso:** Bearer backoffice, `storeKeys:manage` (PSA e D); body vuoto (nessun body o `{}`: ogni proprietà è `422`); 20 al minuto per utente
+- **Comportamento:** genera il codice (16 simboli, 80 bit) e **sostituisce** quello pendente del punto vendita (ne esiste uno solo). **Non tocca la chiave attiva**: il negozio continua a funzionare finché il nuovo server non si attiva. Registra `store.activationCodeCreated`. La risposta non è mai compressa.
+- **Header particolari:** `Location: /v1/groups/{groupId}/places/{placeId}/store-key`
+- **Risposta:** `201`
+  ```json
+  { "data": { "code": "7KQ2-M9XD-4TPA-H3WN", "expiresAt": "2026-11-14T10:00:00.000Z" } }
+  ```
+  Il codice si mostra **una volta**: non si può rileggere (il server conserva solo il suo hash).
+- **Errori:** comuni; `403`; `404` (punto vendita non raggiungibile o nel cestino); `409 CONFLICT` se un codice non servirebbe a nulla (gruppo sospeso o nel cestino, punto vendita disattivato o con licenza scaduta, azienda nel cestino); `422`; `429`
+
+### DELETE /v1/groups/{groupId}/places/{placeId}/store-key/activation-code
+- **Autenticazione e permesso:** Bearer backoffice, `storeKeys:manage`; registra `store.activationCodeCancelled`
+- **Risposta:** `204` senza body
+- **Errori:** comuni; `403`; `404` (punto vendita non raggiungibile, o nessun codice pendente)
+
+### DELETE /v1/groups/{groupId}/places/{placeId}/store-key
+- **Autenticazione e permesso:** Bearer backoffice, `storeKeys:manage`
+- **Comportamento:** revoca la chiave attiva (motivo `revoked`): il negozio riceve `401` alla richiesta successiva. Il codice pendente, se c'è, resta (serve a riattivare). Non richiede `If-Match`. Registra `store.keyRevoked`.
+- **Risposta:** `204` senza body
+- **Errori:** comuni; `403`; `404` (punto vendita non raggiungibile, o nessuna chiave attiva)
+
+### POST /v1/store-activations
+- **Autenticazione e permesso:** **anonimo** (il server di negozio non ha ancora una credenziale: il codice di attivazione è la credenziale); rate limit **10 al minuto per IP**, prima della lettura del body; body massimo 2 KB; la risposta non è mai compressa
+- **Body:**
+  ```json
+  { "activationCode": "7KQ2-M9XD-4TPA-H3WN", "installation": { "appVersion": "2.0.1", "platform": "windows" } }
+  ```
+  `activationCode` come lo digita una persona (maiuscole o minuscole, con o senza trattini e spazi; `O` è letta come `0`, `I` e `L` come `1`); `installation` è facoltativo e dichiara `appVersion` e `platform` (stringhe di al più 64 caratteri con lettere, cifre e `. _ + - ` e spazio); lo user agent si legge dall'header.
+- **Comportamento:** in una transazione consuma il codice (un solo vincitore tra scambi concorrenti), verifica che gruppo, azienda e punto vendita siano operativi, **revoca la chiave attiva** del punto vendita (motivo `replaced`) e crea la nuova. Registra `store.activated`.
+- **Header particolari:** `Location: /v1/store-context`
+- **Risposta:** `201`
+  ```json
+  { "data": { "key": "fc_sk_…", "keyId": "6650…", "groupId": "665f…", "companyId": "665f…", "placeId": "665f…" } }
+  ```
+  `key` si mostra **una volta**: il server conserva solo il suo hash.
+- **Errori:** `401 INVALID_CREDENTIALS`, **identico** per ogni fallimento (codice malformato, sconosciuto, scaduto, già usato, o punto vendita non operativo: in quest'ultimo caso il codice è comunque consumato); `413`; `415`; `422` (body malformato nella forma: proprietà sconosciute, tipi, dichiarazioni non ammesse; mai con il valore ricevuto); `429`
+
+### GET /v1/store-context
+- **Autenticazione e permesso:** solo la **chiave di negozio**; nessun permesso del catalogo (il profilo del negozio è fisso: oggi la sola lettura del proprio punto vendita). Un access token di un utente è `403 FORBIDDEN`.
+- **Risposta:** `200`; serve all'app per verificare la chiave e per ricavare l'azienda attuale del punto vendita senza leggere dati
+  ```json
+  { "data": { "groupId": "665f…", "companyId": "665f…", "placeId": "665f…", "keyId": "6650…", "activatedAt": "2026-11-13T10:00:00.000Z" } }
+  ```
+- **Errori:** `401`; `403 STORE_DISABLED`; `403 FORBIDDEN` (non è una chiave di negozio); `429`
 
 ## Media (`/v1`)
 
@@ -839,6 +1042,21 @@ Rappresentazione del gruppo:
   ```
 - **Errori:** comuni; `403 FORBIDDEN`; `404` (gruppo fuori perimetro)
 - **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
+
+### GET /v1/groups/{groupId}/lookup/email-templates
+- **Superficie:** backoffice. Elenco compatto dei modelli di e-mail del gruppo (`email_templates`), per scegliere i `templateId` delle prenotazioni e degli appuntamenti di un punto vendita (passo 7D).
+- **Autenticazione e permesso:** Bearer backoffice, `places:update` (PSA, D, SA, CA e PA: chi può salvare un punto vendita). Nessuna feature.
+- **Query:** come le altre letture compatte (`limit` 1–100, `cursor`, `sort=name`, `q`, `ids` 1–100).
+- **Risposta:** `200`, `{ "data": [{ "id", "name" }], "page": { "limit", "next" } }`, per nome, senza i modelli nel cestino; mai il testo né l'HTML. Un nome che non è un testo è `""`.
+- **Errori:** comuni; `403`; `404` (gruppo fuori perimetro); `422`
+- **Cache:** `ETag` e `304` con `If-None-Match` (vedi "Liste")
+
+### GET /v1/groups/{groupId}/lookup/languages
+- **Superficie:** backoffice. Le lingue del gruppo (`settings.languages`), per i testi del kiosk (CA e PA non hanno `groups:read`).
+- **Autenticazione e permesso:** Bearer backoffice, **almeno uno** tra `places:update` e `groups:read`.
+- **Risposta:** `200`, `{ "data": [{ "code": "it" }, { "code": "en" }] }`, senza paginazione; solo i codici che sono testi, `[{ "code": "it" }]` se il gruppo non ne ha.
+- **Errori:** comuni; `403`; `404`
+- **Cache:** `ETag` e `304`
 
 ## Cataloghi del gruppo (`/v1`)
 

@@ -47,6 +47,9 @@ export interface AuthContext {
 | API key pubblica | il proprio gruppo, restrizioni opzionali |
 Valori come `groupId`, `role`, `permissions` nel body o nella query non vengono mai letti: lo schema li rifiuta.
 
+## Il negozio non è un utente (D-24)
+Il server di punto vendita autenticato con la chiave `fc_sk_` ha un principal a parte, `StorePrincipal` in `res.locals.store` (mai in `res.locals.auth`): `{ keyId, groupId, companyId, placeId, permissions: STORE_PROFILE, scope: { kind: 'store', groupId, companyId, placeId } }`, congelato e ricostruito a ogni richiesta (l'azienda si rilegge dal punto vendita). Lo scope `store` esiste nel tipo `Scope` ma non in `UserScope`, il tipo dello scope degli utenti: i `switch` che non lo gestiscono non compilano. `requireGroupAccess` e `groupDatabaseFor` accettano un tipo minimo `{ scope }`; `placesScopeFilter` e `placeInScope` danno `_id: placeId` al negozio e negano ovunque non serva. Un negozio raggiunge solo `/groups/:groupId/places/:placeId` del **proprio** punto vendita (qualunque altro id o gruppo è `404` identico) e solo sulle route con opt-in `store: true`. Test di isolamento del negozio: altro punto vendita dello stesso gruppo, altro gruppo, elenchi, route di utenti, gruppi e aziende.
+
 ## Gruppo di lavoro e database
 - Le risorse del gruppo stanno nel database `<prefix><env>_<groupId>`. Il gruppo su cui operare viene:
   - dalla credenziale, se lo scope contiene un solo gruppo;

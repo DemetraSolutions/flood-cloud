@@ -1,0 +1,22 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fc-place-fields block="kiosk" />
+  <fc-rows-editor
+    [rows]="rows"
+    [columns]="columns()"
+    [legend]="'PLACES.KIOSK.CATEGORIES' | t"
+    [addLabel]="'PLACES.KIOSK.ADD_CATEGORY' | t"
+    [max]="max"
+    (add)="add()"
+    (remove)="remove($event)"
+  />
+  @for (name of texts; track name) {
+    <fc-keyed-values
+      section="kiosk"
+      [prop]="name"
+      [keys]="languages()"
+      [legend]="textLegend(name)"
+      [labelOf]="languageLabel"
+    />
+  }
+  <fc-place-save section="kiosk" />
+</form>

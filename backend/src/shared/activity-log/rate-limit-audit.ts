@@ -1,5 +1,5 @@
 import type { RateLimitExceededHandler } from '../security/rate-limit/rate-limit.ts';
-import { actorOf } from './actor.ts';
+import { responseActorOf } from './actor.ts';
 import type { ActivityLog } from './activity-log.ts';
 
 /**
@@ -16,7 +16,7 @@ export function createRateLimitAudit(activityLog: ActivityLog): RateLimitExceede
       category: 'security',
       action: 'rateLimit.exceeded',
       outcome: 'denied',
-      actor: actorOf(res.locals.auth),
+      actor: responseActorOf(res),
       requestId: res.locals.requestId,
       ...(req.ip === undefined ? {} : { ip: req.ip }),
       metadata: { bucket: rule.bucket },

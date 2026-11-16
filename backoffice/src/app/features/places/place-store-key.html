@@ -1,0 +1,99 @@
+@if (loadError()) {
+  <fc-error-state
+    [title]="'PLACES.STORE_KEY.LOAD_ERROR' | t"
+    [message]="errorKey() | t"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else if (info(); as key) {
+  <fieldset>
+    <legend>{{ 'PLACES.STORE_KEY.TITLE' | t }}</legend>
+    <p class="note">{{ 'PLACES.STORE_KEY.HINT' | t }}</p>
+    @if (key.key; as active) {
+      <p role="status">{{ 'PLACES.STORE_KEY.ACTIVE' | t }}</p>
+      <dl>
+        <dt>{{ 'PLACES.STORE_KEY.HINT_LABEL' | t }}</dt>
+        <dd>{{ active.hint }}</dd>
+        <dt>{{ 'PLACES.STORE_KEY.ACTIVATED_AT' | t }}</dt>
+        <dd>{{ when(active.activatedAt) }}</dd>
+        @if (active.lastSeenAt) {
+          <dt>{{ 'PLACES.STORE_KEY.LAST_SEEN' | t }}</dt>
+          <dd>{{ when(active.lastSeenAt) }}</dd>
+        }
+        @if (active.lastSeenIp) {
+          <dt>{{ 'PLACES.STORE_KEY.LAST_IP' | t }}</dt>
+          <dd>{{ active.lastSeenIp }}</dd>
+        }
+        @if (active.installation?.appVersion) {
+          <dt>{{ 'PLACES.STORE_KEY.APP_VERSION' | t }}</dt>
+          <dd>{{ active.installation.appVersion }}</dd>
+        }
+      </dl>
+    } @else {
+      <p role="status">{{ 'PLACES.STORE_KEY.NONE' | t }}</p>
+    }
+    @if (key.pendingActivation; as pending) {
+      <p>{{ 'PLACES.STORE_KEY.PENDING' | t: { expires: when(pending.expiresAt) } }}</p>
+    }
+    @if (key.lastRevoked; as revoked) {
+      <p class="note">
+        {{
+          'PLACES.STORE_KEY.LAST_REVOKED'
+            | t: { when: when(revoked.revokedAt), reason: ('PLACES.STORE_KEY.REASON.' + revoked.reason | t) }
+        }}
+      </p>
+    }
+    @if (canManage()) {
+      <div class="row-actions">
+        <button fc-button [loading]="busy()" (click)="generate()">
+          {{ 'PLACES.STORE_KEY.GENERATE' | t }}
+        </button>
+        @if (key.pendingActivation) {
+          <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelCode()">
+            {{ 'PLACES.STORE_KEY.CANCEL_CODE' | t }}
+          </button>
+        }
+        @if (key.key) {
+          <button fc-button variant="danger" [disabled]="busy()" (click)="revokeOpen.set(true)">
+            {{ 'PLACES.STORE_KEY.REVOKE' | t }}
+          </button>
+        }
+      </div>
+    }
+  </fieldset>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+}
+
+<fc-dialog
+  [heading]="'PLACES.STORE_KEY.CODE_TITLE' | t"
+  [open]="codeOpen()"
+  (openChange)="codeOpen.set($event)"
+  (closed)="onCodeClosed()"
+>
+  @if (code(); as generated) {
+    <p>{{ 'PLACES.STORE_KEY.CODE_HINT' | t }}</p>
+    <p class="code" aria-label="{{ 'PLACES.STORE_KEY.CODE_LABEL' | t }}">
+      <code>{{ generated.code }}</code>
+    </p>
+    <p>{{ 'PLACES.STORE_KEY.EXPIRES' | t: { expires: when(generated.expiresAt) } }}</p>
+    <p class="note">{{ 'PLACES.STORE_KEY.REPLACES' | t }}</p>
+  }
+  <button fcDialogActions fc-button variant="secondary" (click)="copy()">
+    {{ 'PLACES.STORE_KEY.COPY' | t }}
+  </button>
+  <button fcDialogActions fc-button (click)="codeOpen.set(false)">
+    {{ 'COMMON.CLOSE' | t }}
+  </button>
+</fc-dialog>
+
+<fc-confirm-dialog
+  [heading]="'PLACES.STORE_KEY.REVOKE_TITLE' | t"
+  [message]="'PLACES.STORE_KEY.REVOKE_MESSAGE' | t"
+  [confirmLabel]="'PLACES.STORE_KEY.REVOKE' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="revokeOpen()"
+  (openChange)="revokeOpen.set($event)"
+  (confirmed)="revoke()"
+/>

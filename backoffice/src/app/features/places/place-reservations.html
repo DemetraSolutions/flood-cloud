@@ -1,0 +1,14 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fc-place-fields block="reservations" [only]="general" />
+  <fc-rows-editor
+    [rows]="rows"
+    [columns]="columns()"
+    [legend]="'PLACES.RESERVATIONS.TIME_BLOCKS' | t"
+    [addLabel]="'PLACES.RESERVATIONS.ADD_BLOCK' | t"
+    [max]="max"
+    (add)="add()"
+    (remove)="remove($event)"
+  />
+  <fc-place-fields block="reservations" [only]="others" />
+  <fc-place-save section="reservations" />
+</form>

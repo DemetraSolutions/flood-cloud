@@ -199,6 +199,40 @@ describe('ActivityLog.record (real MongoDB)', () => {
     assert.ok(!lines.join('').match(/old@x\.it|new@x\.it|555/));
   });
 
+  it('accepts the events of the store keys (the actor is the store, identified by its key) and nothing else in their metadata', async () => {
+    const { logger, events } = memoryLogger();
+    const service = make(logger);
+    const keyId = new ObjectId();
+    const groupId = new ObjectId();
+    const base = { category: 'security', outcome: 'success', groupId, requestId: 'req-store-events', ip: '203.0.113.7' } as const;
+    const good: ActivityEntry[] = [
+      { ...base, action: 'store.activationCodeCreated', actor: { kind: 'user', id: new ObjectId(), role: 'PSA' }, resource: { type: 'place', id: 'p1' } },
+      { ...base, action: 'store.activationCodeCancelled', actor: { kind: 'user', id: new ObjectId(), role: 'D' }, resource: { type: 'place', id: 'p1' } },
+      { ...base, action: 'store.activated', actor: { kind: 'store', id: keyId }, resource: { type: 'storeKey', id: keyId.toHexString() }, metadata: { replacedKeyId: null } },
+      { ...base, action: 'store.activated', actor: { kind: 'store', id: keyId }, metadata: { replacedKeyId: new ObjectId().toHexString() } },
+      { ...base, action: 'store.activationFailed', outcome: 'denied', actor: { kind: 'anonymous' }, metadata: { reason: 'rejected' } },
+      { ...base, action: 'store.keyRevoked', actor: { kind: 'system' }, resource: { type: 'storeKey', id: keyId.toHexString() }, metadata: { reason: 'placeTrashed', keyHint: 'AbC1' } },
+      { ...base, action: 'store.revokedKeyPresented', outcome: 'denied', actor: { kind: 'anonymous' }, resource: { type: 'storeKey', id: keyId.toHexString() } },
+      { ...base, action: 'rateLimit.exceeded', outcome: 'denied', actor: { kind: 'store', id: keyId }, metadata: { bucket: 'api:store' } },
+    ];
+    for (const item of good) {
+      await service.record(item);
+    }
+    assert.deepEqual(events, []);
+    const stored = await log().find({ requestId: 'req-store-events' }).sort({ _id: 1 }).toArray();
+    assert.deepEqual(stored.map((item) => item.action), good.map((item) => item.action));
+    assert.deepEqual(stored[2]!.actor, { kind: 'store', id: keyId });
+    for (const bad of [
+      { action: 'store.keyRevoked', metadata: { key: 'fc_sk_x' } },
+      { action: 'store.activationCodeCreated', metadata: { code: '0000' } },
+      { action: 'store.activated', category: 'data' },
+    ]) {
+      events.length = 0;
+      await service.record({ ...good[2]!, ...bad } as ActivityEntry);
+      assert.equal(events[0]?.['msg'], 'activity log entry rejected', JSON.stringify(bad));
+    }
+  });
+
   it('never rejects: a malformed entry is logged without its raw content and not stored', async () => {
     const { logger, events, lines } = memoryLogger();
     const service = make(logger);
@@ -210,7 +244,9 @@ describe('ActivityLog.record (real MongoDB)', () => {
       [{ actor: { kind: 'user', id: 'x' } }, /actor id/],
       [{ actor: { kind: 'anonymous', id: new ObjectId() } }, /actor id/],
       [{ actor: { kind: 'user', role: 'ROOT' } }, /unknown actor role/],
-      [{ actor: { kind: 'user', role: 'SA' } }, /user actor needs an id/],
+      [{ actor: { kind: 'user', role: 'SA' } }, /user or store actor needs an id/],
+      [{ actor: { kind: 'store' } }, /user or store actor needs an id/],
+      [{ actor: { kind: 'system', id: new ObjectId() } }, /actor id/],
       [{ groupId: 'abc' }, /groupId/],
       [{ resource: { type: '' } }, /resource type/],
       [{ resource: { type: 'x'.repeat(33) } }, /resource type/],

@@ -6,7 +6,7 @@ import { normalizeMatrix } from '../rbac/permission-matrix.ts';
 import type { PermissionMatrix } from '../rbac/permission-matrix.ts';
 import type { Permission, Role } from '../rbac/permissions.ts';
 import { computeScope } from './scope.ts';
-import type { ComputeScopeDeps, Scope, ScopeAnomaly } from './scope.ts';
+import type { ComputeScopeDeps, Scope, ScopeAnomaly, UserScope } from './scope.ts';
 
 /** What identifies a user inside the data perimeter (scope ids already normalized, D-08). */
 export interface UserScopeView {
@@ -30,7 +30,33 @@ export interface AuthPrincipal extends UserScopeView {
   /** The user's own normalized matrix, core and non-core modules (used to limit what he can grant). */
   readonly matrix: PermissionMatrix;
   /** Data perimeter visible to the user. */
+  readonly scope: UserScope;
+}
+
+/** The only part of a caller the perimeter checks need: the data perimeter. A backoffice user and a store key both have one. */
+export interface ScopeHolder {
   readonly scope: Scope;
+}
+
+/**
+ * Verified, deeply frozen context of the server of a point of sale that authenticated with its store key (`doc/Security-Model.md` section 5), stored in `res.locals.store`, never in
+ * `res.locals.auth`: everything written for users (the permission check, the group check, the per-user rate limit, the services typed on {@link AuthPrincipal}) finds no principal
+ * and refuses, so no path made for users is reachable by a store by mistake. Every field is computed by the server on every request from the key and the stored state of the place.
+ */
+export interface StorePrincipal extends ScopeHolder {
+  /** Marks the store principal. */
+  readonly kind: 'store';
+  /** Id of the store key that authenticated the request. */
+  readonly keyId: ObjectId;
+  readonly groupId: ObjectId;
+  /** Company the place belongs to now (read from the copy of the place on every request: a place can change company). */
+  readonly companyId: ObjectId;
+  readonly placeId: ObjectId;
+  /** When the store key was activated. */
+  readonly activatedAt: Date;
+  /** `STORE_PROFILE`: the fixed allowlist of what a store may do (read-only). */
+  readonly permissions: ReadOnlySet<Permission>;
+  readonly scope: Extract<Scope, { readonly kind: 'store' }>;
 }
 
 /** A stored user, with the legacy permission matrix still untouched. */

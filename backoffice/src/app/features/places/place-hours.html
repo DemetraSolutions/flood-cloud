@@ -1,0 +1,26 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'PLACES.HOURS.TIMEZONE' | t }}</legend>
+    <fc-select
+      [formField]="f.timezone"
+      [label]="'PLACES.HOURS.TIMEZONE' | t"
+      [options]="timeZones()"
+      [error]="state.fieldError(f.timezone)"
+      (blurred)="f.timezone().markAsTouched()"
+    />
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'PLACES.HOURS.OPENING' | t }}</legend>
+    <fc-hours-schedule which="openingHours" />
+  </fieldset>
+
+  @if (state.hasFeature('rooms')) {
+    <fieldset>
+      <legend>{{ 'PLACES.HOURS.DELIVERY' | t }}</legend>
+      <fc-hours-schedule which="deliveryTime" />
+    </fieldset>
+  }
+
+  <fc-place-save section="openingHours" />
+</form>

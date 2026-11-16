@@ -1,0 +1,82 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fc-place-fields block="selfOrdering" />
+
+  <fieldset>
+    <legend>{{ 'PLACES.SELF_ORDERING.LISTS' | t }}</legend>
+    <p class="note">{{ 'PLACES.SELF_ORDERING.LISTS_HINT' | t }}</p>
+    @if (state.fieldError(listsTree); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    <div class="rows">
+      @for (config of configs(); track config.listId; let i = $index) {
+        <fieldset class="row">
+          <legend>{{ listName(config.listId) }}</legend>
+          <div class="grid">
+            <fc-text-field
+              [formField]="trees()[i].roundTime"
+              type="number"
+              inputmode="numeric"
+              [label]="'PLACES.SELF_ORDERING.ROUND_TIME' | t"
+              [error]="state.fieldError(trees()[i].roundTime)"
+            />
+            <fc-text-field
+              [formField]="trees()[i].roundMaxProducts"
+              type="number"
+              inputmode="numeric"
+              [label]="'PLACES.SELF_ORDERING.ROUND_MAX' | t"
+              [error]="state.fieldError(trees()[i].roundMaxProducts)"
+            />
+            <fc-text-field
+              [formField]="trees()[i].totalMaxProducts"
+              type="number"
+              inputmode="numeric"
+              [label]="'PLACES.SELF_ORDERING.TOTAL_MAX' | t"
+              [error]="state.fieldError(trees()[i].totalMaxProducts)"
+            />
+          </div>
+          <div class="checks">
+            <fc-checkbox
+              [formField]="trees()[i].variants"
+              [label]="'PLACES.SELF_ORDERING.VARIANTS' | t"
+            />
+            <fc-checkbox
+              [formField]="trees()[i].freeVariants"
+              [label]="'PLACES.SELF_ORDERING.FREE_VARIANTS' | t"
+            />
+            <fc-checkbox
+              [formField]="trees()[i].tableAutoClose"
+              [label]="'PLACES.SELF_ORDERING.TABLE_AUTO_CLOSE' | t"
+            />
+          </div>
+          <fc-rows-editor
+            [rows]="trees()[i].productsCategories"
+            [columns]="columns()"
+            [legend]="categoriesLegend(config.listId)"
+            [addLabel]="'PLACES.SELF_ORDERING.ADD_CATEGORY' | t"
+            [max]="max"
+            (add)="addCategory(i)"
+            (remove)="removeCategory(i, $event)"
+          />
+          @if (state.canWrite()) {
+            <div class="row-actions">
+              <button fc-button variant="ghost" (click)="removeList(i)">
+                {{ 'PLACES.SELF_ORDERING.REMOVE_LIST' | t: { list: listName(config.listId) } }}
+              </button>
+            </div>
+          }
+        </fieldset>
+      }
+    </div>
+    @if (state.canWrite()) {
+      <div class="row-actions">
+        @for (priceList of available(); track priceList.id) {
+          <button fc-button variant="secondary" (click)="addList(priceList.id)">
+            {{ 'PLACES.SELF_ORDERING.ADD_LIST' | t: { list: priceList.name } }}
+          </button>
+        }
+      </div>
+    }
+  </fieldset>
+
+  <fc-place-save section="selfOrdering" />
+</form>

@@ -213,9 +213,10 @@ describe('checkUserChange: permissions and matrix', () => {
 
   it('rejects effective permissions newly granted that the actor does not hold, alone', () => {
     // The actor changes the role only: the matrix stays the same, but the new role grants more.
-    const limited = actorWithout('SA', ['places:trash'], { canManagePermissions: false });
-    const before = defaultView('PA');
-    const after = realView('CA', legacyOf('PA'), { userId: before.userId });
+    const limited = actorWithout('SA', ['companies:update'], { canManagePermissions: false });
+    // The matrix of a PA that has the companies module on: it grants nothing to a PA (his ceiling has no companies), and a CA with the same matrix gets the companies permissions.
+    const before = defaultView('PA', { companies: { r: true, w: true } });
+    const after = realView('CA', legacyOf('PA', { companies: { r: true, w: true } }), { userId: before.userId });
     assert.deepEqual(checkUserChange(limited, before, after), ['permissionNotHeld']);
     assert.deepEqual(checkUserChange(sa, before, after), []);
   });

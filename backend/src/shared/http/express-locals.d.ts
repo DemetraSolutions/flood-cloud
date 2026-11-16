@@ -1,7 +1,7 @@
 import type { GroupAccess } from '../security/scope/group-access.ts';
 import type { ValidatedInput } from '../validation/middleware.ts';
 import type { ObjectId } from 'mongodb';
-import type { AuthPrincipal } from '../security/scope/principal.ts';
+import type { AuthPrincipal, StorePrincipal } from '../security/scope/principal.ts';
 
 declare global {
   namespace Express {
@@ -14,6 +14,8 @@ declare global {
       routePattern?: string;
       /** Verified principal, set by the authentication middleware of the surface. */
       auth?: AuthPrincipal;
+      /** Verified store principal, set by the store key authentication of `/v1`; never set together with `auth`. */
+      store?: StorePrincipal;
       /** Id of the session whose access token authenticated the request, set by the Bearer middleware. */
       sessionId?: ObjectId;
       /** Set by the Bearer middleware when the user must change a provisional password before doing anything else. */

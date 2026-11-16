@@ -49,6 +49,10 @@ export interface LookupService {
    * without any other field. The catalog is bounded (at most 50 lists), so the answer is not paginated; `NOT_FOUND` if the group does not exist.
    */
   priceLists(access: GroupAccess): Promise<PriceList[]>;
+  /** E-mail templates of the group (`id`, `name`), by name. */
+  emailTemplates(principal: AuthPrincipal, access: GroupAccess, query: LookupQuery): Promise<LookupPage<LookupItem>>;
+  /** The languages of the group as `[{ code }]` (the codes that are texts, as stored; `it` when the group lists none). Bounded by the document of the group. */
+  languages(access: GroupAccess): Promise<readonly { readonly code: string }[]>;
 }
 
 /** Collaborators of {@link createLookupService}. */
@@ -99,6 +103,11 @@ export function createLookupService(deps: LookupDeps): LookupService {
     },
     customers: async (principal, access, query) => pageOfItems(await deps.lookup.customers(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
     contactGroups: async (principal, access, query) => pageOfItems(await deps.lookup.contactGroups(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
+    emailTemplates: async (principal, access, query) => pageOfItems(await deps.lookup.emailTemplates(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
+    languages: async (access) => {
+      const codes = ((await deps.lookup.languages(access)) ?? []).filter((code): code is string => typeof code === 'string' && code !== '');
+      return (codes.length === 0 ? ['it'] : codes).map((code) => ({ code }));
+    },
     priceLists: async (access) =>
       ((await deps.catalogs.list(priceLists, access)) as PriceList[]).map(({ id, name, enabled, isDefault }) => ({ id, name, enabled, isDefault })),
   };

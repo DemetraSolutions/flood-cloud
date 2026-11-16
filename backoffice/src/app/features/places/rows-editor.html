@@ -1,0 +1,77 @@
+<fieldset>
+  <legend>{{ legend() }}</legend>
+  @if (state.fieldError(rows()); as problem) {
+    <p class="problem" role="alert">{{ problem }}</p>
+  }
+  <div class="rows">
+    @for (row of items(); track $index; let i = $index) {
+      <div class="row">
+        <div class="grid">
+          @for (column of columns(); track column.key) {
+            @switch (column.type) {
+              @case ('flag') {
+                <fc-checkbox
+                  [formField]="flagCell(row, column)"
+                  [label]="label(column, i)"
+                  [error]="state.fieldError(flagCell(row, column))"
+                  (blurred)="flagCell(row, column)().markAsTouched()"
+                />
+              }
+              @case ('select') {
+                <fc-select
+                  [formField]="textCell(row, column)"
+                  [label]="label(column, i)"
+                  [options]="optionsOf(column, row)"
+                  [error]="state.fieldError(textCell(row, column))"
+                  (blurred)="textCell(row, column)().markAsTouched()"
+                />
+              }
+              @case ('days') {
+                <fieldset class="days">
+                  <legend>{{ label(column, i) }}</legend>
+                  @for (day of days; track day) {
+                    <fc-checkbox
+                      [label]="dayLabel(day)"
+                      [checked]="hasDay(row, column, day)"
+                      [disabled]="daysCell(row, column)().disabled()"
+                      (checkedChange)="toggleDay(row, column, day, $event)"
+                    />
+                  }
+                </fieldset>
+              }
+              @default {
+                <fc-text-field
+                  [formField]="textCell(row, column)"
+                  [type]="textType(column)"
+                  [inputmode]="column.type === 'number' ? 'decimal' : null"
+                  [label]="label(column, i)"
+                  [error]="state.fieldError(textCell(row, column))"
+                  (blurred)="textCell(row, column)().markAsTouched()"
+                />
+              }
+            }
+          }
+        </div>
+        @if (state.canWrite()) {
+          <div class="row-actions">
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="removeLabel(i)"
+              (click)="remove.emit(i)"
+            >
+              {{ 'PLACES.REMOVE' | t }}
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </div>
+  @if (state.canWrite()) {
+    <div>
+      <button fc-button variant="secondary" [disabled]="items().length >= max()" (click)="add.emit()">
+        {{ addLabel() }}
+      </button>
+    </div>
+  }
+</fieldset>

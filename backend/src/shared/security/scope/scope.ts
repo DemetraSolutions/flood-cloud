@@ -12,6 +12,7 @@ import type { UserScopeView } from './principal.ts';
  * - `group`: one group (SA).
  * - `companies`: some companies of one group and the places of those companies (CA).
  * - `places`: some places of one group (PA).
+ * - `store`: one place of one company of one group (the server of a point of sale with its store key, never a user); the ids are the ones the store key and the place resolved to on this request.
  * - `none`: nothing; roles without backoffice access (E) and users missing the data they need.
  */
 export type Scope =
@@ -20,7 +21,11 @@ export type Scope =
   | { readonly kind: 'group'; readonly groupId: ObjectId }
   | { readonly kind: 'companies'; readonly groupId: ObjectId; readonly companyIds: readonly ObjectId[]; readonly placeIds: readonly ObjectId[] }
   | { readonly kind: 'places'; readonly groupId: ObjectId; readonly placeIds: readonly ObjectId[] }
+  | { readonly kind: 'store'; readonly groupId: ObjectId; readonly companyId: ObjectId; readonly placeId: ObjectId }
   | { readonly kind: 'none' };
+
+/** The scopes a backoffice user can have: every one but the scope of a store key, which no user ever gets. */
+export type UserScope = Exclude<Scope, { readonly kind: 'store' }>;
 
 /** Reasons why a scope is empty although the role would have one. */
 export type ScopeAnomaly = 'invalidRole' | 'missingGroup' | 'companyAdminWithoutCompanies' | 'placeAdminWithoutPlaces';
@@ -35,12 +40,12 @@ export interface ComputeScopeDeps {
 
 /** Result of {@link computeScope}. */
 export interface ComputedScope {
-  readonly scope: Scope;
+  readonly scope: UserScope;
   readonly anomalies: readonly ScopeAnomaly[];
 }
 
-const NONE: Scope = Object.freeze({ kind: 'none' });
-const PLATFORM: Scope = Object.freeze({ kind: 'platform' });
+const NONE: UserScope = Object.freeze({ kind: 'none' });
+const PLATFORM: UserScope = Object.freeze({ kind: 'platform' });
 
 const empty = (anomaly: ScopeAnomaly): ComputedScope => ({ scope: NONE, anomalies: [anomaly] });
 

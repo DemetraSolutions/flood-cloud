@@ -1,0 +1,26 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fc-place-fields block="media" />
+
+  <fieldset>
+    <legend>{{ 'PLACES.MEDIA.IMAGES' | t }}</legend>
+    <div class="grid">
+      @for (slot of slots; track slot) {
+        <fc-logo-slot
+          [label]="slotKey(slot) | t"
+          [logo]="state.model().media.logos[slot]"
+          [groupId]="state.groupId()"
+          [companyId]="state.model().general.companyId"
+          [disabled]="!state.canWrite()"
+          (logoChange)="setLogo(slot, $event)"
+        />
+      }
+    </div>
+    @for (slot of slots; track slot) {
+      @if (slotError(slot); as problem) {
+        <p class="problem" role="alert">{{ problem }}</p>
+      }
+    }
+  </fieldset>
+
+  <fc-place-save section="media" />
+</form>

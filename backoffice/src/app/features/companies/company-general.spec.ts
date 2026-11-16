@@ -303,6 +303,7 @@ describe('CompanyGeneral', () => {
       await click('COMPANIES.CREATE');
       const req = backend().expectOne(`${API}/v1/groups/${GROUP}/companies`);
       expect(req.request.method).toBe('POST');
+      expect(req.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
       expect(req.request.body).toEqual({
         name: 'Nuova Srl',
         vatNumber: '01114601006',
@@ -351,6 +352,33 @@ describe('CompanyGeneral', () => {
         });
       await view();
       expect(error(VAT)).toBe('FORM.ISSUE.TAKEN');
+    });
+
+    it('retries the creation with the same Idempotency-Key and changes it when the data change', async () => {
+      const { type, click, view } = await renderCompany({ path: 'new' });
+      for (const [label, value] of [
+        [NAME, 'N'],
+        [VAT, '1'],
+        [STREET, 'S'],
+        ['COMPANIES.GENERAL.POSTCODE', 'P'],
+        ['COMPANIES.GENERAL.CITY', 'C'],
+      ]) {
+        await type(label, value);
+      }
+      const keys: (string | null)[] = [];
+      const attempt = async () => {
+        await click('COMPANIES.CREATE');
+        const req = backend().expectOne(`${API}/v1/groups/${GROUP}/companies`);
+        keys.push(req.request.headers.get('Idempotency-Key'));
+        req.flush(errorBody('INTERNAL_ERROR'), { status: 500, statusText: 'x' });
+        await view();
+      };
+      await attempt();
+      await attempt();
+      await type(NAME, 'Other');
+      await attempt();
+      expect(keys[0]).toBe(keys[1]);
+      expect(keys[2]).not.toBe(keys[0]);
     });
 
     it('sends the optional data it was given', async () => {

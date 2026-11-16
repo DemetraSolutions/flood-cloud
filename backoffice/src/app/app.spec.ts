@@ -5,6 +5,7 @@ import { provideRouter, Router, withComponentInputBinding } from '@angular/route
 import { RouterTestingHarness } from '@angular/router/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { fakeCompany } from '../testing/companies';
+import { fakePlace } from '../testing/places';
 import { fakeGroup } from '../testing/groups';
 import { signIn } from '../testing/session';
 import { App } from './app';
@@ -317,6 +318,100 @@ describe('routes', () => {
       [`/groups/${GROUP}/companies`, []],
       [`/groups/${GROUP}/companies/${COMPANY}`, []],
       [`/groups/${GROUP}/companies/new`, ['companies:read']],
+    ])('protects %s', async (url, permissions) => {
+      await open(url, permissions);
+      expect(location()).toBe('/forbidden');
+    });
+  });
+  describe('places', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a1';
+    const PLACE = '665f1c2e9b1d4a0012ab34b3';
+    const sa = (permissions: string[]) => ({
+      role: 'SA' as const,
+      permissions: [...permissions, 'profile:read'],
+    });
+
+    async function open(url: string, permissions: string[]) {
+      setup();
+      sessionStorage.clear();
+      signIn(sa(permissions));
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(url);
+      return harness;
+    }
+
+    it('lazy-loads the list', async () => {
+      const list = await open(`/groups/${GROUP}/places`, ['places:read']);
+      expect((list.routeNativeElement as HTMLElement).querySelector('main h1')?.textContent).toBe(
+        '⟦PLACES.TITLE⟧',
+      );
+    });
+
+    it('lazy-loads the page of a new place', async () => {
+      const created = await open(`/groups/${GROUP}/places/new`, ['places:read', 'places:create']);
+      const root = created.routeNativeElement as HTMLElement;
+      expect(root.querySelector('fc-place-page')).not.toBeNull();
+      expect(root.querySelector('fc-place-general')).not.toBeNull();
+    });
+
+    it.each([
+      ['', 'fc-place-general'],
+      ['/license', 'fc-place-license'],
+      ['/opening-hours', 'fc-place-hours'],
+      ['/cash', 'fc-place-cash'],
+      ['/printing', 'fc-place-printing'],
+      ['/payments', 'fc-place-payments'],
+      ['/tables', 'fc-place-tables'],
+      ['/reservations', 'fc-place-reservations'],
+      ['/delivery', 'fc-place-delivery'],
+      ['/self-ordering', 'fc-place-self-ordering'],
+      ['/kiosk', 'fc-place-kiosk'],
+      ['/appointments', 'fc-place-scalar-tab'],
+      ['/external-display', 'fc-place-scalar-tab'],
+      ['/fidelity', 'fc-place-scalar-tab'],
+      ['/tobacco', 'fc-place-scalar-tab'],
+      ['/media', 'fc-place-media'],
+    ])('lazy-loads the tab %s of a place', async (path, selector) => {
+      const harness = await open(`/groups/${GROUP}/places/${PLACE}${path}`, ['places:read']);
+      TestBed.inject(HttpTestingController)
+        .expectOne((r) => r.url.endsWith(`/v1/groups/${GROUP}/places/${PLACE}`))
+        .flush({ data: fakePlace() });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      expect((harness.routeNativeElement as HTMLElement).querySelector(selector)).not.toBeNull();
+    });
+
+    it('lazy-loads the store key tab with storeKeys:read', async () => {
+      const harness = await open(`/groups/${GROUP}/places/${PLACE}/store-key`, [
+        'places:read',
+        'storeKeys:read',
+      ]);
+      TestBed.inject(HttpTestingController)
+        .expectOne((r) => r.url.endsWith(`/v1/groups/${GROUP}/places/${PLACE}`))
+        .flush({ data: fakePlace() });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      expect(
+        (harness.routeNativeElement as HTMLElement).querySelector('fc-place-store-key'),
+      ).not.toBeNull();
+    });
+
+    it('protects the store key tab without storeKeys:read', async () => {
+      await open(`/groups/${GROUP}/places/${PLACE}/store-key`, ['places:read']);
+      expect(location()).toBe('/forbidden');
+    });
+
+    it.each([
+      [`/groups/${GROUP}/places`, []],
+      [`/groups/${GROUP}/places/${PLACE}`, []],
+      [`/groups/${GROUP}/places/${PLACE}/license`, []],
+      [`/groups/${GROUP}/places/new`, ['places:read']],
+      [`/groups/${GROUP}/places/new`, ['places:create']],
     ])('protects %s', async (url, permissions) => {
       await open(url, permissions);
       expect(location()).toBe('/forbidden');

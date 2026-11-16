@@ -13,8 +13,8 @@ export const ACTIVITY_OUTCOMES = Object.freeze(['success', 'failure', 'denied'] 
 /** The outcome of an activity: it happened, it failed, it was refused. */
 export type ActivityOutcome = (typeof ACTIVITY_OUTCOMES)[number];
 
-/** Kinds of actor. */
-export const ACTOR_KINDS = Object.freeze(['user', 'anonymous', 'system'] as const);
+/** Kinds of actor: a backoffice user, an anonymous caller, the system itself and the server of a point of sale (identified by the id of its store key). */
+export const ACTOR_KINDS = Object.freeze(['user', 'anonymous', 'system', 'store'] as const);
 
 /** The kind of the party that performed an activity. */
 export type ActorKind = (typeof ACTOR_KINDS)[number];
@@ -38,6 +38,12 @@ export const SECURITY_ACTIONS = Object.freeze([
   'group.trashed',
   'group.restored',
   'rateLimit.exceeded',
+  'store.activationCodeCreated',
+  'store.activationCodeCancelled',
+  'store.activated',
+  'store.activationFailed',
+  'store.keyRevoked',
+  'store.revokedKeyPresented',
 ] as const);
 
 /** Resources whose writes are logged. */
@@ -70,8 +76,11 @@ export const GROUP_CATALOG_VERBS = Object.freeze(['created', 'updated', 'deleted
 /** An action on an element of a group catalog: `group.<catalog>.<verb>`, for example `group.priceList.created`. */
 export type GroupCatalogAction = `group.${GroupCatalogName}.${(typeof GROUP_CATALOG_VERBS)[number]}`;
 
-/** A data action: `<resource>.<verb>`, for example `user.created`, or an action on a catalog of a group. */
-export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}` | GroupCatalogAction;
+/** The data actions that are not a verb of every resource: a place is also duplicated (`place.duplicated`, with the id of the source place in its metadata). */
+export const DATA_EXTRA_ACTIONS = Object.freeze(['place.duplicated'] as const);
+
+/** A data action: `<resource>.<verb>`, for example `user.created`, an action of one resource only (`place.duplicated`), or an action on a catalog of a group. */
+export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}` | (typeof DATA_EXTRA_ACTIONS)[number] | GroupCatalogAction;
 
 /** Error actions: a server error that became a `500`, and a JavaScript error reported by the backoffice in the browser. */
 export const ERROR_ACTIONS = Object.freeze(['request.failed', 'client.error'] as const);
@@ -81,6 +90,7 @@ export type ActivityAction = (typeof SECURITY_ACTIONS)[number] | DataAction | (t
 
 const DATA_ACTIONS: readonly DataAction[] = [
   ...DATA_RESOURCES.flatMap((resource) => DATA_VERBS.map((verb) => `${resource}.${verb}` as DataAction)),
+  ...DATA_EXTRA_ACTIONS,
   ...GROUP_CATALOG_NAMES.flatMap((name) => GROUP_CATALOG_VERBS.map((verb) => `group.${name}.${verb}` as DataAction)),
 ];
 
@@ -102,12 +112,18 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
   'group.trashed': [],
   'group.restored': [],
   'rateLimit.exceeded': ['bucket'],
+  'store.activationCodeCreated': [],
+  'store.activationCodeCancelled': [],
+  'store.activated': ['replacedKeyId'],
+  'store.activationFailed': ['reason'],
+  'store.keyRevoked': ['reason', 'keyHint'],
+  'store.revokedKeyPresented': [],
 };
 
 const DATA_METADATA: readonly string[] = ['changesTotal', 'changesTruncated'];
 
-/** Extra metadata keys of some data actions: a permanent deletion keeps no field changes, only the role of the user it removed (the group is the entry's `groupId`). */
-const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'] };
+/** Extra metadata keys of some data actions: a permanent deletion keeps no field changes, only the role of the user it removed (the group is the entry's `groupId`), and a duplicated place the id of the place it was copied from. */
+const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'], 'place.duplicated': ['sourceId'] };
 
 /** Definition of one action: its categories and the metadata keys it may carry (anything else is rejected). */
 export interface ActionDefinition {

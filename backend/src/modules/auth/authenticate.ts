@@ -92,3 +92,18 @@ export function createAuthenticate(deps: AuthenticateDeps): RequestHandler {
     next();
   };
 }
+
+const STORE_KEY_BEARER = /^Bearer fc_sk_/i;
+
+/**
+ * Builds the authentication of a surface that accepts two kinds of credential, told apart by the prefix of the Bearer secret and nothing else: `fc_sk_` goes to the store key
+ * authentication, every other value to the user authentication (which answers `401` to anything that is not one of its tokens, an `fc_pk_` API key included). Never "try one, then the other":
+ * the prefix decides, so a credential of one kind is never checked against the data of the other.
+ *
+ * @param user The authentication of a backoffice user (`createAuthenticate`).
+ * @param store The authentication of a store key (`createAuthenticateStore`).
+ * @returns The middleware to mount on `/v1`.
+ */
+export function createCredentialDispatcher(user: RequestHandler, store: RequestHandler): RequestHandler {
+  return (req, res, next) => (STORE_KEY_BEARER.test(req.get('authorization') ?? '') ? store : user)(req, res, next);
+}

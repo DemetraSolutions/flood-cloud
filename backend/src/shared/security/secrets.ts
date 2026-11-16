@@ -2,9 +2,9 @@ import { createHash, randomBytes } from 'node:crypto';
 
 /**
  * Prefixes of the secrets issued by the server.
- * `fc_at_` backoffice access token, `fc_rt_` backoffice refresh token, `fc_pk_` public API key.
+ * `fc_at_` backoffice access token, `fc_rt_` backoffice refresh token, `fc_pk_` public API key, `fc_sk_` store key of a point-of-sale server.
  */
-export const SECRET_PREFIXES = ['fc_at_', 'fc_rt_', 'fc_pk_'] as const;
+export const SECRET_PREFIXES = ['fc_at_', 'fc_rt_', 'fc_pk_', 'fc_sk_'] as const;
 
 /** One of the allowed {@link SECRET_PREFIXES}. */
 export type SecretPrefix = (typeof SECRET_PREFIXES)[number];

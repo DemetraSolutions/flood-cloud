@@ -85,6 +85,9 @@ const GENEROUS = {
   RATE_LIMIT_API_PER_USER: '100000',
   RATE_LIMIT_USER_CREDENTIALS_PER_USER: '100000',
   RATE_LIMIT_UNAUTHENTICATED_PER_IP: '100000',
+  RATE_LIMIT_API_PER_STORE: '100000',
+  RATE_LIMIT_STORE_ACTIVATION_PER_IP: '100000',
+  RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: '100000',
 };
 
 /**
@@ -104,16 +107,17 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
   const env = { LEGACY_PASSWORD_PEPPER: TEST_PEPPER, ...GENEROUS, ...options.env };
   const config = testConfig(env);
   const logs = memoryLogger();
-  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, mediaStorage: options.mediaStorage ?? null });
+  const rateLimiter = options.rateLimiter ?? memoryRateLimiter();
+  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, rateLimiter, mediaStorage: options.mediaStorage ?? null });
   const app = await startApp(
     {
       config,
       logger: logs.logger,
       activityLog: activity,
       now: clock.now,
-      rateLimiter: options.rateLimiter ?? memoryRateLimiter(),
+      rateLimiter,
       routes: { v1: [...modules.routes, ...(options.extraRoutes ?? [])] },
-      authenticate: { v1: modules.authenticate },
+      authenticate: { v1: modules.authenticate, store: modules.authenticateStore },
       groupAccess: { groups: modules.groups },
     },
     env,

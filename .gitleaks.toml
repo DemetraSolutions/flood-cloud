@@ -16,10 +16,10 @@ regexes = ['''@(?:host|h|localhost|127\.0\.0\.1|[^/?#\s@]*\.(?:example(?:\.[a-z]
 
 [[rules]]
 id = "flood-cloud-issued-secret"
-description = "Secret issued by Flood Cloud (access, refresh, store or public API token)"
-regex = '''\bfc_(?:at|rt|st|pk)_[A-Za-z0-9_-]{43}\b'''
-keywords = ["fc_at_", "fc_rt_", "fc_st_", "fc_pk_"]
+description = "Secret issued by Flood Cloud (access, refresh, store key or public API token)"
+regex = '''\bfc_(?:at|rt|pk|sk)_[A-Za-z0-9_-]{43}(?:[^A-Za-z0-9_-]|$)'''
+keywords = ["fc_at_", "fc_rt_", "fc_pk_", "fc_sk_"]
 # Documentation placeholders made only of "x".
 [[rules.allowlists]]
 regexTarget = "match"
-regexes = ['''fc_(?:at|rt|st|pk)_x{43}''']
+regexes = ['''fc_(?:at|rt|pk|sk)_x{43}''']

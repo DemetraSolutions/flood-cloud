@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { EXACT_TYPES } from '../../src/shared/legacy-write/copy-rule.ts';
 import { startBackoffice } from './backoffice.ts';
-import type { Backoffice } from './backoffice.ts';
+import type { Backoffice, BackofficeOptions } from './backoffice.ts';
 import { fullLegacyCompany } from './company-fixtures.ts';
 import { fixtureId, legacyCountry, legacyUser } from './legacy-fixtures.ts';
 import { insertCopies } from './mirror.ts';
@@ -30,9 +30,10 @@ export interface CompaniesWorld {
  * the first group, a second dealer user of the platform in the trash and one dealer that exists.
  *
  * @param ctx Throw-away databases.
+ * @param options Environment overrides, limiter and extra routes of the backoffice.
  */
-export async function startCompaniesWorld(ctx: TestDatabases): Promise<CompaniesWorld> {
-  const office = await startBackoffice(ctx);
+export async function startCompaniesWorld(ctx: TestDatabases, options: BackofficeOptions = {}): Promise<CompaniesWorld> {
+  const office = await startBackoffice(ctx, options);
   const common = ctx.databases.common();
   await common.collection('countries').deleteMany({});
   await common.collection('countries').insertMany([

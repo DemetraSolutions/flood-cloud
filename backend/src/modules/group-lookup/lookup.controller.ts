@@ -11,6 +11,8 @@ export interface LookupController {
   customers: RequestHandler;
   contactGroups: RequestHandler;
   priceLists: RequestHandler;
+  emailTemplates: RequestHandler;
+  languages: RequestHandler;
 }
 
 /**
@@ -35,6 +37,13 @@ export function createLookupController(service: LookupService): LookupController
     contactGroups: async (req, res) => {
       const { items, page } = await service.contactGroups(res.locals.auth!, res.locals.groupAccess!, inputOf<LookupQuery>(res, 'query'));
       sendRevalidatedPage(req, res, items, page);
+    },
+    emailTemplates: async (req, res) => {
+      const { items, page } = await service.emailTemplates(res.locals.auth!, res.locals.groupAccess!, inputOf<LookupQuery>(res, 'query'));
+      sendRevalidatedPage(req, res, items, page);
+    },
+    languages: async (req, res) => {
+      sendRevalidated(req, res, await service.languages(res.locals.groupAccess!));
     },
     priceLists: async (req, res) => {
       sendRevalidated(req, res, await service.priceLists(res.locals.groupAccess!));

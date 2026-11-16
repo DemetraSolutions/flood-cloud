@@ -14,6 +14,8 @@ function setup() {
   return { api: TestBed.inject(CompaniesApi), invalidate };
 }
 
+const KEY = '3f2b8c1e-6a4d-4f7b-9c2e-1a5d8b7e4c90'; // gitleaks:allow (fake test value)
+
 afterEach(() => backend().verify());
 
 describe('CompaniesApi', () => {
@@ -25,10 +27,11 @@ describe('CompaniesApi', () => {
 
   it('creates a company and tells the store', async () => {
     const { api, invalidate } = setup();
-    const done = api.create(GROUP, { name: 'N' });
+    const done = api.create(GROUP, { name: 'N' }, KEY);
     const req = backend().expectOne(BASE);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ name: 'N' });
+    expect(req.request.headers.get('Idempotency-Key')).toBe(KEY);
     req.flush(
       { data: fakeCompany() },
       { status: 201, statusText: 'Created', headers: { ETag: ETAG } },

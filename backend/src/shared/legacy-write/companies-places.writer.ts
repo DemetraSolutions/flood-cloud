@@ -3,14 +3,15 @@ import type { ClientSession, Collection, Document } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
 import { groupDatabaseFor } from '../security/scope/group-access.ts';
 import type { GroupAccess } from '../security/scope/group-access.ts';
-import type { AuthPrincipal } from '../security/scope/principal.ts';
+import type { AuthPrincipal, ScopeHolder } from '../security/scope/principal.ts';
 import { companyInScope, placeInScope } from '../security/scope/scope-filters.ts';
 import { EXACT_TYPES, expectedCopy } from './copy-rule.ts';
 import { COMPANY_CONTAINERS } from './company-paths.ts';
-import { companyContainerDefaults, newCompanyDocument, newPlaceDocument } from './defaults.ts';
+import { companyContainerDefaults, newCompanyDocument, newPlaceDocument, placeContainerDefaults } from './defaults.ts';
 import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from './errors.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkObjectId } from './fields.ts';
-import type { CompanyChanges, NewCompanyFields, NewPlaceFields, PlaceFields } from './fields.ts';
+import type { CompanyChanges, NewCompanyFields, NewPlaceFields, PlaceChanges } from './fields.ts';
+import { PLACE_CONTAINERS } from './place-paths.ts';
 import { reserveWithGoogleRecord } from './reserve-with-google.ts';
 import { normalizeVatNumber, vatNumberFilter } from './vat.ts';
 import { versionOf } from './version.ts';
@@ -35,7 +36,17 @@ export type WriteOutcome =
   /** The VAT number of a company created or changed is already the number of another company of the group that is not in the trash. Nothing was written. */
   | { readonly outcome: 'vatNumberTaken' }
   /** A company in the trash cannot be deleted because a place of the group (trashed ones included) still refers to it. Nothing was written. */
-  | { readonly outcome: 'referenced' };
+  | { readonly outcome: 'referenced' }
+  /** A place in the trash cannot be duplicated. Nothing was written. */
+  | { readonly outcome: 'trashed' };
+
+/** What the places need to know of the company they belong to: whether it is in the trash and the names of its invoice series (`invoicesPSValues`). */
+export interface CompanyOfPlace {
+  readonly trashed: boolean;
+  readonly invoiceSeries: readonly string[];
+  /** The same series with their `cash` flag (`true` only when the stored flag is exactly `true`), in the stored order. */
+  readonly series: readonly { readonly name: string; readonly cash: boolean }[];
+}
 
 /** Options of {@link companiesPlacesWriter}. */
 export interface WriterOptions {
@@ -53,7 +64,7 @@ export const MAX_GROUP_PLACES = 10_000;
 
 /**
  * The write service of companies and places (`doc/Tasks.md` 5.6): the only writer of the `companies` and `places` of a group database
- * and of their copies in the common database. It has no HTTP routes of its own: the company routes (area 6) use it, and the place routes (area 7) will.
+ * and of their copies in the common database. It has no HTTP routes of its own: the company routes (area 6) and the place routes (area 7) use it.
  *
  * Every operation runs in one transaction on the common cluster and, in this order: writes the group database in the legacy format, rereads
  * the whole document (with `EXACT_TYPES`), writes the copy in `common` with `replaceOne({ _id, groupId }, { ...document, groupId }, { upsert: true })`
@@ -77,13 +88,21 @@ export interface CompaniesPlacesWriter {
   /**
    * Reads a document of the group database as stored, with its version: the document with the exact BSON types (`EXACT_TYPES`: `Int32` and `Double`
    * wrappers instead of numbers), the version the same bytes give. It is the read of the detail routes, so the `ETag` they send is the version the next
-   * write checks; it is not scoped (the caller applies the perimeter of the principal to the id first).
+   * write checks; the perimeter of the principal is applied here (a document outside it is `null`, like one that does not exist).
    *
    * @param kind `companies` or `places`.
    * @param id Id of the document.
    * @returns The document and its version, or `null` when the document does not exist in the group.
    */
   read(kind: EntityKind, id: ObjectId): Promise<{ readonly document: Document; readonly version: string } | null>;
+  /**
+   * What the places need of a company of the group, read from the group database, not limited to the perimeter of the caller (the caller must have judged the company already, and never asks for one it rejected): the invoice series
+   * of the company a place chooses from, and whether the company is in the trash. Only these two values are ever read.
+   *
+   * @param id Id of the company.
+   * @returns The data, or `null` when the company does not exist in the group.
+   */
+  companyOfPlace(id: ObjectId): Promise<CompanyOfPlace | null>;
   /**
    * Creates a company with the complete structure the legacy expects.
    *
@@ -95,9 +114,9 @@ export interface CompaniesPlacesWriter {
    */
   createCompany(fields: NewCompanyFields): Promise<WriteOutcome>;
   /**
-   * Creates a place with the complete structure the legacy expects and one storage, and recalculates `groups.places[]`.
+   * Creates a place with the complete structure the old backoffice saves (every block with its defaults) and one storage, and recalculates `groups.places[]`.
    *
-   * @param fields The owned fields; `name` and `companyId` are required.
+   * @param fields The owned fields (the top-level ones and the dotted ones of the blocks); `name` and `companyId` are required.
    * @returns `written`, or `companyNotFound`.
    * @throws {InvalidWriteInputError} If a field is not allowed, invalid or missing.
    * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
@@ -118,17 +137,31 @@ export interface CompaniesPlacesWriter {
    */
   updateCompany(id: ObjectId, expectedVersion: string, changes: CompanyChanges): Promise<WriteOutcome>;
   /**
-   * Changes some owned fields of a place with `$set` and recalculates `groups.places[]`. A new `companyId` must name a company of the group that
-   * is not in the trash.
+   * Changes some owned fields of a place with `$set`, each on its own leaf path (the top-level ones, `general.priceLists`, `platform.sentry`, the opening and delivery hours), and
+   * recalculates `groups.places[]`; nothing else of the document is written but `updateDate`, so what the POS writes (`devices[i].info`, `rooms`, `suspendedToday`…), the integrations and
+   * every key the service does not own survive. A block that is missing or empty is completed with the defaults of the keys the change does not set. A new `companyId` must name a company
+   * of the group that is not in the trash.
    *
    * @param id Id of the place.
    * @param expectedVersion The version the caller read.
    * @param changes The fields to change, at least one.
    * @returns `written`, `notFound`, `conflict` or `companyNotFound`.
    * @throws {InvalidWriteInputError} If a field is not allowed or invalid, or there is none.
+   * @throws {MalformedDocumentError} If a block the change writes into is not an object in the stored document.
    * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
    */
-  updatePlace(id: ObjectId, expectedVersion: string, changes: Partial<PlaceFields>): Promise<WriteOutcome>;
+  updatePlace(id: ObjectId, expectedVersion: string, changes: PlaceChanges): Promise<WriteOutcome>;
+  /**
+   * Duplicates a place: everything of the stored document is replicated (every key, the devices, the rooms, the storages with the same ids, the integrations and the keys the backend
+   * does not know), with a new `_id`, `insertDate` and `updateDate` now, `trash: false`, the `groupId` of the verified access and the name of the legacy duplicate (`<name> (Copy)`). In one
+   * transaction: the insert, its copy in the common database, the Reserve with Google feed (as the legacy insert, only if the integration is active and complete) and `groups.places[]`.
+   * The result of the write never carries a credential: it is the id and the version.
+   *
+   * @param id Id of the place to duplicate.
+   * @returns `written` (with the id of the new place), `notFound`, `trashed` (a place in the trash is not duplicated) or `companyNotFound` (its company does not exist or is in the trash).
+   * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
+   */
+  duplicatePlace(id: ObjectId): Promise<WriteOutcome>;
   /**
    * Moves a company or a place to the trash (`trash: true`). A place also leaves the Reserve with Google feed and `groups.places[]` is recalculated.
    * Nothing is cascaded: the places of a trashed company keep their reference.
@@ -173,24 +206,25 @@ const COMPANY_NOT_FOUND = Object.freeze({ outcome: 'companyNotFound' }) satisfie
 const NOT_TRASHED = Object.freeze({ outcome: 'notTrashed' }) satisfies WriteOutcome;
 const VAT_TAKEN = Object.freeze({ outcome: 'vatNumberTaken' }) satisfies WriteOutcome;
 const REFERENCED = Object.freeze({ outcome: 'referenced' }) satisfies WriteOutcome;
-
-/** The container (`settings.global`, `fattura_elettronica`…) a leaf path belongs to, `undefined` for a top-level field. */
-const containerOf = (path: string): string | undefined => Object.keys(COMPANY_CONTAINERS).find((container) => path.startsWith(`${container}.`));
+const TRASHED = Object.freeze({ outcome: 'trashed' }) satisfies WriteOutcome;
 
 /**
- * The leaves a write adds so that no block of the stored company stays half built: for every block the change writes into, when it is missing
- * or empty, the default of each of its keys the change does not set. A block that already has keys is left as it is (a legacy company may lack
+ * The leaves a write adds so that no block of the stored document stays half built: for every container the change writes into, when it is missing
+ * or empty, the default of each of its keys the change does not set (nor sets anything below). A block that already has keys is left as it is (a legacy document may lack
  * some, and the legacy wrote it so), and a block that is not an object (also any parent of it) is refused.
  *
  * @param current The stored document.
  * @param set The leaves the change sets.
+ * @param containers The containers that hold owned leaves, outermost first.
+ * @param defaultsOf The default value of every key of a container.
  * @returns The extra leaves to `$set`.
  * @throws {MalformedDocumentError} If a block, or a parent of it, is stored as something that is not an object.
  */
-function completionOf(current: Document, set: Document): Document {
+function completionOf(current: Document, set: Document, containers: readonly string[], defaultsOf: (container: string) => Document): Document {
   const extra: Document = {};
-  for (const container of new Set(Object.keys(set).map(containerOf))) {
-    if (container === undefined) {
+  const paths = Object.keys(set);
+  for (const container of containers) {
+    if (!paths.some((path) => path.startsWith(`${container}.`))) {
       continue;
     }
     let value: unknown = current;
@@ -209,9 +243,9 @@ function completionOf(current: Document, set: Document): Document {
       }
     }
     if (!present || Object.keys(value as Document).length === 0) {
-      for (const [key, fallback] of Object.entries(companyContainerDefaults(container))) {
+      for (const [key, fallback] of Object.entries(defaultsOf(container))) {
         const leaf = `${container}.${key}`;
-        if (!Object.hasOwn(set, leaf)) {
+        if (!paths.some((other) => other === leaf || other.startsWith(`${leaf}.`))) {
           extra[leaf] = fallback;
         }
       }
@@ -233,6 +267,23 @@ function completionOf(current: Document, set: Document): Document {
  * @throws {UnknownClusterError} If the cluster of the access is not configured.
  */
 export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAccess, databases: Databases, options: WriterOptions = {}): CompaniesPlacesWriter {
+  return createWriter(principal, access, databases, options);
+}
+
+/**
+ * Opens the read of companies and places for any caller with a perimeter, a backoffice user or the server of a store (its perimeter is its own place). Only `read` is exposed:
+ * the type of {@link companiesPlacesWriter} keeps a store out of every write.
+ *
+ * @param principal The caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ */
+export function companiesPlacesReader(principal: ScopeHolder, access: GroupAccess, databases: Databases): Pick<CompaniesPlacesWriter, 'read'> {
+  const { read } = createWriter(principal, access, databases, {});
+  return { read };
+}
+
+function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Databases, options: WriterOptions): CompaniesPlacesWriter {
   const groupDb = groupDatabaseFor(principal, access, databases);
   const groupId = access.groupId;
   const clock = options.now ?? (() => new Date());
@@ -255,10 +306,15 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
   /** Reads the whole document as stored (exact BSON types), inside the transaction. */
   const reread = (kind: EntityKind, id: ObjectId, session: ClientSession): Promise<Document | null> => original(kind).findOne({ _id: id }, { ...EXACT_TYPES, session });
 
+  /** Whether a document is inside the perimeter of the principal (a company administrator reaches his companies and their places, a place administrator his own). */
+  const inPerimeter = (kind: EntityKind, id: ObjectId, document: Document): boolean =>
+    kind === 'companies' ? companyInScope(principal.scope, id) : placeInScope(principal.scope, id, document['companyId']);
+
   /** Reads the document and checks its version: the document, or the outcome that stops the write. */
   const gate = async (kind: EntityKind, id: ObjectId, expected: string, session: ClientSession): Promise<Gate> => {
     const current = await reread(kind, id, session);
-    if (current === null) {
+    // The perimeter of the caller is applied to every write as it is to the read: a document outside it does not exist.
+    if (current === null || !inPerimeter(kind, id, current)) {
       return { stop: NOT_FOUND };
     }
     return versionOf(kind, current) === expected ? { current } : { stop: CONFLICT };
@@ -324,7 +380,9 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
       if (uses !== undefined && !(await companyIsUsable(uses, session))) {
         return COMPANY_NOT_FOUND;
       }
-      await original(kind).updateOne({ _id: id }, { $set: { ...set, updateDate: clock() } }, { session });
+      // Only a place has leaves below blocks (a trash or a restore sets `trash` alone).
+      const completion = kind === 'places' ? completionOf(passed.current, set, PLACE_CONTAINERS, placeContainerDefaults) : {};
+      await original(kind).updateOne({ _id: id }, { $set: { ...set, ...completion, updateDate: clock() } }, { session });
       const written = await mirror(kind, id, session);
       await effect(session);
       return written;
@@ -354,6 +412,18 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
         return null;
       }
       return { document, version: versionOf(kind, document) };
+    },
+
+    companyOfPlace: async (id) => {
+      const company = await original('companies').findOne({ _id: checkObjectId(id, 'id') }, { projection: { trash: 1, invoicesPSValues: 1 } });
+      if (company === null) {
+        return null;
+      }
+      const series: unknown = company['invoicesPSValues'];
+      const list = (Array.isArray(series) ? (series as unknown[]) : []).flatMap((item) =>
+        typeof item === 'object' && item !== null && typeof (item as Document)['name'] === 'string' ? [{ name: (item as Document)['name'] as string, cash: (item as Document)['cash'] === true }] : [],
+      );
+      return { trashed: company['trash'] === true, invoiceSeries: list.map((entry) => entry.name), series: list };
     },
 
     createCompany: async (fields) => {
@@ -392,7 +462,7 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
         if (Object.hasOwn(set, 'code') && (await vatNumberTaken(set['code'] as string, id, session))) {
           return VAT_TAKEN;
         }
-        await original('companies').updateOne({ _id: id }, { $set: { ...set, ...completionOf(passed.current, set), updateDate: clock() } }, { session });
+        await original('companies').updateOne({ _id: id }, { $set: { ...set, ...completionOf(passed.current, set, Object.keys(COMPANY_CONTAINERS), companyContainerDefaults), updateDate: clock() } }, { session });
         return mirror('companies', id, session);
       });
     },
@@ -400,6 +470,37 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
     updatePlace: async (id, expected, changes) => {
       const set = checkChanges(PLACE_FIELD_KINDS, changes);
       return change('places', id, expected, set, (session) => placeEffects(session, null), set['companyId'] as ObjectId | undefined);
+    },
+
+    duplicatePlace: async (id) => {
+      const copyId = new ObjectId();
+      return run(async (session) => {
+        const source = await reread('places', checkObjectId(id, 'id'), session);
+        if (source === null || !inPerimeter('places', id, source)) {
+          return NOT_FOUND;
+        }
+        if (source['trash'] === true) {
+          return TRASHED;
+        }
+        if (!(source['companyId'] instanceof ObjectId) || !(await companyIsUsable(source['companyId'], session))) {
+          return COMPANY_NOT_FOUND;
+        }
+        const now = clock();
+        // Everything of the source, key by key and in its order; only these keys differ.
+        const document: Document = {
+          ...source,
+          _id: copyId,
+          groupId,
+          name: typeof source['name'] === 'string' ? `${source['name']} (Copy)` : '(Copy)',
+          trash: false,
+          insertDate: now,
+          updateDate: now,
+        };
+        await original('places').insertOne(document, { session });
+        const written = await mirror('places', copyId, session);
+        await placeEffects(session, () => rejoinFeed(copyId, session));
+        return written;
+      });
     },
 
     trash: (kind, id, expected) =>

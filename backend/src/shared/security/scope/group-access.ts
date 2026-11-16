@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { Db } from 'mongodb';
-import type { Request, RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import type { ClusterId } from '../../../config.ts';
 import type { Databases } from '../../../db/databases.ts';
 import { featuresOf } from '../../../modules/groups/features.ts';
@@ -8,7 +8,7 @@ import type { FeatureFlags } from '../../../modules/groups/features.ts';
 import { AppError } from '../../http/errors.ts';
 import type { PermissionDecisionHook } from '../rbac/require-permission.ts';
 import type { GroupsRepository } from './groups.repository.ts';
-import type { AuthPrincipal } from './principal.ts';
+import type { AuthPrincipal, ScopeHolder } from './principal.ts';
 
 /** A group the caller was verified to reach. Only {@link requireGroupAccess} creates one. */
 export interface GroupAccess {
@@ -33,7 +33,7 @@ interface Perimeter {
 }
 
 /** Checks a raw group id against the caller's perimeter; `null` when malformed or outside it. */
-function checkPerimeter(principal: AuthPrincipal, rawGroupId: string): Perimeter | null {
+function checkPerimeter(principal: ScopeHolder, rawGroupId: string): Perimeter | null {
   if (typeof rawGroupId !== 'string' || !GROUP_ID_PATTERN.test(rawGroupId)) {
     return null;
   }
@@ -52,6 +52,7 @@ function checkPerimeter(principal: AuthPrincipal, rawGroupId: string): Perimeter
     case 'group':
     case 'companies':
     case 'places':
+    case 'store':
       if (scope.groupId.toHexString() !== rawGroupId) {
         return null;
       }
@@ -99,11 +100,15 @@ export interface GroupAccessDeps {
  * features, goes in `res.locals.groupAccess`.
  *
  * @param groups Group lookup.
- * @returns The handler: `401 UNAUTHENTICATED` without principal, `404 NOT_FOUND` otherwise when not reachable.
+ * @param callerOf Where the caller is: the backoffice user in `res.locals.auth` by default; the route builder passes the store principal of `res.locals.store` for the requests authenticated with a store key.
+ * @returns The handler: `401 UNAUTHENTICATED` without a caller, `404 NOT_FOUND` otherwise when not reachable.
  */
-export function requireGroupAccess(groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'>): RequestHandler {
+export function requireGroupAccess(
+  groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'>,
+  callerOf: (res: Response) => ScopeHolder | undefined = (res) => res.locals.auth,
+): RequestHandler {
   return async (req, res, next) => {
-    const principal = res.locals.auth;
+    const principal = callerOf(res);
     if (principal === undefined) {
       throw new AppError('UNAUTHENTICATED');
     }
@@ -144,7 +149,7 @@ export function reportCrossGroupAccess(onCrossGroupAccess: CrossGroupAccessHandl
  * @param access A group access.
  * @throws {Error} If the access was not issued by {@link requireGroupAccess} or does not belong to the principal.
  */
-export function assertVerifiedGroupAccess(principal: AuthPrincipal, access: GroupAccess): void {
+export function assertVerifiedGroupAccess(principal: ScopeHolder, access: GroupAccess): void {
   if (!issued.has(access) || checkPerimeter(principal, access.groupId.toHexString()) === null) {
     throw new Error('Group database requested without a verified group access');
   }
@@ -162,7 +167,7 @@ export function assertVerifiedGroupAccess(principal: AuthPrincipal, access: Grou
  * @throws {Error} If the access was not issued by {@link requireGroupAccess} or does not belong to the principal.
  * @throws {UnknownClusterError} If the access's cluster is not configured.
  */
-export function groupDatabaseFor(principal: AuthPrincipal, access: GroupAccess, databases: Databases): Db {
+export function groupDatabaseFor(principal: ScopeHolder, access: GroupAccess, databases: Databases): Db {
   assertVerifiedGroupAccess(principal, access);
   return databases.group(access.groupId, access.clusterId);
 }

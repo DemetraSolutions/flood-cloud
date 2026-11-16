@@ -243,7 +243,7 @@ describe('GET /v1/groups/{groupId}/places', () => {
         ['place-002', hex(fixtureId('company', 2))],
       ],
     );
-    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['companyId', 'id', 'name', 'trashed']);
+    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['city', 'companyId', 'country', 'expirationDate', 'id', 'name', 'plan', 'province', 'status', 'trashed']);
     const text = JSON.stringify(reply.body);
     for (const secret of ['integration', 'fixture-integration-secret', '10.0.0.1', 'apiKey', 'storages', 'devices']) {
       assert.ok(!text.includes(secret), secret);

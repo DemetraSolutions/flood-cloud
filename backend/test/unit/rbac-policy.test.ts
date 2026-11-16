@@ -26,9 +26,10 @@ const EXPECTED: Record<Permission, Role[]> = {
   'companies:trash': FROM_SA,
   'companies:delete': FROM_SA,
   'places:read': FROM_PA,
-  'places:create': FROM_CA,
+  'places:create': FROM_D,
   'places:update': FROM_PA,
-  'places:trash': FROM_CA,
+  'places:trash': FROM_SA,
+  'places:delete': FROM_SA,
   'users:read': FROM_PA,
   'users:create': FROM_PA,
   'users:update': FROM_PA,
@@ -44,6 +45,8 @@ const EXPECTED: Record<Permission, Role[]> = {
   'profile:read': FROM_PA,
   'profile:update': FROM_PA,
   'clientErrors:create': FROM_PA,
+  'storeKeys:read': FROM_D,
+  'storeKeys:manage': FROM_D,
 };
 
 describe('permission catalog', () => {
@@ -59,7 +62,7 @@ describe('permission catalog', () => {
 
   it('recognizes permissions and roles', () => {
     assert.equal(isPermission('places:read'), true);
-    for (const value of ['places:delete', '', 'toString', 5, null, undefined, {}]) {
+    for (const value of ['places:fly', '', 'toString', 5, null, undefined, {}]) {
       assert.equal(isPermission(value), false);
     }
     for (const role of ROLES) {

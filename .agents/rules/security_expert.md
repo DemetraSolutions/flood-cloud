@@ -1,7 +1,7 @@
 ---
 trigger: model_decision
 name: security_expert
-description: "Usa proattivamente per la sicurezza: sessioni del backoffice con token opachi e refresh, API key pubbliche per gruppo, rate limit e quote, hashing password con scrypt, RBAC (PSA, D, SA, CA, PA, E) e isolamento dei gruppi, validazione input e NoSQL injection, upload, webhook, CORS, header, segreti e log; lato backoffice Angular: gestione dei token in memoria, refresh, XSS, CSP, dati sensibili nel browser. Obbligatorio per ogni modifica che tocca questi temi."
+description: "Usa proattivamente per la sicurezza: sessioni del backoffice con token opachi e refresh, chiave di negozio del server di punto vendita, API key pubbliche per gruppo, rate limit e quote, hashing password con scrypt, RBAC (PSA, D, SA, CA, PA, E) e isolamento dei gruppi, validazione input e NoSQL injection, upload, webhook, CORS, header, segreti e log; lato backoffice Angular: gestione dei token in memoria, refresh, XSS, CSP, dati sensibili nel browser. Obbligatorio per ogni modifica che tocca questi temi."
 ---
 # Security Expert - Regole e Competenze
 
@@ -12,8 +12,9 @@ Sei il garante del modello di sicurezza di Flood Cloud, definito in **`doc/Secur
 | Superficie | Credenziale | Skill |
 |---|---|---|
 | `/v1` backoffice (PSA, D, SA, CA, PA; mai `E`) | token opachi 15 min + refresh rotante | `opaque-token-auth` |
+| `/v1`, solo le route con opt-in `store` (app del server di punto vendita) | chiave di negozio `fc_sk_`, una per punto vendita, fino a revoca (D-24) | `store-key-auth` |
 | `/public/v1` integrazioni di un gruppo | API key `fc_pk_` con permessi, limiti e quote | `public-api-keys`, `rate-limiting-metering` |
-Una credenziale vale **solo** sulla propria superficie. L'app del server di punto vendita è separata e fuori scope (D-22): usa `/v1`; la sua credenziale è una decisione aperta (D-24), non implementarla senza decisione.
+Una credenziale vale **solo** sulla propria superficie. L'app del server di punto vendita è separata e fuori scope (D-22): usa `/v1` con la **chiave di negozio** (D-24, decisa e realizzata nel passo 7C). Il suo principal è `res.locals.store`, **mai** `res.locals.auth`: ogni middleware o servizio scritto per gli utenti rifiuta un negozio. Ogni route che il negozio può chiamare ha un opt-in esplicito (`store: true`, permesso nel `STORE_PROFILE`, solo `/places/:placeId` di un gruppo); le altre rispondono `403`. Ogni modifica a chiave, codice di attivazione, profilo o opt-in passa da te.
 
 ## Regole Fondamentali
 1. **Deny by default:** ogni route richiede un permesso; le route anonime sono dichiarate esplicitamente, motivate e con rate limit. Vietato decidere l'autenticazione con pattern sul percorso.
@@ -28,7 +29,8 @@ Una credenziale vale **solo** sulla propria superficie. L'app del server di punt
 10. **Idempotenza** sulle scritture sensibili ai doppioni (`Idempotency-Key`).
 11. **Upload e webhook:** skill `secure-file-upload` e `webhook-verification`.
 12. **Segreti di configurazione** solo da variabili d'ambiente validate all'avvio; mai riusare valori del legacy: sono compromessi.
-13. **Decisioni aperte** (`doc/Security-Model.md` §12): non si implementano senza la decisione dell'utente.
+13. **Chiave di negozio:** hash a riposo, una sola attiva per punto vendita (indice univoco parziale), stato del gruppo, del punto vendita e dell'azienda riletto a ogni richiesta (blocco `403 STORE_DISABLED` senza revoca; punto vendita nel cestino o eliminato ⇒ revoca), regola `api:store` applicata dall'autenticazione della chiave a ogni richiesta di una chiave attiva, anche rifiutata (`403`) o bloccata (la regola per utente non conta un negozio), codice di attivazione monouso mai nei log né nel registro.
+14. **Decisioni aperte** (`doc/Security-Model.md` §12): non si implementano senza la decisione dell'utente.
 
 ## Backoffice Angular
 1. **Token** solo in memoria; mai in `localStorage`/`sessionStorage`; header `Authorization` aggiunto solo alle chiamate verso l'URL delle API (skill `angular-auth-session`).

@@ -60,9 +60,15 @@ describe('logger', () => {
       c: 'fc_pk_abc',
       d: 'mongodb://u:p@h/db',
       e: ['mongodb+srv://h'],
+      f: 'key=fc_sk_abc',
       safe: 'plain text',
     });
-    assert.deepEqual(plain(value), { a: '[REDACTED]', b: '[REDACTED]', c: '[REDACTED]', d: '[REDACTED]', e: ['[REDACTED]'], safe: 'plain text' });
+    assert.deepEqual(plain(value), { a: '[REDACTED]', b: '[REDACTED]', c: '[REDACTED]', d: '[REDACTED]', e: ['[REDACTED]'], f: '[REDACTED]', safe: 'plain text' });
+  });
+
+  it('redacts an activation code by the name of its field (the code has no prefix, so no value gives it away), at any depth', () => {
+    const value = redact({ activationCode: '7KQ2-M9XD-4TPA-H3WN', body: { activationCode: 'x', nested: [{ ActivationCode: 'y' }] }, activation_code: 'z', visible: 'ok' });
+    assert.deepEqual(plain(value), { activationCode: '[REDACTED]', body: { activationCode: '[REDACTED]', nested: [{ ActivationCode: '[REDACTED]' }] }, activation_code: '[REDACTED]', visible: 'ok' });
   });
 
   it('redacts Secret instances', () => {

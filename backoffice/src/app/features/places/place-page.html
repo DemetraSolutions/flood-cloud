@@ -1,0 +1,98 @@
+@if (state.loadFailed()) {
+  <fc-error-state
+    [title]="'PLACES.LOAD_ERROR' | t"
+    [message]="errorKey() | t"
+    [requestId]="state.loadError()?.requestId ?? null"
+    (retry)="state.reload()"
+  />
+  <p>
+    <a [routerLink]="['/groups', groupId(), 'places']">{{ 'PLACES.BACK' | t }}</a>
+  </p>
+} @else {
+  @let place = state.place();
+  @if (state.isNew() || place) {
+    <header class="page-header">
+      <h1>{{ state.isNew() ? ('PLACES.NEW_TITLE' | t) : place?.name }}</h1>
+      @if (place?.trashed) {
+        <fc-status-badge tone="danger">{{ 'PLACES.STATUS.TRASHED' | t }}</fc-status-badge>
+      } @else if (place?.license.status === 'disabled') {
+        <fc-status-badge tone="warning">{{ 'PLACES.STATUS.DISABLED' | t }}</fc-status-badge>
+      }
+      @if (!state.isNew() && state.canWrite()) {
+        <button
+          fc-button
+          [loading]="state.saving()"
+          [disabled]="!state.anyDirty()"
+          (click)="state.save('all')"
+        >
+          {{ 'PLACES.SAVE_ALL' | t }}
+        </button>
+      }
+    </header>
+
+    @if (!state.canWrite()) {
+      <p class="note">{{ 'PLACES.READ_ONLY' | t }}</p>
+    }
+    @if (state.lookupFailed()) {
+      <p class="note" role="status">{{ 'PLACES.LOOKUP_ERROR' | t }}</p>
+    }
+    @if (state.failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (state.stale()) {
+        <div class="actions">
+          <button fc-button variant="secondary" (click)="state.reload()">
+            {{ 'PLACES.RELOAD' | t }}
+          </button>
+        </div>
+      }
+    }
+
+    @if (!state.isNew()) {
+      <nav class="sections" [attr.aria-label]="'PLACES.SECTIONS' | t">
+        <ul>
+          @for (section of state.sections(); track section.id) {
+            <li>
+              <a
+                [routerLink]="section.path === '' ? '.' : section.path"
+                routerLinkActive="active"
+                ariaCurrentWhenActive="page"
+                [routerLinkActiveOptions]="{ exact: section.exact }"
+              >
+                {{ 'PLACES.SECTION.' + section.key | t }}
+                @if (state.dirty().has(section.id)) {
+                  <fc-status-badge tone="warning">{{ 'PLACES.UNSAVED' | t }}</fc-status-badge>
+                }
+                @if (state.errorCounts()[section.id] > 0) {
+                  <fc-status-badge tone="danger">
+                    {{ 'PLACES.SECTION_ERRORS' | t: { count: state.errorCounts()[section.id] } }}
+                  </fc-status-badge>
+                }
+              </a>
+            </li>
+          }
+          @if (state.hasStoreKey()) {
+            <li>
+              <a routerLink="store-key" routerLinkActive="active" ariaCurrentWhenActive="page">
+                {{ 'PLACES.SECTION.STORE_KEY' | t }}
+              </a>
+            </li>
+          }
+        </ul>
+      </nav>
+    }
+
+    <router-outlet />
+  } @else {
+    <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+  }
+}
+
+<fc-confirm-dialog
+  [heading]="'PLACES.LEAVE.TITLE' | t"
+  [message]="'PLACES.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'PLACES.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>

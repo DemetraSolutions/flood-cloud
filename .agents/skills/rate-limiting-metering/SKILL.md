@@ -63,8 +63,11 @@ Indice TTL su `expiresAt`. In caso di due upsert concorrenti sulla stessa chiave
 | Chiave | Esempio |
 |---|---|
 | login per IP / per username | severo, con blocco progressivo dell'utente |
-| refresh, attivazione, token store, per IP | severo |
-| superficie store per server | ampio |
+| refresh, per IP | severo |
+| scambio del codice di attivazione di un negozio (`storeActivation:ip`), per IP | severo: 10 al minuto, prima del body |
+| chiave di negozio (`api:store`), per chiave | ampio: 600 al minuto; la regola per utente (`api:user`) non conta un negozio, quindi la applica l'autenticazione della chiave a ogni richiesta, anche rifiutata o bloccata |
+| codici di attivazione e revoche (`storeKeyAdmin:user`), per utente | 20 al minuto |
+| eventi `store.activationFailed` e `store.revokedKeyPresented` | un contatore dedicato (`rateLimits`) li limita nel registro: 10 all'ora per IP, 1 all'ora per chiave |
 | superficie pubblica per chiave | `apiKeys.rateLimitPerMinute` o default |
 I valori sono una decisione aperta (`doc/Security-Model.md` §12): non inventarli, leggili dalla configurazione.
 

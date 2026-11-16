@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
 import { manageableRoles } from '../rbac/policy.ts';
 import type { AuthPrincipal } from './principal.ts';
-import type { Scope } from './scope.ts';
+import type { Scope, UserScope } from './scope.ts';
 
 /** A filter that matches no document. */
 const NOTHING: Filter<Document> = { _id: { $in: [] } };
@@ -66,7 +66,7 @@ export function usersScopeFilter(principal: Pick<AuthPrincipal, 'role' | 'scope'
  * @param scope Scope of the caller.
  * @returns A MongoDB filter; it matches nothing for `none`.
  */
-export function groupsScopeFilter(scope: Scope): Filter<Document> {
+export function groupsScopeFilter(scope: UserScope): Filter<Document> {
   switch (scope.kind) {
     case 'platform':
       return {};
@@ -88,7 +88,7 @@ export function groupsScopeFilter(scope: Scope): Filter<Document> {
  * @param scope Scope of the caller.
  * @returns A MongoDB filter; it matches nothing for `places` and `none`.
  */
-export function companiesScopeFilter(scope: Scope): Filter<Document> {
+export function companiesScopeFilter(scope: UserScope): Filter<Document> {
   switch (scope.kind) {
     case 'platform':
     case 'dealer':
@@ -108,7 +108,7 @@ export function companiesScopeFilter(scope: Scope): Filter<Document> {
  *
  * @param scope Scope of the caller.
  * @param companyId Id of the company.
- * @returns `true` for the platform, a dealer and a group administrator; for a company administrator only the companies of the scope; never for the other scopes.
+ * @returns `true` for the platform, a dealer and a group administrator; for a company administrator only the companies of the scope, for a store only its own company; never for the other scopes.
  */
 export function companyInScope(scope: Scope, companyId: ObjectId): boolean {
   switch (scope.kind) {
@@ -118,6 +118,8 @@ export function companyInScope(scope: Scope, companyId: ObjectId): boolean {
       return true;
     case 'companies':
       return [...scope.companyIds].some((id) => id.equals(companyId));
+    case 'store':
+      return scope.companyId.equals(companyId);
     case 'places':
     case 'none':
       return false;
@@ -141,6 +143,8 @@ export function placeInScope(scope: Scope, placeId: ObjectId, companyId: unknown
       return companyId instanceof ObjectId && [...scope.companyIds].some((id) => id.equals(companyId));
     case 'places':
       return [...scope.placeIds].some((id) => id.equals(placeId));
+    case 'store':
+      return scope.placeId.equals(placeId);
     case 'none':
       return false;
   }
@@ -163,6 +167,8 @@ export function placesScopeFilter(scope: Scope): Filter<Document> {
       return { companyId: { $in: [...scope.companyIds] } };
     case 'places':
       return { _id: { $in: [...scope.placeIds] } };
+    case 'store':
+      return { _id: scope.placeId };
     case 'none':
       return NOTHING;
   }

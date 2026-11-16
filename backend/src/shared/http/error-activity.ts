@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { ActivityLog } from '../activity-log/activity-log.ts';
 import type { MetadataValue } from '../activity-log/activity-log.ts';
-import { actorOf } from '../activity-log/actor.ts';
+import { responseActorOf } from '../activity-log/actor.ts';
 import type { Logger } from '../logging/logger.ts';
 import { createMinuteCap } from './minute-cap.ts';
 
@@ -70,7 +70,7 @@ export function createErrorActivityReporter(options: ErrorActivityOptions): Erro
           category: 'error',
           action: 'request.failed',
           outcome: 'failure',
-          actor: actorOf(res.locals.auth),
+          actor: responseActorOf(res),
           ...(res.locals.groupAccess === undefined ? {} : { groupId: res.locals.groupAccess.groupId }),
           requestId: res.locals.requestId,
           ...(req.ip === undefined ? {} : { ip: req.ip }),

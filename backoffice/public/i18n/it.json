@@ -49,7 +49,8 @@
     "PRODUCTS": "Prodotti",
     "PRODUCT_FAVORITES": "Preferiti",
     "PROMOTIONS": "Promozioni",
-    "COMPANIES": "Aziende"
+    "COMPANIES": "Aziende",
+    "PLACES": "Punti vendita"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -1739,5 +1740,800 @@
       }
     },
     "LOOKUP_ERROR": "Alcuni elenchi non si sono caricati: i campi mostrano solo i valori già salvati."
+  },
+  "PLACES": {
+    "TITLE": "Punti vendita",
+    "NEW": "Nuovo punto vendita",
+    "NEW_TITLE": "Nuovo punto vendita",
+    "CREATE": "Crea punto vendita",
+    "CREATED": "Punto vendita creato.",
+    "SAVED": "Modifiche salvate.",
+    "SAVE_ALL": "Salva tutto",
+    "RELOAD": "Ricarica",
+    "CONFLICT": "Il punto vendita è stato modificato da un altro utente.",
+    "NOT_ALLOWED": "Non puoi modificare i campi riservati alla piattaforma e ai dealer.",
+    "READ_ONLY": "Hai accesso in sola lettura: non puoi modificare questo punto vendita.",
+    "RESERVED_NOTE": "Solo l’amministratore di piattaforma e i dealer possono modificare questo campo.",
+    "UNSAVED": "Non salvata",
+    "SECTIONS": "Sezioni del punto vendita",
+    "SECTION_ERRORS": "{count} errori",
+    "NONE": "Nessuno",
+    "REMOVE": "Rimuovi",
+    "REMOVE_ROW": "Rimuovi la riga {number} di «{legend}»",
+    "BACK": "Torna all’elenco dei punti vendita",
+    "LOAD_ERROR": "Impossibile caricare il punto vendita",
+    "LIST_ERROR": "Impossibile caricare i punti vendita",
+    "EMPTY": "Nessun punto vendita",
+    "EMPTY_MESSAGE": "Nessun punto vendita corrisponde ai filtri scelti.",
+    "ACTIONS": "Azioni",
+    "ACTIONS_LABEL": "Azioni su {name}",
+    "LOOKUP_ERROR": "Alcuni elenchi non si sono caricati: i valori salvati restano visibili e invariati.",
+    "MINUTES_HINT": "In minuti.",
+    "NO_KEYS": "Nessuna voce disponibile.",
+    "STATUS": {
+      "ACTIVE": "Attivo",
+      "DISABLED": "Disabilitato",
+      "TRASHED": "Nel cestino"
+    },
+    "COLUMN": {
+      "NAME": "Insegna",
+      "COMPANY": "Azienda",
+      "CITY": "Città",
+      "PLAN": "Piano",
+      "EXPIRATION": "Scadenza",
+      "STATUS": "Stato"
+    },
+    "FILTER": {
+      "SEARCH": "Cerca",
+      "COMPANY": "Azienda",
+      "ALL_COMPANIES": "Tutte le aziende",
+      "STATUS": "Stato",
+      "ALL_STATUSES": "Tutti gli stati",
+      "PLAN": "Piano",
+      "ALL_PLANS": "Tutti i piani",
+      "COUNTRY": "Paese",
+      "ALL_COUNTRIES": "Tutti i paesi",
+      "PROVINCE": "Provincia",
+      "ALL_PROVINCES": "Tutte le province",
+      "TRASHED": "Mostra il cestino"
+    },
+    "ACTION": {
+      "TRASH": "Metti nel cestino",
+      "RESTORE": "Ripristina",
+      "DELETE": "Elimina",
+      "DUPLICATE": "Duplica",
+      "TRASH_LABEL": "Metti nel cestino {name}",
+      "RESTORE_LABEL": "Ripristina {name}",
+      "DELETE_LABEL": "Elimina {name}",
+      "DUPLICATE_LABEL": "Duplica {name}",
+      "TITLE": {
+        "TRASH": "Mettere il punto vendita nel cestino?",
+        "RESTORE": "Ripristinare il punto vendita?",
+        "DELETE": "Eliminare il punto vendita per sempre?",
+        "DUPLICATE": "Duplicare il punto vendita?"
+      },
+      "CONFIRM": {
+        "TRASH": "Il punto vendita «{name}» finirà nel cestino: potrai ripristinarlo.",
+        "RESTORE": "Ripristinare il punto vendita «{name}»?",
+        "DELETE": "Il punto vendita «{name}» sarà eliminato per sempre. L’operazione non si può annullare.",
+        "DUPLICATE": "Sarà creata una copia di «{name}» con tutte le sue impostazioni, i dispositivi, le sale, i depositi e le integrazioni. La copia condivide con l’originale le credenziali dei pagamenti e gli identificativi di dispositivi e depositi: dopo la duplicazione rivedi le integrazioni. La chiave di negozio non viene copiata: va generata di nuovo per la copia."
+      },
+      "LABEL": {
+        "TRASH": "Metti nel cestino",
+        "RESTORE": "Ripristina",
+        "DELETE": "Elimina per sempre",
+        "DUPLICATE": "Duplica"
+      },
+      "DONE": {
+        "TRASH": "«{name}» è nel cestino.",
+        "RESTORE": "«{name}» è stato ripristinato.",
+        "DELETE": "«{name}» è stato eliminato.",
+        "DUPLICATE": "«{name}» è stato duplicato: ecco la copia."
+      },
+      "ERROR_REFERENCED": "Ci sono utenti che hanno ancora questo punto vendita nel proprio perimetro: toglilo prima di eliminarlo.",
+      "ERROR_COMPANY": "L’azienda del punto vendita non esiste più o è nel cestino: ripristinala prima di duplicarlo.",
+      "ERROR_STATE": "Il punto vendita non è nello stato richiesto, oppure l’operazione è già in corso."
+    },
+    "RENEW": {
+      "LABEL": "Scadenza di {name}",
+      "ACTION": "Rinnova",
+      "DONE": "Scadenza di «{name}» aggiornata."
+    },
+    "LEAVE": {
+      "TITLE": "Uscire senza salvare?",
+      "MESSAGE": "Ci sono modifiche non salvate: se esci andranno perse.",
+      "CONFIRM": "Esci senza salvare"
+    },
+    "SECTION": {
+      "GENERAL": "Generale",
+      "LICENSE": "Licenza",
+      "OPENING_HOURS": "Orari",
+      "CASH": "Cassa",
+      "PRINTING": "Stampe",
+      "PAYMENTS": "Pagamenti",
+      "TABLES": "Sale",
+      "RESERVATIONS": "Prenotazioni",
+      "DELIVERY": "Asporto e consegna",
+      "SELF_ORDERING": "Self ordering",
+      "KIOSK": "Kiosk",
+      "APPOINTMENTS": "Appuntamenti",
+      "EXTERNAL_DISPLAY": "Display esterno",
+      "FIDELITY": "Fidelity",
+      "TOBACCO": "Tabacchi",
+      "MEDIA": "Media",
+      "STORE_KEY": "Chiave di negozio"
+    },
+    "PLAN": {
+      "BASIC": "Basic",
+      "ADVANCED": "Advanced",
+      "ENTERPRICE": "Enterprise",
+      "TGM_SECONDARY": "Tabacchi e giochi (secondario)",
+      "DESK_SECONDARY": "Cassa (secondario)"
+    },
+    "DAY": {
+      "0": "Domenica",
+      "1": "Lunedì",
+      "2": "Martedì",
+      "3": "Mercoledì",
+      "4": "Giovedì",
+      "5": "Venerdì",
+      "6": "Sabato"
+    },
+    "GENERAL": {
+      "IDENTITY": "Dati del punto vendita",
+      "NAME": "Insegna",
+      "COMPANY": "Azienda",
+      "ADDRESS": "Indirizzo",
+      "STREET": "Indirizzo",
+      "POSTCODE": "CAP",
+      "CITY": "Città",
+      "COUNTRY": "Paese",
+      "PROVINCE": "Provincia",
+      "CONTACTS": "Contatti",
+      "CONTACT_NAME": "Referente",
+      "EMAIL": "E-mail",
+      "PHONE": "Telefono",
+      "SALES": "Vendite e fatture",
+      "PRICE_LIST": "Listino di vendita",
+      "ECOMMERCE_PRICE_LIST": "Listino dell’e-commerce",
+      "INVOICE_SERIES": "Serie delle fatture",
+      "INVOICE_SERIES_HINT": "Una delle serie dell’azienda del punto vendita.",
+      "PRICE_LISTS": "Listini del punto vendita",
+      "PRICE_LISTS_HINT": "I listini che il punto vendita può usare. Il listino di vendita è sempre tra questi.",
+      "NO_PRICE_LISTS": "Il gruppo non ha listini attivi.",
+      "AYCE": "All you can eat",
+      "AYCE_CODE_1": "Primo codice all you can eat",
+      "AYCE_CODE_2": "Secondo codice all you can eat",
+      "SERIES_UNKNOWN": "Hai cambiato azienda e non puoi leggere le aziende: le serie della nuova azienda non sono note. Resta il valore attuale; se non è una serie della nuova azienda il salvataggio sarà rifiutato."
+    },
+    "LICENSE": {
+      "TITLE": "Licenza",
+      "PLAN": "Piano",
+      "PLAN_HINT": "Solo l’amministratore di piattaforma cambia il piano.",
+      "EXPIRATION_DATE": "Data di scadenza",
+      "STATUS": "Stato",
+      "SENTRY": "Segnalazione degli errori (Sentry)",
+      "SENTRY_HINT": "Riservato all’amministratore di piattaforma."
+    },
+    "HOURS": {
+      "TIMEZONE": "Fuso orario",
+      "OPENING": "Orari di apertura",
+      "DELIVERY": "Orari della consegna",
+      "OPEN": "Aperto",
+      "START": "Dalle",
+      "END": "Alle",
+      "SLOTS": "Fasce orarie di {day}",
+      "ADD_SLOT": "Aggiungi una fascia oraria",
+      "SPECIAL": "Giorni speciali",
+      "SPECIAL_HINT": "Date con orari diversi da quelli della settimana, o di chiusura.",
+      "SPECIAL_DAY": "Giorno speciale {number}",
+      "DATE": "Data",
+      "CLOSED": "Chiuso",
+      "ADD_SPECIAL": "Aggiungi un giorno speciale",
+      "REMOVE_SPECIAL": "Rimuovi il giorno speciale {number}"
+    },
+    "CASH": {
+      "SHIFT_NAMES": "Nomi dei turni di lavoro",
+      "SHIFT_NAME": "Nome del turno",
+      "ADD_SHIFT_NAME": "Aggiungi un turno"
+    },
+    "PAYMENTS": {
+      "TYPES": "Tipi di pagamento",
+      "NAME": "Nome",
+      "CASH": "Contanti",
+      "ELECTRONIC": "Elettronico",
+      "CHEQUE": "Assegno",
+      "TICKETS": "Buoni",
+      "INVOICE_MODE": "Modalità di pagamento della fattura elettronica",
+      "ADD": "Aggiungi un tipo di pagamento"
+    },
+    "TABLES": {
+      "TIPS": "Mance suggerite",
+      "TIP_TYPE": "Tipo",
+      "TIP_VALUE": "Importo",
+      "TIP_PERCENT": "Percentuale",
+      "TIP_AMOUNT": "Valore",
+      "ADD_TIP": "Aggiungi una mancia"
+    },
+    "RESERVATIONS": {
+      "TIME_BLOCKS": "Fasce di prenotazione",
+      "WEEK_DAYS": "Giorni",
+      "START": "Dalle",
+      "END": "Alle",
+      "ADD_BLOCK": "Aggiungi una fascia"
+    },
+    "DELIVERY": {
+      "COSTS": "Costi di consegna",
+      "COST": "Costo",
+      "TO_KM": "Fino a (km)",
+      "ADD_COST": "Aggiungi un costo",
+      "MIN_AMOUNT": "Ordine minimo per valuta"
+    },
+    "SELF_ORDERING": {
+      "LISTS": "Limiti per listino",
+      "LISTS_HINT": "Per ogni listino, i limiti dei prodotti ordinabili dai clienti.",
+      "CATEGORY": "Categoria",
+      "CATEGORIES": "Categorie del listino «{list}»",
+      "ROUND_TIME": "Tempo del giro (minuti)",
+      "ROUND_MAX": "Prodotti al massimo per giro",
+      "TOTAL_MAX": "Prodotti al massimo in totale",
+      "POSITION": "Posizione",
+      "PURCHASABLE": "Acquistabile",
+      "VARIANTS": "Varianti",
+      "FREE_VARIANTS": "Varianti libere",
+      "TABLE_AUTO_CLOSE": "Chiusura automatica del tavolo",
+      "ADD_CATEGORY": "Aggiungi una categoria",
+      "REMOVE_LIST": "Rimuovi i limiti di «{list}»",
+      "ADD_LIST": "Aggiungi i limiti di «{list}»"
+    },
+    "KIOSK": {
+      "CATEGORIES": "Categorie mostrate",
+      "CATEGORY": "Categoria",
+      "POSITION": "Posizione",
+      "ADD_CATEGORY": "Aggiungi una categoria",
+      "TEXT": {
+        "TITLE_TEXT": "Titolo",
+        "SUB_TITLE_TEXT": "Sottotitolo",
+        "START_BUTTON_TEXT": "Testo del pulsante di avvio",
+        "EAT_HERE_TEXT": "Testo di «Mangia qui»",
+        "TAKE_AWAY_TEXT": "Testo di «Da asporto»"
+      }
+    },
+    "PRINTING": {
+      "TRANSFER": "Copia della configurazione",
+      "TRANSFER_HINT": "Esporta le impostazioni di stampa in un file JSON o importale da un altro punto vendita. L’importazione compila i campi: le modifiche si salvano con «Salva».",
+      "EXPORT": "Esporta in JSON",
+      "IMPORT": "Importa da JSON",
+      "IMPORT_TOO_LARGE": "Il file è troppo grande.",
+      "IMPORT_INVALID": "Il file non contiene una configurazione valida.",
+      "IMPORTED": "Importati {applied} campi, ignorati {ignored}. Controlla e salva."
+    },
+    "MEDIA": {
+      "IMAGES": "Immagini del punto vendita",
+      "SLOT": {
+        "LOGO_LIGHT": "Logo (tema chiaro)",
+        "COVER_LIGHT": "Copertina (tema chiaro)",
+        "LOGO_KIOSK": "Logo del kiosk",
+        "COVER_KIOSK": "Copertina del kiosk",
+        "PRODUCT_PLACEHOLDER_KIOSK": "Immagine dei prodotti senza foto (kiosk)"
+      }
+    },
+    "F": {
+      "CASH_SETTINGS": {
+        "FAST_LOGIN": "Accesso rapido",
+        "URERS_LOGIN_REQUIRED_TO_RECEIPT": "Accesso utente obbligatorio per lo scontrino",
+        "URERS_LOGIN_REQUIRED_TO_RECEIPT_ONLY_DESK": "Accesso obbligatorio per lo scontrino solo in cassa",
+        "SINGLE_CART_ROW": "Riga singola nel carrello",
+        "TOTAL_PRICE_CART_ROW": "Prezzo totale nella riga del carrello",
+        "COMBINES_VARIANTS_PRICE": "Combina il prezzo delle varianti",
+        "DISCOUNT_PERCENTAGE_ONLY_NO_DISCOUNT": "Sconto in percentuale solo sui prodotti non scontati",
+        "RESET_PRICE_LIST_ON_SALE": "Ripristina il listino dopo la vendita",
+        "CHECKOUT_CONTACT_NOTE": "Nota del contatto alla chiusura",
+        "RETURNED_GOODS": "Gestione dei resi",
+        "PRODUCTS_WEIGHT_KG": "Peso dei prodotti in kg",
+        "PRODUCT_VARIANTS_QUANTITY": "Quantità nelle varianti dei prodotti",
+        "LOGS": "Registro delle operazioni",
+        "WORKSHIFT": "Turni di lavoro",
+        "USERS_SHIFTS": "Turni degli utenti",
+        "USERS_SHIFTS_PRINT_RECEIPT": "Stampa i turni degli utenti sullo scontrino",
+        "OPERATING_TIME": "Orario operativo",
+        "NO_TAXED_PRODUCTS_PRINT_RECEIPT": "Stampa i prodotti non tassati sullo scontrino",
+        "ONLY_NO_TAXED_PRODUCTS_PRINT_RECEIPT": "Stampa solo i prodotti non tassati sullo scontrino",
+        "NO_TAXED_PRODUCTS_SUMMARY_PRINT_RECEIPT": "Riepilogo dei prodotti non tassati sullo scontrino",
+        "CHARGE_DOCUMENT": "Documento di carico",
+        "CHARGE_DOCUMENT_QT": "Copie del documento di carico",
+        "CUSTOM_DISCOUNT": "Sconti personalizzati (separati da punto e virgola)",
+        "TOTAL_ROUNDING": "Arrotondamento del totale",
+        "RECEIPTS_CANCELLATION": "Annullamento degli scontrini",
+        "DESK_BACKOFFICE": "Backoffice dalla cassa",
+        "LOCAL_WAREHOUSE": "Magazzino locale",
+        "SIMPLE_WAREHOUSE": "Magazzino semplice",
+        "LOCAL_WAREHOUSE_OUT_OF_STOCK": "Prodotti esauriti nel magazzino locale",
+        "ADVANCED_REPORT_LOGS": "Registro del report avanzato"
+      },
+      "PRINTING": {
+        "RECEIPT": {
+          "USER": "Utente",
+          "BARCODE": "Codice a barre",
+          "MERGED_VARIANTS": "Varianti unite",
+          "NO_PRINT_PRICE0_PRODUCTS": "Non stampare i prodotti a prezzo zero",
+          "PRICE0_PRODUCTS_BOTTOM": "Prodotti a prezzo zero in fondo",
+          "PRINT_RECEIPT_COPY": "Stampa la copia dello scontrino",
+          "PRINT_DIVISION_NUMBER": "Numero della divisione",
+          "PRINT_PRICE_LISTS": "Listini",
+          "PRINT_UNPAID_RECEIPT": "Stampa lo scontrino non pagato",
+          "UNPAID_RECEIPT_CUSTOMER_REQUIRED": "Cliente obbligatorio per lo scontrino non pagato",
+          "NOTE": "Note",
+          "INVOICE": "Fattura",
+          "GIFT_RECEIPT": "Scontrino regalo",
+          "SERVER_PRINT": "Stampa dal server",
+          "VERIFY_CLOUSURES": "Verifica delle chiusure",
+          "SEATS_TOP": "Coperti in alto",
+          "SERVICE_TOP": "Servizio in alto",
+          "SUBTOTAL_SERVICE_BOTTOM": "Subtotale e servizio in fondo",
+          "NO_FISCAL_DEFAULT_NO_PRINT": "Non fiscale: non stampare per impostazione predefinita",
+          "NO_FISCAL_HEADER": "Non fiscale: intestazione",
+          "NO_FISCAL_TAXES": "Non fiscale: imposte",
+          "NO_FISCAL_TAXES_TOTAL": "Non fiscale: totale delle imposte",
+          "NO_FISCAL_REST": "Non fiscale: resto",
+          "SUBTOTAL_FONT_SIZE": "Dimensione del subtotale",
+          "INVOICE_QT": "Copie della fattura",
+          "NO_FISCAL_BOTTOM_TEXT": "Testo in fondo al documento non fiscale"
+        },
+        "PREBILLING": {
+          "HEADER": "Intestazione",
+          "PRINT_MERGED_VARIANTS": "Varianti unite",
+          "NO_PRINT_PRICE0_PRODUCTS": "Non stampare i prodotti a prezzo zero",
+          "PRINT_CATEGORIES_TOTALIZERS": "Totali per categoria",
+          "PRINT_TABLE_USER": "Utente del tavolo",
+          "PRINT_USER": "Utente",
+          "TITLE_TEXT": "Titolo",
+          "BOTTOM_TEXT": "Testo in fondo",
+          "TITLE_FONT_SIZE": "Titolo",
+          "SEQUENTIAL_NUMBER_FONT_SIZE": "Numero progressivo",
+          "BOTTOM_TEXT_FONT_SIZE": "Testo in fondo",
+          "CUSTOMER_DATA_FONT_SIZE": "Dati del cliente"
+        },
+        "ORDERING": {
+          "PRODUCTS_SORTING": "Ordinamento dei prodotti",
+          "START_RETURN_NUMBER": "Primo numero di rientro",
+          "END_RETURN_NUMBER": "Ultimo numero di rientro",
+          "PRINT_STATION_FONT_SIZE": "Postazione di stampa",
+          "DEVICE_FONT_SIZE": "Dispositivo",
+          "PIECES_FONT_SIZE": "Pezzi",
+          "SEATS_FONT_SIZE": "Coperti",
+          "CUSTOMER_NAME_FONT_SIZE": "Nome del cliente",
+          "CALLER_FONT_SIZE": "Chiamante",
+          "INVOLVED_STATIONS_FONT_SIZE": "Postazioni coinvolte",
+          "PRODUCTS_FONT_SIZE": "Prodotti",
+          "VARIANTS_FONT_SIZE": "Varianti",
+          "SUMMARY_PRODUCTS_FONT_SIZE": "Riepilogo dei prodotti",
+          "SUMMARY_VARIANTS_FONT_SIZE": "Riepilogo delle varianti",
+          "TITLE_FONT_SIZE": "Titolo",
+          "TABLE_FONT_SIZE": "Tavolo",
+          "EXITS_FONT_SIZE": "Uscite",
+          "CATEGORIES_GROPUS_FONT_SIZE": "Gruppi di categorie",
+          "NUMBER_FONT_SIZE": "Numero",
+          "TABLE_TEXT": "Testo del tavolo",
+          "DESK_TEXT": "Testo del banco",
+          "TAKE_AWAY_TEXT": "Testo dell’asporto",
+          "DELIVERY_TEXT": "Testo della consegna",
+          "VARIANT_PLUS_TEXT": "Testo della variante aggiunta",
+          "VARIANT_MINUS_TEXT": "Testo della variante tolta",
+          "VARIANT_INFO_TEXT": "Testo delle informazioni della variante",
+          "EXIT_TEXT": "Testo dell’uscita",
+          "PROCEED_TEXT": "Testo di prosegui",
+          "REMOVAL_TEXT": "Testo della rimozione",
+          "MOVE_TEXT": "Testo dello spostamento",
+          "ADDITION_TEXT": "Testo dell’aggiunta",
+          "RESEND_TEXT": "Testo del rinvio",
+          "CHANGE_ORDER_TEXT": "Testo della modifica dell’ordine",
+          "CANCELLATION_ORDER_TEXT": "Testo dell’annullamento dell’ordine",
+          "NOTE_TEXT": "Testo delle note",
+          "TABLE_NOTE_TEXT": "Testo delle note del tavolo",
+          "ORDER_NOTE_TEXT": "Testo delle note dell’ordine",
+          "QUIKLY_TEXT": "Testo dell’urgenza",
+          "INVOLVED_STATIONS_TEXT": "Testo delle postazioni coinvolte",
+          "TITLE_REVERSE": "Titolo invertito",
+          "CATEGORIES_GROPUS": "Raggruppa per categorie",
+          "NO_REMOVAL": "Non stampare le rimozioni",
+          "NO_REMOVAL_ON_DELETE_TABLE": "Non stampare le rimozioni all’eliminazione del tavolo",
+          "NO_REMOVAL_ON_DELETE_ORDER": "Non stampare le rimozioni all’eliminazione dell’ordine",
+          "DEVICE": "Dispositivo",
+          "PRINT_STATION": "Postazione di stampa",
+          "PRICE_LIST_NAME": "Nome del listino",
+          "MERGE_PRODUCTS_PRINT": "Unisci i prodotti nella stampa",
+          "ROOM_NAME": "Nome della sala",
+          "TOTAL": "Totale",
+          "TOTAL_PC": "Totale dei pezzi",
+          "ALL_PRICES": "Tutti i prezzi",
+          "SEATS_NUMBER": "Numero dei coperti",
+          "PRODUCTS_PROCEED": "Prodotti da proseguire",
+          "FIRST_EXIT_ON_EXITS_CUT": "Prima uscita sul taglio delle uscite",
+          "SEQUENTIAL_NUMBER_TOP": "Numero progressivo in alto",
+          "SEQUENTIAL_NUMBER_BOTTOM": "Numero progressivo in fondo",
+          "ROOMS_SEQUENTIAL_NUMBER_TOP": "Numero progressivo della sala in alto",
+          "ROOMS_SEQUENTIAL_NUMBER_BOTTOM": "Numero progressivo della sala in fondo",
+          "SHORT_NAME": "Nome breve",
+          "SHORT_DESCRIPTION": "Descrizione breve",
+          "NOTE": "Note",
+          "TABLE_NOTE": "Note del tavolo",
+          "PRINT_STATIONS_INVOLVED": "Postazioni coinvolte",
+          "TABLE_BOTTOM": "Tavolo in fondo",
+          "ADDITION_INFO": "Informazioni sull’aggiunta",
+          "PRODUCTS_SPACE": "Spazio tra i prodotti",
+          "SUMMARY_EXITS": "Riepilogo delle uscite",
+          "MOVE": "Spostamento",
+          "PARTIAL_MOVE_PRODUCTS": "Spostamento parziale dei prodotti",
+          "CONTACT_INFO": "Informazioni sul contatto",
+          "TABLE_USER": "Utente del tavolo",
+          "PRODUCTS_BOLD": "Prodotti in grassetto",
+          "PRODUCTS_CODE": "Codice dei prodotti"
+        }
+      },
+      "PAYMENTS": {
+        "DEFAULT_TYPE": "Tipo di pagamento predefinito",
+        "CHEQUE": "Assegni",
+        "TICKETS": "Buoni pasto",
+        "PAYMENT_DISCOUNT": "Sconto sul pagamento"
+      },
+      "TABLES": {
+        "EXITS": "Uscite",
+        "PROCEED_NO_PRINT": "Prosegui senza stampare",
+        "SEND_ORDER_PREBILLING": "Invia l’ordine con il preconto",
+        "DESK_CHECKOUT_PRINTERS_PRIORITY": "Priorità delle stampanti della cassa",
+        "CHECKOUT_TABLE_VALUE0": "Chiudi il tavolo a valore zero",
+        "DISCOUNT_TICKETS_DIFFERENCE": "Differenza degli sconti sui buoni",
+        "WAITING_LIST": "Lista d’attesa",
+        "EXITS_NUMBER": "Numero di uscite",
+        "URERS_LOGIN_REQUIRED_TO_TABLE_DESK": "Accesso obbligatorio al tavolo dalla cassa",
+        "URERS_LOGIN_REQUIRED_TO_TABLE": "Accesso obbligatorio al tavolo",
+        "TABLE_USER_SELECT": "Scelta dell’utente del tavolo",
+        "TABLE_USER_SELECT_PIN": "PIN per la scelta dell’utente",
+        "TABLE_USER_SELECT_EACH_OPENING": "Scelta dell’utente a ogni apertura",
+        "EXCLUSIVE_USER_TABLE": "Tavolo esclusivo dell’utente",
+        "TABLE_SEATS": "Coperti del tavolo",
+        "WAITING_PAYMENT_TABLE_STATUS": "Stato del tavolo in attesa di pagamento",
+        "PREBILLING_REQUEST_TABLE_STATUS": "Stato del tavolo con preconto richiesto",
+        "HANDHELD_RECEIPT_REQUEST_DELEGATE": "Richiesta dello scontrino dal palmare",
+        "ROOMS_GRID_HANDHELDS": "Griglia delle sale sui palmari",
+        "HALF_PORTION_VALUE": "Valore della mezza porzione",
+        "HALF_PORTION_VARIANTS_VALUE": "Valore della mezza porzione delle varianti",
+        "RESET_DESK_NUMBER": "Azzera il numero del banco",
+        "RESET_ROOMS_NUMBER": "Azzera il numero delle sale",
+        "RESET_DELIVERY_NUMBER": "Azzera il numero delle consegne",
+        "TABLE_GROUPS": {
+          "STATUS": "Gruppi di tavoli",
+          "NAME": "Nome del gruppo di tavoli",
+          "AUTO_CREATE_FIRST": "Crea il primo gruppo automaticamente"
+        }
+      },
+      "RESERVATIONS": {
+        "STATUS": "Prenotazioni attive",
+        "SUSPENDED_TODAY": "Sospeso oggi",
+        "STEP": "Intervallo tra le prenotazioni",
+        "DURATION": "Durata della prenotazione",
+        "UNTIL_HOURS": "Prenotabile fino alle",
+        "WEB_WIDGET": {
+          "STATUS": "Widget web attivo",
+          "COLOR": "Colore",
+          "BRIGHTNESS": "Luminosità"
+        },
+        "EMAIL_NOTIFICATION": {
+          "STATUS": "Invia l’e-mail",
+          "TEMPLATE_ID": "Modello dell’e-mail (id)",
+          "SUBJECT": "Oggetto",
+          "TO": "Destinatario"
+        },
+        "EMAIL": {
+          "STATUS": "Invia l’e-mail",
+          "TEMPLATE_ID": "Modello dell’e-mail (id)",
+          "SUBJECT": "Oggetto"
+        },
+        "EMAIL_CONFIRMED_STATUS": {
+          "STATUS": "Invia l’e-mail",
+          "TEMPLATE_ID": "Modello dell’e-mail (id)",
+          "SUBJECT": "Oggetto"
+        },
+        "EMAIL_REFUSED_STATUS": {
+          "STATUS": "Invia l’e-mail",
+          "TEMPLATE_ID": "Modello dell’e-mail (id)",
+          "SUBJECT": "Oggetto"
+        },
+        "EMAIL_CHANGE_STATUS": {
+          "STATUS": "Invia l’e-mail",
+          "TEMPLATE_ID": "Modello dell’e-mail (id)",
+          "SUBJECT": "Oggetto"
+        }
+      },
+      "DELIVERY": {
+        "TAKE_AWAY": {
+          "STATUS": "Asporto attivo",
+          "DELIVERY": "Consegna attiva",
+          "AUTO_DELIVERY_COST": "Costo di consegna automatico",
+          "FAST_TAKE_AWAY": "Asporto veloce",
+          "CALLER_REQUIRED": "Chiamante obbligatorio",
+          "SEND_PREBILLING_ON_SAVE": "Invia il preconto al salvataggio",
+          "PRINT_ORDER_NUMBER": "Stampa il numero dell’ordine",
+          "CREATE_ORDER_NUMBER_ON_SAVE": "Crea il numero dell’ordine al salvataggio",
+          "AUTO_ORDER_STATUS_COMPLETE": "Completa lo stato dell’ordine automaticamente",
+          "ROOMS_PRODUCTION_CENTER_VALUE": "Valore del centro di produzione delle sale",
+          "SEND_ORDER_ON_SAVE": "Invio dell’ordine al salvataggio",
+          "SEND_ORDER_ON_SAVE_FAST": "Invio dell’ordine al salvataggio (asporto veloce)",
+          "AUTO_ORDERING_TIME": "Tempo di ordinazione automatica (minuti)",
+          "ALERT_MAX_DELIVERY_IN_STEP": "Avviso: massimo di consegne per intervallo",
+          "ALERT_MAX_TAKE_AWAY_IN_STEP": "Avviso: massimo di asporti per intervallo",
+          "STEP": "Intervallo degli ordini",
+          "DELIVERY_LIST_ID": "Listino della consegna",
+          "TAKE_AWAY_LIST_ID": "Listino dell’asporto"
+        },
+        "STEP": "Intervallo della consegna",
+        "MAX_CONTEMPORARY": "Consegne contemporanee al massimo",
+        "RADIUS": "Raggio di consegna",
+        "MARGIN": "Margine",
+        "LAT": "Latitudine",
+        "LNG": "Longitudine"
+      },
+      "SELF_ORDERING": {
+        "STATUS": "Self ordering attivo",
+        "FIXED_MESSAGE": "Messaggio fisso",
+        "ADDITIONAL_INFO_LABEL": "Etichetta delle informazioni aggiuntive",
+        "ADDITIONAL_INFO": "Informazioni aggiuntive"
+      },
+      "KIOSK": {
+        "LIST_ID": "Listino",
+        "MODE": "Modalità",
+        "CATALOG_LAYOUT": "Layout del catalogo",
+        "TABLE_PLACEHOLDER": "Segnaposto del tavolo",
+        "TABLE_PLACEHOLDER_TYPE": "Tipo di segnaposto del tavolo",
+        "TAKEAWAY_PLACEHOLDER": "Segnaposto dell’asporto",
+        "TAKEAWAY_PLACEHOLDER_TYPE": "Tipo di segnaposto dell’asporto",
+        "UPSELLING_CATEGORY_ID": "Categoria dell’upselling",
+        "EAT_HERE": "Mangia qui",
+        "TAKE_AWAY": "Da asporto",
+        "DESK_PAY": "Pagamento in cassa",
+        "POS_PAY": "Pagamento al POS",
+        "PREBILLING_DESK_PAY": "Preconto: pagamento in cassa",
+        "PREBILLING_POS_PAY": "Preconto: pagamento al POS",
+        "PAYMENTS_CARDS": "Pagamento con carte",
+        "PAYMENTS_CASH": "Pagamento in contanti",
+        "PAYMENTS_SATISPAY": "Pagamento con Satispay",
+        "HIDE_CATEGORIES": "Nascondi le categorie",
+        "HIDE_NOT_AVAILABLE_PRODUCTS": "Nascondi i prodotti non disponibili",
+        "HIDE_PHOTOS": "Nascondi le foto",
+        "PRODUCT_VARIANTS": "Varianti dei prodotti",
+        "QUICK_ADD_TO_CART": "Aggiunta rapida al carrello",
+        "CATEGORIES_ICONS": "Icone delle categorie",
+        "BACKGROUND_COLOR": "Colore di sfondo",
+        "TEXT_COLOR": "Colore del testo",
+        "UNPAID_NOT_PRINT": "Non stampare se non pagato",
+        "PRINT_ORDER_CHECKOUT_DEFAULT": "Stampa l’ordine alla chiusura",
+        "AUTO_ORDER_STATUS_COMPLETE": "Completa lo stato dell’ordine automaticamente",
+        "PAPER_RECEIPT": "Scontrino cartaceo",
+        "E_RECEIPT_EMAIL": "Scontrino elettronico via e-mail",
+        "E_RECEIPT_QR": "Scontrino elettronico con QR code",
+        "MANAGE_FIDELITY": "Gestione fidelity",
+        "IDLE_TIME_ALERT": "Avviso di inattività (secondi)",
+        "CLOSE_SESSION_TIME": "Chiusura della sessione (secondi)"
+      },
+      "APPOINTMENTS": {
+        "STAFF_CHOICE": "Scelta dell’operatore",
+        "STAFF_CHOICE_REQUIRED": "Scelta dell’operatore obbligatoria",
+        "WEB_WIDGET_STATUS": "Widget web attivo",
+        "STEP": "Intervallo degli appuntamenti",
+        "MAX_CONTEMPORARY": "Appuntamenti contemporanei al massimo",
+        "MAX_DAILY": "Appuntamenti al giorno al massimo",
+        "TYPE": "Tipo di appuntamento",
+        "EMAIL": {
+          "TEMPLATE_ID": "Modello dell’e-mail (id)",
+          "FROM": "Mittente",
+          "SUBJECT": "Oggetto"
+        }
+      },
+      "EXTERNAL_DISPLAY": {
+        "TIPS": "Mance",
+        "RECEIPT_TYPE": "Tipo di scontrino",
+        "FIDELITY": "Fidelity",
+        "BACKGROUND_COLOR": "Colore di sfondo",
+        "TEXT_COLOR": "Colore del testo"
+      },
+      "FIDELITY": {
+        "TYPE": "Tipo di fidelity",
+        "SHOW_POINTS": "Mostra i punti",
+        "SHOW_POINTS_CHECKOUT": "Mostra i punti alla chiusura",
+        "PRINT_DATA_ON_FISCAL_RECEIPT": "Stampa i dati sullo scontrino fiscale",
+        "PRINT_DATA_ON_RECEIPT": "Stampa i dati sullo scontrino"
+      },
+      "TOBACCO": {
+        "STATUS": "Tabacchi e giochi attivi",
+        "PRINT_PRODUCTS_ON_RECEIPT": "Stampa i prodotti sullo scontrino",
+        "WINNINGS_MANAGEMENT": "Gestione delle vincite",
+        "COMPANY_ID": "Azienda del punto vendita collegato",
+        "PLACE_ID": "Punto vendita collegato"
+      },
+      "MEDIA": {
+        "INTERNAL_FILE_NAME_LOGO": "Nome del file del logo (server di punto vendita)",
+        "EXTERNAL_URL_LOGO": "URL del logo",
+        "INTERNAL_FILE_NAME": "Nome del file dell’immagine",
+        "EXTERNAL_URL": "URL dell’immagine"
+      }
+    },
+    "G": {
+      "CASH_SETTINGS": {
+        "LOGIN": "Accesso",
+        "CART": "Carrello",
+        "SHIFTS": "Turni e registro",
+        "RECEIPT": "Scontrino e documenti",
+        "WAREHOUSE": "Magazzino",
+        "REPORT": "Report"
+      },
+      "PRINTING": {
+        "RECEIPT_OPTIONS": "Scontrino: opzioni",
+        "RECEIPT_NON_FISCAL": "Scontrino non fiscale",
+        "RECEIPT_FORMAT": "Scontrino: formato",
+        "PREBILLING_OPTIONS": "Preconto: opzioni",
+        "PREBILLING_TEXTS": "Preconto: testi",
+        "PREBILLING_FONTS": "Preconto: dimensioni dei caratteri",
+        "ORDERING_GENERAL": "Comanda: generale",
+        "ORDERING_FONTS": "Comanda: dimensioni dei caratteri",
+        "ORDERING_TEXTS": "Comanda: testi",
+        "ORDERING_OPTIONS": "Comanda: opzioni"
+      },
+      "PAYMENTS": {
+        "DEFAULTS": "Impostazioni dei pagamenti"
+      },
+      "TABLES": {
+        "GENERAL": "Generale",
+        "ACCESS": "Accesso",
+        "STATUS": "Stato dei tavoli",
+        "PORTIONS": "Porzioni",
+        "RESETS": "Azzeramenti",
+        "TABLE_GROUPS": "Gruppi di tavoli"
+      },
+      "RESERVATIONS": {
+        "GENERAL": "Prenotazioni",
+        "WEB_WIDGET": "Widget web",
+        "EMAIL_NOTIFICATION": "Notifica al locale",
+        "EMAIL": "E-mail di prenotazione",
+        "EMAIL_CONFIRMED_STATUS": "E-mail di conferma",
+        "EMAIL_REFUSED_STATUS": "E-mail di rifiuto",
+        "EMAIL_CHANGE_STATUS": "E-mail di modifica"
+      },
+      "DELIVERY": {
+        "TAKE_AWAY": "Asporto e consegna",
+        "ORDERS": "Ordini",
+        "AREA": "Area di consegna"
+      },
+      "SELF_ORDERING": {
+        "GENERAL": "Self ordering"
+      },
+      "KIOSK": {
+        "GENERAL": "Generale",
+        "SERVICES": "Servizio e pagamenti",
+        "DISPLAY": "Aspetto",
+        "ORDER": "Ordine e scontrino",
+        "SESSION": "Sessione"
+      },
+      "APPOINTMENTS": {
+        "GENERAL": "Appuntamenti",
+        "EMAIL": "E-mail di conferma"
+      },
+      "EXTERNAL_DISPLAY": {
+        "GENERAL": "Display esterno"
+      },
+      "FIDELITY": {
+        "GENERAL": "Fidelity"
+      },
+      "TOBACCO": {
+        "GENERAL": "Tabacchi e giochi",
+        "SECONDARY": "Punto vendita collegato"
+      },
+      "MEDIA": {
+        "FILES": "File e indirizzi"
+      }
+    },
+    "OPTION": {
+      "RECEIPTS_CANCELLATION": {
+        "SYNC": "Sincronizzato",
+        "NOT_SYNC": "Non sincronizzato"
+      },
+      "LOCAL_WAREHOUSE_OUT_OF_STOCK": {
+        "DISABLED": "Non consentito",
+        "ENABLED": "Consentito",
+        "ALERT": "Consentito con avviso"
+      },
+      "PRODUCTS_SORTING": {
+        "CART": "Come nel carrello",
+        "ALPHABETICAL": "Alfabetico",
+        "POSITION": "Per posizione"
+      },
+      "DEFAULT_TYPE": {
+        "CASH": "Contanti",
+        "ELECTRONIC": "Elettronico"
+      },
+      "BRIGHTNESS": {
+        "LIGHT": "Chiaro",
+        "DARK": "Scuro",
+        "AUTO": "Automatico"
+      },
+      "SEND_ORDER_ON_SAVE": {
+        "ASK": "Chiedi",
+        "NEVER": "Mai",
+        "ALWAYS": "Sempre"
+      },
+      "SEND_ORDER_ON_SAVE_FAST": {
+        "ASK": "Chiedi",
+        "NEVER": "Mai",
+        "ALWAYS": "Sempre"
+      },
+      "MODE": {
+        "SALE": "Vendita",
+        "CATALOG": "Catalogo"
+      },
+      "CATALOG_LAYOUT": {
+        "COLS_4": "4 colonne",
+        "COLS_3": "3 colonne",
+        "LIST": "Elenco"
+      },
+      "TABLE_PLACEHOLDER": {
+        "NONE": "Nessuno",
+        "OPTIONAL": "Facoltativo",
+        "REQUIRED": "Obbligatorio"
+      },
+      "TAKEAWAY_PLACEHOLDER": {
+        "NONE": "Nessuno",
+        "OPTIONAL": "Facoltativo",
+        "REQUIRED": "Obbligatorio"
+      },
+      "TABLE_PLACEHOLDER_TYPE": {
+        "TABLE": "Tavolo",
+        "STAND": "Supporto",
+        "PAGER": "Cercapersone"
+      },
+      "TAKEAWAY_PLACEHOLDER_TYPE": {
+        "PAGER": "Cercapersone"
+      },
+      "TYPE": {
+        "SINGLE": "Singolo",
+        "MULTIPLE": "Multiplo",
+        "ADVANCED": "Avanzata",
+        "BASE": "Base"
+      }
+    },
+    "STORE_KEY": {
+      "TITLE": "Chiave di negozio",
+      "HINT": "La chiave con cui il server del punto vendita parla con il cloud. Una sola chiave attiva, senza scadenza fino alla revoca.",
+      "LOAD_ERROR": "Impossibile caricare la chiave di negozio",
+      "ACTIVE": "Chiave attiva.",
+      "NONE": "Nessuna chiave attiva.",
+      "HINT_LABEL": "Chiave",
+      "ACTIVATED_AT": "Attivata il",
+      "LAST_SEEN": "Ultimo contatto",
+      "LAST_IP": "Ultimo indirizzo IP",
+      "APP_VERSION": "Versione dell’app",
+      "PENDING": "Codice di attivazione in attesa, valido fino al {expires}.",
+      "LAST_REVOKED": "Ultima chiave revocata il {when} ({reason}).",
+      "REASON": {
+        "revoked": "revocata",
+        "replaced": "sostituita da una nuova attivazione",
+        "placeTrashed": "punto vendita nel cestino",
+        "placeDeleted": "punto vendita eliminato"
+      },
+      "GENERATE": "Genera codice di attivazione",
+      "CANCEL_CODE": "Annulla codice",
+      "REVOKE": "Revoca chiave",
+      "REVOKE_TITLE": "Revocare la chiave di negozio?",
+      "REVOKE_MESSAGE": "Il server del punto vendita smetterà di funzionare alla prossima richiesta, finché non sarà attivato con un nuovo codice.",
+      "CODE_TITLE": "Codice di attivazione",
+      "CODE_HINT": "Digita questo codice sull’app del server di negozio. Si vede una volta sola: chiudendo la finestra non sarà più possibile leggerlo.",
+      "CODE_LABEL": "Codice di attivazione",
+      "EXPIRES": "Valido fino al {expires}, per un solo uso.",
+      "REPLACES": "Quando il nuovo server userà il codice, la chiave attuale sarà sostituita e il vecchio server smetterà di funzionare.",
+      "COPY": "Copia",
+      "COPIED": "Codice copiato.",
+      "COPY_FAILED": "Impossibile copiare il codice: selezionalo e copialo a mano.",
+      "CODE_CANCELLED": "Codice annullato.",
+      "REVOKED": "Chiave revocata."
+    }
   }
 }

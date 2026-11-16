@@ -1,0 +1,22 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fc-place-fields block="delivery" [only]="orders" />
+  <fc-rows-editor
+    [rows]="rows"
+    [columns]="columns()"
+    [legend]="'PLACES.DELIVERY.COSTS' | t"
+    [addLabel]="'PLACES.DELIVERY.ADD_COST' | t"
+    [max]="max"
+    (add)="add()"
+    (remove)="remove($event)"
+  />
+  <fc-place-fields block="delivery" [only]="area" />
+  <fc-keyed-values
+    section="delivery"
+    prop="minAmount"
+    type="number"
+    [keys]="state.currencies()"
+    [legend]="'PLACES.DELIVERY.MIN_AMOUNT' | t"
+    [labelOf]="currencyLabel"
+  />
+  <fc-place-save section="delivery" />
+</form>

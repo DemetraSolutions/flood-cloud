@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { ObjectId } from 'mongodb';
 import { startBackoffice, userName } from '../helpers/backoffice.ts';
 import type { Backoffice } from '../helpers/backoffice.ts';
-import { assertIsolation, isolationCases, isolationProbeRoute } from '../helpers/isolation.ts';
+import { assertIsolation, isolationCases } from '../helpers/isolation.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
@@ -13,7 +13,8 @@ const accessTokens = new Map<string, string>();
 
 before(async () => {
   ctx = await openTestDatabases();
-  office = await startBackoffice(ctx, { extraRoutes: [isolationProbeRoute(ctx.databases)] });
+  // The place detail route of the places module is the route under test (it replaces the probe of the isolation model).
+  office = await startBackoffice(ctx);
 });
 after(async () => {
   await office.close();

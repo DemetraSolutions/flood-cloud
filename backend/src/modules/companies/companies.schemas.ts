@@ -40,7 +40,7 @@ export const MAX_MINIMUM_ORDER_CURRENCIES = 10;
 const MAX_FREE_TEXT = 100;
 
 /** `''` is the same as `null`: the documents keep an empty text for none, and a client may send it back. */
-function emptyAsNull<T>(inner: Schema<T | null>): Schema<T | null> {
+export function emptyAsNull<T>(inner: Schema<T | null>): Schema<T | null> {
   return { optional: inner.optional, parse: (value, path, context, depth) => inner.parse(value === '' ? null : value, path, context, depth) };
 }
 
@@ -50,14 +50,14 @@ const freeText = (max: number) => emptyAsNull(nullable(string({ max, trim: true 
 /** A text that must satisfy a check, or `null`/`''` for none; the value kept is the one `normalize` returns (`undefined` rejects it with `format`). */
 const checkedText = (max: number, normalize: (text: string) => string | undefined) => emptyAsNull(nullable(transform(string({ max, trim: true }), normalize, 'format')));
 
-const alpha2 = () => string({ min: 2, max: 2, pattern: /^[A-Z]{2}$/ });
+export const alpha2 = () => string({ min: 2, max: 2, pattern: /^[A-Z]{2}$/ });
 const province = () => emptyAsNull(nullable(enumOf(ITALIAN_PROVINCES)));
 const upperIf = (valid: (text: string) => boolean) => (text: string): string | undefined => (valid(text.toUpperCase()) ? text.toUpperCase() : undefined);
 
 /** `part` of the object is required (a whole block) or optional (a modification). */
-type Part = <T>(schema: Schema<T>) => Schema<T>;
-const required: Part = (schema) => schema;
-const partial: Part = (schema) => optional(schema);
+export type Part = <T>(schema: Schema<T>) => Schema<T>;
+export const required: Part = (schema) => schema;
+export const partial: Part = (schema) => optional(schema);
 
 /**
  * The e-invoicing block. As a modification every key (and every key of the sub-objects) is optional; as a whole block (PUT) every key is required, so
@@ -193,7 +193,7 @@ const logoDescriptor = () => {
 const imageReference = () => object({ imageId: string({ min: 24, max: 24, pattern: /^[0-9a-f]{24}$/ }) });
 
 /** A logo in a request: an `{ imageId }` or the descriptor of the company (an object with `imageId` is judged as a reference, any other as a descriptor). */
-const logoValue = (): Schema<unknown> => {
+export const logoValue = (): Schema<unknown> => {
   const reference = imageReference();
   const descriptor = logoDescriptor();
   return {
@@ -204,7 +204,27 @@ const logoValue = (): Schema<unknown> => {
 };
 
 /** A text of the media block: a file name or an URL, without control characters. */
-const mediaText = (max: number) => string({ max, trim: true, pattern: /^[^\u0000-\u001F\u007F-\u009F]*$/ });
+export const mediaText = (max: number) => string({ max, trim: true, pattern: /^[^\u0000-\u001F\u007F-\u009F]*$/ });
+
+/** A simple file name of a media image (or empty). */
+export const fileNameText = () => string({ max: 255, trim: true, pattern: /^(?!.*\.\.)(?:[A-Za-z0-9][A-Za-z0-9._-]*)?$/ });
+
+/** An `http(s)` URL of a media image (or empty). */
+export const urlText = () =>
+  transform(
+    mediaText(2048),
+    (text) => {
+      if (text === '') {
+        return text;
+      }
+      try {
+        return ['http:', 'https:'].includes(new URL(text).protocol) ? text : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    'format',
+  );
 
 /**
  * The media block. The two logos accept `null` (removal), `{ imageId }` (an image of the group, from which the server builds the descriptor) or the descriptor the
@@ -212,43 +232,34 @@ const mediaText = (max: number) => string({ max, trim: true, pattern: /^[^\u0000
  */
 export function mediaSchema(part: Part): Schema<NonNullable<CompanyPatch['media']>> {
   return object({
-    internalFileName: part(string({ max: 255, trim: true, pattern: /^(?!.*\.\.)(?:[A-Za-z0-9][A-Za-z0-9._-]*)?$/ })),
-    externalUrl: part(
-      transform(
-        mediaText(2048),
-        (text) => {
-          if (text === '') {
-            return text;
-          }
-          try {
-            return ['http:', 'https:'].includes(new URL(text).protocol) ? text : undefined;
-          } catch {
-            return undefined;
-          }
-        },
-        'format',
-      ),
-    ),
+    internalFileName: part(fileNameText()),
+    externalUrl: part(urlText()),
     customersAppLogoLight: part(nullable(logoValue())),
     customersAppLogoDark: part(nullable(logoValue())),
   }) as unknown as Schema<NonNullable<CompanyPatch['media']>>;
 }
 
-/** The general fields and the blocks of a company, each as required (`part` is {@link required}) or optional ({@link partial}). */
-function companyShape(part: Part, creation: boolean) {
-  const address = object({
+/**
+ * The postal address of a company or a place: street, postcode, city and country (`part`: required for a whole address, optional for a modification) and the province, which may be left out
+ * (`''`) and is checked against the areas of the country by the service.
+ */
+export function addressSchema(part: Part) {
+  return object({
     street: part(string({ min: 1, max: 150, trim: true })),
     postcode: part(string({ min: 1, max: 20, trim: true })),
     city: part(string({ min: 1, max: 100, trim: true })),
-    // On a creation the province may be left out (`''`); a country is required.
     province: optional(string({ max: 10, trim: true })),
     country: part(alpha2()),
   });
+}
+
+/** The general fields and the blocks of a company, each as required (`part` is {@link required}) or optional ({@link partial}). */
+function companyShape(part: Part, creation: boolean) {
   return {
     name: part(string({ min: 1, max: 150, trim: true })),
     vatNumber: part(string({ min: 1, max: 30, trim: true })),
     fiscalCode: optional(emptyAsNull(nullable(string({ max: 30, trim: true })))),
-    address: creation ? address : optional(address),
+    address: creation ? addressSchema(part) : optional(addressSchema(part)),
     currency: optional(string({ min: 3, max: 3, pattern: /^[A-Z]{3}$/ })),
     email: optional(emptyAsNull(nullable(email()))),
     phone: optional(emptyAsNull(nullable(string({ max: 30, trim: true })))),

@@ -12,6 +12,7 @@ import { requestId } from './shared/http/request-id.ts';
 import { createCrossGroupAuditor } from './shared/activity-log/cross-group-audit.ts';
 import type { ActivityLog } from './shared/activity-log/activity-log.ts';
 import { createRateLimitAudit } from './shared/activity-log/rate-limit-audit.ts';
+import { createCredentialDispatcher } from './modules/auth/authenticate.ts';
 import { createErrorActivityReporter } from './shared/http/error-activity.ts';
 import { createRateLimitRules } from './shared/security/rate-limit/rules.ts';
 import type { RateLimiter } from './shared/security/rate-limit/rate-limiter.ts';
@@ -43,6 +44,11 @@ export interface AppDeps {
   readonly authenticate?: {
     /** Backoffice sessions on `/v1`. */
     readonly v1?: RequestHandler;
+    /**
+     * Store keys (`fc_sk_…`) on `/v1`. When present, `/v1` accepts them next to the sessions (the secret's prefix decides which of the two checks a request) and the routes opened to a store can be mounted;
+     * when absent a store key is refused like any unknown credential, and such a route cannot start (deny by default).
+     */
+    readonly store?: RequestHandler;
   };
   /** Group lookup for the `/v1` routes declaring `group: true`; PSA and D accesses are audited by the app itself. */
   readonly groupAccess?: { readonly groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'> };
@@ -93,8 +99,11 @@ export function createApp(deps: AppDeps): Express {
 
   const v1 = express.Router();
   mountRoutes(v1, deps.routes?.v1 ?? [], {
-    allowedAuth: ['anonymous', 'user'],
-    ...(deps.authenticate?.v1 === undefined ? {} : { authenticate: deps.authenticate.v1 }),
+    allowedAuth: ['anonymous', 'user', 'store'],
+    ...(deps.authenticate?.v1 === undefined
+      ? {}
+      : { authenticate: deps.authenticate.store === undefined ? deps.authenticate.v1 : createCredentialDispatcher(deps.authenticate.v1, deps.authenticate.store) }),
+    ...(deps.authenticate?.store === undefined ? {} : { storeKeys: true as const }),
     ...(deps.groupAccess === undefined
       ? {}
       : { groupAccess: { groups: deps.groupAccess.groups, onCrossGroupAccess: createCrossGroupAuditor({ activityLog, now }) } }),

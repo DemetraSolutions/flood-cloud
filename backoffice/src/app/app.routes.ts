@@ -9,6 +9,7 @@ import {
 } from './core/auth/guards';
 import { Shell } from './core/layout/shell';
 import { leaveCompany } from './features/companies/company-leave';
+import { leavePlace } from './features/places/place-leave';
 
 /**
  * List, creation and detail of users under a path prefix (the group area and the platform
@@ -229,6 +230,123 @@ const companyRoutes: Routes = [
   },
 ];
 
+/** A tab of the place page that only shows the keys of a settings block. */
+function placeScalarTab(path: string, section: string, key: string): Routes[number] {
+  return {
+    path,
+    title: `PLACES.SECTION.${key}`,
+    data: { section },
+    loadComponent: () => import('./features/places/place-scalar-tab').then((m) => m.PlaceScalarTab),
+  };
+}
+
+/** The tabs of the place page, as child routes (the general tab is the default one). */
+const placeTabs: Routes = [
+  {
+    path: '',
+    pathMatch: 'full',
+    title: 'PLACES.SECTION.GENERAL',
+    loadComponent: () => import('./features/places/place-general').then((m) => m.PlaceGeneral),
+  },
+  {
+    path: 'license',
+    title: 'PLACES.SECTION.LICENSE',
+    loadComponent: () => import('./features/places/place-license').then((m) => m.PlaceLicense),
+  },
+  {
+    path: 'opening-hours',
+    title: 'PLACES.SECTION.OPENING_HOURS',
+    loadComponent: () => import('./features/places/place-hours').then((m) => m.PlaceHours),
+  },
+  {
+    path: 'cash',
+    title: 'PLACES.SECTION.CASH',
+    loadComponent: () => import('./features/places/place-cash').then((m) => m.PlaceCash),
+  },
+  {
+    path: 'printing',
+    title: 'PLACES.SECTION.PRINTING',
+    loadComponent: () => import('./features/places/place-printing').then((m) => m.PlacePrinting),
+  },
+  {
+    path: 'payments',
+    title: 'PLACES.SECTION.PAYMENTS',
+    loadComponent: () => import('./features/places/place-payments').then((m) => m.PlacePayments),
+  },
+  {
+    path: 'tables',
+    title: 'PLACES.SECTION.TABLES',
+    loadComponent: () => import('./features/places/place-tables').then((m) => m.PlaceTables),
+  },
+  {
+    path: 'reservations',
+    title: 'PLACES.SECTION.RESERVATIONS',
+    loadComponent: () =>
+      import('./features/places/place-reservations').then((m) => m.PlaceReservations),
+  },
+  {
+    path: 'delivery',
+    title: 'PLACES.SECTION.DELIVERY',
+    loadComponent: () => import('./features/places/place-delivery').then((m) => m.PlaceDelivery),
+  },
+  {
+    path: 'self-ordering',
+    title: 'PLACES.SECTION.SELF_ORDERING',
+    loadComponent: () =>
+      import('./features/places/place-self-ordering').then((m) => m.PlaceSelfOrdering),
+  },
+  {
+    path: 'kiosk',
+    title: 'PLACES.SECTION.KIOSK',
+    loadComponent: () => import('./features/places/place-kiosk').then((m) => m.PlaceKiosk),
+  },
+  placeScalarTab('appointments', 'appointments', 'APPOINTMENTS'),
+  placeScalarTab('external-display', 'externalDisplay', 'EXTERNAL_DISPLAY'),
+  placeScalarTab('fidelity', 'fidelity', 'FIDELITY'),
+  placeScalarTab('tobacco', 'tobacco', 'TOBACCO'),
+  {
+    path: 'store-key',
+    title: 'PLACES.SECTION.STORE_KEY',
+    canMatch: [permission('storeKeys:read')],
+    loadComponent: () => import('./features/places/place-store-key').then((m) => m.PlaceStoreKey),
+  },
+  {
+    path: 'media',
+    title: 'PLACES.SECTION.MEDIA',
+    loadComponent: () => import('./features/places/place-media').then((m) => m.PlaceMedia),
+  },
+];
+
+/**
+ * Places of a group: the list, the page of a new place (general tab only) and the page of a place
+ * with its tabs as child routes. Leaving a page with unsaved changes asks for confirmation. Each
+ * route carries its full path so that the parameters reach the pages as inputs; the server checks
+ * the group and the place against the perimeter of the user, and does not refuse a write because a
+ * tab is hidden by the features of the group (the interface does).
+ */
+const placeRoutes: Routes = [
+  {
+    path: 'groups/:groupId/places',
+    canMatch: [permission('places:read')],
+    title: 'PLACES.TITLE',
+    loadComponent: () => import('./features/places/places-list').then((m) => m.PlacesList),
+  },
+  {
+    path: 'groups/:groupId/places/new',
+    canMatch: [permission('places:read'), permission('places:create')],
+    canDeactivate: [leavePlace],
+    loadComponent: () => import('./features/places/place-page').then((m) => m.PlacePage),
+    children: [placeTabs[0]],
+  },
+  {
+    path: 'groups/:groupId/places/:placeId',
+    canMatch: [permission('places:read')],
+    canDeactivate: [leavePlace],
+    loadComponent: () => import('./features/places/place-page').then((m) => m.PlacePage),
+    children: placeTabs,
+  },
+];
+
 /**
  * Record of a group: general data, features, integrations and the six catalogs, as child routes
  * of one layout page (`groups:read`; the server checks the group against the user's perimeter).
@@ -336,6 +454,7 @@ export const routes: Routes = [
           ...groupSettingsRoutes,
           ...groupCatalogRoutes,
           ...companyRoutes,
+          ...placeRoutes,
           {
             path: 'users',
             canMatch: [role('PSA', 'D'), permission('users:read')],

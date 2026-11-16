@@ -72,6 +72,7 @@ describe('visibleMenu', () => {
       'profile',
       'users',
       'companies',
+      'places',
       'fidelity',
       'products',
       'promotions',
@@ -93,6 +94,16 @@ describe('visibleMenu', () => {
     expect(MENU.find((item) => item.id === 'companies')).toMatchObject({
       groupPath: 'companies',
       labelKey: 'MENU.COMPANIES',
+    });
+  });
+
+  it('shows places with places:read in the group area', () => {
+    const only = (permission: string) => ids(visibleMenu(MENU, (p) => p === permission, allowAll));
+    expect(only('places:read')).toContain('places');
+    expect(only('companies:read')).not.toContain('places');
+    expect(MENU.find((item) => item.id === 'places')).toMatchObject({
+      groupPath: 'places',
+      labelKey: 'MENU.PLACES',
     });
   });
 

@@ -36,6 +36,7 @@ import {
   serverFieldErrors,
 } from '../../shared/forms/form-errors';
 import { ToastService } from '../../shared/ui/toast/toast.service';
+import { IdempotencyKey } from '../../shared/util/idempotency';
 import { PriceList } from '../groups/catalogs/catalog.types';
 import { apiErrorOf } from '../profile/sessions';
 import { CompaniesApi, VersionedCompany } from './companies-api';
@@ -96,6 +97,8 @@ export class CompanyState {
   readonly i18n = inject(I18nService);
 
   private readonly source = signal<Source | null>(null);
+  /** The `Idempotency-Key` of the creation: one per opening of the form, reused on retries. */
+  private readonly createKey = new IdempotencyKey();
 
   /** Binds the state to the route parameters of the page (called once by the page). */
   attach(groupId: Signal<string>, companyId: Signal<string | undefined>): void {
@@ -386,7 +389,8 @@ export class CompanyState {
     const groupId = this.groupId() as string;
     const model = this.model();
     if (this.isNew()) {
-      return this.api.create(groupId, createBody(model.general));
+      const body = createBody(model.general);
+      return this.api.create(groupId, body, this.createKey.forBody(body));
     }
     const current = this.saved() as VersionedCompany;
     const companyId = current.company.id;

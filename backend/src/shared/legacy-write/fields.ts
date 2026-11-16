@@ -1,7 +1,9 @@
-import { Double, ObjectId } from 'mongodb';
+import { Double, Int32, Long, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { ECOMMERCE_FLAGS, E_INVOICING_KEYS, MEDIA_IMAGE_KEYS } from './company-paths.ts';
 import { InvalidWriteInputError } from './errors.ts';
+import { WEEK_DAYS } from './place-paths.ts';
+import { SETTING_FIELDS, DEPRECATED_ROOMS_PATHS } from './place-settings.ts';
 
 /** Largest `settings.global.lastInvoiceNumber` (the largest Int32): the legacy writes it as an Int32. */
 export const MAX_INVOICE_NUMBER = 2_147_483_647;
@@ -34,7 +36,10 @@ export interface CompanyFields {
   readonly expirationDate: Date | null;
 }
 
-/** The fields of a place that the write service owns: the registry data and the state (`PLACES_OWNED_FIELDS` minus `trash` and `updateDate`). */
+/**
+ * The top-level fields of a place that the write service owns: the registry data, the license and the state. The rest of what it owns
+ * (`PLACES_OWNED_FIELDS` minus `trash` and `updateDate`) is {@link PlaceBlockFields}.
+ */
 export interface PlaceFields {
   readonly name: string;
   readonly address: string;
@@ -58,10 +63,21 @@ export interface PlaceFields {
   readonly invoicePS: string | boolean | null;
   /** IANA time zone. */
   readonly timezone: string;
+  /** The plan of the license as stored (`basic`, `advanced`, `enterprice`, `tgm-secondary`, `desk-secondary`, or a historical value the service leaves as it is). */
+  readonly plan: string;
   /** Whether the place is enabled. */
   readonly status: boolean;
   /** End of the license, or `null` for none. */
   readonly expirationDate: Date | null;
+}
+
+/**
+ * The other owned fields of a place, by their legacy dotted path: the enabled price lists (`general.priceLists`), the Sentry switch (`platform.sentry`) and the
+ * opening and delivery hours (`openingTime.weekGeneric`, `openingTime.daySpecial`, `delivery.time.weekGeneric`, `delivery.time.daySpecial`), each a whole value. Each is checked
+ * by its own kind ({@link PLACE_FIELD_KINDS}): the values are exactly what is stored, never a whole block.
+ */
+export interface PlaceBlockFields {
+  readonly [path: string]: unknown;
 }
 
 /**
@@ -81,10 +97,13 @@ export type NewCompanyFields = Pick<CompanyFields, 'name'> & Partial<CompanyFiel
 export type CompanyChanges = Partial<CompanyFields> & CompanyBlockFields;
 
 /** Fields of a new place: the name and the company are required, the others take the defaults of {@link newPlaceDocument}. */
-export type NewPlaceFields = Pick<PlaceFields, 'name' | 'companyId'> & Partial<PlaceFields> & {
+export type NewPlaceFields = Pick<PlaceFields, 'name' | 'companyId'> & Partial<PlaceFields> & PlaceBlockFields & {
   /** Name of the first storage of the place, `Deposito 1` by default. */
   readonly storageName?: string;
 };
+
+/** The changes of an update of a place: any of the owned fields, at least one. */
+export type PlaceChanges = Partial<PlaceFields> & PlaceBlockFields;
 
 /** How the value of a field is checked. */
 type FieldKind =
@@ -102,7 +121,11 @@ type FieldKind =
   | 'invoiceSeries'
   | 'banks'
   | 'suppliers'
-  | 'logoOrNull';
+  | 'logoOrNull'
+  | 'priceLists'
+  | 'weekHours'
+  | 'specialDays'
+  | 'setting';
 
 /** Kind of every field of a company: the registry data, the whole values and every owned key of the blocks, by dotted path. */
 export const COMPANY_FIELD_KINDS: Readonly<Record<string, FieldKind>> = Object.freeze({
@@ -137,8 +160,8 @@ export const COMPANY_FIELD_KINDS: Readonly<Record<string, FieldKind>> = Object.f
   ...Object.fromEntries(MEDIA_IMAGE_KEYS.map((key) => [`medias.images.${key}`, key.startsWith('customersAppLogo') ? ('logoOrNull' as const) : ('text' as const)])),
 });
 
-/** Kind of every field of a place. */
-export const PLACE_FIELD_KINDS: Readonly<Record<keyof PlaceFields, FieldKind>> = Object.freeze({
+/** Kind of every field of a place: the top-level ones and every owned leaf path of the blocks, by dotted path. */
+export const PLACE_FIELD_KINDS: Readonly<Record<string, FieldKind>> = Object.freeze({
   name: 'name',
   address: 'text',
   postcode: 'text',
@@ -153,15 +176,25 @@ export const PLACE_FIELD_KINDS: Readonly<Record<keyof PlaceFields, FieldKind>> =
   ecommerceListId: 'textOrNull',
   invoicePS: 'flagOrTextOrNull',
   timezone: 'text',
+  plan: 'text',
   status: 'boolean',
   expirationDate: 'dateOrNull',
+  'general.priceLists': 'priceLists',
+  'platform.sentry': 'boolean',
+  'openingTime.weekGeneric': 'weekHours',
+  'openingTime.daySpecial': 'specialDays',
+  'delivery.time.weekGeneric': 'weekHours',
+  'delivery.time.daySpecial': 'specialDays',
+  // The settings of step 7B: a value of the shape the schemas give (checked loosely here), the images as descriptors.
+  ...Object.fromEntries(SETTING_FIELDS.map((field) => [field.legacy, field.kind.t === 'logo' ? ('logoOrNull' as const) : ('setting' as const)])),
+  ...Object.fromEntries(DEPRECATED_ROOMS_PATHS.map((path) => [path, 'setting' as const])),
 });
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 }
 
-type Shape = Readonly<Record<string, 'string' | 'boolean' | 'numbers'>>;
+type Shape = Readonly<Record<string, 'string' | 'boolean' | 'numbers' | 'stringOrNull'>>;
 
 /** Whether a value is an object with exactly the given keys, each of the given type (`numbers`: a list of numbers, `null` allowed as an element). */
 function hasShape(value: unknown, shape: Shape): boolean {
@@ -173,6 +206,9 @@ function hasShape(value: unknown, shape: Shape): boolean {
     Object.keys(value).length === keys.length &&
     keys.every((key) => {
       const item = value[key];
+      if (shape[key] === 'stringOrNull') {
+        return item === null || typeof item === 'string';
+      }
       return shape[key] === 'numbers' ? Array.isArray(item) && item.every((cut) => cut === null || (typeof cut === 'number' && Number.isFinite(cut) && cut >= 0)) : typeof item === shape[key];
     })
   );
@@ -204,7 +240,54 @@ function isLogoDescriptor(value: unknown): boolean {
 
 const listOf = (shape: Shape) => (value: unknown): boolean => Array.isArray(value) && value.every((item) => hasShape(item, shape));
 
+/** Most time slots of one day, and most special days of a place, that a write accepts. */
+export const MAX_DAY_SLOTS = 8;
+export const MAX_SPECIAL_DAYS = 400;
+
+/** A key of the special days: `YYYY-MM-DD`. */
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Whether a value is the hours of one day: the flag (`active` for a day of the week, `closed` for a special day) and at most {@link MAX_DAY_SLOTS} slots `{ start, end }` of text. */
+function isDayHours(value: unknown, flag: 'active' | 'closed'): boolean {
+  if (!isPlainObject(value) || Object.keys(value).length !== 2 || typeof value[flag] !== 'boolean') {
+    return false;
+  }
+  const slots = value['values'];
+  return Array.isArray(slots) && slots.length <= MAX_DAY_SLOTS && slots.every((slot) => hasShape(slot, { start: 'string', end: 'string' }));
+}
+
+/** Most elements of a list and keys of a map of a settings value, and its deepest nesting. */
+const MAX_SETTING_ITEMS = 500;
+const MAX_SETTING_DEPTH = 6;
+
+/**
+ * Whether a value is one a settings key can hold: `null`, a boolean, a finite number, a text of at most 5000 characters, an `ObjectId`, a date, a BSON number kept from the stored document, or a list or plain object of such values (at most
+ * {@link MAX_SETTING_ITEMS} elements, six levels deep) without a key that is an operator (`$…`) or a path (`a.b`).
+ */
+function isSettingValue(value: unknown, depth = 0): boolean {
+  if (value === null || typeof value === 'boolean' || value instanceof ObjectId || value instanceof Date) {
+    return true;
+  }
+  if (value instanceof Int32 || value instanceof Double || value instanceof Long) {
+    return true;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (typeof value === 'string') {
+    return value.length <= 5000;
+  }
+  if (depth >= MAX_SETTING_DEPTH) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.length <= MAX_SETTING_ITEMS && value.every((item) => isSettingValue(item, depth + 1));
+  }
+  return isPlainObject(value) && Object.keys(value).length <= MAX_SETTING_ITEMS && Object.entries(value).every(([key, item]) => !key.startsWith('$') && !key.includes('.') && isSettingValue(item, depth + 1));
+}
+
 const CHECKS: Readonly<Record<FieldKind, (value: unknown) => boolean>> = {
+  setting: (value) => isSettingValue(value),
   name: (value) => typeof value === 'string' && value.trim() !== '',
   text: (value) => typeof value === 'string',
   textOrNull: (value) => value === null || typeof value === 'string',
@@ -221,6 +304,14 @@ const CHECKS: Readonly<Record<FieldKind, (value: unknown) => boolean>> = {
   banks: listOf({ id: 'string', name: 'string', iban: 'string', abi: 'string', cab: 'string', bic: 'string', default: 'boolean' }),
   suppliers: listOf({ id: 'string', name: 'string', cuts: 'numbers' }),
   logoOrNull: (value) => value === null || isLogoDescriptor(value),
+  priceLists: listOf({ id: 'string', allYouCanEat: 'boolean', ayceCode1: 'stringOrNull', ayceCode2: 'stringOrNull' }),
+  // The seven days of the week, each complete; the keys the document has besides them are the caller's to keep (the codec merges them).
+  weekHours: (value) => isPlainObject(value) && WEEK_DAYS.every((day) => isDayHours(value[day], 'active')),
+  // The special days by date; a key that is not a date is a key of the document the caller keeps, and is not judged (an operator never is acceptable).
+  specialDays: (value) =>
+    isPlainObject(value) &&
+    Object.keys(value).filter((key) => DAY_KEY.test(key)).length <= MAX_SPECIAL_DAYS &&
+    Object.entries(value).every(([key, hours]) => !key.startsWith('$') && (!DAY_KEY.test(key) || isDayHours(hours, 'closed'))),
 };
 
 /**

@@ -9,6 +9,7 @@ export const ICONS = {
   'chevron-right': 'M9 6l6 6-6 6',
   'chevron-up': 'M6 15l6-6 6 6',
   building: 'M5 21V4h9v17M14 9h5v12M3 21h18M8 8h2M8 12h2M8 16h2',
+  store: 'M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6',
   more: 'M12 6v.01M12 12v.01M12 18v.01',
   'chevron-down': 'M6 9l6 6 6-6',
   sort: 'M8 9l4-4 4 4M8 15l4 4 4-4',

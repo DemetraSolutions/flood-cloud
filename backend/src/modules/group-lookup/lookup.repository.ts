@@ -82,6 +82,15 @@ export interface LookupRepository {
   customers(principal: AuthPrincipal, access: GroupAccess, params: ListParams, ids: readonly ObjectId[] | null): Promise<ListPage>;
   /** A page of the contact groups of a group (they have no trash), by name. */
   contactGroups(principal: AuthPrincipal, access: GroupAccess, params: ListParams, ids: readonly ObjectId[] | null): Promise<ListPage>;
+  /** A page of the e-mail templates of a group that are not in the trash, by name (only `_id` and `name` are read: never the text or the HTML). */
+  emailTemplates(principal: AuthPrincipal, access: GroupAccess, params: ListParams, ids: readonly ObjectId[] | null): Promise<ListPage>;
+  /**
+   * The language codes the group declares (`settings.languages` in `common.groups`), as stored.
+   *
+   * @param access Verified access to the group.
+   * @returns The stored value when it is a list, `null` when the group has none.
+   */
+  languages(access: GroupAccess): Promise<readonly unknown[] | null>;
 }
 
 /** Reads one page: only the fields of the name travel down the pipeline, and the name is computed before search, order and cursor. */
@@ -126,6 +135,18 @@ export function createLookupRepository(databases: Databases): LookupRepository {
         params,
         ids,
       ),
+    emailTemplates: (principal, access, params, ids) =>
+      readPage(
+        group(principal, access).collection('email_templates'),
+        { filter: NOT_TRASHED, fields: { name: 1 }, extra: {}, name: { $cond: [{ $eq: [{ $type: '$name' }, 'string'] }, '$name', null] } },
+        params,
+        ids,
+      ),
+    languages: async (access) => {
+      const found = await databases.common().collection('groups').findOne({ _id: access.groupId }, { projection: { 'settings.languages': 1 }, maxTimeMS: LIST_MAX_TIME_MS });
+      const languages: unknown = (found?.['settings'] as { languages?: unknown } | undefined)?.languages;
+      return Array.isArray(languages) ? (languages as unknown[]) : null;
+    },
     contactGroups: (principal, access, params, ids) =>
       readPage(
         group(principal, access).collection('contacts_groups'),

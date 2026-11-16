@@ -18,6 +18,9 @@ export function createLookupRoutes(controller: LookupController): RouteDefinitio
     defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/product-categories', auth, middleware: [validateQuery(lookupQuery)], handler: controller.categories }),
     defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/customers', auth, middleware: [validateQuery(lookupQuery)], handler: controller.customers }),
     defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/contact-groups', auth, middleware: [validateQuery(lookupQuery)], handler: controller.contactGroups }),
+    // For the settings of a place (step 7D): the templates of the e-mails and the languages of the kiosk texts, for whoever may save a place (`places:update`: also CA and PA). The languages are also read with `groups:read`.
+    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/email-templates', auth: { kind: 'user', anyPermission: ['places:update'], group: true }, middleware: [validateQuery(lookupQuery)], handler: controller.emailTemplates }),
+    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/languages', auth: { kind: 'user', anyPermission: ['places:update', 'groups:read'], group: true }, handler: controller.languages }),
     defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/price-lists', auth: { kind: 'user', anyPermission: ['users:read', 'fidelity:read', 'groups:read'], group: true }, handler: controller.priceLists }),
   ];
 }

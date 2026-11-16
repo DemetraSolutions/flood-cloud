@@ -17,6 +17,7 @@ import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
 import { parseIds } from '../group-lookup/lookup.schemas.ts';
 import type { MediaService } from '../media/media.service.ts';
+import { addressProblem } from './address.ts';
 import type { CompaniesQuery } from './companies.schemas.ts';
 import { COMPANIES_LIST } from './companies.list.ts';
 import type { CompaniesRepository, GroupLists } from './companies.repository.ts';
@@ -139,7 +140,7 @@ const NO_LISTS: GroupLists = { currencies: new Set(), priceLists: new Set() };
 
 /** What each outcome of the write service that is not a success becomes. A company never has `companyNotFound` (it is the answer for a place); both are a missing document. */
 const notFound = (): AppError => new AppError('NOT_FOUND');
-const REFUSALS: Readonly<Record<Exclude<WriteOutcome['outcome'], 'written' | 'deleted'>, () => AppError>> = {
+const REFUSALS: Readonly<Record<Exclude<WriteOutcome['outcome'], 'written' | 'deleted' | 'trashed'>, () => AppError>> = {
   notFound,
   companyNotFound: notFound,
   conflict: () => new AppError('PRECONDITION_FAILED'),
@@ -242,12 +243,9 @@ export function createCompaniesService(deps: CompaniesServiceDeps): CompaniesSer
     const country = request.address?.country ?? current?.address.country ?? null;
     const countryChanged = changes('address.country');
     if (creation || countryChanged || changes('address.province')) {
-      const province = request.address?.province ?? current?.address.province ?? '';
-      const found = country === null ? null : await repository.findCountry(country);
-      if (found === null && (creation || countryChanged)) {
-        issue('address.country', 'incorrect');
-      } else if (found?.areas != null && province !== '' && !found.areas.has(province)) {
-        issue('address.province', 'incorrect');
+      const problem = await addressProblem((code) => repository.findCountry(code), country, request.address?.province ?? current?.address.province ?? '', creation || countryChanged);
+      if (problem !== null) {
+        issue(problem, 'incorrect');
       }
     }
 

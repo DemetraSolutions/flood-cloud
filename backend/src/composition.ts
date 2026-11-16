@@ -6,6 +6,7 @@ import type { Databases } from './db/databases.ts';
 import type { ActivityLog } from './shared/activity-log/activity-log.ts';
 import type { RouteDefinition } from './shared/http/routes.ts';
 import type { Logger } from './shared/logging/logger.ts';
+import type { RateLimiter } from './shared/security/rate-limit/rate-limiter.ts';
 import { createRateLimitRules } from './shared/security/rate-limit/rules.ts';
 import { createCompanyPlacesRepository } from './shared/security/scope/company-places.repository.ts';
 import { createDealerGroupsRepository } from './shared/security/scope/dealer-groups.repository.ts';
@@ -56,12 +57,24 @@ import { createMediaService } from './modules/media/media.service.ts';
 import { createMeController } from './modules/me/me.controller.ts';
 import { createMeRoutes } from './modules/me/me.routes.ts';
 import { createMeService } from './modules/me/me.service.ts';
+import { newPaymentTypeId } from './modules/places/place-ids.ts';
+import { createPlacesController } from './modules/places/places.controller.ts';
+import { createPlacesRepository } from './modules/places/places.repository.ts';
+import { createPlacesRoutes } from './modules/places/places.routes.ts';
+import { createPlacesService } from './modules/places/places.service.ts';
+import { createIdempotencyStore } from './shared/http/idempotency.ts';
 import { createReferenceController } from './modules/reference/reference.controller.ts';
 import { createReferenceRepository } from './modules/reference/reference.repository.ts';
 import { createReferenceRoutes } from './modules/reference/reference.routes.ts';
 import { createReferenceService } from './modules/reference/reference.service.ts';
 import { createSessionsRepository } from './modules/sessions/sessions.repository.ts';
-import { companiesPlacesWriter } from './shared/legacy-write/companies-places.writer.ts';
+import { createAuthenticateStore } from './modules/store-keys/authenticate-store.ts';
+import { createStoreKeysController } from './modules/store-keys/store-keys.controller.ts';
+import { createStoreKeysRepository } from './modules/store-keys/store-keys.repository.ts';
+import { createStoreKeysRoutes } from './modules/store-keys/store-keys.routes.ts';
+import { createStoreKeysService } from './modules/store-keys/store-keys.service.ts';
+import { createStoreStateReader } from './modules/store-keys/store-state.ts';
+import { companiesPlacesReader, companiesPlacesWriter } from './shared/legacy-write/companies-places.writer.ts';
 import { createCredentialsRepository } from './modules/users/credentials.repository.ts';
 import { createGroupDirectoryRepository } from './modules/users/group-directory.repository.ts';
 import { createGroupOptionsReader } from './modules/users/group-options.ts';
@@ -74,8 +87,10 @@ import { createUsersRepository } from './modules/users/users.repository.ts';
 export interface BackofficeModules {
   /** Routes to mount on `/v1`. */
   readonly routes: readonly RouteDefinition[];
-  /** Bearer authentication of `/v1`. */
+  /** Bearer authentication of the users of `/v1`. */
   readonly authenticate: RequestHandler;
+  /** Authentication of the store keys of `/v1` (`fc_sk_…`): the app mounts it next to `authenticate`, which dispatches by the prefix of the secret. */
+  readonly authenticateStore: RequestHandler;
   /** Group lookup for the routes declaring `group: true`. */
   readonly groups: GroupsRepository;
 }
@@ -86,6 +101,8 @@ export interface BackofficeDeps {
   readonly databases: Databases;
   readonly activityLog: ActivityLog;
   readonly logger: Logger;
+  /** The rate limit counters (the store keys use them to record a revoked key in use, and a failed exchange, once an hour). */
+  readonly rateLimiter: RateLimiter;
   /** The media storage built at start-up (`createMediaStorage`); `null` or absent when it is disabled (the upload answers `503`). */
   readonly mediaStorage?: MediaStorage | null;
   /** Clock in epoch milliseconds; defaults to `Date.now`. */
@@ -94,14 +111,14 @@ export interface BackofficeDeps {
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the companies, the media (images), the groups, the activity log monitor and the browser error reports. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the companies, the places, the store keys of the points of sale, the media (images), the groups, the activity log monitor and the browser error reports. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
  * @returns Routes, authentication middleware and group lookup, ready for `createApp`.
  */
 export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules {
-  const { config, databases, activityLog, logger } = deps;
+  const { config, databases, activityLog, logger, rateLimiter } = deps;
   const now = deps.now ?? Date.now;
   const users = createUsersRepository(databases);
   const credentials = createCredentialsRepository(databases);
@@ -176,10 +193,38 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       newId: () => randomBytes(12).toString('hex'),
     }),
   );
+  const idempotency = createIdempotencyStore(databases, now);
+  const storeKeysState = createStoreStateReader({ groups, databases });
+  const storeKeysRepository = createStoreKeysRepository(databases);
+  const storeKeysService = createStoreKeysService({
+    repository: storeKeysRepository,
+    state: storeKeysState,
+    activityLog,
+    rateLimiter,
+    transaction: (work) => databases.transaction(work),
+    failureRule: rules.unauthenticatedPerIp,
+    activationCodeTtlMinutes: config.storeActivationCodeTtlMinutes,
+    now,
+  });
+  const authenticateStore = createAuthenticateStore({ repository: storeKeysRepository, state: storeKeysState, activityLog, rateLimiter, logger, apiRule: rules.apiPerStore, now });
+  const storeKeys = createStoreKeysController(storeKeysService, now);
+  const places = createPlacesController(
+    createPlacesService({
+      repository: createPlacesRepository(databases, companiesRepository),
+      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()) }),
+      readerFor: (principal, access) => companiesPlacesReader(principal, access, databases),
+      logger,
+      activityLog,
+      references: createReferencesRepository(databases),
+      images: mediaService,
+      storeKeys: storeKeysService,
+      newId: () => newPaymentTypeId(now),
+    }),
+  );
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
-    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController),
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController),
       ...createCatalogRoutes(catalogsService, CATALOGS),
       ...createGroupServicesRoutes(groupServices),
       ...createLookupRoutes(lookup),
@@ -187,6 +232,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createClientErrorsRoutes(clientErrors, rules),
     ],
     authenticate,
+    authenticateStore,
     groups,
   };
 }

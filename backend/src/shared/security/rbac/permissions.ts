@@ -35,6 +35,7 @@ export const PERMISSIONS = Object.freeze({
   PLACES_CREATE: 'places:create',
   PLACES_UPDATE: 'places:update',
   PLACES_TRASH: 'places:trash',
+  PLACES_DELETE: 'places:delete',
   USERS_READ: 'users:read',
   USERS_CREATE: 'users:create',
   USERS_UPDATE: 'users:update',
@@ -50,6 +51,8 @@ export const PERMISSIONS = Object.freeze({
   PROFILE_READ: 'profile:read',
   PROFILE_UPDATE: 'profile:update',
   CLIENT_ERRORS_CREATE: 'clientErrors:create',
+  STORE_KEYS_READ: 'storeKeys:read',
+  STORE_KEYS_MANAGE: 'storeKeys:manage',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

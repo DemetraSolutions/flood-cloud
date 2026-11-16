@@ -46,6 +46,7 @@
 | `403` | autenticato ma senza permesso | `FORBIDDEN` |
 | `403` | password provvisoria da cambiare (consentite solo profilo, cambio password e logout) | `PASSWORD_CHANGE_REQUIRED` |
 | `403` | il gruppo non ha acceso il modulo a cui appartiene la route (vale per ogni ruolo, PSA e D compresi; dopo il controllo di gruppo e permesso) | `FEATURE_DISABLED` |
+| `403` | il server di punto vendita ha una chiave valida ma il punto vendita non è operativo (gruppo sospeso o nel cestino, punto vendita disattivato o con licenza scaduta, azienda nel cestino): nulla è revocato, riprende da solo | `STORE_DISABLED` |
 | `404` | inesistente **o fuori scope** | `NOT_FOUND` |
 | `405` | metodo non supportato sulla risorsa (+ `Allow`) | `METHOD_NOT_ALLOWED` |
 | `409` | conflitto, duplicato, stato incompatibile | `CONFLICT` |
@@ -65,11 +66,11 @@
 `issue` possibili nei `details` dei `422`: `required`, `type`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `enum`, `unknown`, `forbiddenKey`, `format`, `tooDeep`, `tooMany` (anche un elenco o un documento oltre il limite), `incorrect` (valore o riferimento non valido; anche un elemento ripetuto in un elenco di elementi univoci), `reused`, `immutable`, `notAllowed` (il campo non è consentito in quel contesto: anche nei `details` dei `403` quando un ruolo invia un campo che non può dare); `taken` compare invece nei `details` dei `409` di unicità, e `default`, `last`, `referenced` in quelli dei `409` di eliminazione rifiutata.
 
 ## 6. Idempotenza e concorrenza
-- **`Idempotency-Key`** (UUID) obbligatoria sulle scritture della superficie store e sulle creazioni sensibili ai doppioni (vendite, documenti, pagamenti): stessa chiave e stesso body ⇒ stessa risposta; stessa chiave e body diverso ⇒ `409`.
+- **`Idempotency-Key`** (UUID) obbligatoria sulle scritture del server di punto vendita (chiave di negozio, D-24: oggi il negozio non scrive) e sulle creazioni sensibili ai doppioni (vendite, documenti, pagamenti): stessa chiave e stesso body ⇒ stessa risposta; stessa chiave e body diverso ⇒ `409`. Come è realizzata (`shared/http/idempotency.ts`; oggi su `POST` di aziende e punti vendita e sulla duplicazione di un punto vendita): header mancante `422` (`required`), non UUID `422` (`format`); la stessa chiave con lo stesso body restituisce stato, body, `Location` ed `ETag` della prima risposta di successo, senza rieseguire; body diverso `409` (`reused`), prima richiesta ancora in corso `409`; chiavi per utente e per route, conservate 24 ore; una richiesta che fallisce libera la chiave.
 - **Concorrenza ottimistica** dove più utenti modificano la stessa risorsa: `ETag` in risposta e `If-Match` sulle modifiche (`412` se cambiata nel frattempo). Si introduce nel passo che ne ha bisogno.
 
 ## 7. Header
-- In ingresso: `Authorization`, `X-Api-Key` (solo `/public/v1`), `Idempotency-Key`, `If-Match`, `X-Request-Id` (opzionale, altrimenti generato).
+- In ingresso: `Authorization` (Bearer: token del backoffice o chiave di negozio `fc_sk_…`; nessun header dedicato alla chiave di negozio), `X-Api-Key` (solo `/public/v1`), `Idempotency-Key`, `If-Match`, `X-Request-Id` (opzionale, altrimenti generato).
 - In uscita: `X-Request-Id`, `Location` (creazioni), `ETag`, `RateLimit-*`, `Retry-After`.
 
 ## 8. Documentazione

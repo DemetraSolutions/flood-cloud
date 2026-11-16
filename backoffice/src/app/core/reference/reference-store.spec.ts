@@ -60,6 +60,7 @@ describe('ReferenceStore', () => {
       'customers',
       'contact-groups',
       'price-lists',
+      'email-templates',
     ]);
   });
 

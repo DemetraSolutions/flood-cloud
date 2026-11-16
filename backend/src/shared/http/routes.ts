@@ -4,12 +4,14 @@ import { isFeature } from '../../modules/groups/features.ts';
 import type { Feature } from '../../modules/groups/features.ts';
 import { isPermission } from '../security/rbac/permissions.ts';
 import type { Permission } from '../security/rbac/permissions.ts';
+import { STORE_PROFILE } from '../security/rbac/policy.ts';
 import { requirePermission } from '../security/rbac/require-permission.ts';
 import { guardAuthentication, rateLimit } from '../security/rate-limit/rate-limit.ts';
 import type { RateLimitMount, RateLimitRule } from '../security/rate-limit/rate-limit.ts';
 import { reportCrossGroupAccess, requireGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { requireFeature } from '../security/scope/require-feature.ts';
+import { refuseStore, requireStore, requireStorePermission, requireStorePlace } from '../security/scope/store-guards.ts';
 import { AppError } from './errors.ts';
 
 /** HTTP methods a route may declare. */
@@ -50,10 +52,24 @@ export interface UserAuth {
    * profile, the password change, the logout). Every other `user` route answers `403 PASSWORD_CHANGE_REQUIRED` to him.
    */
   readonly allowWithPendingPasswordChange?: true;
+  /**
+   * Opens the route to the server of a point of sale authenticated with its store key (D-24): the opt-in is explicit, route by route, and the default is deny (`403 FORBIDDEN` to a store).
+   * Allowed only on a route with `permission` (not `anyPermission`) that is in `STORE_PROFILE`, with `group: true` and a `:placeId` in the path (a store reaches its own place and nothing else), without
+   * `allowWithPendingPasswordChange`, on a surface that accepts store keys. A user reaches the route as he always did.
+   */
+  readonly store?: true;
+}
+
+/**
+ * A route only the server of a point of sale may call, with its store key (`GET /v1/store-context`). It needs no permission of the catalog (the profile of the store is fixed), has no path parameter
+ * and is rate limited per store key.
+ */
+export interface StoreAuth {
+  readonly kind: 'store';
 }
 
 /** Authentication requirement of a route. */
-export type RouteAuth = AnonymousAuth | UserAuth;
+export type RouteAuth = AnonymousAuth | UserAuth | StoreAuth;
 
 /** Declarative description of a route. */
 export interface RouteDefinition {
@@ -118,6 +134,44 @@ function normalizePath(path: string): string {
   return lower.length > 1 && lower.endsWith('/') ? lower.slice(0, -1) : lower;
 }
 
+type AuthFields = { kind?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown; store?: unknown };
+
+/** The problems of a `user` route that declares `store`. */
+function storeProblems(label: string, route: RouteDefinition, auth: AuthFields, options: MountOptions): string[] {
+  const problems: string[] = [];
+  if (auth.store !== true) {
+    problems.push(`${label}: store can only be true`);
+  }
+  if (auth.anyPermission !== undefined || !STORE_PROFILE.has(auth.permission as Permission)) {
+    problems.push(`${label}: a route open to a store key needs a single permission that is in the profile of the store`);
+  }
+  if (auth.group !== true || !/\/places\/:placeId(?![A-Za-z0-9_])/.test(String(route.path))) {
+    problems.push(`${label}: a route open to a store key must be on a group and on a :placeId (a store reaches its own place only)`);
+  }
+  if (auth.allowWithPendingPasswordChange !== undefined) {
+    problems.push(`${label}: a route open to a store key cannot allow a pending password change`);
+  }
+  if (options.storeKeys !== true) {
+    problems.push(`${label}: a route open to a store key needs a surface that accepts store keys`);
+  }
+  return problems;
+}
+
+/** The problems of a route reserved to the server of a point of sale (`kind: 'store'`). */
+function storeOnlyProblems(label: string, route: RouteDefinition, auth: AuthFields, options: MountOptions): string[] {
+  const problems: string[] = [];
+  if (['permission', 'anyPermission', 'group', 'feature', 'allowWithPendingPasswordChange', 'store'].some((name) => (auth as Record<string, unknown>)[name] !== undefined)) {
+    problems.push(`${label}: a store route declares nothing but its kind`);
+  }
+  if (/:/.test(String(route.path))) {
+    problems.push(`${label}: a store route has no path parameter`);
+  }
+  if (options.authenticate === undefined || options.storeKeys !== true) {
+    problems.push(`${label}: a store route needs a surface that accepts store keys, with its authenticate middleware`);
+  }
+  return problems;
+}
+
 /**
  * Checks every route and returns a human-readable list of problems.
  *
@@ -135,7 +189,7 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     if (typeof route.path !== 'string' || !route.path.startsWith('/')) {
       problems.push(`${label}: path must be a string starting with "/"`);
     }
-    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown } | undefined;
+    const auth = route.auth as { kind?: unknown; reason?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown; store?: unknown } | undefined;
     if (auth === undefined || auth === null) {
       problems.push(`${label}: missing auth declaration`);
     } else if (auth.kind === 'anonymous') {
@@ -177,13 +231,21 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
       if (auth.allowWithPendingPasswordChange !== undefined && auth.allowWithPendingPasswordChange !== true) {
         problems.push(`${label}: allowWithPendingPasswordChange can only be true`);
       }
+      if (auth.store !== undefined) {
+        problems.push(...storeProblems(label, route, auth, options));
+      }
+    } else if (auth.kind === 'store') {
+      problems.push(...storeOnlyProblems(label, route, auth, options));
     } else {
       problems.push(`${label}: unknown auth kind`);
     }
     if (auth?.kind === 'anonymous' && auth.allowWithPendingPasswordChange !== undefined) {
       problems.push(`${label}: only user routes can allow a pending password change`);
     }
-    if ((auth?.kind === 'anonymous' || auth?.kind === 'user') && !allowed.includes(auth.kind)) {
+    if (auth?.kind === 'anonymous' && auth.store !== undefined) {
+      problems.push(`${label}: only user routes can be opened to a store key`);
+    }
+    if ((auth?.kind === 'anonymous' || auth?.kind === 'user' || auth?.kind === 'store') && !allowed.includes(auth.kind)) {
       problems.push(`${label}: auth kind "${auth.kind}" is not allowed on this surface`);
     }
     const extra: unknown = route.middleware;
@@ -263,6 +325,20 @@ const refusePendingPasswordChange: RequestHandler = (_req, res, next) => {
   next();
 };
 
+/** Runs a list of handlers in order, as one middleware (a router, so an error in any of them, async ones included, goes to the error handler). `mergeParams` keeps the path parameters the handlers read. */
+function chainOf(handlers: readonly RequestHandler[]): RequestHandler {
+  const router = express.Router({ mergeParams: true });
+  router.use(...handlers);
+  return router;
+}
+
+/** Sends a request that carries a store principal down one chain and every other request down the other: the store chain and the user chain never mix. */
+function byCaller(forStore: readonly RequestHandler[], forUser: readonly RequestHandler[]): RequestHandler {
+  const store = chainOf(forStore);
+  const user = chainOf(forUser);
+  return (req, res, next) => (res.locals.store === undefined ? user : store)(req, res, next);
+}
+
 /** Options of {@link mountRoutes}. */
 export interface MountOptions {
   /**
@@ -276,8 +352,13 @@ export interface MountOptions {
   readonly rateLimit?: RateLimitMount;
   /** Lets anonymous routes declare `rateLimitExempt`; only the health router sets it. */
   readonly allowRateLimitExempt?: boolean;
-  /** Auth kinds this surface accepts; only anonymous routes by default, so `user` must be allowed explicitly (the backoffice does). */
+  /** Auth kinds this surface accepts; only anonymous routes by default, so `user` (and `store`) must be allowed explicitly (the backoffice does). */
   readonly allowedAuth?: ReadonlyArray<RouteAuth['kind']>;
+  /**
+   * `true` when the `authenticate` middleware of the surface also accepts store keys (it sets `res.locals.store` for them and applies the per-key rate limit itself). Without it a route
+   * declaring `store: true` or `auth: { kind: 'store' }` cannot be mounted: a store key is accepted only where the surface says so.
+   */
+  readonly storeKeys?: true;
 }
 
 const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
@@ -291,13 +372,17 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * then the declared rules that read the body (`needsBody`), then the route `middleware` (validation), then the handler. An anonymous route runs
  * its declared rules, the guard and parser, the body rules, the handler. `/health` declares none.
  *
+ * A caller that authenticated with a store key (`res.locals.store`, never `res.locals.auth`) is refused with `403` by every `user` route that does not declare `store: true`, right after `authenticate`;
+ * on a route that does, it follows its own chain (the group check on the store principal, the place of the key, the store profile, the feature), and a user follows the chain above.
+ * A route with `auth: { kind: 'store' }` runs `authenticate`, refuses whoever is not a store and applies the declared rules before the body. The per-key rate limit is the store authentication's own.
+ *
  * @param router Target router.
  * @param routes Route declarations.
  * @param options The `authenticate` middleware and the rate limit dependencies, needed by `user` routes.
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
  * empty reason, unknown permission, both or an empty `anyPermission`, unknown feature or a feature without `group: true`, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
  * malformed rate limit rules, malformed `middleware`, `multipart` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
- * auth kind not allowed on the surface, disallowed method,
+ * auth kind not allowed on the surface, a `store` declaration that is not `true`, on an anonymous route, with `anyPermission`, outside `STORE_PROFILE`, without `group: true` and a `:placeId`, with a pending password change or on a surface that does not accept store keys, a store route with anything but its kind or with a path parameter, disallowed method,
  * bad path, duplicate method and path).
  */
 export function mountRoutes(router: Router, routes: readonly RouteDefinition[], options: MountOptions = {}): void {
@@ -331,8 +416,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
     const afterGroup = limits(declared.filter((rule) => rule.needsGroup === true));
     if (route.auth.kind === 'user') {
       const grouped = route.auth.group === true;
-      middleware.push(
-        guardAuthentication(authenticate!, rateLimitOptions!),
+      const userChain: RequestHandler[] = [
         ...limits([rateLimitOptions!.apiRule]),
         ...beforeBody,
         ...(route.auth.allowWithPendingPasswordChange === true ? [] : [refusePendingPasswordChange]),
@@ -340,7 +424,24 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         requirePermission(route.auth.anyPermission ?? route.auth.permission!, grouped ? reportCrossGroupAccess(groupAccess!.onCrossGroupAccess) : undefined),
         ...(route.auth.feature === undefined ? [] : [requireFeature(route.auth.feature)]),
         ...afterGroup,
-      );
+      ];
+      middleware.push(guardAuthentication(authenticate!, rateLimitOptions!));
+      if (route.auth.store === true) {
+        // Open to a store key: a store follows its own chain (its rate limit, the group, its place, its profile), a user the one above.
+        const storeChain: RequestHandler[] = [
+          ...beforeBody,
+          requireGroupAccess(groupAccess!.groups, (res) => res.locals.store),
+          requireStorePlace,
+          requireStorePermission(route.auth.permission!),
+          ...(route.auth.feature === undefined ? [] : [requireFeature(route.auth.feature)]),
+          ...afterGroup,
+        ];
+        middleware.push(byCaller(storeChain, userChain));
+      } else {
+        middleware.push(refuseStore, ...userChain);
+      }
+    } else if (route.auth.kind === 'store') {
+      middleware.push(guardAuthentication(authenticate!, rateLimitOptions!), requireStore, ...beforeBody);
     } else {
       middleware.push(...beforeBody);
     }

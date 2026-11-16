@@ -23,7 +23,7 @@ const DAY_MS = 86_400_000;
 /** Who performed an activity. */
 export interface ActivityActor {
   readonly kind: ActorKind;
-  /** The user id, for `user` actors. */
+  /** The user id for `user` actors, the id of the store key for `store` actors. */
   readonly id?: ObjectId;
   readonly role?: Role;
 }
@@ -200,14 +200,14 @@ export function buildActivityDocument(entry: ActivityEntry, at: Date, retentionD
   if (!(ACTOR_KINDS as readonly string[]).includes(actor.kind)) {
     invalid('unknown actor kind');
   }
-  if ((actor.id !== undefined && !(actor.id instanceof ObjectId)) || (actor.kind !== 'user' && actor.id !== undefined)) {
-    invalid('actor id must be an ObjectId and only for user actors');
+  if ((actor.id !== undefined && !(actor.id instanceof ObjectId)) || (actor.kind !== 'user' && actor.kind !== 'store' && actor.id !== undefined)) {
+    invalid('actor id must be an ObjectId and only for user and store actors');
   }
   if (actor.role !== undefined && !ACTOR_ROLES.includes(actor.role)) {
     invalid('unknown actor role');
   }
-  if (actor.kind === 'user' && actor.id === undefined) {
-    invalid('a user actor needs an id');
+  if ((actor.kind === 'user' || actor.kind === 'store') && actor.id === undefined) {
+    invalid('a user or store actor needs an id');
   }
   if (entry.groupId !== undefined && !(entry.groupId instanceof ObjectId)) {
     invalid('groupId must be an ObjectId');

@@ -1,0 +1,190 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'PLACES.GENERAL.IDENTITY' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.name"
+        [label]="'PLACES.GENERAL.NAME' | t"
+        [error]="state.fieldError(f.name)"
+        (blurred)="f.name().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.companyId"
+        [label]="'PLACES.GENERAL.COMPANY' | t"
+        [placeholder]="'PLACES.NONE' | t"
+        [options]="companyOptions()"
+        [error]="state.fieldError(f.companyId)"
+        (blurred)="f.companyId().markAsTouched()"
+      />
+      @if (state.isNew() && state.canPlan()) {
+        <fc-select
+          [formField]="license.plan"
+          [label]="'PLACES.LICENSE.PLAN' | t"
+          [options]="planOptions()"
+          [error]="state.fieldError(license.plan)"
+          (blurred)="license.plan().markAsTouched()"
+        />
+      }
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'PLACES.GENERAL.ADDRESS' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.address.street"
+        [label]="'PLACES.GENERAL.STREET' | t"
+        [error]="state.fieldError(f.address.street)"
+        autocomplete="street-address"
+        (blurred)="f.address.street().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.address.postcode"
+        [label]="'PLACES.GENERAL.POSTCODE' | t"
+        [error]="state.fieldError(f.address.postcode)"
+        autocomplete="postal-code"
+        (blurred)="f.address.postcode().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.address.city"
+        [label]="'PLACES.GENERAL.CITY' | t"
+        [error]="state.fieldError(f.address.city)"
+        autocomplete="address-level2"
+        (blurred)="f.address.city().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.address.country"
+        [label]="'PLACES.GENERAL.COUNTRY' | t"
+        [options]="countryOptions()"
+        [error]="state.fieldError(f.address.country)"
+        (valueChange)="onCountry($event)"
+        (blurred)="f.address.country().markAsTouched()"
+      />
+      @if (areas().length > 0) {
+        <fc-select
+          [formField]="f.address.province"
+          [label]="'PLACES.GENERAL.PROVINCE' | t"
+          [placeholder]="'PLACES.NONE' | t"
+          [options]="provinceOptions()"
+          [error]="state.fieldError(f.address.province)"
+          (blurred)="f.address.province().markAsTouched()"
+        />
+      } @else {
+        <fc-text-field
+          [formField]="f.address.province"
+          [label]="'PLACES.GENERAL.PROVINCE' | t"
+          [error]="state.fieldError(f.address.province)"
+          (blurred)="f.address.province().markAsTouched()"
+        />
+      }
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'PLACES.GENERAL.CONTACTS' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="f.contactName"
+        [label]="'PLACES.GENERAL.CONTACT_NAME' | t"
+        [error]="state.fieldError(f.contactName)"
+        (blurred)="f.contactName().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.email"
+        type="email"
+        [label]="'PLACES.GENERAL.EMAIL' | t"
+        [error]="state.fieldError(f.email)"
+        autocomplete="email"
+        (blurred)="f.email().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.phone"
+        type="tel"
+        [label]="'PLACES.GENERAL.PHONE' | t"
+        [error]="state.fieldError(f.phone)"
+        autocomplete="tel"
+        (blurred)="f.phone().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'PLACES.GENERAL.SALES' | t }}</legend>
+    <div class="grid">
+      <fc-select
+        [formField]="f.priceListId"
+        [label]="'PLACES.GENERAL.PRICE_LIST' | t"
+        [placeholder]="'PLACES.NONE' | t"
+        [options]="priceListOptions()"
+        [error]="state.fieldError(f.priceListId)"
+        (blurred)="f.priceListId().markAsTouched()"
+      />
+      @if (state.hasFeature('customersApp')) {
+        <fc-select
+          [formField]="f.ecommercePriceListId"
+          [label]="'PLACES.GENERAL.ECOMMERCE_PRICE_LIST' | t"
+          [placeholder]="'PLACES.NONE' | t"
+          [options]="ecommerceOptions()"
+          [error]="state.fieldError(f.ecommercePriceListId)"
+          (blurred)="f.ecommercePriceListId().markAsTouched()"
+        />
+      }
+      <fc-select
+        [formField]="f.invoiceSeries"
+        [label]="'PLACES.GENERAL.INVOICE_SERIES' | t"
+        [hint]="'PLACES.GENERAL.INVOICE_SERIES_HINT' | t"
+        [placeholder]="'PLACES.NONE' | t"
+        [options]="seriesOptions()"
+        [error]="state.fieldError(f.invoiceSeries)"
+        (blurred)="f.invoiceSeries().markAsTouched()"
+      />
+      @if (state.seriesUnknown()) {
+        <p class="note">{{ 'PLACES.GENERAL.SERIES_UNKNOWN' | t }}</p>
+      }
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'PLACES.GENERAL.PRICE_LISTS' | t }}</legend>
+    <p class="note">{{ 'PLACES.GENERAL.PRICE_LISTS_HINT' | t }}</p>
+    @if (state.fieldError(f.priceLists); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    @if (entries().length === 0) {
+      <p class="note">{{ 'PLACES.GENERAL.NO_PRICE_LISTS' | t }}</p>
+    }
+    <div class="rows">
+      @for (entry of entries(); track entry.id) {
+        <div class="row">
+          <fc-checkbox
+            [label]="entry.name"
+            [checked]="entry.index >= 0"
+            [disabled]="!state.canWrite()"
+            (checkedChange)="toggle(entry, $event)"
+          />
+          @if (entry.index >= 0 && state.hasFeature('rooms')) {
+            <div class="grid">
+              <fc-checkbox
+                [formField]="f.priceLists[entry.index].allYouCanEat"
+                [label]="'PLACES.GENERAL.AYCE' | t"
+                [error]="state.fieldError(f.priceLists[entry.index].allYouCanEat)"
+              />
+              <fc-text-field
+                [formField]="f.priceLists[entry.index].ayceCode1"
+                [label]="'PLACES.GENERAL.AYCE_CODE_1' | t"
+                [error]="state.fieldError(f.priceLists[entry.index].ayceCode1)"
+              />
+              <fc-text-field
+                [formField]="f.priceLists[entry.index].ayceCode2"
+                [label]="'PLACES.GENERAL.AYCE_CODE_2' | t"
+                [error]="state.fieldError(f.priceLists[entry.index].ayceCode2)"
+              />
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </fieldset>
+
+  <fc-place-save section="general" />
+</form>

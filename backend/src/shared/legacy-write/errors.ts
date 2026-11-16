@@ -48,8 +48,8 @@ export class InvalidWriteInputError extends Error {
 }
 
 /**
- * Thrown, inside the transaction of an update of a company, when the stored document has something that is not an object where the write must
- * put a key (`settings: null`, `fattura_elettronica: 'x'`): writing below it would fail in the database or destroy data. Nothing is written. The
+ * Thrown, inside the transaction of an update of a company or a place, when the stored document has something that is not an object where the write must
+ * put a key (`settings: null`, `fattura_elettronica: 'x'`, `platform: 'web'`): writing below it would fail in the database or destroy data. Nothing is written. The
  * route answers `409 CONFLICT`. It carries the name of the block only, never a value.
  */
 export class MalformedDocumentError extends Error {
@@ -60,7 +60,7 @@ export class MalformedDocumentError extends Error {
    * @param path The dotted path of the block that is not an object.
    */
   constructor(path: string) {
-    super('The stored company has a block that is not an object');
+    super('The stored document has a block that is not an object');
     this.name = 'MalformedDocumentError';
     this.path = path;
   }

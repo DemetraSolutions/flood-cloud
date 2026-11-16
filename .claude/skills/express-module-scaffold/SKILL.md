@@ -53,6 +53,8 @@ export function productsRoutes(
   };
 }
 ```
+Una route può essere aperta al server di punto vendita (chiave di negozio, D-24) solo con l'opt-in esplicito `store: true` nell'`auth` (permesso nel `STORE_PROFILE`, gruppo e `:placeId` nel percorso) oppure con `auth: { kind: 'store' }` per le route del solo negozio: senza opt-in una chiave di negozio ha `403` (skill `store-key-auth`).
+
 Le uniche route `anonymous: true` ammesse sono quelle che lo sono per natura (health, login, refresh, webhook con firma propria), sempre con rate limit e un commento che lo motiva. Percorsi e metodi seguono `doc/API-Guidelines.md`.
 
 ## Controller

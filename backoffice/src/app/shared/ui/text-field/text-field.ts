@@ -22,7 +22,8 @@ export type TextFieldType =
   | 'number'
   | 'date'
   | 'time'
-  | 'datetime-local';
+  | 'datetime-local'
+  | 'color';
 
 /**
  * Labelled text input on a native `<input>`. The label is always visible; hint and error are

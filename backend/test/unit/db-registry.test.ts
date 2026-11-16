@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { COLLECTIONS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from '../../src/db/sessions-schema.ts';
 import { DEALERS_INDEXES, DEALERS_VALIDATOR } from '../../src/db/dealers-schema.ts';
+import { STORE_ACTIVATION_CODES_VALIDATOR, STORE_KEYS_VALIDATOR } from '../../src/db/store-keys-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from '../../src/db/user-credentials-schema.ts';
 import type { CollectionRegistry } from '../../src/db/collections.ts';
 
@@ -23,13 +24,13 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes and validators', () => {
-    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'companies', 'countries', 'dealers', 'groups', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'syncIssues', 'userCredentials', 'users']);
-    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'files', 'places', 'products', 'products_categories']);
+    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'companies', 'countries', 'dealers', 'groups', 'idempotencyKeys', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials', 'users']);
+    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'email_templates', 'files', 'places', 'products', 'products_categories']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
       const isMirror = ['companies', 'places'].includes(name) && COLLECTIONS.common[name as 'companies' | 'places'] === spec;
       const expected = isMirror
         ? 'mirror'
-        : ['activityEvents', 'dealers', 'rateLimits', 'sessions', 'syncIssues', 'userCredentials'].includes(name)
+        : ['activityEvents', 'dealers', 'idempotencyKeys', 'rateLimits', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials'].includes(name)
           ? 'new'
           : name === 'users' || name === 'groups' || name === 'reserve_with_google' || (['companies', 'files', 'places'].includes(name) && !isMirror)
             ? 'legacy-write'
@@ -67,7 +68,7 @@ describe('collection registry', () => {
     );
     // The copies of the group documents: non-unique indexes only, no validator; the issues collection has a 180-day TTL and no validator.
     assert.deepEqual(COLLECTIONS.common.companies.indexes.map((index) => [index.name, index.key]), [['groupId_1__id_1', { groupId: 1, _id: 1 }], ['groupId_1_name_1', { groupId: 1, name: 1 }], ['groupId_1_status_1', { groupId: 1, status: 1 }], ['groupId_1_code_1', { groupId: 1, code: 1 }]]);
-    assert.deepEqual(COLLECTIONS.common.places.indexes.map((index) => index.name), ['groupId_1__id_1', 'groupId_1_name_1', 'groupId_1_companyId_1']);
+    assert.deepEqual(COLLECTIONS.common.places.indexes.map((index) => index.name), ['groupId_1__id_1', 'groupId_1_name_1', 'groupId_1_companyId_1', 'groupId_1_status_1']);
     for (const spec of [COLLECTIONS.common.companies, COLLECTIONS.common.places]) {
       assert.equal('validator' in spec, false);
       assert.equal(spec.indexes.some((index) => 'unique' in index || 'expireAfterSeconds' in index), false);
@@ -78,8 +79,17 @@ describe('collection registry', () => {
       ['detectedAt_ttl', { detectedAt: 1 }, 180 * 86400],
     ]);
     assert.equal('validator' in COLLECTIONS.common.syncIssues, false);
+    assert.equal(COLLECTIONS.common.storeKeys.validator, STORE_KEYS_VALIDATOR);
+    assert.equal(COLLECTIONS.common.storeActivationCodes.validator, STORE_ACTIVATION_CODES_VALIDATOR);
+    assert.deepEqual(COLLECTIONS.common.storeKeys.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null, 'partialFilterExpression' in index ? index.partialFilterExpression : null]), [
+      ['keyHash_1', true, null, null],
+      ['placeId_1_active', true, null, { status: 'active' }],
+      ['groupId_1_placeId_1_activatedAt_-1', false, null, null],
+      ['purgeAt_1', false, 0, null],
+    ]);
+    assert.deepEqual(COLLECTIONS.common.storeActivationCodes.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null]), [['codeHash_1', true, null], ['placeId_1', true, null], ['expiresAt_1', false, 0]]);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'files', 'groups', 'places', 'products', 'products_categories', 'rateLimits', 'reserve_with_google', 'sessions', 'syncIssues', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_categories', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials', 'users']);
   });
 
   it('accepts valid new, legacy-read and legacy-write entries', () => {

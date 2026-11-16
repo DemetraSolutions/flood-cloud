@@ -1,0 +1,79 @@
+<div class="rows">
+  @for (day of days; track day) {
+    <fieldset class="row">
+      <legend>{{ dayLabel(day) }}</legend>
+      <fc-checkbox
+        [formField]="tree().week[day].active"
+        [label]="'PLACES.HOURS.OPEN' | t"
+        [error]="state.fieldError(tree().week[day].active)"
+      />
+      @if (model().week[day].active) {
+        <fc-rows-editor
+          [rows]="tree().week[day].values"
+          [columns]="columns()"
+          [legend]="slotsLegend(dayLabel(day))"
+          [addLabel]="'PLACES.HOURS.ADD_SLOT' | t"
+          [max]="maxSlots"
+          (add)="addSlot(day)"
+          (remove)="removeSlot(day, $event)"
+        />
+      }
+    </fieldset>
+  }
+</div>
+
+<fieldset>
+  <legend>{{ 'PLACES.HOURS.SPECIAL' | t }}</legend>
+  <p class="note">{{ 'PLACES.HOURS.SPECIAL_HINT' | t }}</p>
+  <div class="rows">
+    @for (day of specialDays(); track $index; let i = $index) {
+      <fieldset class="row">
+        <legend>{{ specialLegend(i) }}</legend>
+        <div class="grid">
+          <fc-text-field
+            [formField]="day.date"
+            type="date"
+            [label]="'PLACES.HOURS.DATE' | t"
+            [error]="state.fieldError(day.date)"
+            (blurred)="day.date().markAsTouched()"
+          />
+          <fc-checkbox
+            [formField]="day.closed"
+            [label]="'PLACES.HOURS.CLOSED' | t"
+            [error]="state.fieldError(day.closed)"
+          />
+        </div>
+        @if (!model().special[i].closed) {
+          <fc-rows-editor
+            [rows]="day.values"
+            [columns]="columns()"
+            [legend]="slotsLegend(specialLegend(i))"
+            [addLabel]="'PLACES.HOURS.ADD_SLOT' | t"
+            [max]="maxSlots"
+            (add)="addSpecialSlot(i)"
+            (remove)="removeSpecialSlot(i, $event)"
+          />
+        }
+        @if (state.canWrite()) {
+          <div class="row-actions">
+            <button fc-button variant="ghost" (click)="removeSpecial(i)">
+              {{ 'PLACES.HOURS.REMOVE_SPECIAL' | t: { number: i + 1 } }}
+            </button>
+          </div>
+        }
+      </fieldset>
+    }
+  </div>
+  @if (state.canWrite()) {
+    <div>
+      <button
+        fc-button
+        variant="secondary"
+        [disabled]="specialDays().length >= maxSpecial"
+        (click)="addSpecial()"
+      >
+        {{ 'PLACES.HOURS.ADD_SPECIAL' | t }}
+      </button>
+    </div>
+  }
+</fieldset>

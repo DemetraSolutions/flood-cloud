@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { E_INVOICING_KEYS } from './company-paths.ts';
+import { WEEK_DAYS } from './place-paths.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkFields, requireFields } from './fields.ts';
 import type { NewCompanyFields, NewPlaceFields } from './fields.ts';
 import { InvalidWriteInputError } from './errors.ts';
@@ -10,9 +11,6 @@ export const DEFAULT_STORAGE_NAME = 'Deposito 1';
 
 /** Time zone of a new place when the caller gives none (the legacy wizard's default, needed by the e-mails of the integration service). */
 export const DEFAULT_TIMEZONE = 'Europe/Rome';
-
-/** Day of the week `0` (Sunday) to `6`: the keys of `openingTime.weekGeneric`, each `{ active, values }`. */
-const WEEK_DAYS = ['0', '1', '2', '3', '4', '5', '6'] as const;
 
 /**
  * The template of the blocks of a new company, as the intended form of the `insertOne` of the legacy and of its group wizard: every block complete (a
@@ -144,26 +142,157 @@ export function newCompanyDocument(id: ObjectId, groupId: ObjectId, input: NewCo
 /** A reservation e-mail setting of a new place. */
 const reservationEmail = (): Document => ({ status: false, templateId: null, subject: null });
 
+/** The hours of a week with every day closed: the seven keys `0` to `6`, each `{ active: false, values: [] }`. */
+const closedWeek = (): Document => Object.fromEntries(WEEK_DAYS.map((day) => [day, { active: false, values: [] }]));
+
+/** The hours of a place with nothing set: the week closed and no special day (the form of `openingTime` and of `delivery.time` that the backoffice saves). */
+const closedHours = (): Document => ({ weekGeneric: closedWeek(), daySpecial: {} });
+
 /**
- * Blocks of a new place the write service does not own, as the intended form of the legacy `insertOne` with an empty body: all the
- * blocks the POS and the legacy read without checks, with the defaults of the legacy (`false`, `null`, empty lists, fonts, texts).
- * The values the legacy copied from a wrong field are not reproduced (`doc/Tasks.md` 5.6.3): `platform` is `{ sentry: false }`
- * (the legacy wrote `{ ip: <sentry> }`), `roomsSettings.reservation.suspendedToday` and `untilHours` are their own defaults, the
- * web widget has its own `color` and `brightness`, and `floodPay.stripe` its own `null` keys. The optional blocks (`kiosk`, `fidelity`,
- * `tgm`, `payments`) are absent, as in the legacy when the client does not send them.
+ * The keys of `roomsSettings` the backoffice still writes although the legacy replaced them (`delivery`, `deliveryAutoOrderingTime`,
+ * `deliverySendPrebillingOnSave`, `tableGroupName` and `tableGroups.mergeProductsPrint`): copies of the keys of `deliveryTakeAway`, `roomsSettings.tableGroups`
+ * and `ordering` they replaced, computed from them exactly as the form does, so a reader of the old keys and a reader of the new ones agree.
  *
- * @returns Fresh objects on every call.
+ * @param deliveryTakeAway The `deliveryTakeAway` block.
+ * @param ordering The `ordering` block.
+ * @param tableGroups The `{ status, name, autoCreateFirst }` of the table groups.
+ */
+function deprecatedRoomsSettings(deliveryTakeAway: Document, ordering: Document, tableGroups: Document): Document {
+  return {
+    delivery: deliveryTakeAway['status'],
+    deliveryAutoOrderingTime: deliveryTakeAway['autoOrderingTime'],
+    deliverySendPrebillingOnSave: deliveryTakeAway['sendPrebillingOnSave'],
+    tableGroupName: tableGroups['name'],
+    tableGroups: { ...tableGroups, mergeProductsPrint: ordering['mergeProductsPrint'] },
+  };
+}
+
+/**
+ * The blocks of a new place, in the form the old backoffice saves (`PD.prepareData` of `views/places/detail`) with the value every field has when the form is empty: all the
+ * blocks the POS and the legacy read without checks, with the defaults of the form (`false`, `null`, empty lists, fonts, texts, `exitsNumber` 5, `invoiceQt` 1, `numberFontSize`
+ * `2-1`, `kiosk.mode` `sale`…). Nothing is copied from a wrong field as the `insertOne` of the legacy does: `platform` is `{ sentry: false }`, the reservation block has its own
+ * `suspendedToday`, `untilHours` and web widget. `integrations` has the empty shape of the form: every switch off and no credential. The settings of step 7B are in here, complete,
+ * so a place created now is a complete place; the caller's values are put on top of the blocks the backend owns.
+ *
+ * @returns Fresh objects on every call (nothing is shared between documents).
  */
 function placeBlocks(): Document {
-  const week: Document = {};
-  for (const day of WEEK_DAYS) {
-    week[day] = { active: false, values: [] };
-  }
+  const deliveryTakeAway: Document = {
+    status: false,
+    deliveryListId: '',
+    takeAwayListId: '',
+    autoOrderingTime: null,
+    sendPrebillingOnSave: false,
+    printOrderNumber: false,
+    step: 900000,
+    delivery: false,
+    autoDeliveryCost: false,
+    alertMaxDeliveryInStep: null,
+    alertMaxTakeAwayInStep: null,
+    roomsProductionCenterValue: false,
+    callerRequired: false,
+    fastTakeAway: false,
+    sendOrderOnSave: 'ask',
+    sendOrderOnSaveFast: 'ask',
+    createOrderNumberOnSave: false,
+    autoOrderStatusComplete: false,
+    shippingCosts: [],
+  };
+  const ordering: Document = {
+    printStationFontSize: '1-1',
+    deviceFontSize: '1-1',
+    numberFontSize: '2-1',
+    piecesFontSize: '1-1',
+    seatsFontSize: '1-1',
+    titleFontSize: '1-2',
+    tableFontSize: '1-2',
+    exitsFontSize: '1-2',
+    customerNameFontSize: '1-1',
+    callerFontSize: '1-1',
+    involvedStationsFontSize: '1-1',
+    titleReverse: false,
+    categoriesGropusFontSize: '1-2',
+    productsSorting: 'cart',
+    categoriesGropus: false,
+    productsFontSize: '1-1',
+    variantsFontSize: '1-1',
+    summaryProductsFontSize: '1-1',
+    summaryVariantsFontSize: '1-1',
+    startReturnNumber: 0,
+    endReturnNumber: 0,
+    tableText: null,
+    deskText: null,
+    takeAwayText: null,
+    deliveryText: null,
+    variantPlusText: null,
+    variantMinusText: null,
+    variantInfoText: null,
+    exitText: null,
+    proceedText: null,
+    removalText: null,
+    moveText: null,
+    additionText: null,
+    resendText: null,
+    changeOrderText: null,
+    cancellationOrderText: null,
+    noteText: null,
+    tableNoteText: null,
+    orderNoteText: null,
+    quiklyText: null,
+    involvedStationsText: null,
+    noRemoval: false,
+    noRemovalOnDeleteTable: false,
+    noRemovalOnDeleteOrder: false,
+    device: false,
+    printStation: false,
+    priceListName: false,
+    mergeProductsPrint: false,
+    roomName: false,
+    total: false,
+    totalPc: false,
+    allPrices: false,
+    seatsNumber: false,
+    productsProceed: false,
+    firstExitOnExitsCut: false,
+    sequentialNumberTop: false,
+    sequentialNumberBottom: false,
+    roomsSequentialNumberTop: false,
+    roomsSequentialNumberBottom: false,
+    shortName: false,
+    shortDescription: false,
+    note: false,
+    tableNote: false,
+    printStationsInvolved: false,
+    tableBottom: false,
+    additionInfo: false,
+    productsSpace: false,
+    summaryExits: false,
+    move: false,
+    partialMoveProducts: false,
+    contactInfo: false,
+    tableUser: false,
+    productsBold: false,
+    productsCode: false,
+  };
+  const tableGroups: Document = { status: false, name: false, autoCreateFirst: false };
   return {
-    openingTime: { daySpecial: {}, weekGeneric: week },
+    medias: {
+      images: {
+        internalFileNameLogo: '',
+        externalUrlLogo: '',
+        internalFileName: '',
+        externalUrl: '',
+        logoLight: null,
+        coverLight: null,
+        logoKiosk: null,
+        coverKiosk: null,
+        productPlaceholderKiosk: null,
+      },
+    },
+    openingTime: closedHours(),
     platform: { sentry: false },
     server: { ip: null },
-    connectorAddress: null,
+    connectorAddress: '',
     general: {
       fastLogin: false,
       urersLoginRequiredToReceipt: false,
@@ -194,8 +323,8 @@ function placeBlocks(): Document {
       totalRounding: null,
       operatingTime: null,
       customDiscount: null,
-      receiptsCancellation: null,
       priceLists: [],
+      receiptsCancellation: null,
     },
     paymentTypes: [],
     receipt: {
@@ -215,10 +344,12 @@ function placeBlocks(): Document {
       subtotalFontSize: '1-1',
       note: false,
       invoice: false,
-      invoiceQt: 0,
+      invoiceQt: 1,
       noFiscalBottomText: null,
       noFiscalDefaultNoPrint: false,
       noFiscalHeader: false,
+      noFiscalTaxes: false,
+      noFiscalTaxesTotal: false,
       noFiscalRest: false,
       giftReceipt: false,
       serverPrint: false,
@@ -233,91 +364,16 @@ function placeBlocks(): Document {
       printUser: false,
       titleText: null,
       titleFontSize: '1-2',
-      sequentialNumberFontSize: '1-2',
+      sequentialNumberFontSize: '1-1',
       bottomTextFontSize: '1-1',
       customerDataFontSize: '1-1',
       bottomText: null,
     },
-    ordering: {
-      printStationFontSize: '1-1',
-      deviceFontSize: '1-1',
-      piecesFontSize: '1-1',
-      seatsFontSize: '1-1',
-      titleFontSize: '1-2',
-      tableFontSize: '1-2',
-      exitsFontSize: '1-2',
-      customerNameFontSize: '1-1',
-      callerFontSize: '1-1',
-      involvedStationsFontSize: '1-1',
-      titleReverse: false,
-      categoriesGropusFontSize: '1-2',
-      notesFontSize: '1-1',
-      productsSorting: 'cart',
-      categoriesGropus: false,
-      mergeProductsPrint: false,
-      productsFontSize: '1-1',
-      variantsFontSize: '1-1',
-      summaryProductsFontSize: '1-1',
-      summaryVariantsFontSize: '1-1',
-      startReturnNumber: 0,
-      endReturnNumber: 0,
-      tableText: null,
-      deskText: null,
-      takeAwayText: null,
-      deliveryText: null,
-      variantPlusText: null,
-      variantMinusText: null,
-      variantInfoText: null,
-      exitText: null,
-      proceedText: null,
-      removalText: null,
-      moveText: null,
-      additionText: null,
-      resendText: null,
-      changeOrderText: null,
-      cancellationOrderText: null,
-      noteText: null,
-      tableNoteText: null,
-      orderNoteText: null,
-      quiklyText: null,
-      involvedStationsText: null,
-      noRemoval: false,
-      noRemovalOnDeleteTable: false,
-      noRemovalOnDeleteOrder: false,
-      device: false,
-      printStation: false,
-      priceListName: false,
-      roomName: false,
-      total: false,
-      totalPc: false,
-      allPrices: false,
-      seatsNumber: false,
-      productsProceed: false,
-      firstExitOnExitsCut: false,
-      sequentialNumberTop: false,
-      sequentialNumberBottom: false,
-      roomsSequentialNumberTop: false,
-      roomsSequentialNumberBottom: false,
-      shortName: false,
-      shortDescription: false,
-      note: false,
-      tableNote: false,
-      printStationsInvolved: false,
-      tableBottom: false,
-      additionInfo: false,
-      productsSpace: false,
-      summaryExits: false,
-      move: false,
-      partialMoveProducts: false,
-      contactInfo: false,
-      tableUser: false,
-      productsBold: false,
-      productsCode: false,
-    },
+    ordering,
     roomsSettings: {
       exits: false,
       proceedNoPrint: false,
-      exitsNumber: null,
+      exitsNumber: 5,
       urersLoginRequiredToTableDesk: false,
       urersLoginRequiredToTable: false,
       tableSeats: false,
@@ -327,13 +383,10 @@ function placeBlocks(): Document {
       exclusiveUserTable: false,
       waitingPaymentTableStatus: false,
       prebillingRequestTableStatus: false,
-      delivery: false,
-      deliveryAutoOrderingTime: null,
-      deliverySendPrebillingOnSave: false,
       sendOrderPrebilling: false,
       halfPortionValue: null,
       halfPortionVariantsValue: null,
-      tableGroups: { status: false, name: false, mergeProductsPrint: false, autoCreateFirst: false },
+      ...deprecatedRoomsSettings(deliveryTakeAway, ordering, tableGroups),
       deskCheckoutPrintersPriority: false,
       checkoutTableValue0: false,
       waitingList: false,
@@ -360,6 +413,8 @@ function placeBlocks(): Document {
       },
     },
     selfOrdering: { status: false, fixedMessage: null, additionalInfoLabel: null, additionalInfo: null, priceListsConfig: {} },
+    payments: { defaultType: 'cash', cheque: false, tickets: false, paymentDiscount: false },
+    externalDisplay: { tips: false, receiptType: false, fidelity: false, backgroundColor: '#8936F7', textColor: '#F8F9FA' },
     advancedReport: { logs: false },
     appointment: {
       staffChoice: false,
@@ -371,38 +426,52 @@ function placeBlocks(): Document {
       webWidgetStatus: false,
       email: { templateId: null, from: null, subject: null },
     },
-    deliveryTakeAway: {
-      status: false,
-      deliveryListId: null,
-      takeAwayListId: null,
-      autoOrderingTime: null,
-      sendPrebillingOnSave: false,
-      printOrderNumber: false,
-      step: 900000,
-      delivery: false,
-      autoDeliveryCost: false,
-      alertMaxDeliveryInStep: null,
-      alertMaxTakeAwayInStep: null,
-      roomsProductionCenterValue: false,
-      callerRequired: false,
-      fastTakeAway: false,
-      sendOrderOnSave: 'ask',
-      sendOrderOnSaveFast: 'ask',
-      createOrderNumberOnSave: false,
+    deliveryTakeAway,
+    kiosk: {
+      listId: null,
+      mode: 'sale',
+      eatHere: false,
+      takeAway: false,
+      deskPay: false,
+      posPay: false,
+      catalogLayout: 'cols-4',
+      hideCategories: false,
+      hideNotAvailableProducts: false,
+      hidePhotos: false,
+      productVariants: false,
+      quickAddToCart: false,
+      upsellingCategoryId: null,
+      productsCategories: [],
+      unpaidNotPrint: false,
+      prebillingDeskPay: false,
+      prebillingPosPay: false,
+      printOrderCheckoutDefault: false,
       autoOrderStatusComplete: false,
-      shippingCosts: [],
+      paperReceipt: false,
+      eReceiptEmail: false,
+      eReceiptQr: false,
+      paymentsCards: false,
+      paymentsCash: false,
+      paymentsSatispay: false,
+      tablePlaceholder: 'none',
+      tablePlaceholderType: 'table',
+      takeawayPlaceholder: 'none',
+      takeawayPlaceholderType: 'pager',
+      manageFidelity: false,
+      backgroundColor: '#8936F7',
+      textColor: '#F8F9FA',
+      categoriesIcons: false,
+      titleText: { it: '' },
+      subTitleText: { it: '' },
+      startButtonText: { it: '' },
+      eatHereText: { it: '' },
+      takeAwayText: { it: '' },
+      idleTimeAlert: null,
+      closeSessionTime: null,
     },
-    delivery: {
-      time: { daySpecial: {}, weekGeneric: {} },
-      step: null,
-      maxContemporary: null,
-      radius: null,
-      margin: null,
-      minAmount: {},
-      lat: null,
-      lng: null,
-    },
-    externalDisplay: { tips: false, receiptType: false, fidelity: false, backgroundColor: '#8936F7', textColor: '#F8F9FA' },
+    fidelity: { type: null, showPoints: false, showPointsCheckout: false, printDataOnFiscalReceipt: false, printDataOnReceipt: false },
+    tgm: { status: false, companyId: null, placeId: null, printProductsOnReceipt: false, winningsManagement: false },
+    delivery: { time: closedHours(), step: null, maxContemporary: null, radius: null, margin: null, minAmount: {}, lat: null, lng: null },
     integrations: {
       floodPay: {
         status: false,
@@ -418,12 +487,12 @@ function placeBlocks(): Document {
         name: null,
         telephone: null,
         url: null,
-        geo: { latitude: null, longitude: null, address: { streetAddress: null, locality: null, postalCode: null, country: null } },
+        geo: { latitude: null, longitude: null, address: { streetAddress: null, locality: null, postalCode: null, country: 'IT' } },
       },
       easyappear: { status: false, appToken: null },
-      leggimenu: { status: false, apiKey: null },
       yellgo: { status: false, apiKey: null },
-      plateform: { status: false, locationId: null, username: null, password: null },
+      leggimenu: { status: false, apiKey: null },
+      plateform: { status: false, username: null, password: null },
       cooperto: { status: false, apiKey: null },
       dojo: { status: false, apiKey: null },
       satispay: { status: false, activationCode: null, keyId: null, type: 'checkin' },
@@ -437,11 +506,30 @@ function placeBlocks(): Document {
 }
 
 /**
- * Builds the document of a new place in the format of the legacy (`doc/Tasks.md` 5.6.3): the owned fields from the caller, validated, and the
- * complete template of the blocks the legacy reads without checks ({@link placeBlocks}). There is exactly one storage, `{ id, name, cash: true,
- * ecommerce: false }` (a place without a cash storage leaves the stock movements without a storage), with a new `ObjectId` as `id`;
- * `openingTime.weekGeneric` has the seven days `{ active: false, values: [] }`; `timezone` is `Europe/Rome` unless given. `status` is explicit,
- * `trash` is `false`, both dates are `now`. The group is always the one of the verified access.
+ * The default value of every key of a block a write completes (`platform`, `general`, `openingTime`, `delivery` and `delivery.time`, see `PLACE_CONTAINERS`): what a write puts in
+ * the keys it does not set when it finds the block missing or empty.
+ *
+ * @param container Dotted path of the block.
+ * @returns A fresh object.
+ */
+export function placeContainerDefaults(container: string): Document {
+  let value: unknown = placeBlocks();
+  for (const key of container.split('.')) {
+    value = (value as Document)[key];
+  }
+  return value as Document;
+}
+
+/** The plan of a new place when the caller gives none, and the one a group administrator gets: the plan every group has (`basic`). */
+export const DEFAULT_PLAN = 'basic';
+
+/**
+ * Builds the document of a new place in the format the old backoffice saves (`doc/Tasks.md` 5.6.3 and area 7, step 7A): the owned fields from the caller, validated, each at its
+ * place (the dotted ones inside their block), and the complete template of the blocks ({@link placeBlocks}), so a place created now is complete and the POS, the legacy and the
+ * integrations read it without checks. There is exactly one storage, `{ id, name, cash: true, ecommerce: false }` (a place without a cash storage leaves the stock movements without
+ * a storage), with a new `ObjectId` as `id`; `openingTime.weekGeneric` and `delivery.time.weekGeneric` have the seven days `{ active: false, values: [] }`; `timezone` is `Europe/Rome`
+ * and `plan` `basic` unless given. `status` is explicit (`false` is kept), `expirationDate` is `null` unless given (never the epoch), `trash` is `false`, both dates are `now`.
+ * The group is always the one of the verified access.
  *
  * @param id Id of the new place.
  * @param groupId Group of the verified access.
@@ -458,7 +546,7 @@ export function newPlaceDocument(id: ObjectId, groupId: ObjectId, input: NewPlac
   const fields = checkFields(PLACE_FIELD_KINDS, rest);
   requireFields(fields, ['name', 'companyId']);
   const blocks = placeBlocks();
-  return {
+  const document: Document = {
     _id: id,
     groupId,
     companyId: fields['companyId'],
@@ -474,7 +562,7 @@ export function newPlaceDocument(id: ObjectId, groupId: ObjectId, input: NewPlac
     email: '',
     telephone: '',
     invoicePS: null,
-    medias: {},
+    medias: blocks['medias'],
     devices: [],
     rooms: [],
     storages: [{ id: new ObjectId(), name: storageName, cash: true, ecommerce: false }],
@@ -492,17 +580,25 @@ export function newPlaceDocument(id: ObjectId, groupId: ObjectId, input: NewPlac
     ordering: blocks['ordering'],
     roomsSettings: blocks['roomsSettings'],
     selfOrdering: blocks['selfOrdering'],
+    payments: blocks['payments'],
+    externalDisplay: blocks['externalDisplay'],
     advancedReport: blocks['advancedReport'],
     appointment: blocks['appointment'],
     deliveryTakeAway: blocks['deliveryTakeAway'],
+    kiosk: blocks['kiosk'],
+    fidelity: blocks['fidelity'],
+    tgm: blocks['tgm'],
     delivery: blocks['delivery'],
-    externalDisplay: blocks['externalDisplay'],
     integrations: blocks['integrations'],
     status: true,
+    plan: DEFAULT_PLAN,
     expirationDate: null,
     trash: false,
     insertDate: now,
     updateDate: now,
-    ...fields,
   };
+  for (const [path, value] of Object.entries(fields)) {
+    setPath(document, path, value);
+  }
+  return document;
 }

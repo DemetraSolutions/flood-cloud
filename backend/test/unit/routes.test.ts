@@ -119,7 +119,7 @@ describe('mountRoutes with user routes', () => {
   });
 
   it('rejects a permission outside the catalog', () => {
-    for (const permission of ['places:delete', '', undefined, 5]) {
+    for (const permission of ['places:fly', '', undefined, 5]) {
       assert.match(mountMessage([userRoute({ auth: { kind: 'user', permission } })], options), /unknown permission/);
     }
   });
@@ -128,7 +128,7 @@ describe('mountRoutes with user routes', () => {
     mountRoutes(express.Router(), [userRoute({ auth: { kind: 'user', anyPermission: ['users:read', 'groups:read'] } })], options);
     assert.match(mountMessage([userRoute({ auth: { kind: 'user', anyPermission: [] } })], options), /anyPermission must be a non-empty list/);
     assert.match(mountMessage([userRoute({ auth: { kind: 'user', anyPermission: 'users:read' } })], options), /anyPermission must be a non-empty list/);
-    assert.match(mountMessage([userRoute({ auth: { kind: 'user', anyPermission: ['users:read', 'places:delete'] } })], options), /unknown permission/);
+    assert.match(mountMessage([userRoute({ auth: { kind: 'user', anyPermission: ['users:read', 'places:fly'] } })], options), /unknown permission/);
     assert.match(mountMessage([userRoute({ auth: { kind: 'user', permission: 'users:read', anyPermission: ['users:read'] } })], options), /either permission or anyPermission/);
   });
 

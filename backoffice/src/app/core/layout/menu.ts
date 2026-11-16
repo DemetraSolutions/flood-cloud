@@ -96,6 +96,14 @@ export const MENU: readonly MenuItem[] = [
     permission: 'companies:read',
   },
   {
+    id: 'places',
+    labelKey: 'MENU.PLACES',
+    icon: 'store',
+    route: '/groups',
+    groupPath: 'places',
+    permission: 'places:read',
+  },
+  {
     id: 'fidelity',
     labelKey: 'MENU.FIDELITY',
     icon: 'card',

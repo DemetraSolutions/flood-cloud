@@ -1,0 +1,87 @@
+import type { Document, Filter, ObjectId } from 'mongodb';
+import type { Databases } from '../../db/databases.ts';
+import { LIST_MAX_TIME_MS, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
+import type { ListPage, ListParams } from '../../shared/http/list.ts';
+import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
+import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
+import { groupMirror } from '../../shared/security/scope/group-mirror.ts';
+import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { placesScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
+import type { CompaniesRepository } from '../companies/companies.repository.ts';
+import { PLACE_SUMMARY_PROJECTION } from './place.mapper.ts';
+import { PLACES_LIST } from './places.list.ts';
+
+/** The reads of the place routes that are not the place itself: the list (from the copies), the users that refer to a place, and the countries and the price lists, which are the ones of the companies. */
+export interface PlacesRepository extends Pick<CompaniesRepository, 'findCountry' | 'groupLists'> {
+  /**
+   * A page of the `places` of a verified group (read from the copies in `common.places`), inside the caller's perimeter.
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   * @param filter Resource filter of the request.
+   * @param params Validated list parameters.
+   */
+  list(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
+  /**
+   * Whether a user of the group has the place in his scope (`placeId` or `placesId`), whatever the state of the user: the reference that stops the deletion of a place.
+   *
+   * @param groupId Id of the group (from a verified access).
+   * @param placeId Id of the place.
+   */
+  hasUsers(groupId: ObjectId, placeId: ObjectId): Promise<boolean>;
+  /**
+   * Tells which of the e-mail templates of a request do not exist in the group (`email_templates` of the group database, read only).
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group, which fixes the database.
+   * @param ids The ids to check, at most a few.
+   * @returns The positions, in the list, of the ids that are missing.
+   */
+  missingTemplates(principal: AuthPrincipal, access: GroupAccess, ids: readonly ObjectId[]): Promise<Set<number>>;
+  /**
+   * The language codes of a group (`settings.languages`; `it` when the group lists none).
+   *
+   * @param groupId Id of the group (from a verified access).
+   */
+  groupLanguages(groupId: ObjectId): Promise<ReadonlySet<string>>;
+}
+
+/**
+ * Builds the repository of the place routes.
+ *
+ * @param databases Database accessor.
+ * @param companies The reads of the company routes that the places share (countries and price lists).
+ */
+export function createPlacesRepository(databases: Databases, companies: Pick<CompaniesRepository, 'findCountry' | 'groupLists'>): PlacesRepository {
+  return {
+    list: async (principal, access, filter, params) =>
+      pageOf(
+        await groupMirror(principal, access, databases, 'places').aggregate(
+          listPipeline(withScope(placesScopeFilter(principal.scope), { $and: [filter, listSearch(params, PLACES_LIST)] }), params, PLACES_LIST, PLACE_SUMMARY_PROJECTION),
+        ),
+        params,
+      ),
+
+    hasUsers: async (groupId, placeId) =>
+      (await databases.common().collection('users').findOne({ groupId, $or: [{ placeId }, { placesId: placeId }] }, { projection: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS })) !== null,
+
+    missingTemplates: async (principal, access, ids) => {
+      const found = await groupDatabaseFor(principal, access, databases)
+        .collection<{ _id: ObjectId }>('email_templates')
+        .find({ _id: { $in: [...ids] } }, { projection: { _id: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS })
+        .toArray();
+      const present = new Set(found.map((template) => template._id.toHexString()));
+      return new Set(ids.flatMap((id, index) => (present.has(id.toHexString()) ? [] : [index])));
+    },
+
+    groupLanguages: async (groupId) => {
+      const group = await databases.common().collection('groups').findOne({ _id: groupId }, { projection: { 'settings.languages': 1 }, maxTimeMS: LIST_MAX_TIME_MS });
+      const languages: unknown = (group?.['settings'] as { languages?: unknown } | undefined)?.languages;
+      const codes = (Array.isArray(languages) ? (languages as unknown[]) : []).filter((code): code is string => typeof code === 'string');
+      return new Set(codes.length === 0 ? ['it'] : codes);
+    },
+
+    findCountry: (code) => companies.findCountry(code),
+    groupLists: (groupId) => companies.groupLists(groupId),
+  };
+}

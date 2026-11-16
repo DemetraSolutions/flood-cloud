@@ -4,7 +4,7 @@ description: Usa quando implementi login del backoffice, sessioni, access e refr
 ---
 # Opaque Token Auth (backoffice)
 
-Riferimenti: `doc/Security-Model.md` §4, collection `sessions` in `doc/Data-Model.md`. Decisione del 2026-10-30: **token opachi**, non JWT.
+Riferimenti: `doc/Security-Model.md` §4 (la credenziale dell'app del punto vendita è un'altra: §5, skill `store-key-auth`), collection `sessions` in `doc/Data-Model.md`. Decisione del 2026-10-30: **token opachi**, non JWT.
 
 ## Generazione e hash
 ```ts
@@ -61,4 +61,4 @@ const session = await sessions.findOneAndUpdate(
 Logout (sessione corrente), logout ovunque, cambio password, cambio ruolo o scope, utente disattivato, gruppo sospeso: `updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now, revokedReason } })` (per il gruppo: `groupId`).
 
 ## Test obbligatori
-Token assente, malformato, inesistente, scaduto (`TOKEN_EXPIRED`), revocato; utente `E`; utente disattivato; gruppo sospeso; refresh valido; refresh riusato (famiglia revocata); refresh oltre la durata massima; logout ovunque; token assenti dai log; token store o API key rifiutati su `/v1`.
+Token assente, malformato, inesistente, scaduto (`TOKEN_EXPIRED`), revocato; utente `E`; utente disattivato; gruppo sospeso; refresh valido; refresh riusato (famiglia revocata); refresh oltre la durata massima; logout ovunque; token assenti dai log; una API key pubblica (`fc_pk_`) rifiutata su `/v1`; la chiave di negozio `fc_sk_` smistata per prefisso a un controllo a parte (skill `store-key-auth`) e mai letta dal controllo degli utenti (un `fc_sk_` su una route senza opt-in è `403`, un access token su `GET /v1/store-context` è `403`).

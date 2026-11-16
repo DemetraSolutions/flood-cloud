@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Double, ObjectId } from 'mongodb';
+import { Double, Int32, ObjectId } from 'mongodb';
 import type { Db, Document } from 'mongodb';
 import type { Databases } from '../../src/db/databases.ts';
 import { companiesPlacesWriter, MAX_GROUP_PLACES } from '../../src/shared/legacy-write/companies-places.writer.ts';
 import type { CompaniesPlacesWriter, EntityKind, WriteOutcome } from '../../src/shared/legacy-write/companies-places.writer.ts';
-import { CrossClusterWriteError, InvalidWriteInputError } from '../../src/shared/legacy-write/errors.ts';
+import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from '../../src/shared/legacy-write/errors.ts';
 import { versionOf } from '../../src/shared/legacy-write/version.ts';
 import type { GroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import { EXACT_TYPES, expectedCopy, sameDocument } from '../../src/shared/legacy-write/copy-rule.ts';
@@ -422,7 +422,7 @@ describe('companies and places writer: optimistic concurrency', () => {
 
   it('does not conflict on a POS write on devices or rooms done after the version was read, and still writes only its own fields', async () => {
     const version = (await writerOn().currentVersion('places', P(1)))!;
-    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { 'devices.0.info.os': 'changed by the POS', 'rooms.0.name': 'Sala 2', 'roomsSettings.reservation.suspendedToday': false, updateDate: new Date() } });
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { 'devices.0.info.os': 'changed by the POS', 'rooms.0.name': 'Sala 2', updateDate: new Date() } });
     assert.equal(await writerOn().currentVersion('places', P(1)), version);
     written(await writerOn().updatePlace(P(1), version, { name: 'not late' }));
     const stored = must(await original('places', P(1)));
@@ -644,5 +644,244 @@ describe('companies and places writer: groups on another cluster', () => {
     } finally {
       await clusters.cleanup();
     }
+  });
+});
+
+describe('companies and places writer: the blocks of a place', () => {
+  const WEEK = Object.fromEntries(['0', '1', '2', '3', '4', '5', '6'].map((day) => [day, { active: day === '1', values: day === '1' ? [{ start: '09:00', end: '18:00' }] : [] }]));
+  const versionOfPlace = async (id: ObjectId = P(1)): Promise<string> => (await writerOn().currentVersion('places', id))!;
+  const set = (id: ObjectId, update: Document): Promise<unknown> => groupDb().collection('places').updateOne({ _id: id }, update);
+
+  it('writes the leaf paths of the blocks and the license fields, and nothing else of the document', async () => {
+    await set(P(1), { $set: { platform: { ip: false, sentry: false }, openingTime: { weekGeneric: WEEK, daySpecial: { legacy: { keep: true } }, unknownOpening: 1 }, delivery: { time: { weekGeneric: WEEK, daySpecial: {} }, step: new Double(5), minAmount: { EUR: { code: 'EUR', value: new Double(5) } } } } });
+    const before = must(await original('places', P(1)));
+    const outcome = written(
+      await writerOn().updatePlace(P(1), await versionOfPlace(), {
+        plan: 'advanced',
+        'platform.sentry': true,
+        'general.priceLists': [{ id: 'a', allYouCanEat: true, ayceCode1: '1', ayceCode2: null }],
+        'openingTime.weekGeneric': WEEK,
+        'openingTime.daySpecial': { '2026-12-25': { closed: true, values: [] } },
+        'delivery.time.weekGeneric': WEEK,
+        'delivery.time.daySpecial': { '2026-12-31': { closed: false, values: [{ start: '10:00', end: '12:00' }] } },
+      }),
+    );
+    const after = must(await original('places', P(1)));
+    differences(before, after, ['plan', 'platform', 'general', 'openingTime', 'delivery', 'updateDate']);
+    assert.deepEqual(after['platform'], { ip: false, sentry: true });
+    assert.deepEqual((after['general'] as Document)['priceLists'], [{ id: 'a', allYouCanEat: true, ayceCode1: '1', ayceCode2: null }]);
+    assert.ok((after['general'] as Document)['chargeDocumentQt'] instanceof Double || (after['general'] as Document)['logs'] === true);
+    assert.equal(Number((after['openingTime'] as Document)['unknownOpening']), 1);
+    assert.deepEqual(((after['delivery'] as Document)['minAmount'] as Document)['EUR'], (before['delivery'] as Document)['minAmount'] !== undefined ? ((before['delivery'] as Document)['minAmount'] as Document)['EUR'] : undefined);
+    assert.ok(((after['delivery'] as Document)['step']) instanceof Double);
+    assert.equal(outcome.version, versionOf('places', after));
+    await assertMirrored('places', P(1));
+    await assertGroupPlaces();
+  });
+
+  it('completes a block that is missing or empty with the defaults of the keys the change does not set', async () => {
+    await set(P(1), { $unset: { delivery: '', platform: '' }, $set: { general: {}, openingTime: {} } });
+    written(await writerOn().updatePlace(P(1), await versionOfPlace(), { 'delivery.time.weekGeneric': WEEK, 'platform.sentry': true, 'general.priceLists': [], 'openingTime.daySpecial': {} }));
+    const after = must(await original('places', P(1)));
+    assert.deepEqual(Object.keys(after['delivery'] as Document).sort(), ['lat', 'lng', 'margin', 'maxContemporary', 'minAmount', 'radius', 'step', 'time']);
+    assert.deepEqual(Object.keys((after['delivery'] as { time: Document }).time).sort(), ['daySpecial', 'weekGeneric']);
+    assert.deepEqual((after['delivery'] as { time: { weekGeneric: unknown } }).time.weekGeneric, WEEK);
+    assert.deepEqual(after['platform'], { sentry: true });
+    assert.equal(Object.keys(after['general'] as Document).length, 31);
+    assert.ok((after['general'] as Document)['chargeDocumentQt'] instanceof Int32);
+    assert.deepEqual(Object.keys(after['openingTime'] as Document).sort(), ['daySpecial', 'weekGeneric']);
+    assert.equal(Object.keys((after['openingTime'] as { weekGeneric: Document }).weekGeneric).length, 7);
+    await assertMirrored('places', P(1));
+  });
+
+  it('leaves a block that already has keys as it is, even when it lacks some', async () => {
+    await set(P(1), { $set: { delivery: { step: 5 } } });
+    written(await writerOn().updatePlace(P(1), await versionOfPlace(), { 'delivery.time.daySpecial': {} }));
+    const after = must(await original('places', P(1)));
+    assert.equal(Number((after['delivery'] as Document)['step']), 5);
+    assert.deepEqual(Object.keys(after['delivery'] as Document).sort(), ['step', 'time']);
+    assert.deepEqual(Object.keys((after['delivery'] as { time: Document }).time).sort(), ['daySpecial', 'weekGeneric']);
+  });
+
+  it('refuses to write below a block that is not an object, and writes nothing', async () => {
+    const version = await versionOfPlace();
+    // The fixture place has `platform: 'web'`.
+    for (const [update, field] of [
+      [{ 'platform.sentry': true }, 'platform'],
+      [{ 'general.priceLists': [] }, undefined],
+    ] as const) {
+      await set(P(1), { $set: field === undefined ? { general: [1] } : {} });
+      const before = await snapshot();
+      await assert.rejects(
+        async () => writerOn().updatePlace(P(1), field === undefined ? await versionOfPlace() : version, update as never),
+        (error: unknown) => error instanceof MalformedDocumentError && error.path === (field ?? 'general'),
+      );
+      assert.deepEqual(await snapshot(), before);
+    }
+    await set(P(1), { $set: { delivery: { time: 'none' }, general: {} } });
+    await assert.rejects(async () => writerOn().updatePlace(P(1), await versionOfPlace(), { 'delivery.time.daySpecial': {} }), (error: unknown) => error instanceof MalformedDocumentError && error.path === 'delivery.time');
+    await set(P(1), { $set: { delivery: null } });
+    await assert.rejects(async () => writerOn().updatePlace(P(1), await versionOfPlace(), { 'delivery.time.daySpecial': {} }), (error: unknown) => error instanceof MalformedDocumentError && error.path === 'delivery');
+  });
+
+  it('tells a legacy change of an owned leaf (the Sentry switch, the hours) from a write of the POS on a key that is not owned', async () => {
+    await set(P(1), { $set: { platform: { sentry: false, ip: false } } });
+    const version = await versionOfPlace();
+    await set(P(1), { $set: { 'platform.ip': true, 'server.port': 9, 'devices.0.info.os': 'y' } });
+    assert.equal(await versionOfPlace(), version);
+    await set(P(1), { $set: { 'platform.sentry': true } });
+    assert.deepEqual(await writerOn().updatePlace(P(1), version, { name: 'late' }), { outcome: 'conflict' });
+    const week = await versionOfPlace();
+    await set(P(1), { $set: { 'openingTime.daySpecial': { '2026-01-01': { closed: true, values: [] } } } });
+    assert.notEqual(await versionOfPlace(), week);
+  });
+
+  it('creates a place with the dotted fields in their blocks', async () => {
+    const outcome = written(
+      await writerOn().createPlace({ name: 'Dotted', companyId: C(1), plan: 'enterprice', 'platform.sentry': true, 'general.priceLists': [{ id: 'a', allYouCanEat: false, ayceCode1: null, ayceCode2: null }], 'openingTime.weekGeneric': WEEK, 'delivery.time.daySpecial': { '2026-01-01': { closed: true, values: [] } } }),
+    );
+    const stored = must(await original('places', outcome.id));
+    assert.deepEqual([stored['plan'], (stored['platform'] as Document)['sentry'], (stored['openingTime'] as { weekGeneric: unknown }).weekGeneric], ['enterprice', true, WEEK]);
+    assert.deepEqual((stored['delivery'] as { time: { daySpecial: unknown } }).time.daySpecial, { '2026-01-01': { closed: true, values: [] } });
+    await assertMirrored('places', outcome.id);
+  });
+
+  it('refuses values of the wrong kind for the blocks, and a path that is not owned, before writing', async () => {
+    const before = await snapshot();
+    const version = await versionOfPlace();
+    const invalid = (field: string) => (error: unknown) => error instanceof InvalidWriteInputError && error.field === field;
+    for (const [field, value] of [
+      ['general.priceLists', [{ id: 'a' }]],
+      ['general.priceLists', 'a'],
+      ['general.priceLists', [{ id: 'a', allYouCanEat: 'yes', ayceCode1: null, ayceCode2: null }]],
+      ['openingTime.weekGeneric', { ...WEEK, '3': undefined }],
+      ['openingTime.weekGeneric', 'closed'],
+      ['openingTime.weekGeneric', { ...WEEK, '2': { active: true, values: [{ start: 9, end: 10 }] } }],
+      ['openingTime.weekGeneric', { ...WEEK, '2': { active: true, values: Array.from({ length: 9 }, () => ({ start: '09:00', end: '10:00' })) } }],
+      ['openingTime.weekGeneric', { ...WEEK, '2': { active: true, values: [], extra: 1 } }],
+      ['delivery.time.daySpecial', { $where: { closed: true, values: [] } }],
+      ['openingTime.daySpecial', { '2026-01-01': { active: true, values: [] } }],
+      ['openingTime.daySpecial', [] as never],
+      ['openingTime.daySpecial', Object.fromEntries(Array.from({ length: 401 }, (_unused, index) => [new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10), { closed: true, values: [] }]))],
+      ['platform.sentry', 'yes'],
+      ['plan', 5],
+    ] as const) {
+      await assert.rejects(() => writerOn().updatePlace(P(1), version, { [field]: value } as never), invalid(field), field);
+    }
+    for (const field of ['platform', 'platform.ip', 'general', 'general.unknownKey', 'openingTime', 'delivery', 'delivery.unknownKey', 'roomsSettings', 'roomsSettings.reservation', 'integrations.dojo.apiKey', 'devices.0.info', 'server.ip', 'connectorAddress']) {
+      await assert.rejects(() => writerOn().updatePlace(P(1), version, { [field]: {} } as never), invalid(field), field);
+    }
+    // A date key that is not a date is kept as it is, and an operator is not.
+    written(await writerOn().updatePlace(P(1), version, { 'openingTime.daySpecial': { legacy: 'keep', '2026-01-01': { closed: true, values: [] } } }));
+    assert.equal(Object.keys((must(await original('places', P(1)))['openingTime'] as { daySpecial: Document }).daySpecial).join(), 'legacy,2026-01-01');
+    assert.notDeepEqual(await snapshot(), before);
+  });
+});
+
+describe('companies and places writer: the company of a place', () => {
+  it('gives the series of the invoices and the state of a company of the group, from the group database, and null for one that is not there', async () => {
+    await groupDb().collection('companies').updateOne({ _id: C(1) }, { $set: { invoicesPSValues: [{ name: 'FE', cash: true }, { name: 'NC', cash: false }, { name: 5 }, 'x', null] } });
+    assert.deepEqual(await writerOn().companyOfPlace(C(1)), { trashed: false, invoiceSeries: ['FE', 'NC'], series: [{ name: 'FE', cash: true }, { name: 'NC', cash: false }] });
+    assert.deepEqual(await writerOn().companyOfPlace(C(2)), { trashed: true, invoiceSeries: [], series: [] });
+    await groupDb().collection('companies').updateOne({ _id: C(1) }, { $set: { invoicesPSValues: 'none' } });
+    assert.deepEqual(await writerOn().companyOfPlace(C(1)), { trashed: false, invoiceSeries: [], series: [] });
+    assert.equal(await writerOn().companyOfPlace(C(3)), null);
+    assert.equal(await writerOn().companyOfPlace(missingId()), null);
+    await assert.rejects(() => writerOn().companyOfPlace('x' as never), InvalidWriteInputError);
+  });
+});
+
+describe('companies and places writer: duplicating a place', () => {
+  it('replicates the whole stored document, with a new id, new dates, the name of the legacy duplicate and the group of the access, and records it everywhere', async () => {
+    const source = must(await original('places', P(1)));
+    const outcome = written(await writerOn().duplicatePlace(P(1)));
+    assert.ok(!outcome.id.equals(P(1)));
+    const copy = must(await original('places', outcome.id));
+    assert.deepEqual(differences(source, copy, ['_id', 'name', 'insertDate', 'updateDate']).sort(), ['_id', 'insertDate', 'name', 'updateDate']);
+    assert.equal(copy['name'], 'place-001 (Copy)');
+    assert.deepEqual([copy['trash'], copy['insertDate']], [false, copy['updateDate']]);
+    for (const key of ['devices', 'rooms', 'storages', 'integrations', 'server', 'general', 'futureBlock']) {
+      assert.ok(sameDocument({ v: source[key] }, { v: copy[key] }), key);
+    }
+    assert.equal(outcome.version, versionOf('places', copy));
+    await assertMirrored('places', outcome.id);
+    await assertGroupPlaces();
+    assert.equal(((await groupPlaces()) as unknown[]).length, 3);
+    // The feed: the place has a complete Reserve with Google integration, so the copy is in the feed with its own id.
+    const record = must(await feed(G1, outcome.id));
+    assert.deepEqual([record['name'], record['companyId'], record['category']], ['Fixture RWG', C(1), 'restaurant']);
+    assert.notEqual(await feed(G1, P(1)), null);
+  });
+
+  it('puts the group of the access in the copy even when the source has another one, or none, and the placeholder name of a place without a name', async () => {
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { groupId: G2, name: null } });
+    const first = written(await writerOn().duplicatePlace(P(1)));
+    assert.deepEqual(must(await original('places', first.id))['groupId'], G1);
+    assert.equal(must(await original('places', first.id))['name'], '(Copy)');
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $unset: { groupId: '' } });
+    const second = written(await writerOn().duplicatePlace(P(1)));
+    assert.deepEqual(must(await original('places', second.id))['groupId'], G1);
+    await assertMirrored('places', second.id);
+  });
+
+  it('does not duplicate a place that does not exist, is in the trash, is of another group, or whose company is in the trash, is missing or is not an id', async () => {
+    const before = await snapshot();
+    assert.deepEqual(await writerOn().duplicatePlace(missingId()), { outcome: 'notFound' });
+    assert.deepEqual(await writerOn().duplicatePlace(P(3)), { outcome: 'notFound' });
+    assert.deepEqual(await writerOn().duplicatePlace(P(2)), { outcome: 'trashed' });
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { companyId: C(2) } });
+    assert.deepEqual(await writerOn().duplicatePlace(P(1)), { outcome: 'companyNotFound' });
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { companyId: 'not-an-id' } });
+    assert.deepEqual(await writerOn().duplicatePlace(P(1)), { outcome: 'companyNotFound' });
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $unset: { companyId: '' } });
+    assert.deepEqual(await writerOn().duplicatePlace(P(1)), { outcome: 'companyNotFound' });
+    await assert.rejects(() => writerOn().duplicatePlace('x' as never), InvalidWriteInputError);
+    assert.equal((await snapshot())[`${names()[1]}.places`]!.length, (before[`${names()[1]}.places`] as Document[]).length);
+  });
+
+  it('rolls back when the copy, the feed or groups.places cannot be written', async () => {
+    const before = await snapshot();
+    for (const hooks of [{ common: { places: { replaceOne: boom } } }, { common: { groups: { updateOne: boom } } }, { common: { reserve_with_google: { updateOne: boom } } }] as const) {
+      await assert.rejects(() => writerOn(withHooks(ctx.databases, hooks)).duplicatePlace(P(1)), /boom/);
+      assert.deepEqual(await snapshot(), before);
+    }
+  });
+
+  it('leaves nothing for sync:copies to repair', async () => {
+    written(await writerOn().duplicatePlace(P(1)));
+    const result = await syncCopies(ctx.databases, { ...options(), apply: false });
+    assert.deepEqual(Object.values(result.issues.totals()).filter((count) => count !== 0), []);
+  });
+});
+
+describe('companies and places writer: the perimeter of every write', () => {
+  const writerFor = async (companyIds: ObjectId[]): Promise<CompaniesPlacesWriter> => {
+    const ca = principalOf('CA', { groupId: G1, companyIds });
+    return companiesPlacesWriter(ca, (await accessFor(ca, G1))!, ctx.databases, { now: clock });
+  };
+
+  it('does not write, trash, restore, delete or duplicate a document outside the perimeter of the caller: it does not exist for him', async () => {
+    const outside = await writerFor([C(2)]);
+    const before = await snapshot();
+    const place = (await writerOn().currentVersion('places', P(1)))!;
+    const trashedPlace = (await writerOn().currentVersion('places', P(2)))!;
+    const company = (await writerOn().currentVersion('companies', C(1)))!;
+    assert.deepEqual(await outside.updatePlace(P(1), place, { name: 'x' }), { outcome: 'notFound' });
+    assert.deepEqual(await outside.trash('places', P(1), place), { outcome: 'notFound' });
+    assert.deepEqual(await outside.restore('places', P(2), trashedPlace), { outcome: 'notFound' });
+    assert.deepEqual(await outside.deleteTrashed('places', P(2), trashedPlace), { outcome: 'notFound' });
+    assert.deepEqual(await outside.duplicatePlace(P(1)), { outcome: 'notFound' });
+    assert.deepEqual(await outside.updateCompany(C(1), company, { name: 'x' }), { outcome: 'notFound' });
+    assert.deepEqual(await snapshot(), before);
+    const inside = await writerFor([C(1)]);
+    written(await inside.updatePlace(P(1), place, { name: 'mine' }));
+    written(await inside.duplicatePlace(P(1)));
+    written(await inside.updateCompany(C(1), company, { name: 'mine' }));
+  });
+
+  it('writes a map of special days that keeps keys that are not dates without counting them as days', async () => {
+    const days = Object.fromEntries(Array.from({ length: 400 }, (_unused, index) => [new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10), { closed: true, values: [] }]));
+    const version = (await writerOn().currentVersion('places', P(1)))!;
+    written(await writerOn().updatePlace(P(1), version, { 'openingTime.daySpecial': { legacyOddKey: { keep: true }, ...days } }));
   });
 });

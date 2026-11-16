@@ -1,0 +1,41 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'PLACES.LICENSE.TITLE' | t }}</legend>
+    @if (!state.canReserved()) {
+      <p class="note">{{ 'PLACES.RESERVED_NOTE' | t }}</p>
+    }
+    <div class="grid">
+      <fc-select
+        [formField]="f.plan"
+        [label]="'PLACES.LICENSE.PLAN' | t"
+        [hint]="state.canPlan() ? null : ('PLACES.LICENSE.PLAN_HINT' | t)"
+        [options]="planOptions()"
+        [error]="state.fieldError(f.plan)"
+        (blurred)="f.plan().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="f.expirationDate"
+        type="date"
+        [label]="'PLACES.LICENSE.EXPIRATION_DATE' | t"
+        [error]="state.fieldError(f.expirationDate)"
+        (blurred)="f.expirationDate().markAsTouched()"
+      />
+      <fc-select
+        [formField]="f.status"
+        [label]="'PLACES.LICENSE.STATUS' | t"
+        [options]="statusOptions()"
+        [error]="state.fieldError(f.status)"
+        (blurred)="f.status().markAsTouched()"
+      />
+    </div>
+    <fc-checkbox
+      [formField]="f.sentry"
+      [label]="'PLACES.LICENSE.SENTRY' | t"
+      [hint]="'PLACES.LICENSE.SENTRY_HINT' | t"
+      [error]="state.fieldError(f.sentry)"
+      (blurred)="f.sentry().markAsTouched()"
+    />
+  </fieldset>
+
+  <fc-place-save section="license" />
+</form>

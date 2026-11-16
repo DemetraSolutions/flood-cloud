@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { ObjectId } from 'mongodb';
 import { userName } from './backoffice.ts';
 import type { Backoffice } from './backoffice.ts';
@@ -16,6 +17,12 @@ export interface Failure {
   readonly details: unknown;
 }
 
+/** The creations of companies and places (and the duplication of a place) need an `Idempotency-Key`: a request of the tests gets a fresh one unless it brings its own. */
+const IDEMPOTENT = /\/(?:companies|places)(?:\/[0-9a-f]{24}\/duplicate)?$/;
+function withKey(method: string, path: string, headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  return method === 'POST' && IDEMPOTENT.test(path) && !Object.keys(headers ?? {}).some((name) => name.toLowerCase() === 'idempotency-key') ? { ...headers, 'idempotency-key': randomUUID() } : headers;
+}
+
 /**
  * Acting as the users of the seeded cluster: one login per user, then plain requests.
  *
@@ -32,7 +39,7 @@ export function actors(office: Backoffice) {
   };
   /** A request as `actor`, with its JSON body read (`undefined` for an empty one). */
   const call = async (actor: ObjectId, method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<Reply<any>> => {
-    const response = await office.call(method, path, await tokenOf(actor), body, headers);
+    const response = await office.call(method, path, await tokenOf(actor), body, withKey(method, path, headers));
     const text = await response.text();
     return { status: response.status, headers: response.headers, body: text === '' ? undefined : JSON.parse(text) };
   };

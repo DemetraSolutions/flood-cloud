@@ -4,14 +4,14 @@
 ```
 App di backoffice ─────────── /v1  (token opachi) ───────┐
                                                          │
-App del server di punto vendita ─ /v1 (credenziale: D-24)┼──► Flood Cloud ──► MongoDB
+App del server di punto vendita ─ /v1 (chiave di negozio)┼──► Flood Cloud ──► MongoDB
   └─ casse, palmari, altri client locali                 │      (Node.js,      ├─ <env>_common
      (non parlano mai con il cloud)                      │       Express 5)    └─ <env>_<groupId>
                                                          │          │
 Integrazioni di un gruppo ─── /public/v1 (API key) ──────┘          └──► provider esterni
                                                                          (fiscale, fatturazione, pagamenti…)
 ```
-- Il cloud ha **due superfici API** (`/v1` e `/public/v1`), ciascuna con la propria credenziale (`doc/Security-Model.md` §3). L'app del server di punto vendita è un'applicazione separata, fuori scope (D-22), che usa le stesse API `/v1` del backoffice (D-23); la sua credenziale è una decisione aperta (D-24). La superficie `/store/v1` prevista in origine è **eliminata**.
+- Il cloud ha **due superfici API** (`/v1` e `/public/v1`), ciascuna con la propria credenziale (`doc/Security-Model.md` §3). L'app del server di punto vendita è un'applicazione separata, fuori scope (D-22), che usa le stesse API `/v1` del backoffice (D-23) con la **chiave di negozio** (D-24, `fc_sk_…`, una per punto vendita, attivata con un codice monouso, `doc/Security-Model.md` §5): accettata solo dalle route che la ammettono. La superficie `/store/v1` prevista in origine è **eliminata**.
 - In ogni negozio c'è **un solo server di punto vendita** che centralizza casse e dispositivi: è l'unico che comunica con il cloud per quel negozio.
 
 ## 2. Stack
@@ -44,7 +44,7 @@ I nomi dei database dipendono dall'ambiente, come nel legacy, così più ambient
 | Common (identità, tenancy, sicurezza) | Database del gruppo (dati operativi) |
 |---|---|
 | `groups`, `users`, `companies`, `places` | catalogo (prodotti, reparti, categorie…) |
-| `sessions` | magazzino |
+| `sessions`, `storeKeys`, `storeActivationCodes` | magazzino |
 | `apiKeys`, `rateLimits`, `apiUsage`, `platformSettings` | vendite e documenti fiscali |
 | `auditLog` | clienti e fedeltà, prenotazioni… |
 
@@ -79,10 +79,10 @@ Il nuovo backend lavora sugli stessi cluster e database del legacy, che resta at
 ## 4. Superfici API
 | Superficie | Prefisso | Credenziale | CORS | Note |
 |---|---|---|---|---|
-| Backoffice | `/v1` | Bearer `fc_at_…` + refresh | allowlist origini del backoffice | ruoli PSA, D, SA, CA, PA |
+| Backoffice | `/v1` | Bearer `fc_at_…` + refresh; Bearer `fc_sk_…` (chiave di negozio) sulle sole route che la ammettono | allowlist origini del backoffice | ruoli PSA, D, SA, CA, PA; il server di punto vendita è un principal a parte con scope sul solo punto vendita |
 | Pubblica | `/public/v1` | `X-Api-Key: fc_pk_…` | chiuso | scope sul gruppo; rate limit e quote |
 
-Nessuna superficie `/store/v1` per il server di punto vendita: è un'app separata, fuori scope (D-22), che usa le API `/v1` (D-23); la credenziale è una decisione aperta (D-24).
+Nessuna superficie `/store/v1` per il server di punto vendita: è un'app separata, fuori scope (D-22), che usa le API `/v1` (D-23) con la chiave di negozio (D-24): un secondo tipo di credenziale della stessa superficie, smistato dal prefisso del Bearer, con opt-in route per route (`store: true`) e rate limit proprio (`doc/Security-Model.md` §5, §8.3).
 
 Lo stesso dominio (es. prodotti) può essere esposto su più superfici con permessi e campi diversi: il service è unico, cambiano route, autenticazione e mapper di risposta. Le regole REST sono in `doc/API-Guidelines.md`; il riferimento degli endpoint in `doc/API.md`.
 

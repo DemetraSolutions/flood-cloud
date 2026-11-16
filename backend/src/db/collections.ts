@@ -1,5 +1,6 @@
 import { FEATURES } from '../modules/groups/features.ts';
 import { COMPANY_BLOCK_PATHS, COMPANY_WHOLE_KEYS } from '../shared/legacy-write/company-paths.ts';
+import { PLACE_BLOCK_PATHS, PLACE_TOP_KEYS } from '../shared/legacy-write/place-paths.ts';
 import { PROVIDERS } from '../modules/groups/group.types.ts';
 import { LEGACY_MODULES, READ_ONLY_MODULE } from '../shared/security/rbac/permission-matrix.ts';
 import { POS_OWNED_FIELDS, POS_PRICE_LISTS_PATH } from '../modules/users/pos.catalog.ts';
@@ -7,6 +8,7 @@ import { SHIFT_SPECIAL_PATH, SHIFT_TIME_OWNED_FIELDS } from '../modules/users/sh
 import { ACTIVITY_EVENTS_INDEXES } from './activity-events-schema.ts';
 import { DEALERS_INDEXES, DEALERS_VALIDATOR } from './dealers-schema.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
+import { STORE_ACTIVATION_CODES_INDEXES, STORE_ACTIVATION_CODES_VALIDATOR, STORE_KEYS_INDEXES, STORE_KEYS_VALIDATOR } from './store-keys-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
 import { COMPANIES_MIRROR_INDEXES, PLACES_MIRROR_INDEXES, SYNC_ISSUES_INDEXES } from './mirror-schema.ts';
 
@@ -174,32 +176,13 @@ export const COMPANIES_OWNED_FIELDS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * Fields of the legacy `places` documents of a group database this backend may `$set`: the registry data of the place and its state
- * (`doc/Tasks.md` 5.6.3 and the legacy analysis §3.2). `devices`, `rooms`, `storages`, `printStations`, `productionCenter`, the
- * configuration blocks (`general`, `receipt`, `ordering`, `roomsSettings`, `openingTime`…), `integrations` and every unknown key are
- * never written: the POS and the legacy replace them whole, so writing them from here would corrupt them. `plan` is not included
- * (only PSA may set it in the legacy: left out until a route needs it). `trash` is written by trash and restore only.
+ * Fields of the legacy `places` documents of a group database this backend may `$set` (`doc/Tasks.md` 5.6.3 and area 7, step 7A): the registry data, the license
+ * (`plan`, `expirationDate`, `status`, `platform.sentry`) and the state of the place, the timezone, and the leaf paths of the blocks listed in `PLACE_BLOCK_PATHS`
+ * (`general.priceLists`, `openingTime.weekGeneric|daySpecial`, `delivery.time.weekGeneric|daySpecial`). The blocks themselves (`general`, `openingTime`, `delivery`, `platform`)
+ * are never written whole. `devices`, `rooms`, `storages`, `printStations`, `productionCenter`, `integrations`, `server`, `connectorAddress`, `platform` (but for `platform.sentry`)
+ * and every unknown key are never written: the POS and the legacy replace them, so writing them from here would corrupt them. `trash` is written by trash and restore only.
  */
-export const PLACES_OWNED_FIELDS: readonly string[] = Object.freeze([
-  'name',
-  'address',
-  'postcode',
-  'city',
-  'countryAreaCode',
-  'countryCode',
-  'contact',
-  'email',
-  'telephone',
-  'companyId',
-  'listId',
-  'ecommerceListId',
-  'invoicePS',
-  'timezone',
-  'status',
-  'trash',
-  'expirationDate',
-  'updateDate',
-]);
+export const PLACES_OWNED_FIELDS: readonly string[] = Object.freeze([...PLACE_TOP_KEYS, 'trash', ...PLACE_BLOCK_PATHS, 'updateDate']);
 
 /**
  * Fields of the legacy `files` documents of a group database (the images of the media manager) this backend writes (`doc/Tasks.md` area 6, step 6B): only whole
@@ -264,6 +247,14 @@ export const COLLECTIONS = {
     countries: { ownership: 'legacy-read' },
     // The Reserve with Google feed of the places: only the write service of places touches it (restore: upsert; trash and delete: deleteOne).
     reserve_with_google: { ownership: 'legacy-write', ownedFields: RESERVE_WITH_GOOGLE_OWNED_FIELDS },
+    // The keys of the idempotent creations (`Idempotency-Key`): unique per user, route and key; a finished response is kept 24 hours.
+    idempotencyKeys: {
+      ownership: 'new',
+      indexes: [
+        { name: 'principal_1_route_1_key_1', key: { principal: 1, route: 1, key: 1 }, unique: true },
+        { name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+      ],
+    },
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
     activityEvents: { ownership: 'new', indexes: ACTIVITY_EVENTS_INDEXES },
     dealers: { ownership: 'new', indexes: DEALERS_INDEXES, validator: DEALERS_VALIDATOR },
@@ -274,6 +265,9 @@ export const COLLECTIONS = {
     syncIssues: { ownership: 'new', indexes: SYNC_ISSUES_INDEXES },
     userCredentials: { ownership: 'new', validator: USER_CREDENTIALS_VALIDATOR },
     sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
+    // The server of a point of sale (D-24): the pending activation code of a place and its store keys, hashes only. Ours alone: the legacy knows nothing of them.
+    storeActivationCodes: { ownership: 'new', indexes: STORE_ACTIVATION_CODES_INDEXES, validator: STORE_ACTIVATION_CODES_VALIDATOR },
+    storeKeys: { ownership: 'new', indexes: STORE_KEYS_INDEXES, validator: STORE_KEYS_VALIDATOR },
   },
   group: {
     // Written only by the write service of companies and places (`shared/legacy-write`, `$set` of the owned fields, plus insert and delete of
@@ -284,6 +278,8 @@ export const COLLECTIONS = {
     // The images of the media manager: the upload inserts whole documents (`FILES_OWNED_FIELDS`), the lists read them; the objects live in the storage bucket.
     files: { ownership: 'legacy-write', ownedFields: FILES_OWNED_FIELDS },
     // Read only, to check that the ids a catalog of the group refers to exist.
+    // The e-mail templates of the group, read only: to check the ids the reservations and the appointments of a place refer to.
+    email_templates: { ownership: 'legacy-read' },
     products: { ownership: 'legacy-read' },
     products_categories: { ownership: 'legacy-read' },
     contacts: { ownership: 'legacy-read' },

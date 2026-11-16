@@ -158,14 +158,15 @@ export async function run(
     retentionDays: config.activityLogRetentionDays,
     errorRetentionDays: config.activityLogErrorRetentionDays,
   });
-  const backoffice = createBackofficeModules({ config, databases, activityLog, logger, mediaStorage });
+  const rateLimiter = createRateLimiter(databases);
+  const backoffice = createBackofficeModules({ config, databases, activityLog, logger, rateLimiter, mediaStorage });
   const app = createApp({
     config,
     logger,
     activityLog,
-    rateLimiter: createRateLimiter(databases),
+    rateLimiter,
     routes: { v1: backoffice.routes },
-    authenticate: { v1: backoffice.authenticate },
+    authenticate: { v1: backoffice.authenticate, store: backoffice.authenticateStore },
     groupAccess: { groups: backoffice.groups },
     readiness: { isShuttingDown: () => shuttingDown, checks: [createPingCheck(databases)] },
   });

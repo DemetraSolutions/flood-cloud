@@ -35,6 +35,17 @@ describe('media storage configuration', () => {
     }
   });
 
+  it('reads the thresholds of the store keys: 600 requests a minute a key, 10 exchanges a minute an address, 20 administrations a minute a user, a code valid 24 hours', () => {
+    const defaults = loadConfig(validEnv());
+    assert.deepEqual([defaults.rateLimitApiPerStore, defaults.rateLimitStoreActivationPerIp, defaults.rateLimitStoreKeyAdminPerUser, defaults.storeActivationCodeTtlMinutes], [600, 10, 20, 1440]);
+    const custom = loadConfig(validEnv({ RATE_LIMIT_API_PER_STORE: '1000000', RATE_LIMIT_STORE_ACTIVATION_PER_IP: '1', RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: '100000', STORE_ACTIVATION_CODE_TTL_MINUTES: '5' }));
+    assert.deepEqual([custom.rateLimitApiPerStore, custom.rateLimitStoreActivationPerIp, custom.rateLimitStoreKeyAdminPerUser, custom.storeActivationCodeTtlMinutes], [1_000_000, 1, 100_000, 5]);
+    assert.equal(loadConfig(validEnv({ STORE_ACTIVATION_CODE_TTL_MINUTES: '10080' })).storeActivationCodeTtlMinutes, 10080);
+    for (const [variable, bad] of [['RATE_LIMIT_API_PER_STORE', '0'], ['RATE_LIMIT_API_PER_STORE', '1000001'], ['RATE_LIMIT_STORE_ACTIVATION_PER_IP', '100001'], ['RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 'x'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '4'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '10081']] as const) {
+      assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/, `${variable}=${bad}`);
+    }
+  });
+
   it('reads a Google Cloud Storage bucket with the metadata server, and with a credentials file, deeply frozen', () => {
     const metadata = loadConfig(validEnv({ MEDIA_STORAGE: 'gcs', GCS_MEDIA_BUCKET: 'my-media_bucket.1', GCS_AUTH: 'metadata', GCS_SERVICE_ACCOUNT_FILE: '/ignored.json' })).media;
     assert.deepEqual(metadata, { kind: 'gcs', bucket: 'my-media_bucket.1', auth: { mode: 'metadata' } });

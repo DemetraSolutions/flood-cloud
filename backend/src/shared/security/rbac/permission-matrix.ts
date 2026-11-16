@@ -30,7 +30,7 @@ export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze(
   groups: { read: [P.GROUPS_READ, P.DEALERS_READ], write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, P.DEALERS_CREATE, P.DEALERS_UPDATE] },
   users: { read: [P.USERS_READ], write: [P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH, P.USERS_DELETE] },
   companies: { read: [P.COMPANIES_READ], write: [P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH, P.COMPANIES_DELETE] },
-  places: { read: [P.PLACES_READ], write: [P.PLACES_CREATE, P.PLACES_UPDATE, P.PLACES_TRASH] },
+  places: { read: [P.PLACES_READ], write: [P.PLACES_CREATE, P.PLACES_UPDATE, P.PLACES_TRASH, P.PLACES_DELETE] },
   // Group-wide loyalty and catalog data kept in the group document (card types, points collections, prize catalogues; favorites and promotions): the legacy menus are governed by these two modules.
   fidelity: { read: [P.FIDELITY_READ], write: [P.FIDELITY_UPDATE] },
   products: { read: [P.PRODUCTS_READ], write: [P.PRODUCTS_UPDATE] },

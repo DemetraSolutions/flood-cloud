@@ -1,0 +1,50 @@
+@for (group of groups(); track group.id) {
+  <fieldset>
+    <legend>{{ group.legend | t }}</legend>
+    <div class="grid">
+      @for (definition of group.fields; track definition.key) {
+        @switch (control(definition)) {
+          @case ('flag') {
+            <fc-checkbox
+              [formField]="flagField(definition.key)"
+              [label]="label(definition)"
+              [hint]="hint(definition)"
+              [error]="state.fieldError(flagField(definition.key))"
+              (blurred)="flagField(definition.key)().markAsTouched()"
+            />
+          }
+          @case ('long') {
+            <fc-textarea
+              [formField]="textField(definition.key)"
+              [label]="label(definition)"
+              [error]="state.fieldError(textField(definition.key))"
+              (blurred)="textField(definition.key)().markAsTouched()"
+            />
+          }
+          @case ('choice') {
+            <fc-select
+              [formField]="textField(definition.key)"
+              [label]="label(definition)"
+              [hint]="hint(definition)"
+              [placeholder]="hasNone(definition) ? ('PLACES.NONE' | t) : null"
+              [options]="options()[definition.key]"
+              [error]="state.fieldError(textField(definition.key))"
+              (blurred)="textField(definition.key)().markAsTouched()"
+            />
+          }
+          @default {
+            <fc-text-field
+              [formField]="textField(definition.key)"
+              [type]="textType(definition)"
+              [inputmode]="inputMode(definition)"
+              [label]="label(definition)"
+              [hint]="hint(definition)"
+              [error]="state.fieldError(textField(definition.key))"
+              (blurred)="textField(definition.key)().markAsTouched()"
+            />
+          }
+        }
+      }
+    </div>
+  </fieldset>
+}

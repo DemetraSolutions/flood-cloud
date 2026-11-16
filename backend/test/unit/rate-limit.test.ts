@@ -13,10 +13,10 @@ import { testConfig } from '../helpers/app.ts';
 const rules = createRateLimitRules(testConfig());
 
 describe('createRateLimitRules', () => {
-  it('builds the twelve rules from the thresholds', () => {
+  it('builds the fifteen rules from the thresholds', () => {
     assert.deepEqual(
       Object.values(rules).map(({ bucket, limit }) => [bucket, limit]),
-      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['media-upload:user', 30], ['media-upload-day:user', 300], ['media-upload-day:group', 2000], ['api:user', 300]],
+      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['media-upload:user', 30], ['media-upload-day:user', 300], ['media-upload-day:group', 2000], ['api:user', 300], ['api:store', 600], ['storeActivation:ip', 10], ['storeKeyAdmin:user', 20]],
     );
     const custom = createRateLimitRules(testConfig({ RATE_LIMIT_LOGIN_PER_USERNAME: '7', RATE_LIMIT_API_PER_USER: '9', RATE_LIMIT_MEDIA_UPLOAD_PER_USER: '4', RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY: '8', RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY: '9' }));
     assert.deepEqual([custom.loginPerUsername.limit, custom.apiPerUser.limit, custom.mediaUploadPerUser.limit], [7, 9, 4]);
@@ -26,6 +26,18 @@ describe('createRateLimitRules', () => {
     assert.equal(rules.mediaUploadPerGroupDaily.key({} as never, res({ groupId: { toHexString: () => 'abc' } })), 'abc');
     assert.equal(rules.mediaUploadPerGroupDaily.key({} as never, res()), null);
     assert.ok(Object.isFrozen(rules) && Object.isFrozen(rules.apiPerUser));
+    const tuned = createRateLimitRules(testConfig({ RATE_LIMIT_API_PER_STORE: '11', RATE_LIMIT_STORE_ACTIVATION_PER_IP: '3', RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: '4' }));
+    assert.deepEqual([tuned.apiPerStore.limit, tuned.storeActivationPerIp.limit, tuned.storeKeyAdminPerUser.limit], [11, 3, 4]);
+  });
+
+  it('counts a store per its key and never per a user: the rule of a store has no subject outside a store principal', () => {
+    const store = { locals: { store: { keyId: new ObjectId('0123456789abcdef01234567') } } } as never;
+    const user = { locals: { auth: { userId: new ObjectId('0123456789abcdef01234567') } } } as never;
+    assert.equal(rules.apiPerStore.key({} as never, store), '0123456789abcdef01234567');
+    assert.equal(rules.apiPerStore.key({} as never, user), null, 'a user is not counted by the rule of the stores');
+    assert.equal(rules.apiPerUser.key({} as never, store), null, 'a store is not counted by the per-user rule: the route builder must mount its own');
+    assert.equal(rules.storeActivationPerIp.key({ ip: '203.0.113.9' } as never, { locals: {} } as never), '203.0.113.9');
+    assert.equal(rules.storeKeyAdminPerUser.key({} as never, user), '0123456789abcdef01234567');
   });
 
   it('keys by normalized username, IP and user id', () => {

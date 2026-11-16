@@ -232,10 +232,12 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
     },
 
     logoSource: async (principal, access, imageId, forCompany) => {
-      if (principal.scope.kind === 'companies' && forCompany === null) {
+      // A company or place administrator uses only the images of the company the logo is of (the company of the place, for a place administrator).
+      const restricted = principal.scope.kind === 'companies' || principal.scope.kind === 'places';
+      if (restricted && forCompany === null) {
         return null;
       }
-      const owner: Filter<Document> = principal.scope.kind === 'companies' ? { companyId: forCompany } : {};
+      const owner: Filter<Document> = restricted ? { companyId: forCompany } : {};
       const document = await repository.findImage(principal, access, imageId, owner);
       return document === null ? null : toLogoSource(document);
     },

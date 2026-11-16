@@ -21,6 +21,7 @@ export const REFERENCE_ENDPOINTS = {
   customers: 'lookup/customers',
   'contact-groups': 'lookup/contact-groups',
   'price-lists': 'lookup/price-lists',
+  'email-templates': 'lookup/email-templates',
 } as const;
 
 /** A list the store keeps. */

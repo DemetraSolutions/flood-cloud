@@ -6,7 +6,7 @@ import { assertVerifiedGroupAccess } from './group-access.ts';
 import { assertCountedGroups, countByGroupPipeline, countsByGroup } from './group-counts.ts';
 import type { TrashCount } from './group-counts.ts';
 import type { GroupAccess } from './group-access.ts';
-import type { AuthPrincipal } from './principal.ts';
+import type { ScopeHolder } from './principal.ts';
 
 /** The copies kept in the common database (`common.companies`, `common.places`) that this module can read. */
 export type MirrorCollection = 'companies' | 'places';
@@ -19,11 +19,12 @@ const MIRROR_COLLECTIONS: readonly string[] = ['companies', 'places'];
 /**
  * The fields of each copy collection an application read may name, return or compute from: the one central allowlist.
  * The copies hold the credentials of the integrations of the places and the bank data of the companies, so nothing else is ever readable:
- * the companies expose, besides the compact reference (`name`, `trash`), the fields of the list of companies (`code`, `city`, `countryAreaCode`, `countryCode`, `status`).
+ * the companies expose, besides the compact reference (`name`, `trash`), the fields of the list of companies (`code`, `city`, `countryAreaCode`, `countryCode`, `status`);
+ * the places the compact reference (`name`, `trash`, `companyId`) and the fields of the list of places (`plan`, `status`, `city`, `countryAreaCode`, `countryCode`, `expirationDate`).
  */
 export const MIRROR_FIELDS: Readonly<Record<MirrorCollection, ReadonlySet<string>>> = Object.freeze({
   companies: new Set(['_id', 'name', 'trash', 'code', 'city', 'countryAreaCode', 'countryCode', 'status']),
-  places: new Set(['_id', 'name', 'trash', 'companyId']),
+  places: new Set(['_id', 'name', 'trash', 'companyId', 'plan', 'status', 'city', 'countryAreaCode', 'countryCode', 'expirationDate']),
 });
 
 /** Prefix of the computed keys a pipeline may add (`__sortKey`); they are never stored fields. */
@@ -268,7 +269,7 @@ function build(groupId: ObjectId, databases: Databases, name: MirrorCollection):
  * @returns The read access to the copies of the group.
  * @throws {Error} If the access was not issued by `requireGroupAccess` or does not belong to the principal.
  */
-export function groupMirror(principal: AuthPrincipal, access: GroupAccess, databases: Databases, name: MirrorCollection): GroupMirror {
+export function groupMirror(principal: ScopeHolder, access: GroupAccess, databases: Databases, name: MirrorCollection): GroupMirror {
   assertVerifiedGroupAccess(principal, access);
   return build(access.groupId, databases, name);
 }

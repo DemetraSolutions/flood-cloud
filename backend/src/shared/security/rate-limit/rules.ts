@@ -30,6 +30,12 @@ export interface RateLimitRules {
   readonly mediaUploadPerGroupDaily: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
   readonly apiPerUser: RateLimitRule;
+  /** Every `/v1` request per store key (the route builder applies it to every route a store key may call, and to no other: the per-user rule would let a store through with no limit, its key being the user's). */
+  readonly apiPerStore: RateLimitRule;
+  /** Activation code exchanges per client IP address: the route is anonymous, so this runs before the body is read. */
+  readonly storeActivationPerIp: RateLimitRule;
+  /** Creations and cancellations of activation codes and revocations of store keys per authenticated user. */
+  readonly storeKeyAdminPerUser: RateLimitRule;
 }
 
 /** Length of a daily quota window. */
@@ -76,5 +82,8 @@ export function createRateLimitRules(config: Config): RateLimitRules {
       key: (_req: Request, res: Response) => res.locals.groupAccess?.groupId.toHexString() ?? null,
     }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
+    apiPerStore: Object.freeze({ bucket: 'api:store', limit: config.rateLimitApiPerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
+    storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),
+    storeKeyAdminPerUser: Object.freeze({ bucket: 'storeKeyAdmin:user', limit: config.rateLimitStoreKeyAdminPerUser, key: perUser }),
   });
 }

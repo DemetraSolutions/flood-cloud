@@ -16,11 +16,12 @@ export const COMPANIES_MIRROR_INDEXES: readonly IndexSpec[] = Object.freeze([
   { name: 'groupId_1_code_1', key: { groupId: 1, code: 1 } },
 ]);
 
-/** Indexes of `common.places`, the mirror of the `places` collections of the group databases: as the companies plus by company. */
+/** Indexes of `common.places`, the mirror of the `places` collections of the group databases: by group and `_id`, by group and name, by group and company (the filter of the list by company) and by group and status (the filter of the list). All non-unique. */
 export const PLACES_MIRROR_INDEXES: readonly IndexSpec[] = Object.freeze([
   { name: 'groupId_1__id_1', key: { groupId: 1, _id: 1 } },
   { name: 'groupId_1_name_1', key: { groupId: 1, name: 1 } },
   { name: 'groupId_1_companyId_1', key: { groupId: 1, companyId: 1 } },
+  { name: 'groupId_1_status_1', key: { groupId: 1, status: 1 } },
 ]);
 
 /**

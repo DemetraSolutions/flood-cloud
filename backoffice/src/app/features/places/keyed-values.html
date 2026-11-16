@@ -1,0 +1,18 @@
+<fieldset>
+  <legend>{{ legend() }}</legend>
+  @if (entries().length === 0) {
+    <p class="note">{{ 'PLACES.NO_KEYS' | t }}</p>
+  }
+  <div class="grid">
+    @for (key of entries(); track key) {
+      <fc-text-field
+        [type]="type()"
+        [inputmode]="type() === 'number' ? 'decimal' : null"
+        [label]="labelOf()(key)"
+        [value]="valueOf(key)"
+        [disabled]="!state.canWrite()"
+        (valueChange)="set(key, $event)"
+      />
+    }
+  </div>
+</fieldset>

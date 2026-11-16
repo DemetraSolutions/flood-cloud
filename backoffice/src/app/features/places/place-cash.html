@@ -1,0 +1,15 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fc-place-fields block="cashSettings" />
+  @if (state.hasFeature('rooms')) {
+    <fc-rows-editor
+      [rows]="rows"
+      [columns]="columns()"
+      [legend]="'PLACES.CASH.SHIFT_NAMES' | t"
+      [addLabel]="'PLACES.CASH.ADD_SHIFT_NAME' | t"
+      [max]="max"
+      (add)="add()"
+      (remove)="remove($event)"
+    />
+  }
+  <fc-place-save section="cashSettings" />
+</form>

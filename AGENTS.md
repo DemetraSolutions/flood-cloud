@@ -59,7 +59,7 @@ MongoDB con il driver ufficiale, senza ODM.
 
 ### 3. Security Expert (`security_expert`)
 Garante di `doc/Security-Model.md`; obbligatorio su ogni modifica di sicurezza.
-- Due superfici: backoffice `/v1` con token opachi e refresh rotante (usata anche dall'app del punto vendita, credenziale D-24 aperta), API pubbliche con chiavi per gruppo.
+- Due superfici: backoffice `/v1` con token opachi e refresh rotante (usata anche dall'app del punto vendita con la chiave di negozio, D-24: una per punto vendita, codice di attivazione monouso, opt-in route per route), API pubbliche con chiavi per gruppo.
 - scrypt, RBAC (PSA, D, SA, CA, PA, E), isolamento dei gruppi, rate limit e quote, validazione, upload, webhook, header, CORS, segreti e log.
 
 ### 4. Tester Expert (`tester_expert`)
@@ -111,6 +111,7 @@ Guide operative attivate automaticamente in base alla `description`, in `.agents
 | `input-validation` | Validazione di body, query, params senza librerie |
 | `tenant-isolation` | Accesso a dati di gruppo, ruoli, scope, database del gruppo, test di isolamento |
 | `opaque-token-auth` | Login del backoffice, sessioni, refresh, logout, middleware `/v1` |
+| `store-key-auth` | Chiave di negozio (D-24): codice di attivazione, scambio, principal `store`, opt-in `store` delle route, blocco e revoca, `STORE_PROFILE`, rate limit `api:store` |
 | `public-api-keys` | API key della superficie pubblica |
 | `rate-limiting-metering` | Rate limit, quote e conteggio d'uso |
 | `password-hashing` | Password e PIN con scrypt |

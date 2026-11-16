@@ -5,6 +5,7 @@ import { legacyScopeIds } from '../../src/shared/security/scope/legacy-scope.ts'
 import { buildPrincipal } from '../../src/shared/security/scope/principal.ts';
 import type { StoredUser } from '../../src/shared/security/scope/principal.ts';
 import { computeScope } from '../../src/shared/security/scope/scope.ts';
+import type { UserScope } from '../../src/shared/security/scope/scope.ts';
 import { companiesScopeFilter, companyInScope, groupsScopeFilter, placeInScope, placesScopeFilter, usersScopeFilter, withScope } from '../../src/shared/security/scope/scope-filters.ts';
 import type { Scope } from '../../src/shared/security/scope/scope.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
@@ -141,6 +142,7 @@ describe('scope filters', () => {
   const dealer: Scope = { kind: 'dealer', groupIds: new Set([g1.toHexString()]) };
   const companies: Scope = { kind: 'companies', groupId: g1, companyIds: [c1, c2], placeIds: [p1, p2] };
   const places: Scope = { kind: 'places', groupId: g1, placeIds: [p1] };
+  const store: Scope = { kind: 'store', groupId: g1, companyId: c1, placeId: p1 };
   const NOTHING = { _id: { $in: [] } };
   const managed = (role: 'D' | 'SA' | 'CA' | 'PA') => ({ $in: role === 'D' || role === 'SA' ? ['SA', 'CA', 'PA', 'E', null] : role === 'CA' ? ['CA', 'PA', 'E', null] : ['PA', 'E', null] });
 
@@ -179,14 +181,14 @@ describe('scope filters', () => {
   it('groups', () => {
     assert.deepEqual(groupsScopeFilter({ kind: 'platform' }), {});
     assert.deepEqual(groupsScopeFilter(dealer), { _id: { $in: [...(dealer as Extract<Scope, { kind: 'dealer' }>).groupIds].map((hex) => ObjectId.createFromHexString(hex)) } });
-    for (const scope of [{ kind: 'group', groupId: g1 }, companies, places] as Scope[]) {
+    for (const scope of [{ kind: 'group', groupId: g1 }, companies, places] as UserScope[]) {
       assert.deepEqual(groupsScopeFilter(scope), { _id: g1 });
     }
     assert.deepEqual(groupsScopeFilter({ kind: 'none' }), NOTHING);
   });
 
   it('companies', () => {
-    for (const scope of [{ kind: 'platform' }, dealer, { kind: 'group', groupId: g1 }] as Scope[]) {
+    for (const scope of [{ kind: 'platform' }, dealer, { kind: 'group', groupId: g1 }] as UserScope[]) {
       assert.deepEqual(companiesScopeFilter(scope), {});
     }
     assert.deepEqual(companiesScopeFilter(companies), { _id: { $in: [c1, c2] } });
@@ -203,6 +205,8 @@ describe('scope filters', () => {
     assert.equal(companyInScope(companies, fixtureId('company', 99)), false);
     assert.equal(companyInScope(places, c1), false);
     assert.equal(companyInScope({ kind: 'none' }, c1), false);
+    assert.equal(companyInScope(store, c1), true, 'a store reaches its own company');
+    assert.equal(companyInScope(store, c2), false);
   });
 
   it('tells whether a place is inside a scope', () => {
@@ -215,6 +219,8 @@ describe('scope filters', () => {
     assert.equal(placeInScope(places, p1, undefined), true);
     assert.equal(placeInScope(places, fixtureId('place', 99), c1), false);
     assert.equal(placeInScope({ kind: 'none' }, p1, c1), false);
+    assert.equal(placeInScope(store, p1, c2), true, 'a store reaches its own place, whatever the company stored on it');
+    assert.equal(placeInScope(store, p2, c1), false);
   });
 
   it('places', () => {
@@ -224,6 +230,7 @@ describe('scope filters', () => {
     assert.deepEqual(placesScopeFilter(companies), { companyId: { $in: [c1, c2] } });
     assert.deepEqual(placesScopeFilter(places), { _id: { $in: [p1] } });
     assert.deepEqual(placesScopeFilter({ kind: 'none' }), NOTHING);
+    assert.deepEqual(placesScopeFilter(store), { _id: p1 }, 'a store sees its own place and nothing else');
   });
 
   it('withScope puts the scope and the query side by side under $and', () => {

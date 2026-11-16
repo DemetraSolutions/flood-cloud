@@ -97,6 +97,14 @@ export interface Config {
   readonly rateLimitApiPerUser: number;
   /** Failed authentications per minute allowed to a client IP on `/v1` (`RATE_LIMIT_UNAUTHENTICATED_PER_IP`). */
   readonly rateLimitUnauthenticatedPerIp: number;
+  /** Requests per minute allowed to a store key on the `/v1` API (`RATE_LIMIT_API_PER_STORE`). */
+  readonly rateLimitApiPerStore: number;
+  /** Activation code exchanges per minute allowed to a client IP address (`RATE_LIMIT_STORE_ACTIVATION_PER_IP`). */
+  readonly rateLimitStoreActivationPerIp: number;
+  /** Activation code creations, cancellations and key revocations per minute allowed to a user (`RATE_LIMIT_STORE_KEY_ADMIN_PER_USER`). */
+  readonly rateLimitStoreKeyAdminPerUser: number;
+  /** Minutes an activation code of a store key stays valid (`STORE_ACTIVATION_CODE_TTL_MINUTES`). */
+  readonly storeActivationCodeTtlMinutes: number;
   /** Image uploads per minute allowed to a user (`RATE_LIMIT_MEDIA_UPLOAD_PER_USER`): each decodes and resizes an image and writes five objects. */
   readonly rateLimitMediaUploadPerUser: number;
   /** Image uploads per day allowed to a user (`RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY`). */
@@ -532,6 +540,10 @@ export function loadConfig(env: Env): Config {
   const rateLimitMediaUploadPerUser = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_USER', 30, 1, 100000);
   const rateLimitMediaUploadPerUserDaily = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY', 300, 1, 1_000_000);
   const rateLimitMediaUploadPerGroupDaily = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY', 2000, 1, 1_000_000);
+  const rateLimitApiPerStore = readInteger(env, issues, 'RATE_LIMIT_API_PER_STORE', 600, 1, 1_000_000);
+  const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
+  const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
+  const storeActivationCodeTtlMinutes = readInteger(env, issues, 'STORE_ACTIVATION_CODE_TTL_MINUTES', 1440, 5, 10080);
   const media = readMedia(env, issues);
   const activityLogRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_RETENTION_DAYS', 365, 1, 3650);
   const activityLogErrorRetentionDays = readInteger(env, issues, 'ACTIVITY_LOG_ERROR_RETENTION_DAYS', 90, 1, 3650);
@@ -582,6 +594,10 @@ export function loadConfig(env: Env): Config {
     rateLimitMediaUploadPerUser === undefined ||
     rateLimitMediaUploadPerUserDaily === undefined ||
     rateLimitMediaUploadPerGroupDaily === undefined ||
+    rateLimitApiPerStore === undefined ||
+    rateLimitStoreActivationPerIp === undefined ||
+    rateLimitStoreKeyAdminPerUser === undefined ||
+    storeActivationCodeTtlMinutes === undefined ||
     media === undefined ||
     activityLogRetentionDays === undefined ||
     activityLogErrorRetentionDays === undefined
@@ -613,6 +629,10 @@ export function loadConfig(env: Env): Config {
     rateLimitMediaUploadPerUser,
     rateLimitMediaUploadPerUserDaily,
     rateLimitMediaUploadPerGroupDaily,
+    rateLimitApiPerStore,
+    rateLimitStoreActivationPerIp,
+    rateLimitStoreKeyAdminPerUser,
+    storeActivationCodeTtlMinutes,
     media,
     activityLogRetentionDays,
     activityLogErrorRetentionDays,

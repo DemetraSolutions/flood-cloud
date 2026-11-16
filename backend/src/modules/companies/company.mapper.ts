@@ -23,7 +23,8 @@ export interface Leaf {
   readonly readOnly?: true;
 }
 
-const isPlain = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+/** Whether a stored value is a plain object (not an array, not `null`). */
+export const isPlain = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
  * A stored number: a JS number or one of the BSON numeric types the exact reads give (`Int32`, `Double`, `Long`).
@@ -36,27 +37,29 @@ export function numberOf(value: unknown): number | null {
   return number !== null && Number.isFinite(number) ? number : null;
 }
 
-const stringOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null);
-const nonEmptyOrNull = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
+/** A string kept as it is; anything else is `null`. */
+export const stringOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+/** A non-empty string kept as it is; `''` and anything that is not a string is `null`. */
+export const nonEmptyOrNull = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
 
 /** A string kept as it is; anything else is `null`. */
-const text: Codec = { read: stringOrNull, write: (value) => value };
+export const text: Codec = { read: stringOrNull, write: (value) => value };
 /** A string the document keeps as `''` when empty (the e-invoicing keys, the fiscal code): `''` and anything else that is not text read as `null`, and `null` is written as `''`. */
 const blank: Codec = { read: nonEmptyOrNull, write: (value) => value ?? '' };
 /** A string the document may hold as `null` or `''` (e-mail, telephone): `''` reads as `null`, `null` is written as `null`. */
-const optionalText: Codec = { read: nonEmptyOrNull, write: (value) => value };
+export const optionalText: Codec = { read: nonEmptyOrNull, write: (value) => value };
 /** A string with `''` for none, in the domain too (the media names). */
 const plainText: Codec = { read: (value) => (typeof value === 'string' ? value : ''), write: (value) => value };
 /** A flag: only `true` is on. */
-const flag: Codec = { read: (value) => value === true, write: (value) => value };
+export const flag: Codec = { read: (value) => value === true, write: (value) => value };
 /** A number, `0` when the document has none. */
 const quantity: Codec = { read: (value) => numberOf(value) ?? 0, write: (value) => value };
 /** A whole number or `null`. */
 const wholeNumber: Codec = { read: (value) => ((n) => (n !== null && Number.isInteger(n) ? n : null))(numberOf(value)), write: (value) => value };
 /** The `active` or `disabled` of a status flag. */
-const status: Codec = { read: (value) => (value === true ? 'active' : 'disabled'), write: (value) => value === 'active' };
+export const status: Codec = { read: (value) => (value === true ? 'active' : 'disabled'), write: (value) => value === 'active' };
 /** A date as an ISO instant, `null` when missing or not a valid date. */
-const instant: Codec = {
+export const instant: Codec = {
   read: (value) => (value instanceof Date && !Number.isNaN(value.getTime()) ? value.toISOString() : null),
   write: (value) => (value === null ? null : new Date(value as string)),
 };
@@ -66,7 +69,7 @@ const position: Codec = { read: (value) => (value === 'prefix' || value === 'suf
 const reference: Codec = { read: nonEmptyOrNull, write: (value) => value ?? '' };
 
 /** A list of the document read item by item: what is not an object is left out. */
-const listOf = (item: (stored: Record<string, unknown>) => unknown, write: (value: never) => unknown): Codec => ({
+export const listOf = (item: (stored: Record<string, unknown>) => unknown, write: (value: never) => unknown): Codec => ({
   read: (value) => (Array.isArray(value) ? value.filter(isPlain).map(item) : []),
   write: (value) => (value as never[]).map(write),
 });
@@ -111,7 +114,7 @@ const invoiceSeries = listOf(
  * well formed are left out of the domain; on a write every entry the document has is kept exactly as it is (other currencies, other keys of an entry),
  * and only the currencies of the domain value are set.
  */
-const minimumOrder: Codec = {
+export const minimumOrder: Codec = {
   read: (value) => {
     const amounts: Record<string, number> = {};
     for (const [code, entry] of Object.entries(isPlain(value) ? value : {})) {
@@ -158,7 +161,7 @@ export function legacyLogoDescriptor(logoValue: MediaLogo): Document {
  * A logo descriptor: the ten known keys (text, and the creation time as a number), `null` when the document has none. The unknown keys of the stored object (`mmThumb`)
  * are never returned. A write is `null` (remove) or the descriptor of an image of the group, which the service has built and checked: it is stored in the form of the legacy.
  */
-const logo: Codec = {
+export const logo: Codec = {
   read: (value) => (isPlain(value) ? { ...Object.fromEntries(LOGO_KEYS.map((key) => [key, stringOrNull(value[key])])), filectime: numberOf(value['filectime']) } : null),
   write: (value) => (value === null ? null : legacyLogoDescriptor(value as MediaLogo)),
 };
@@ -269,10 +272,22 @@ export function setValueAt(tree: Record<string, unknown>, path: string, value: u
  */
 export function toCompany(document: Document, groupId: ObjectId): Company {
   const company: Record<string, unknown> = { id: document['_id'] instanceof ObjectId ? document['_id'].toHexString() : '', groupId: groupId.toHexString() };
-  for (const leaf of LEAVES) {
-    setValueAt(company, leaf.domain, leaf.codec.read(valueAt(document, leaf.legacy)));
-  }
+  readLeaves(LEAVES, document, company);
   return company as unknown as Company;
+}
+
+/**
+ * Reads every key of a table of leaves from a stored document into a representation being built, each by its codec (a value that is missing or has the wrong type is the neutral
+ * value of its kind, so the read never fails).
+ *
+ * @param leaves The table (companies and places each have theirs).
+ * @param document The stored document, read with the exact types.
+ * @param target The object being built, which the domain paths are set into.
+ */
+export function readLeaves(leaves: readonly Leaf[], document: Document, target: Record<string, unknown>): void {
+  for (const leaf of leaves) {
+    setValueAt(target, leaf.domain, leaf.codec.read(valueAt(document, leaf.legacy)));
+  }
 }
 
 /** One key to write: its stored path and the value to give it. */
@@ -289,13 +304,14 @@ export interface LeafWrite {
  * one the company has is left out, so a request that sends the whole object back changes only what really differs and keeps the exact stored form of the rest.
  *
  * @param request The validated request (any subset of the writable keys, in the domain form).
- * @param current The company as it is now, or `null` for a creation (every key the request has is written).
- * @param document The company as stored, or `null` for a creation: the minimum orders of other currencies are kept from it.
+ * @param current The company (or place) as it is now, or `null` for a creation (every key the request has is written).
+ * @param document The company (or place) as stored, or `null` for a creation: the minimum orders of other currencies (the days of other dates, for a place) are kept from it.
+ * @param leaves The table of the keys, the one of the companies by default.
  * @returns The keys to write, in the order of the table.
  */
-export function leafWrites(request: unknown, current: Company | null, document: Document | null): LeafWrite[] {
+export function leafWrites(request: unknown, current: object | null, document: Document | null, leaves: readonly Leaf[] = LEAVES): LeafWrite[] {
   const writes: LeafWrite[] = [];
-  for (const leaf of LEAVES) {
+  for (const leaf of leaves) {
     const requested = valueAt(request, leaf.domain);
     if (leaf.readOnly === true || requested === undefined) {
       continue;
