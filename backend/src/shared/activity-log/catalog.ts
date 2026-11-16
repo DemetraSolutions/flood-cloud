@@ -76,8 +76,8 @@ export const GROUP_CATALOG_VERBS = Object.freeze(['created', 'updated', 'deleted
 /** An action on an element of a group catalog: `group.<catalog>.<verb>`, for example `group.priceList.created`. */
 export type GroupCatalogAction = `group.${GroupCatalogName}.${(typeof GROUP_CATALOG_VERBS)[number]}`;
 
-/** The data actions that are not a verb of every resource: a place is also duplicated (`place.duplicated`, with the id of the source place in its metadata). */
-export const DATA_EXTRA_ACTIONS = Object.freeze(['place.duplicated'] as const);
+/** The data actions that are not a verb of every resource: a place is also duplicated (`place.duplicated`, with the id of the source place in its metadata), and the e-mail templates of a group are created, updated and deleted (never trashed; their content is never logged), and the tobacco price list is imported (`tobaccos.imported`, with the counts of documents only, or with the reason `file` or `rows` when the file was refused). */
+export const DATA_EXTRA_ACTIONS = Object.freeze(['place.duplicated', 'emailTemplate.created', 'emailTemplate.updated', 'emailTemplate.deleted', 'tobaccos.imported'] as const);
 
 /** A data action: `<resource>.<verb>`, for example `user.created`, an action of one resource only (`place.duplicated`), or an action on a catalog of a group. */
 export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}` | (typeof DATA_EXTRA_ACTIONS)[number] | GroupCatalogAction;
@@ -123,7 +123,7 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
 const DATA_METADATA: readonly string[] = ['changesTotal', 'changesTruncated'];
 
 /** Extra metadata keys of some data actions: a permanent deletion keeps no field changes, only the role of the user it removed (the group is the entry's `groupId`), and a duplicated place the id of the place it was copied from. */
-const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'], 'place.duplicated': ['sourceId'] };
+const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'], 'place.duplicated': ['sourceId'], 'tobaccos.imported': ['inserted', 'previous', 'reason'] };
 
 /** Definition of one action: its categories and the metadata keys it may carry (anything else is rejected). */
 export interface ActionDefinition {

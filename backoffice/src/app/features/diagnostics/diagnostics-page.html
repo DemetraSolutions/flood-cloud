@@ -1,0 +1,84 @@
+<header class="page-header">
+  <h1>{{ 'DIAGNOSTICS.TITLE' | t }}</h1>
+  <button fc-button variant="secondary" [loading]="downloading()" (click)="download()">
+    {{ 'DIAGNOSTICS.DOWNLOAD' | t }}
+  </button>
+</header>
+<p class="hint">{{ 'DIAGNOSTICS.HINT' | t }}</p>
+<p class="download-status" role="status" [class.failed]="downloadError() !== null">
+  {{ downloadStatus() }}
+</p>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'DIAGNOSTICS.FILTER.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+  @if (groupId() !== null) {
+    @if (companyOptions().length > 0) {
+      <fc-select
+        [label]="'DIAGNOSTICS.FILTER.COMPANY' | t"
+        [placeholder]="'DIAGNOSTICS.FILTER.ALL_COMPANIES' | t"
+        [options]="companyOptions()"
+        [value]="companyId() ?? ''"
+        (valueChange)="onFilter('companyId', $event)"
+      />
+    }
+    @if (placeOptions().length > 0) {
+      <fc-select
+        [label]="'DIAGNOSTICS.FILTER.PLACE' | t"
+        [placeholder]="'DIAGNOSTICS.FILTER.ALL_PLACES' | t"
+        [options]="placeOptions()"
+        [value]="placeId() ?? ''"
+        (valueChange)="onFilter('placeId', $event)"
+      />
+    }
+  }
+  <fc-select
+    [label]="'DIAGNOSTICS.FILTER.TYPE' | t"
+    [placeholder]="'DIAGNOSTICS.FILTER.ALL_TYPES' | t"
+    [options]="typeOptions()"
+    [value]="type() ?? ''"
+    (valueChange)="onFilter('type', $event)"
+  />
+</form>
+
+@if (devices.error()) {
+  <fc-error-state
+    [title]="'DIAGNOSTICS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="devices.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'DIAGNOSTICS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="'deviceName'"
+    [loading]="devices.isLoading()"
+    [emptyTitle]="'DIAGNOSTICS.EMPTY' | t"
+    [emptyMessage]="'DIAGNOSTICS.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="storeKey" let-row>
+      @if (row.storeKey.status === 'active') {
+        <fc-status-badge tone="success">{{ 'DIAGNOSTICS.STORE_KEY.ACTIVE' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge tone="neutral">{{ 'DIAGNOSTICS.STORE_KEY.NONE' | t }}</fc-status-badge>
+      }
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="devices.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}

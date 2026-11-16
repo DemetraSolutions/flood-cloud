@@ -20,6 +20,8 @@ const EXPECTED: Record<Permission, Role[]> = {
   'dealers:read': ['PSA'],
   'dealers:create': ['PSA'],
   'dealers:update': ['PSA'],
+  'tobaccos:read': ['PSA'],
+  'tobaccos:import': ['PSA'],
   'companies:read': FROM_CA,
   'companies:create': FROM_SA,
   'companies:update': FROM_CA,

@@ -53,6 +53,8 @@ export const PERMISSIONS = Object.freeze({
   CLIENT_ERRORS_CREATE: 'clientErrors:create',
   STORE_KEYS_READ: 'storeKeys:read',
   STORE_KEYS_MANAGE: 'storeKeys:manage',
+  TOBACCOS_READ: 'tobaccos:read',
+  TOBACCOS_IMPORT: 'tobaccos:import',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

@@ -23,6 +23,8 @@ export interface MenuItem {
   readonly groupPath?: string;
   /** Feature (company/store module) that must be enabled to see the entry. */
   readonly feature?: string;
+  /** Whether the entry links to its first visible child (a group whose children are open to different roles): `route` is then only the fallback. */
+  readonly linksToFirstChild?: true;
   /** Sub-entries; a group without any visible child is hidden. */
   readonly children?: readonly MenuItem[];
 }
@@ -158,7 +160,7 @@ export const MENU: readonly MenuItem[] = [
     labelKey: 'MENU.TOOLS',
     icon: 'settings',
     route: '/tools/new-customer',
-    roles: ['PSA', 'D'],
+    linksToFirstChild: true,
     children: [
       {
         id: 'new-customer',
@@ -167,6 +169,30 @@ export const MENU: readonly MenuItem[] = [
         route: '/tools/new-customer',
         permission: 'groups:create',
         roles: ['PSA', 'D'],
+      },
+      {
+        id: 'diagnostics',
+        labelKey: 'MENU.DIAGNOSTICS',
+        icon: 'log',
+        route: '/tools/diagnostics',
+        permission: 'places:read',
+      },
+      {
+        id: 'tobaccos',
+        labelKey: 'MENU.TOBACCOS',
+        icon: 'tag',
+        route: '/tools/tobaccos',
+        permission: 'tobaccos:read',
+        roles: ['PSA'],
+      },
+      {
+        id: 'email-templates',
+        labelKey: 'MENU.EMAIL_TEMPLATES',
+        icon: 'mail',
+        route: '/groups',
+        groupPath: 'email-templates',
+        permission: 'places:read',
+        feature: 'email',
       },
     ],
   },
@@ -223,7 +249,11 @@ export function visibleMenu(
     }
     const children = visibleMenu(item.children, can, hasFeature, role);
     if (children.length > 0) {
-      result.push({ ...item, children });
+      result.push({
+        ...item,
+        children,
+        ...(item.linksToFirstChild === true ? { route: children[0]!.route } : {}),
+      });
     }
   }
   return result;

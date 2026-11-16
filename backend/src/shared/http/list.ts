@@ -33,13 +33,15 @@ const CURSOR_VERSION = 1;
 export const SORT_KEY = '__sortKey';
 
 /** Kind of the stored value a list is sorted by. */
-export type SortKind = 'string' | 'date';
+export type SortKind = 'string' | 'date' | 'number';
 
 /** One field a list can be sorted by. */
 export interface SortField {
   /** Stored field (dotted path allowed). */
   readonly field: string;
   readonly kind: SortKind;
+  /** An aggregation expression that gives the value to sort by, instead of the stored field (the first element of an array, for example). */
+  readonly expression?: Document;
 }
 
 /** What a resource says about its list: sortable fields, default order and searchable fields. */
@@ -138,7 +140,8 @@ function decodeCursor(raw: string, token: string, spec: SortField): ListCursor {
   const valueFits =
     v === null ||
     (spec.kind === 'string' && typeof v === 'string' && Buffer.byteLength(v) <= MAX_CURSOR_VALUE_BYTES && v.isWellFormed()) ||
-    (spec.kind === 'date' && typeof v === 'number' && Number.isSafeInteger(v) && !Number.isNaN(new Date(v).getTime()));
+    (spec.kind === 'date' && typeof v === 'number' && Number.isSafeInteger(v) && !Number.isNaN(new Date(v).getTime())) ||
+    (spec.kind === 'number' && typeof v === 'number' && Number.isFinite(v));
   if (keys.join() !== 'id,s,v,ver' || ver !== CURSOR_VERSION || s !== token || typeof id !== 'string' || !/^[0-9a-f]{24}$/.test(id) || !valueFits) {
     throw malformedCursor();
   }
@@ -205,11 +208,14 @@ export function listSearch(params: ListParams, config: ListConfig): Filter<Docum
  */
 export function listPipeline(match: Filter<Document>, params: ListParams, config: ListConfig, projection: Readonly<Record<string, 1 | Document>>): Document[] {
   const { spec, direction } = sortOf(params.sort, config);
-  const stored = '$' + spec.field;
+  const stored = spec.expression ?? '$' + spec.field;
   const key =
     spec.kind === 'date'
       ? { $cond: [{ $eq: [{ $type: stored }, 'date'] }, stored, null] }
-      : { $cond: [{ $and: [{ $eq: [{ $type: stored }, 'string'] }, { $lte: [{ $strLenBytes: stored }, MAX_CURSOR_VALUE_BYTES] }] }, stored, null] };
+      : spec.kind === 'number'
+        ? // A finite number (a `Decimal128` is not one: the cursor could not carry it): `NaN` and the infinities sort as a missing value, because they have no place in a cursor.
+          { $cond: [{ $and: [{ $in: [{ $type: stored }, ['double', 'int', 'long']] }, { $gte: [stored, -Number.MAX_VALUE] }, { $lte: [stored, Number.MAX_VALUE] }] }, stored, null] }
+        : { $cond: [{ $and: [{ $eq: [{ $type: stored }, 'string'] }, { $lte: [{ $strLenBytes: stored }, MAX_CURSOR_VALUE_BYTES] }] }, stored, null] };
   return [
     { $match: match },
     { $addFields: { [SORT_KEY]: key } },
@@ -230,7 +236,7 @@ export interface ListPage {
 
 function valueAt(document: Document): string | number | null {
   const raw: unknown = document[SORT_KEY];
-  return raw instanceof Date ? raw.getTime() : typeof raw === 'string' ? raw : null;
+  return raw instanceof Date ? raw.getTime() : typeof raw === 'string' || typeof raw === 'number' ? raw : null;
 }
 
 /**

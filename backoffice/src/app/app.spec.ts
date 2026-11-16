@@ -7,7 +7,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { fakeCompany } from '../testing/companies';
 import { fakePlace } from '../testing/places';
-import { fakeGroup } from '../testing/groups';
+import { fakeFeatureFlags, fakeGroup } from '../testing/groups';
 import { signIn } from '../testing/session';
 import { App } from './app';
 import { StartupState } from './core/startup/startup-state';
@@ -172,6 +172,7 @@ describe('routes', () => {
       ['/groups/list', psa(['groups:read']), '⟦GROUPS.TITLE⟧'],
       ['/groups/list', { ...psa(['groups:read']), role: 'D' as const }, '⟦GROUPS.TITLE⟧'],
       ['/activity-log', sa(['activityLog:read', 'profile:read']), '⟦ACTIVITY.TITLE⟧'],
+      ['/tools/tobaccos', psa(['tobaccos:read']), '⟦TOBACCOS.TITLE⟧'],
     ])('lazy-loads %s', async (url, profile, expected) => {
       expect(await go(url, profile)).toBe(expected);
     });
@@ -271,6 +272,9 @@ describe('routes', () => {
       ['/dealers/new', psa(['dealers:read', 'dealers:create'])],
       ['/tools/new-customer', psa([])],
       ['/tools/new-customer', sa(['groups:create'])],
+      ['/tools/tobaccos', psa([])],
+      ['/tools/tobaccos', { ...psa(['tobaccos:read']), role: 'D' as const }],
+      ['/tools/tobaccos', sa(['tobaccos:read'])],
       ['/users', psa([])],
       ['/platform/users', { ...psa([]) }],
       ['/activity-log', sa()],
@@ -349,6 +353,73 @@ describe('routes', () => {
       expect(location()).toBe('/forbidden');
     });
   });
+  describe('email templates', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a1';
+    const TEMPLATE = '665f1c2e9b1d4a0012ab34c1';
+    const ON = fakeFeatureFlags(false, { email: true });
+
+    afterEach(() => sessionStorage.clear());
+
+    async function open(url: string, permissions: string[], groupFeatures = ON) {
+      setup();
+      sessionStorage.clear();
+      signIn({ role: 'SA', permissions: [...permissions, 'profile:read'], groupFeatures });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(url);
+      return harness;
+    }
+
+    it('lazy-loads the list for whoever reads places', async () => {
+      const harness = await open(`/groups/${GROUP}/email-templates`, ['places:read']);
+      expect(
+        (harness.routeNativeElement as HTMLElement).querySelector('main h1')?.textContent,
+      ).toBe('⟦EMAIL_TEMPLATES.TITLE⟧');
+    });
+
+    it('lazy-loads the page of a new template for whoever updates places', async () => {
+      const harness = await open(`/groups/${GROUP}/email-templates/new`, [
+        'places:read',
+        'places:update',
+      ]);
+      const root = harness.routeNativeElement as HTMLElement;
+      expect(root.querySelector('fc-email-template-page')).not.toBeNull();
+      expect(root.querySelector('fc-email-preview iframe')).not.toBeNull();
+    });
+
+    it('lazy-loads the page of a template', async () => {
+      const harness = await open(`/groups/${GROUP}/email-templates/${TEMPLATE}`, ['places:read']);
+      TestBed.inject(HttpTestingController)
+        .expectOne((r) => r.url.endsWith(`/v1/groups/${GROUP}/email-templates/${TEMPLATE}`))
+        .flush({
+          data: { id: TEMPLATE, name: 'N', text: '', html: '', createdAt: null, updatedAt: null },
+        });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      expect(
+        (harness.routeNativeElement as HTMLElement).querySelector('fc-email-template-page'),
+      ).not.toBeNull();
+    });
+
+    it.each([
+      [`/groups/${GROUP}/email-templates`, []],
+      [`/groups/${GROUP}/email-templates/${TEMPLATE}`, []],
+      [`/groups/${GROUP}/email-templates/new`, ['places:read']],
+    ])('protects %s with the permissions', async (url, permissions) => {
+      await open(url, permissions);
+      expect(location()).toBe('/forbidden');
+    });
+
+    it.each([
+      `/groups/${GROUP}/email-templates`,
+      `/groups/${GROUP}/email-templates/new`,
+      `/groups/${GROUP}/email-templates/${TEMPLATE}`,
+    ])('sends %s to the feature-disabled page when the group has no e-mail', async (url) => {
+      await open(url, ['places:read', 'places:update'], fakeFeatureFlags(false));
+      expect(location()).toBe('/feature-disabled');
+    });
+  });
+
   describe('places', () => {
     const GROUP = '665f1c2e9b1d4a0012ab34a1';
     const PLACE = '665f1c2e9b1d4a0012ab34b3';

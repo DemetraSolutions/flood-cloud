@@ -1,0 +1,92 @@
+<header class="page-header">
+  <h1>{{ 'TOBACCOS.TITLE' | t }}</h1>
+  <button *fcCan="'tobaccos:import'" fc-button [loading]="busy()" (click)="choose()">
+    {{ 'TOBACCOS.IMPORT.ACTION' | t }}
+  </button>
+</header>
+<p class="hint">{{ 'TOBACCOS.HINT' | t }}</p>
+<input
+  #fileInput
+  hidden
+  type="file"
+  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  (change)="onFile($event)"
+/>
+
+<p class="status" role="status">{{ statusMessage() }}</p>
+
+@if (pickError(); as message) {
+  <p class="problem" role="alert">{{ message }}</p>
+}
+
+@if (failure(); as refused) {
+  <section class="problem" role="alert" aria-labelledby="import-failure-heading">
+    <h2 id="import-failure-heading">{{ 'TOBACCOS.IMPORT.ERROR.TITLE' | t }}</h2>
+    <p>{{ refused.message }}</p>
+    @if (failureProblems().length > 0) {
+      <ul>
+        @for (problem of failureProblems(); track $index) {
+          <li>{{ problem }}</li>
+        }
+      </ul>
+      @if (refused.truncated) {
+        <p>{{ 'TOBACCOS.IMPORT.TRUNCATED' | t }}</p>
+      }
+    }
+    <button fc-button variant="secondary" (click)="failure.set(null)">
+      {{ 'COMMON.CLOSE' | t }}
+    </button>
+  </section>
+}
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'TOBACCOS.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+</form>
+
+@if (products.error()) {
+  <fc-error-state
+    [title]="'TOBACCOS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'TOBACCOS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="'code'"
+    [loading]="products.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'TOBACCOS.EMPTY' | t"
+    [emptyMessage]="'TOBACCOS.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  />
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="products.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-confirm-dialog
+  [heading]="'TOBACCOS.IMPORT.CONFIRM_TITLE' | t"
+  [message]="confirmMessage()"
+  [confirmLabel]="'TOBACCOS.IMPORT.CONFIRM_ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="onConfirmClosed()"
+  (confirmed)="confirmImport()"
+/>

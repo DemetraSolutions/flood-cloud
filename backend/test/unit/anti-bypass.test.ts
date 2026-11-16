@@ -139,6 +139,17 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
     });
 
+    it('imports the multi-group reads of the diagnostics only in the diagnostics repository', async () => {
+      const importers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path !== MIRROR && /import\s*(?:type\s*)?\{[^}]*\b(readMirrorDevices|countMirrorDevices|trashedCompanyIds)\b[^}]*\}\s*from\s*'[^']*group-mirror\.ts'/.test(await readFile(file, 'utf8'))) {
+          importers.push(path);
+        }
+      }
+      assert.deepEqual(importers, ['modules/diagnostics/diagnostics.repository.ts']);
+    });
+
     it('never reads companies or places from a group database outside the tools', async () => {
       for (const file of await filesUnder(SRC)) {
         const path = posix(file);
@@ -151,13 +162,30 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
     });
 
-    it('exposes from group-mirror.ts only the two per-group openers and the fixed count of the page groups', async () => {
+    it('imports the read of the places that use a template only in the templates repository, and the copies are never read for appointment or roomsSettings anywhere else', async () => {
+      const importers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        const text = await readFile(file, 'utf8');
+        if (path !== MIRROR && /import\s*(?:type\s*)?\{[^}]*\bfindPlacesUsingTemplate\b[^}]*\}\s*from\s*'[^']*group-mirror\.ts'/.test(text)) {
+          importers.push(path);
+        }
+      }
+      assert.deepEqual(importers, ['modules/email-templates/email-templates.repository.ts']);
+      const mirror = await readFile(join(SRC, MIRROR), 'utf8');
+      assert.match(mirror, /MIRROR_FIELDS[\s\S]*?places: new Set\(\[[^\]]*\]\)/);
+      assert.ok(!/places: new Set\(\[[^\]]*(?:appointment|roomsSettings)/.test(mirror));
+    });
+
+    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups the three fixed reads of the diagnostics and the fixed read of the places that use a template', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
-      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups']);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'findPlacesUsingTemplate']);
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
-      assert.equal([...text.matchAll(/\.aggregate\(/g)].length, 2);
+      // The diagnostics (T1) add two more, each running a pipeline made by `mirror-devices.ts` (the whole of what leaves the copies: an allowlist of the fields of a device).
+      assert.equal([...text.matchAll(/deviceRowsPipeline\(|deviceCountPipeline\(/g)].length, 2);
+      assert.equal([...text.matchAll(/\.aggregate\(/g)].length, 4);
     });
 
     it('lets only the write service write companies and places, in a transaction, from a verified group access', async () => {
@@ -230,6 +258,25 @@ describe('database access cannot be bypassed outside src/db', () => {
     });
   });
 
+  describe('e-mail templates (step T2)', () => {
+    const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
+
+    it('writes the e-mail templates of a group only from the templates repository, and reads them only from it, the places repository and the lookup repository', async () => {
+      const readers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        const text = await readFile(file, 'utf8');
+        if (/\.collection(?:<[^>]*>)?\(\s*['"`]email_templates['"`]/.test(text) && !path.startsWith('tools/') && !path.startsWith('db/')) {
+          readers.push(path);
+          if (path !== 'modules/email-templates/email-templates.repository.ts') {
+            assert.ok(!/\.(?:insertOne|insertMany|updateOne|updateMany|replaceOne|deleteOne|deleteMany|findOneAndUpdate|bulkWrite)\(/.test(text), `${path} writes e-mail templates`);
+          }
+        }
+      }
+      assert.deepEqual(readers.sort(), ['modules/email-templates/email-templates.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/places/places.repository.ts']);
+    });
+  });
+
   describe('media (step 6B)', () => {
     const REPOSITORY = 'modules/media/media.repository.ts';
     const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
@@ -258,7 +305,7 @@ describe('database access cannot be bypassed outside src/db', () => {
           assert.ok(!/@google-cloud|googleapis'/.test(text), `${path} imports a Google SDK`);
         }
         assert.ok(!/from 'sharp'/.test(text) || path === 'modules/media/image-processing.ts', `${path} imports sharp`);
-        assert.ok(!/from 'multer'/.test(text) || path === 'modules/media/upload.ts', `${path} imports multer`);
+        assert.ok(!/from 'multer'/.test(text) || path === 'modules/media/upload.ts' || path === 'modules/tobaccos/tobaccos.upload.ts', `${path} imports multer`);
       }
     });
   });

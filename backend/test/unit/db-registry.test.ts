@@ -24,7 +24,7 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes and validators', () => {
-    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'companies', 'countries', 'dealers', 'groups', 'idempotencyKeys', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials', 'users']);
+    assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'companies', 'countries', 'dealers', 'groups', 'idempotencyKeys', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
     assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'email_templates', 'files', 'places', 'products', 'products_categories', 'products_departments']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
       const isMirror = ['companies', 'places'].includes(name) && COLLECTIONS.common[name as 'companies' | 'places'] === spec;
@@ -32,7 +32,7 @@ describe('collection registry', () => {
         ? 'mirror'
         : ['activityEvents', 'dealers', 'idempotencyKeys', 'rateLimits', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials'].includes(name)
           ? 'new'
-          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || (['companies', 'files', 'places', 'products_departments'].includes(name) && !isMirror)
+          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || (['companies', 'email_templates', 'files', 'places', 'products_departments'].includes(name) && !isMirror)
             ? 'legacy-write'
             : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
@@ -44,6 +44,9 @@ describe('collection registry', () => {
     for (const index of COLLECTIONS.common.users.indexes) {
       assert.equal('unique' in index || 'expireAfterSeconds' in index, false, index.name);
     }
+    assert.deepEqual([...COLLECTIONS.common.tobaccos.ownedFields].sort(), ['barcodes', 'category', 'code', 'description', 'name', 'numPieces', 'price', 'priceKg', 'shortName', 'unitWeight']);
+    assert.deepEqual(COLLECTIONS.common.tobaccos.indexes.map((index) => index.name), ['name_1', 'code_1']);
+    assert.deepEqual([...COLLECTIONS.group.email_templates.ownedFields].sort(), ['html', 'insertDate', 'name', 'text', 'updateDate']);
     assert.deepEqual([...COLLECTIONS.group.products_departments.ownedFields].sort(), ['code', 'description', 'groupId', 'insertDate', 'medias', 'name', 'placesAvailability', 'status', 'tax', 'trash', 'updateDate']);
     assert.deepEqual([...COLLECTIONS.common.users.ownedFields].sort(), [...USERS_OWNED_FIELDS].sort());
     for (const field of ['name', 'surname', 'email', 'telephone', 'settings.language', 'settings.hiddenInStats', 'status', 'trash', 'role', 'groupId', 'dealerId', 'companyId', 'placeId', 'placesId', 'permissions.status', 'permissions.users.r', 'permissions.users.w', 'permissions.logs.r', 'permissions.stats.r', 'permissions.documents.w', 'description', 'avatar', 'pin', 'servicesId', 'shiftTime.status', 'shiftTime.weeksGeneric', 'shiftTime.daySpecial', 'permissions.apps.cash.status', 'permissions.apps.cash.sub.preblling', 'permissions.apps.cash.sub.automaticCash.glory.withdrawal', 'permissions.apps.cash.options.priceLists', 'password', 'tokens', 'userName', 'insertDate', 'updateDate']) {
@@ -90,7 +93,7 @@ describe('collection registry', () => {
     ]);
     assert.deepEqual(COLLECTIONS.common.storeActivationCodes.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null]), [['codeHash_1', true, null], ['placeId_1', true, null], ['expiresAt_1', false, 0]]);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
   });
 
   it('keeps the api key of the group out of every field a $set can write: it is written only when a new customer is inserted', () => {

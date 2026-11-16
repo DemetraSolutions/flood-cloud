@@ -52,7 +52,10 @@
     "PLACES": "Punti vendita",
     "TOOLS": "Strumenti",
     "NEW_CUSTOMER": "Nuovo cliente",
-    "RELEASES": "Release"
+    "DIAGNOSTICS": "Diagnostica",
+    "RELEASES": "Release",
+    "EMAIL_TEMPLATES": "Template e-mail",
+    "TOBACCOS": "Listino Tabacchi"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -2973,6 +2976,182 @@
       "IMPORT_TOO_LARGE": "Il file è troppo grande.",
       "IMPORT_INVALID": "Il file non è un oggetto JSON.",
       "IMPORTED": "Impostazioni caricate nel modulo: {applied} valori applicati, {ignored} ignorati. Salva per confermarle."
+    }
+  },
+  "DIAGNOSTICS": {
+    "TITLE": "Diagnostica",
+    "HINT": "Dispositivi dei punti vendita con versioni, ultimo scaricamento dati e stato della chiave di negozio.",
+    "DOWNLOAD": "Scarica CSV",
+    "DOWNLOADING": "Download del CSV in corso…",
+    "DOWNLOAD_ERROR": {
+      "TOO_LARGE": "Troppi dati: restringi i filtri e riprova",
+      "TOO_MANY": "Troppe richieste, riprova tra poco",
+      "GENERIC": "Impossibile scaricare il CSV. Riprova."
+    },
+    "LOAD_ERROR": "Impossibile caricare la diagnostica",
+    "EMPTY": "Nessun dispositivo",
+    "EMPTY_MESSAGE": "Nessun dispositivo corrisponde ai filtri scelti.",
+    "YES": "Sì",
+    "NO": "No",
+    "FILTER": {
+      "SEARCH": "Cerca",
+      "COMPANY": "Azienda",
+      "ALL_COMPANIES": "Tutte le aziende",
+      "PLACE": "Punto vendita",
+      "ALL_PLACES": "Tutti i punti vendita",
+      "TYPE": "Tipo",
+      "ALL_TYPES": "Tutti i tipi"
+    },
+    "COLUMN": {
+      "GROUP": "Gruppo",
+      "COMPANY": "Azienda",
+      "VAT": "P.IVA",
+      "PLACE": "Punto vendita",
+      "DEVICE": "Dispositivo",
+      "TYPE": "Tipo",
+      "APP_VERSION": "Versione Flood",
+      "SERVER": "Server",
+      "PLATFORM": "Sistema",
+      "PLATFORM_VERSION": "Versione sistema",
+      "MODEL": "Modello",
+      "LAST_DOWNLOAD": "Ultimo download",
+      "LAST_SESSION": "Ultima sessione",
+      "STORE_KEY": "Chiave di negozio",
+      "STORE_KEY_LAST_USE": "Ultimo uso chiave",
+      "STORE_APP_VERSION": "Versione app negozio"
+    },
+    "STORE_KEY": {
+      "ACTIVE": "Attiva",
+      "NONE": "Nessuna"
+    },
+    "TYPE": {
+      "DESK": "Cassa",
+      "HANDHELD": "Palmare",
+      "ORDERING": "Comanda",
+      "ROOM_HANDHELD": "Palmare di sala",
+      "SELFORDERING": "Self ordering",
+      "WAITING_LIST": "Lista d’attesa",
+      "EXTERNAL_DISPLAY": "Display esterno",
+      "KIOSK": "Kiosk",
+      "TGM": "TGM"
+    }
+  },
+  "TOBACCOS": {
+    "TITLE": "Listino Tabacchi",
+    "HINT": "Il listino nazionale dei tabacchi (file ufficiale ADM), unico per tutta la piattaforma. L’importazione sostituisce l’intero listino.",
+    "SEARCH": "Cerca per nome o codice",
+    "LOAD_ERROR": "Impossibile caricare il listino",
+    "EMPTY": "Nessun prodotto",
+    "EMPTY_MESSAGE": "Il listino è vuoto o nessun prodotto corrisponde alla ricerca. Importa il file ufficiale per caricarlo.",
+    "COLUMN": {
+      "CODE": "Codice",
+      "NAME": "Nome",
+      "CATEGORY": "Categoria",
+      "PRICE_KG": "Prezzo/kg",
+      "PRICE": "Prezzo",
+      "BARCODE": "Barcode",
+      "SHORT_NAME": "Nome breve",
+      "UNIT_WEIGHT": "Peso unitario",
+      "NUM_PIECES": "Numero pezzi",
+      "DESCRIPTION": "Descrizione"
+    },
+    "IMPORT": {
+      "ACTION": "Importa listino",
+      "CONFIRM_TITLE": "Sostituire l’intero listino?",
+      "CONFIRM": "Tutti i prodotti del listino attuale saranno eliminati e sostituiti con quelli del file «{name}». L’operazione non si può annullare.",
+      "CONFIRM_ACTION": "Sostituisci il listino",
+      "RUNNING": "Importazione del listino in corso…",
+      "DONE": "Listino importato: {inserted} prodotti (prima {previous}) in {seconds} s.",
+      "BARCODE": "Barcode {n}",
+      "QUANTITY": "Quantità del barcode {n}",
+      "PROBLEM": "Riga {row}, {column}: {message}",
+      "TRUNCATED": "Sono mostrati solo i primi problemi: correggili e riprova per vedere gli altri.",
+      "CLIENT_ERROR": {
+        "TYPE": "Scegli un file Excel con estensione .xlsx.",
+        "SIZE": "Il file è troppo grande: il limite è 10 MB.",
+        "EMPTY": "Il file è vuoto."
+      },
+      "ERROR": {
+        "TITLE": "Importazione non riuscita: il listino non è stato modificato",
+        "TOO_LARGE": "Il file è troppo grande: il limite è 10 MB.",
+        "UNSUPPORTED": "Il file non è un file Excel (.xlsx).",
+        "INCORRECT": "Il file non è un listino Excel valido o supera i limiti consentiti.",
+        "EMPTY": "Il file non contiene prodotti.",
+        "TOO_MANY": "Il file contiene troppi prodotti: il limite è 20.000.",
+        "INVALID": "Il file non è valido.",
+        "ROWS": "Alcune righe del file non sono valide. Correggile e importa di nuovo il file.",
+        "RATE_LIMITED": "Troppe importazioni: riprova più tardi.",
+        "RATE_LIMITED_WAIT": "Troppe importazioni: riprova tra {seconds} secondi.",
+        "UNAVAILABLE": "Il server è occupato con un’altra importazione: riprova tra poco."
+      }
+    }
+  },
+  "EMAIL_TEMPLATES": {
+    "TITLE": "Template e-mail",
+    "HINT": "Testi e HTML delle e-mail che il gruppo invia: conferme di prenotazione, appuntamenti e report. I punti vendita li scelgono nelle loro impostazioni.",
+    "NEW": "Nuovo template",
+    "SEARCH": "Cerca per nome",
+    "LOAD_ERROR": "Impossibile caricare i template e-mail",
+    "EMPTY": "Nessun template e-mail",
+    "EMPTY_MESSAGE": "Non ci sono template che corrispondono alla ricerca.",
+    "COLUMN": {
+      "NAME": "Nome",
+      "UPDATED": "Ultima modifica"
+    },
+    "DELETE": {
+      "ACTION": "Elimina",
+      "LABEL": "Elimina il template {name}",
+      "TITLE": "Elimina template",
+      "CONFIRM": "Eliminare definitivamente il template «{name}»? L’operazione non si può annullare.",
+      "DONE": "Template «{name}» eliminato",
+      "BLOCKED_TITLE": "Il template «{name}» è in uso",
+      "BLOCKED_MESSAGE": "Non si può eliminare finché lo usano le impostazioni di prenotazioni o appuntamenti dei punti vendita seguenti. Scegli un altro template in quei punti vendita e riprova."
+    },
+    "FORM": {
+      "NEW_TITLE": "Nuovo template e-mail",
+      "EDIT_TITLE": "Template e-mail",
+      "BACK": "Torna ai template",
+      "CREATE": "Crea template",
+      "CREATED": "Template creato",
+      "SAVED": "Template salvato",
+      "UPDATED": "Ultima modifica: {date}",
+      "MODEL": "Parti da un modello",
+      "MODEL_HINT": "Riempie nome, testo e HTML con uno dei modelli di esempio. Sostituisci il logo prima di salvare.",
+      "MODEL_NONE": "Nessun modello",
+      "STALE": "Il template è stato modificato da qualcun altro dopo che lo hai aperto. Ricaricalo per vedere l’ultima versione: le tue modifiche non salvate andranno perse.",
+      "RELOAD": "Ricarica il template"
+    },
+    "FIELD": {
+      "NAME": "Nome",
+      "TEXT": "Testo",
+      "TEXT_HINT": "Versione in solo testo, per i programmi di posta che non mostrano l’HTML. Al massimo 64 KB.",
+      "HTML": "Codice HTML",
+      "HTML_HINT": "Al massimo 256 KB. Viene salvato così come lo scrivi: usa stili in linea e immagini https.",
+      "PLACEHOLDERS": "Segnaposto sostituiti al momento dell’invio:"
+    },
+    "PREVIEW": {
+      "TITLE": "Anteprima",
+      "HINT": "Mostrata in un riquadro isolato: gli script non vengono eseguiti, i collegamenti non si aprono e sono mostrati solo stili in linea e immagini https.",
+      "LABEL": "Anteprima del template e-mail"
+    },
+    "MODEL": {
+      "ADVANCED_REPORT": "Report avanzato",
+      "TABLE_RESERVATION_NOTIFICATION": "Prenotazione tavolo notifica (Gestore)",
+      "TABLE_RESERVATION_RECEIVED": "Prenotazione tavolo presa in carico (Cliente)",
+      "TABLE_RESERVATION_CONFIRMED_STATUS": "Prenotazione tavolo confermata (Cliente)",
+      "TABLE_RESERVATION_REFUSED_STATUS": "Prenotazione tavolo rifiutata (Cliente)",
+      "TABLE_RESERVATION_CHANGE_STATUS": "Prenotazione tavolo cambio stato (Cliente)",
+      "APPOINTMENT_CONFIRMED": "Prenotazione appuntamento confermata"
+    },
+    "MODEL_REPLACE": {
+      "TITLE": "Sostituire il contenuto?",
+      "MESSAGE": "Nome, testo e HTML che hai scritto saranno sostituiti da quelli del modello.",
+      "CONFIRM": "Sostituisci"
+    },
+    "LEAVE": {
+      "TITLE": "Uscire senza salvare?",
+      "MESSAGE": "Le modifiche al template non sono state salvate e andranno perse.",
+      "CONFIRM": "Esci senza salvare"
     }
   },
   "RELEASES": {

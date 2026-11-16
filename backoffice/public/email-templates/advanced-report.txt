@@ -1,0 +1,6 @@
+%placeName%
+%startDate% - %endDate%
+
+%tableDataRoomsLogs%
+
+%tableDataAdvancedReport%

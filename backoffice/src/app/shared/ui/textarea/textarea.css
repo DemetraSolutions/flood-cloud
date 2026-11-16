@@ -3,3 +3,10 @@ textarea {
   font: inherit;
   resize: vertical;
 }
+
+textarea.code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.875rem;
+  white-space: pre;
+  overflow: auto;
+}

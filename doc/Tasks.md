@@ -794,6 +794,16 @@ Specifica in `doc/Security-Model.md` §6–7.
 
 ---
 
+## 9-bis. Strumenti di piattaforma
+
+Decisioni dell'utente del 2026-11-16 (inventario del legacy in `backend/reports/tools-legacy.md`, non versionata):
+- **Ora:** Diagnostica (con la Diagnostica dispositivi), Template e-mail, listino Tabacchi. **Con i domini successivi:** prodotto e variante rapidi, import/export dei prodotti, sincronizzazione Tabacchi (Catalogo), fatture differite (Documenti).
+- **Diagnostica:** una sola pagina con tabella filtrabile e scarica CSV, le colonne del legacy più lo stato della chiave di negozio; perimetro applicato dal server (PSA tutti i gruppi esclusi i demo come nel legacy, D i propri, SA/CA/PA i propri punti vendita); dati dalle copie del common (in produzione aggiornati finché la copia del legacy è spenta solo dall'ultimo `sync:copies`).
+- **Template e-mail:** lettura con `places:read`, scrittura con `places:update`, solo con la feature `email` del gruppo, anche per PSA e D sul gruppo selezionato; eliminazione rifiutata con `409` se un punto vendita lo usa; HTML salvato com'è con un limite, anteprima isolata con tutta la sicurezza necessaria (iframe sandbox senza script, CSP), mai `innerHTML` nel backoffice.
+- **Listino Tabacchi:** solo PSA, permessi dedicati; import del file XLSX ADM con un **lettore XLSX nativo** (`node:zlib`, nessuna dipendenza) con limiti stretti; il listino resta unico per la piattaforma.
+
+Passi: **T1** Diagnostica; **T2** Template e-mail; **T3** listino Tabacchi.
+
 ## 10. Aree successive (da dettagliare)
 Ogni area parte con l'analisi del `legacy_analyst` (skill `legacy-module-analysis`) e si dettaglia in task prima di iniziare. Il server di punto vendita è un'applicazione separata, fuori da questo progetto (D-22), e usa le API del backoffice (D-23).
 - **Accesso dell'app del server di punto vendita alle API `/v1`:** la credenziale è la chiave di negozio (D-24, passo 7C); restano da decidere, con i domini che apriranno le scritture del negozio, l'attribuzione dell'operatore e le route che il negozio può chiamare.

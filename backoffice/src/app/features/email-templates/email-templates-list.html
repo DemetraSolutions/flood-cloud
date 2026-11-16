@@ -1,0 +1,93 @@
+<header class="page-header">
+  <h1>{{ 'EMAIL_TEMPLATES.TITLE' | t }}</h1>
+  <a *fcCan="'places:update'" class="new" [routerLink]="newRoute()">{{
+    'EMAIL_TEMPLATES.NEW' | t
+  }}</a>
+</header>
+<p class="hint">{{ 'EMAIL_TEMPLATES.HINT' | t }}</p>
+
+@if (blocked(); as refused) {
+  <section class="blocked" role="alert" aria-labelledby="blocked-heading">
+    <h2 id="blocked-heading">
+      {{ 'EMAIL_TEMPLATES.DELETE.BLOCKED_TITLE' | t: { name: refused.template } }}
+    </h2>
+    <p>{{ 'EMAIL_TEMPLATES.DELETE.BLOCKED_MESSAGE' | t }}</p>
+    <ul>
+      @for (place of refused.places; track $index) {
+        <li>{{ place }}</li>
+      }
+    </ul>
+    <button fc-button variant="secondary" (click)="blocked.set(null)">
+      {{ 'COMMON.CLOSE' | t }}
+    </button>
+  </section>
+}
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'EMAIL_TEMPLATES.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+</form>
+
+@if (templates.error()) {
+  <fc-error-state
+    [title]="'EMAIL_TEMPLATES.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'EMAIL_TEMPLATES.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="templates.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'EMAIL_TEMPLATES.EMPTY' | t"
+    [emptyMessage]="'EMAIL_TEMPLATES.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'places:update'" fcEmptyAction [routerLink]="newRoute()">{{
+      'EMAIL_TEMPLATES.NEW' | t
+    }}</a>
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="detailRoute(row)">{{ row.name }}</a>
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      <button
+        *fcCan="'places:update'"
+        fc-button
+        variant="ghost"
+        [attr.aria-label]="rowLabel(row)"
+        (click)="askDelete(row)"
+      >
+        {{ 'EMAIL_TEMPLATES.DELETE.ACTION' | t }}
+      </button>
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="templates.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-confirm-dialog
+  [heading]="'EMAIL_TEMPLATES.DELETE.TITLE' | t"
+  [message]="confirmMessage()"
+  [confirmLabel]="'EMAIL_TEMPLATES.DELETE.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="delete()"
+/>

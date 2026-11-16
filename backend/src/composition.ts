@@ -24,6 +24,18 @@ import { createLookupController } from './modules/group-lookup/lookup.controller
 import { createLookupRepository } from './modules/group-lookup/lookup.repository.ts';
 import { createLookupRoutes } from './modules/group-lookup/lookup.routes.ts';
 import { createLookupService } from './modules/group-lookup/lookup.service.ts';
+import { createDiagnosticsController } from './modules/diagnostics/diagnostics.controller.ts';
+import { createDiagnosticsRepository } from './modules/diagnostics/diagnostics.repository.ts';
+import { createDiagnosticsRoutes } from './modules/diagnostics/diagnostics.routes.ts';
+import { createDiagnosticsService } from './modules/diagnostics/diagnostics.service.ts';
+import { createTobaccosController } from './modules/tobaccos/tobaccos.controller.ts';
+import { createTobaccosRepository } from './modules/tobaccos/tobaccos.repository.ts';
+import { createTobaccosRoutes } from './modules/tobaccos/tobaccos.routes.ts';
+import { createTobaccosService } from './modules/tobaccos/tobaccos.service.ts';
+import { createEmailTemplatesController } from './modules/email-templates/email-templates.controller.ts';
+import { createEmailTemplatesRepository } from './modules/email-templates/email-templates.repository.ts';
+import { createEmailTemplatesRoutes } from './modules/email-templates/email-templates.routes.ts';
+import { createEmailTemplatesService } from './modules/email-templates/email-templates.service.ts';
 import { createGroupServicesController } from './modules/group-services/services.controller.ts';
 import { createServicesRepository } from './modules/group-services/services.repository.ts';
 import { createGroupServicesRoutes } from './modules/group-services/services.routes.ts';
@@ -241,6 +253,9 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     }),
   );
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
+  const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
+  const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
+  const tobaccos = createTobaccosController(createTobaccosService({ repository: createTobaccosRepository(databases), activityLog, now }));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
     routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
@@ -248,6 +263,9 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createGroupServicesRoutes(groupServices),
       ...createLookupRoutes(lookup),
       ...createActivityLogRoutes(activity),
+      ...createDiagnosticsRoutes(diagnostics, rules),
+      ...createEmailTemplatesRoutes(emailTemplates, idempotency),
+      ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createClientErrorsRoutes(clientErrors, rules),
     ],
     authenticate,

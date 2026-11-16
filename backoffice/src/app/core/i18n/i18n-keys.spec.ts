@@ -24,6 +24,8 @@ import {
   SETTINGS_ENTRIES,
   SETTINGS_MENU_GROUPS,
 } from '../../features/places/place-nav';
+import { TEMPLATE_MODELS } from '../../features/email-templates/template-models';
+import { importProblems } from '../../features/tobaccos/tobaccos.types';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -132,6 +134,33 @@ describe('dictionaries', () => {
       expected.push(`CATALOG.REFERENCED.${key}`);
     }
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the names of the e-mail template models, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    expect(TEMPLATE_MODELS.filter((model) => !keys.has(model.labelKey))).toEqual([]);
+  });
+
+  it('defines the names of the columns of the tobacco price list a refused import points at, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    const columns = [
+      'category',
+      'code',
+      'name',
+      'shortName',
+      'priceKg',
+      'price',
+      'unitWeight',
+      'numPieces',
+      'description',
+    ];
+    const problems = importProblems([
+      ...columns.map((field) => ({ field: `rows[2].${field}`, issue: 'type' })),
+      { field: 'rows[2].barcodes[0].barcode', issue: 'type' },
+      { field: 'rows[2].barcodes[0].quantity', issue: 'type' },
+    ]);
+    expect(problems).toHaveLength(columns.length + 2);
+    expect(problems.filter((problem) => !keys.has(problem.columnKey))).toEqual([]);
   });
 
   it('defines the texts of the point of sale, the permission modules and the form sections', () => {

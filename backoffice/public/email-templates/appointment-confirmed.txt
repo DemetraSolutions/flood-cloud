@@ -1,0 +1,9 @@
+Ciao %name%,
+%placeName% ha confermato la tua prenotazione.
+
+Data
+%date%
+Ore %hours%
+
+Ospite
+%name% %surname%

@@ -1,0 +1,111 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'EMAIL_TEMPLATES.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ 'EMAIL_TEMPLATES.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  <header class="page-header">
+    <h1>
+      {{ (isNew() ? 'EMAIL_TEMPLATES.FORM.NEW_TITLE' : 'EMAIL_TEMPLATES.FORM.EDIT_TITLE') | t }}
+    </h1>
+    <a [routerLink]="listRoute()">{{ 'EMAIL_TEMPLATES.FORM.BACK' | t }}</a>
+  </header>
+
+  @if (template(); as current) {
+    <p class="meta">
+      {{ 'EMAIL_TEMPLATES.FORM.UPDATED' | t: { date: date(current.updatedAt) } }}
+    </p>
+  }
+
+  <div class="layout">
+    <form novalidate (submit)="onSubmit($event)" class="editor">
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+        @if (stale()) {
+          <button fc-button variant="secondary" (click)="reload()">
+            {{ 'EMAIL_TEMPLATES.FORM.RELOAD' | t }}
+          </button>
+        }
+      }
+      @if (isNew() && canWrite() && modelOptions().length > 0) {
+        <fc-select
+          [label]="'EMAIL_TEMPLATES.FORM.MODEL' | t"
+          [hint]="'EMAIL_TEMPLATES.FORM.MODEL_HINT' | t"
+          [placeholder]="'EMAIL_TEMPLATES.FORM.MODEL_NONE' | t"
+          [options]="modelOptions()"
+          [disabled]="modelBusy()"
+          [value]="modelChoice()"
+          (valueChange)="onModel($event)"
+        />
+      }
+      <fc-text-field
+        [formField]="templateForm.name"
+        autocomplete="off"
+        [label]="'EMAIL_TEMPLATES.FIELD.NAME' | t"
+        [error]="error(templateForm.name)"
+        (blurred)="templateForm.name().markAsTouched()"
+      />
+      <fc-textarea
+        [formField]="templateForm.text"
+        [rows]="8"
+        [label]="'EMAIL_TEMPLATES.FIELD.TEXT' | t"
+        [hint]="'EMAIL_TEMPLATES.FIELD.TEXT_HINT' | t"
+        [error]="error(templateForm.text)"
+        (blurred)="templateForm.text().markAsTouched()"
+      />
+      <fc-textarea
+        [formField]="templateForm.html"
+        code
+        [rows]="22"
+        [label]="'EMAIL_TEMPLATES.FIELD.HTML' | t"
+        [hint]="'EMAIL_TEMPLATES.FIELD.HTML_HINT' | t"
+        [error]="error(templateForm.html)"
+        (blurred)="templateForm.html().markAsTouched()"
+      />
+      <p class="placeholders">
+        {{ 'EMAIL_TEMPLATES.FIELD.PLACEHOLDERS' | t }}
+        @for (placeholder of placeholders; track placeholder) {
+          <code>{{ placeholder }}</code>
+        }
+      </p>
+      @if (canWrite()) {
+        <div class="actions">
+          <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+            {{ (isNew() ? 'EMAIL_TEMPLATES.FORM.CREATE' : 'COMMON.SAVE') | t }}
+          </button>
+        </div>
+      }
+    </form>
+
+    <section class="preview" aria-labelledby="preview-heading">
+      <h2 id="preview-heading">{{ 'EMAIL_TEMPLATES.PREVIEW.TITLE' | t }}</h2>
+      <p class="hint">{{ 'EMAIL_TEMPLATES.PREVIEW.HINT' | t }}</p>
+      <fc-email-preview [html]="model().html" [label]="previewLabel()" />
+    </section>
+  </div>
+}
+
+<fc-confirm-dialog
+  [heading]="'EMAIL_TEMPLATES.MODEL_REPLACE.TITLE' | t"
+  [message]="'EMAIL_TEMPLATES.MODEL_REPLACE.MESSAGE' | t"
+  [confirmLabel]="'EMAIL_TEMPLATES.MODEL_REPLACE.CONFIRM' | t"
+  [open]="modelAsk()"
+  (openChange)="onModelDismissed()"
+  (confirmed)="onModelConfirmed()"
+/>
+<fc-confirm-dialog
+  [heading]="'EMAIL_TEMPLATES.LEAVE.TITLE' | t"
+  [message]="'EMAIL_TEMPLATES.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'EMAIL_TEMPLATES.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>

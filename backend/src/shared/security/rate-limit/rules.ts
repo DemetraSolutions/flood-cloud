@@ -28,6 +28,10 @@ export interface RateLimitRules {
   readonly mediaUploadPerUserDaily: RateLimitRule;
   /** Image uploads per group per day, whoever uploads them. Runs after the group is verified. */
   readonly mediaUploadPerGroupDaily: RateLimitRule;
+  /** CSV exports of the diagnostics per authenticated user: each reads every device of the perimeter. */
+  readonly diagnosticsExportPerUser: RateLimitRule;
+  /** Imports of the tobacco price list per authenticated user per hour: each parses a workbook of up to 10 MB and replaces the whole collection. */
+  readonly tobaccosImportPerUser: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
   readonly apiPerUser: RateLimitRule;
   /** Every `/v1` request per store key (the route builder applies it to every route a store key may call, and to no other: the per-user rule would let a store through with no limit, its key being the user's). */
@@ -37,6 +41,9 @@ export interface RateLimitRules {
   /** Creations and cancellations of activation codes and revocations of store keys per authenticated user. */
   readonly storeKeyAdminPerUser: RateLimitRule;
 }
+
+/** Length of an hourly window. */
+const HOUR_SECONDS = 3600;
 
 /** Length of a daily quota window. */
 const DAY_SECONDS = 86_400;
@@ -81,6 +88,8 @@ export function createRateLimitRules(config: Config): RateLimitRules {
       needsGroup: true,
       key: (_req: Request, res: Response) => res.locals.groupAccess?.groupId.toHexString() ?? null,
     }),
+    diagnosticsExportPerUser: Object.freeze({ bucket: 'diagnostics-export:user', limit: config.rateLimitDiagnosticsExportPerUser, key: perUser }),
+    tobaccosImportPerUser: Object.freeze({ bucket: 'tobaccos-import:user', limit: config.rateLimitTobaccosImportPerUser, windowSeconds: HOUR_SECONDS, key: perUser }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
     apiPerStore: Object.freeze({ bucket: 'api:store', limit: config.rateLimitApiPerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),

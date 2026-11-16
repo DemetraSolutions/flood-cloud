@@ -1,0 +1,17 @@
+Ciao %name%,
+la tua prenotazione è passata in stato %status%.
+
+Data
+%date%
+Ore %hours%
+
+Ospite
+%name% %surname%
+%pax% pax
+
+Contatti
+%contactEmail%
+%contactTelephone%
+
+Note
+%notes%

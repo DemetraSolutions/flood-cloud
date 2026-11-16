@@ -77,6 +77,7 @@ describe('visibleMenu', () => {
       'fidelity',
       'products',
       'promotions',
+      'tools',
       'activity-log',
     ]);
   });
@@ -117,6 +118,27 @@ describe('visibleMenu', () => {
     expect(only('products:read')).not.toContain('fidelity');
   });
 
+  it('shows "Strumenti › Template e-mail" in the pages of the group only when the group has the email feature and the user reads places', () => {
+    const children = (
+      hasFeature: (feature: string) => boolean,
+      can: (p: string) => boolean = allowAll,
+    ) =>
+      visibleMenu(MENU, can, hasFeature, 'SA')
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children(allowAll)).toEqual(['diagnostics', 'email-templates']);
+    expect(children((feature) => feature !== 'email')).toEqual(['diagnostics']);
+    expect(children(allowAll, (p) => p !== 'places:read')).toBeUndefined();
+    expect(
+      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'email-templates'),
+    ).toMatchObject({
+      route: '/groups',
+      groupPath: 'email-templates',
+      feature: 'email',
+      permission: 'places:read',
+    });
+  });
+
   it('shows "Strumenti › Nuovo cliente" to platform administrators and dealers with groups:create', () => {
     const tools = (role: Role | undefined, permission: string) =>
       visibleMenu(MENU, (p) => p === permission, allowAll, role).find((i) => i.id === 'tools');
@@ -124,9 +146,46 @@ describe('visibleMenu', () => {
     expect(tools('D', 'groups:create')).toBeDefined();
     expect(tools('SA', 'groups:create')).toBeUndefined();
     expect(tools('PSA', 'groups:read')).toBeUndefined();
+    expect(tools('SA', 'places:read')?.children?.map((i) => i.id)).toEqual([
+      'diagnostics',
+      'email-templates',
+    ]);
+    expect(tools('CA', 'places:read')).toBeDefined();
+    // The parent opens the first page the user can open.
+    expect(tools('SA', 'places:read')?.route).toBe('/tools/diagnostics');
+    expect(tools('PSA', 'groups:create')?.route).toBe('/tools/new-customer');
+    expect(ids([...(tools('PSA', 'places:read')?.children ?? [])])).toEqual([
+      'diagnostics',
+      'email-templates',
+    ]);
+    expect(MENU.find((i) => i.id === 'tools')?.children?.[1]).toMatchObject({
+      route: '/tools/diagnostics',
+      labelKey: 'MENU.DIAGNOSTICS',
+      permission: 'places:read',
+    });
     expect(MENU.find((i) => i.id === 'tools')?.children?.[0]).toMatchObject({
       route: '/tools/new-customer',
       labelKey: 'MENU.NEW_CUSTOMER',
+    });
+  });
+
+  it('shows "Strumenti › Listino Tabacchi" only to platform administrators with tobaccos:read', () => {
+    const children = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children('PSA', 'tobaccos:read')).toEqual(['tobaccos']);
+    for (const role of ['D', 'SA', 'CA', 'PA', 'E', undefined] as const) {
+      expect(children(role, 'tobaccos:read')).toBeUndefined();
+    }
+    expect(children('PSA', 'places:read')).toEqual(['diagnostics', 'email-templates']);
+    expect(
+      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'tobaccos'),
+    ).toMatchObject({
+      route: '/tools/tobaccos',
+      labelKey: 'MENU.TOBACCOS',
+      permission: 'tobaccos:read',
+      roles: ['PSA'],
     });
   });
 

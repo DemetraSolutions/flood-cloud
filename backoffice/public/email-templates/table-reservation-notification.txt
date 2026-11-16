@@ -1,0 +1,17 @@
+Ciao,
+hai ricevuto una nuova richiesta di prenotazione per %placeName%.
+
+Data
+%date%
+Ore %hours%
+
+Ospite
+%name% %surname%
+%pax% pax
+
+Contatti
+%contactEmail%
+%contactTelephone%
+
+Note
+%notes%

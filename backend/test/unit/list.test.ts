@@ -184,3 +184,33 @@ describe('listSearch, listPipeline and pageOf', () => {
     assert.deepEqual(failure({ cursor: over }), [{ field: 'cursor', issue: 'format' }]);
   });
 });
+
+describe('sorting by a number or by an expression', () => {
+  const numeric: ListConfig = {
+    sorts: { price: { field: 'price', kind: 'number' }, first: { field: 'items', kind: 'string', expression: { $arrayElemAt: ['$items.code', 0] } } },
+    defaultSort: 'price',
+    searchFields: ['name'],
+  };
+  const params = (overrides: Partial<ListParams> = {}): ListParams => ({ limit: 2, sort: 'price', q: null, cursor: null, ...overrides });
+  const encode = (value: unknown): string => Buffer.from(JSON.stringify({ ver: 1, s: 'price', v: value, id: ID.toHexString() })).toString('base64url');
+  const decode = (cursor: string) => listParamsOf({ cursor }, numeric);
+
+  it('computes the key as a finite number only, or as the expression when there is one', () => {
+    const key = (sort: string) => (listPipeline({}, params({ sort }), numeric, { name: 1 })[1] as { $addFields: Record<string, unknown> }).$addFields[SORT_KEY];
+    assert.deepEqual(key('price'), { $cond: [{ $and: [{ $in: [{ $type: '$price' }, ['double', 'int', 'long']] }, { $gte: ['$price', -Number.MAX_VALUE] }, { $lte: ['$price', Number.MAX_VALUE] }] }, '$price', null] });
+    const expression = { $arrayElemAt: ['$items.code', 0] };
+    assert.deepEqual(key('first'), { $cond: [{ $and: [{ $eq: [{ $type: expression }, 'string'] }, { $lte: [{ $strLenBytes: expression }, MAX_CURSOR_VALUE_BYTES] }] }, expression, null] });
+  });
+
+  it('keeps a number in the cursor and refuses anything else in it', () => {
+    assert.deepEqual(decode(encode(12.5)).cursor, { value: 12.5, id: ID });
+    assert.deepEqual(decode(encode(null)).cursor, { value: null, id: ID });
+    for (const value of ['12', {}, 'x']) {
+      assert.throws(() => decode(encode(value)), { code: 'VALIDATION_ERROR' });
+    }
+    const page = pageOf([{ _id: ID, [SORT_KEY]: 7.25 }, { _id: new ObjectId() }], params({ limit: 1 }));
+    assert.deepEqual(decode(page.page.next!).cursor, { value: 7.25, id: ID });
+    // A number key continues after the number, on the same computed key.
+    assert.deepEqual(listPipeline({}, params({ cursor: { value: 7.25, id: ID } }), numeric, {})[2], { $match: { $or: [{ [SORT_KEY]: { $gt: 7.25 } }, { [SORT_KEY]: 7.25, _id: { $gt: ID } }] } });
+  });
+});

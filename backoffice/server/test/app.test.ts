@@ -64,6 +64,8 @@ describe('static server', () => {
     await writeFile(join(root, 'main-ABCDEF12.js'), 'console.log(1)');
     await writeFile(join(root, 'styles-ZZZZ9999.css'), 'a{}');
     await writeFile(join(root, 'plain.js'), 'x');
+    await writeFile(join(root, 'email-preview.html'), '<html>preview</html>');
+    await writeFile(join(root, 'email-preview.js'), 'void 0');
     await writeFile(join(root, 'i18n', 'it.json'), '{"a":1}');
     await writeFile(join(root, 'hello.txt'), 'hello');
     await writeFile(join(root, 'hello.txt.br'), 'BR');
@@ -130,6 +132,30 @@ describe('static server', () => {
     const json = await raw(port, '/i18n/it.json');
     assert.equal(json.headers['cache-control'], 'no-cache');
     assert.equal(json.body, '{"a":1}');
+  });
+
+  test('serves the e-mail preview files with their own policy, and every other path keeps the strict one', async () => {
+    for (const target of ['/email-preview.html', '/email-preview.js']) {
+      const res = await raw(port, target);
+      assert.equal(res.status, 200);
+      assert.equal(
+        res.headers['content-security-policy'],
+        "sandbox allow-scripts; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src https: data:; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
+      );
+      assert.equal(res.headers['referrer-policy'], 'no-referrer');
+      assert.equal(res.headers['x-content-type-options'], 'nosniff');
+      assert.equal(res.headers['x-frame-options'], 'SAMEORIGIN');
+      assert.equal(res.headers['cross-origin-resource-policy'], 'cross-origin');
+      const again = await raw(port, target, 'GET', { 'if-none-match': res.headers['etag'] as string });
+      assert.equal(again.status, 304);
+      assert.match(again.headers['content-security-policy'] as string, /^sandbox allow-scripts; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'/);
+    }
+    for (const target of ['/plain.js', '/index.html', '/healthz', '/email-preview.html.txt', '/sub/email-preview.html', '/Email-Preview.html']) {
+      const res = await raw(port, target, 'GET', HTML);
+      assert.doesNotMatch(res.headers['content-security-policy'] as string, /unsafe-inline/, target);
+      assert.match(res.headers['content-security-policy'] as string, /frame-ancestors 'none'/, target);
+      assert.equal(res.headers['x-frame-options'], 'DENY', target);
+    }
   });
 
   test('answers 304 on matching If-None-Match (list and wildcard)', async () => {

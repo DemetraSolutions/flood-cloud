@@ -1,0 +1,8 @@
+Ciao %name%,
+purtroppo la prenotazione non è andata a buon fine.
+%placeName% ha annullato la tua prenotazione.
+
+Prova a prenotare in un altro giorno o contatta il locale.
+
+Vuoi contattare %placeName%?
+Chiama il numero %placeTelephone%

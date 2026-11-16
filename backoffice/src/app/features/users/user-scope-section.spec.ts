@@ -48,7 +48,10 @@ async function render(options: StateOptions & { user?: ReturnType<typeof storedU
   return { ...rendered, ...spies, legends, as };
 }
 
+beforeEach(() => sessionStorage.clear());
+
 afterEach(() => {
+  sessionStorage.clear();
   backend().verify();
   vi.restoreAllMocks();
   document.body.replaceChildren();

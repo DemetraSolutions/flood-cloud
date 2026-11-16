@@ -105,6 +105,16 @@ describe('the requests of a store key', () => {
       ['PUT', `${placeUrl(own())}/settings/dealer`, { sentry: true, serverIp: '1.1.1.1', connectorAddress: '' }],
       ['PUT', `${placeUrl(own())}/integrations`, {}],
       ['PUT', `${placeUrl(own())}/devices`, { items: [] }],
+      // The tools of the platform (steps T1, T2, T3) are not opened to a store key either; the import is refused before its body is read.
+      ['GET', '/diagnostics/devices'],
+      ['GET', '/diagnostics/devices.csv'],
+      ['GET', `/groups/${g}/email-templates`],
+      ['POST', `/groups/${g}/email-templates`, { name: 'x' }],
+      ['GET', `/groups/${g}/email-templates/${hex(own())}`],
+      ['PATCH', `/groups/${g}/email-templates/${hex(own())}`, { name: 'x' }],
+      ['DELETE', `/groups/${g}/email-templates/${hex(own())}`],
+      ['GET', '/tobaccos'],
+      ['POST', '/tobaccos/import', {}],
       ['GET', world.keyPath(0, own())],
       ['POST', world.keyPath(0, own(), '/activation-codes')],
       ['DELETE', world.keyPath(0, own())],
@@ -115,6 +125,8 @@ describe('the requests of a store key', () => {
     }
     assert.equal((await world.asStore(store.key, 'GET', '/groups/not-a-group/places/x')).status, 404);
     assert.equal(await common().collection('storeActivationCodes').countDocuments({}), 0, 'nothing was created');
+    assert.equal(await common().collection('tobaccos').countDocuments({}), 0, 'no list was written');
+    assert.equal(await common().collection('idempotencyKeys').countDocuments({}), 0, 'the import did not even begin');
     assert.equal((await world.keysOf(own())).length, 1);
   });
 

@@ -10,7 +10,7 @@ import { open, readFile, realpath, stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { join, sep } from 'node:path';
 import type { ServerConfig } from './config.ts';
-import { buildSecurityHeaders, NONCE_PLACEHOLDER } from './headers.ts';
+import { buildPreviewHeaders, buildSecurityHeaders, NONCE_PLACEHOLDER, PREVIEW_PATHS } from './headers.ts';
 import { mimeType } from './mime.ts';
 
 /** One structured access-log entry. */
@@ -159,6 +159,7 @@ export function createApp(
 ): (req: IncomingMessage, res: ServerResponse) => void {
   const configBody = Buffer.from(JSON.stringify({ apiBaseUrl: config.apiBaseUrl }));
   const baseHeaders = buildSecurityHeaders(config.apiOrigin);
+  const previewHeaders = buildPreviewHeaders(config.apiOrigin);
   let realRootPromise: Promise<string> | undefined;
   const getRealRoot = (): Promise<string> => (realRootPromise ??= realpath(config.staticRoot));
 
@@ -184,6 +185,7 @@ export function createApp(
     realRoot: string,
     segments: readonly string[],
     file: ResolvedFile,
+    securityHeaders: Record<string, string> = baseHeaders,
   ): Promise<void> {
     const acceptEncoding = req.headers['accept-encoding'];
     let served = file;
@@ -210,12 +212,12 @@ export function createApp(
       headers['content-encoding'] = encoding;
     }
     if (matchesEtag(req.headers['if-none-match'], etag)) {
-      res.writeHead(304, { ...baseHeaders, ...headers });
+      res.writeHead(304, { ...securityHeaders, ...headers });
       res.end();
       return;
     }
     const handle = await open(served.path, 'r');
-    res.writeHead(200, { ...baseHeaders, ...headers, 'content-length': String(served.size) });
+    res.writeHead(200, { ...securityHeaders, ...headers, 'content-length': String(served.size) });
     if (req.method === 'HEAD') {
       await handle.close();
       res.end();
@@ -288,7 +290,7 @@ export function createApp(
         await serveIndex(req, res, realRoot);
         return;
       }
-      await serveFile(req, res, realRoot, segments, file);
+      await serveFile(req, res, realRoot, segments, file, PREVIEW_PATHS.has(pathname) ? previewHeaders : baseHeaders);
       return;
     }
     const last = segments[segments.length - 1] as string;

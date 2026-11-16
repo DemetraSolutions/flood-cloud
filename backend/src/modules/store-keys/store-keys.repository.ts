@@ -2,6 +2,7 @@ import type { ClientSession, Collection, ObjectId } from 'mongodb';
 import { REVOKED_STORE_KEY_RETENTION_DAYS } from '../../db/store-keys-schema.ts';
 import type { Databases } from '../../db/databases.ts';
 import type {
+  ActiveKeySummary,
   ConsumedActivation,
   Installation,
   KeyIssuer,
@@ -19,6 +20,9 @@ import type {
 export const LAST_SEEN_RESOLUTION_MS = 60_000;
 
 const DAY_MS = 86_400_000;
+
+/** Most places {@link StoreKeysRepository.summariesOfPlaces} answers for in one call. */
+export const MAX_KEY_SUMMARY_PLACES = 1000;
 
 /** The stored store key: the hash is kept, and never leaves the repository. */
 interface StoreKeyDocument {
@@ -126,6 +130,15 @@ export interface StoreKeysRepository {
    */
   findActiveOfPlace(groupId: ObjectId, placeId: ObjectId): Promise<StoreKey | null>;
   /**
+   * The active keys of some places, reduced to what the diagnostics show: never the hash, the hint, an address or a user agent.
+   *
+   * @param groupIds Ids of the groups of the places (a key of another group is never summarised).
+   * @param placeIds Ids of the places, at most {@link MAX_KEY_SUMMARY_PLACES}.
+   * @returns One summary per place that has an active key.
+   * @throws {Error} If there are more places than the maximum.
+   */
+  summariesOfPlaces(groupIds: readonly ObjectId[], placeIds: readonly ObjectId[]): Promise<ActiveKeySummary[]>;
+  /**
    * @param groupId Id of the group.
    * @param placeId Id of the place.
    * @returns When and why its most recently activated key that is revoked ended, or `null`.
@@ -223,6 +236,16 @@ export function createStoreKeysRepository(databases: Databases): StoreKeysReposi
     findActiveOfPlace: async (groupId, placeId) => {
       const document = await keys().findOne({ groupId, placeId, status: 'active' });
       return document === null ? null : toStoreKey(document);
+    },
+
+    summariesOfPlaces: async (groupIds, placeIds) => {
+      if (placeIds.length > MAX_KEY_SUMMARY_PLACES) {
+        throw new Error('Too many places for one summary of the store keys');
+      }
+      const found = await keys()
+        .find({ groupId: { $in: [...groupIds] }, placeId: { $in: [...placeIds] }, status: 'active' }, { projection: { placeId: 1, lastSeenAt: 1, 'installation.appVersion': 1 }, limit: placeIds.length })
+        .toArray();
+      return found.map((key) => ({ placeId: key.placeId, lastSeenAt: key.lastSeenAt, appVersion: key.installation.appVersion }));
     },
 
     findLastRevokedOfPlace: async (groupId, placeId) => {

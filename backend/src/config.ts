@@ -111,6 +111,10 @@ export interface Config {
   readonly rateLimitStoreActivationPerIp: number;
   /** Activation code creations, cancellations and key revocations per minute allowed to a user (`RATE_LIMIT_STORE_KEY_ADMIN_PER_USER`). */
   readonly rateLimitStoreKeyAdminPerUser: number;
+  /** CSV exports of the diagnostics per minute allowed to a user (`RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER`). */
+  readonly rateLimitDiagnosticsExportPerUser: number;
+  /** Imports of the tobacco price list per hour allowed to a user (`RATE_LIMIT_TOBACCOS_IMPORT_PER_USER`). */
+  readonly rateLimitTobaccosImportPerUser: number;
   /** Files host written in the `filesHost` of the groups the onboarding creates (`GROUP_FILES_HOST`, an `https` URL without trailing slash), `''` when unset. */
   readonly groupFilesHost: string;
   /** Minutes an activation code of a store key stays valid (`STORE_ACTIVATION_CODE_TTL_MINUTES`). */
@@ -595,6 +599,8 @@ export function loadConfig(env: Env): Config {
   const rateLimitApiPerStore = readInteger(env, issues, 'RATE_LIMIT_API_PER_STORE', 600, 1, 1_000_000);
   const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
+  const rateLimitDiagnosticsExportPerUser = readInteger(env, issues, 'RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', 5, 1, 100000);
+  const rateLimitTobaccosImportPerUser = readInteger(env, issues, 'RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', 5, 1, 100000);
   const storeActivationCodeTtlMinutes = readInteger(env, issues, 'STORE_ACTIVATION_CODE_TTL_MINUTES', 1440, 5, 10080);
   const groupFilesHost = readFilesHost(env, issues);
   const media = readMedia(env, issues);
@@ -661,6 +667,8 @@ export function loadConfig(env: Env): Config {
     rateLimitApiPerStore === undefined ||
     rateLimitStoreActivationPerIp === undefined ||
     rateLimitStoreKeyAdminPerUser === undefined ||
+    rateLimitDiagnosticsExportPerUser === undefined ||
+    rateLimitTobaccosImportPerUser === undefined ||
     storeActivationCodeTtlMinutes === undefined ||
     groupFilesHost === undefined ||
     media === undefined ||
@@ -699,6 +707,8 @@ export function loadConfig(env: Env): Config {
     rateLimitApiPerStore,
     rateLimitStoreActivationPerIp,
     rateLimitStoreKeyAdminPerUser,
+    rateLimitDiagnosticsExportPerUser,
+    rateLimitTobaccosImportPerUser,
     storeActivationCodeTtlMinutes,
     groupFilesHost,
     media,

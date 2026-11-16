@@ -29,6 +29,7 @@ const ODD: WarehouseRule = { ...BASE, id: 'w4', name: 'Odd', type: null, counter
 const render = (canUpdate = true) =>
   renderCatalogPage(WarehouseRulesPage, 'warehouse-rules', canUpdate);
 
+beforeEach(() => sessionStorage.clear());
 afterEach(cleanUpPage);
 
 describe('WarehouseRulesPage', () => {

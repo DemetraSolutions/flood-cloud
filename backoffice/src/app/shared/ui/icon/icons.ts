@@ -33,6 +33,7 @@ export const ICONS = {
   tag: 'M3 12V4h8l10 10-8 8zM7.5 8v.01',
   release: 'M12 4v10M8 10l4 4 4-4M5 19h14',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
+  mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20c0-3.3 3.6-6 8-6s8 2.7 8 6',
 } as const;
 

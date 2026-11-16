@@ -1220,6 +1220,132 @@ Promozioni. Permessi `products:*`. Body fino a 256 KB. Limite 200 promozioni, li
 - Regole: fine prima dell'inizio `422` `conditions.endDate`/`incorrect`; sconto percentuale oltre 100 `422` `actions.discountValue`/`incorrect`; id inesistenti o nel cestino `422` `<campo>.<indice>`/`incorrect` (ad esempio `conditions.products.productIds.2`).
 - **CA e PA** scrivono solo promozioni valide per punti vendita del proprio perimetro (`conditions.placeIds`, lista vuota vietata): `403 FORBIDDEN` con `details` `notAllowed`; modificare o eliminare una promozione che vale fuori perimetro o per tutto il gruppo è `403`.
 
+## Diagnostica dei dispositivi (`/v1`, passo T1)
+
+Sola lettura sulle **copie dei punti vendita** nel database comune (mai sui database dei gruppi): una riga per dispositivo di ogni punto vendita. Il perimetro lo applica il server dal ruolo; il client al massimo restringe con i filtri. Le route non sono aperte alla chiave di negozio (`403 FORBIDDEN`).
+
+**Perimetro** (stesso per le due route): PSA tutti i gruppi; D i propri; SA il proprio gruppo; CA i punti vendita delle proprie aziende; PA i propri punti vendita. Sono sempre esclusi i gruppi nel cestino, i punti vendita nel cestino e quelli di un'azienda nel cestino. Per **PSA e D** sono esclusi anche i gruppi **demo** (come il legacy), a meno che la richiesta nomini quel gruppo con `groupId`; SA, CA e PA leggono il proprio gruppo anche se demo. Un `groupId`, `companyId` o `placeId` fuori dal perimetro non dà errore: il risultato è vuoto.
+
+**Mai restituito**: credenziali della cassa automatica, integrazioni, `server.ip`, `connectorAddress`, host, numeri di serie, parametri dei POS e dei terminali di pagamento, hash, suggerimento, IP e user agent della chiave di negozio. Di ogni dispositivo escono solo i campi elencati sotto.
+
+### GET /v1/diagnostics/devices
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `places:read`
+- **Query:**
+  | Parametro | Tipo | Note |
+  |---|---|---|
+  | `limit` | intero 1–100 | default 50 |
+  | `cursor` | opaco | quello di `page.next`; un cursore non emesso dal server è `422` (`cursor`/`format`) |
+  | `groupId`, `companyId`, `placeId` | 24 caratteri esadecimali | restringono dentro il perimetro |
+  | `type` | `desk`, `handheld`, `ordering`, `room-handheld`, `selfordering`, `waiting-list`, `external-display`, `kiosk`, `tgm` | |
+  | `q` | testo 1–64 caratteri | cerca, in modo letterale e senza distinzione tra maiuscole e minuscole, nel nome del punto vendita e del dispositivo |
+  Parametri sconosciuti (compresi `sort`) sono `422`. L'ordine è fisso: punti vendita per `_id`, dispositivi nell'ordine della lista del punto vendita.
+- **Risposta:** `200` `{ data, page }` con `ETag` debole e `Cache-Control: no-store`; `If-None-Match` uguale dà `304` senza corpo. Ogni riga:
+  ```json
+  {
+    "id": "665f1c2e9b1d4a0012ab3601:0",
+    "groupId": "665f1c2e9b1d4a0012ab34a1", "groupName": "Gruppo Esempio",
+    "companyId": "665f1c2e9b1d4a0012ab3501", "companyName": "Acme S.r.l.", "companyCode": "01234567890",
+    "placeId": "665f1c2e9b1d4a0012ab3601", "placeName": "Bar Roma",
+    "deviceId": "d1", "deviceName": "Cassa 1", "deviceType": "desk",
+    "appVersion": "1.2.3", "server": true,
+    "platform": "android", "platformVersion": "13", "model": "Pixel 7",
+    "lastDataDownload": "2026-03-05T22:30:15.000Z", "lastSession": "2026-03-06T08:00:00.000Z",
+    "storeKey": { "status": "active", "lastSeenAt": "2026-11-16T09:00:00.000Z", "appVersion": "4.5.6" }
+  }
+  ```
+  `id` è `<placeId>:<posizione del dispositivo>`. `companyCode` è la partita IVA. I valori mancanti o del tipo sbagliato nel dato memorizzato sono `null` (i nomi `''`); le date sono ISO UTC (`null` se non sono date). `storeKey.status` è `active` (una chiave attiva, con ultimo uso e versione dell'app dichiarata allo scambio) o `none`.
+- **Errori:** `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante o chiave di negozio), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR`, `429 RATE_LIMITED`
+
+### GET /v1/diagnostics/devices.csv
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** come sopra; **rate limit** dedicato per utente (`RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER`, 5 al minuto di default) oltre a quello generale.
+- **Query:** gli stessi filtri (`groupId`, `companyId`, `placeId`, `type`, `q`), senza `limit` né `cursor` (`limit` è `422`).
+- **Risposta:** `200` `text/csv; charset=utf-8` in streaming (a blocchi di 500 righe, con contropressione; il lavoro si ferma se il client chiude), `Content-Disposition: attachment; filename="devices-diagnostic_<AAAA-MM-GG>.csv"`, `Cache-Control: no-store`. UTF-8 con BOM, separatore `;`, fine riga CRLF, valori con `;`, `"` o a capo tra virgolette (`"` raddoppiate). Colonne, nell'ordine: `GRUPPO;AZIENDA;P.IVA;PUNTO VENDITA;DISPOSITIVO;TIPO;VERSIONE FLOOD;SERVER;SISTEMA;VERSIONE;MODELLO;ULT. DOWNLOAD;ULT. SESSIONE;CHIAVE NEGOZIO;ULT. USO CHIAVE;VERSIONE APP NEGOZIO` (le prime tredici come il legacy). `SERVER` è `Sì`/`No`; le date sono `gg-mm-aaaa HH:MM:SS` nel fuso `Europe/Rome`; `CHIAVE NEGOZIO` è `Attiva`/`Nessuna`; una partita IVA di sole cifre ha il prefisso `_` (come il legacy, per non perdere gli zeri in Excel). **Iniezione di formule**: un valore che inizia con `=`, `+`, `-`, `@`, tabulazione o ritorno a capo riceve un `'` iniziale. Senza righe il file ha solo l'intestazione.
+- **Limite:** al massimo **50 000 righe**; oltre, `413 PAYLOAD_TOO_LARGE` prima del primo byte (si restringe con i filtri); il file non supera mai il tetto nemmeno se dopo il conteggio si aggiungono righe. Un solo export alla volta per utente (un secondo è `429 RATE_LIMITED`) e al massimo 5 minuti di durata (poi la connessione si chiude).
+- **Errori:** `401`, `403 FORBIDDEN`, `403 PASSWORD_CHANGE_REQUIRED`, `413 PAYLOAD_TOO_LARGE`, `422 VALIDATION_ERROR`, `429 RATE_LIMITED`
+
+## Template e-mail del gruppo (`/v1`, passo T2)
+
+Testi e HTML delle e-mail che il gruppo invia (conferme di prenotazione e di appuntamento, report avanzato); i punti vendita li scelgono nelle impostazioni (`GET /v1/groups/{groupId}/lookup/email-templates`). Collection `email_templates` del database del gruppo. Tutte le route sono **di gruppo** (il gruppo è verificato sul perimetro del chiamante: PSA e D sul gruppo scelto, SA, CA e PA sul proprio), richiedono la **feature `email`** del gruppo (altrimenti `403 FEATURE_DISABLED`, qualunque ruolo) e **non sono aperte alla chiave di negozio**. Permessi: lettura `places:read`, scrittura `places:update`. Un template è del gruppo, non di un punto vendita: CA e PA vedono e modificano quelli di tutto il gruppo, come nel legacy.
+
+**L'HTML non si serve mai come HTML.** Compare solo come campo stringa di una risposta JSON (`Content-Type: application/json`, `X-Content-Type-Options: nosniff`); nessuna route risponde `text/html`. Il server **non lo sanifica** (decisione dell'utente: è il contenuto di un'e-mail): il backoffice lo mostra solo in un riquadro isolato (documento a parte, con `sandbox` senza `allow-same-origin` e una propria CSP) e mai con `innerHTML`. L'HTML e il testo non entrano mai nei log, né in quelli dell'applicazione né nel registro attività.
+
+**Forma.** Elenco: `{ id, name, updatedAt }` (mai testo né HTML). Dettaglio: `{ id, name, text, html, createdAt, updatedAt }`, con `ETag` forte (la versione: HMAC di id, nome, testo, HTML e data dell'ultima modifica; il `If-Match` della scrittura successiva). Le date sono ISO 8601 UTC, `null` se il documento (storico) non ne ha; un campo del tipo sbagliato è `''`.
+
+**Limiti e validazione** (per allowlist, nessun documento del client è memorizzato così com'è): `name` obbligatorio, 1–150 caratteri dopo il trim, nessun carattere di controllo; `text` al massimo 64 KB (UTF-8); `html` al massimo **256 KB** (UTF-8), stringa, **memorizzato come inviato** (nessuna normalizzazione). In `text` e `html` sono rifiutati NUL e gli altri caratteri di controllo (`U+0000–0008`, `000B`, `000C`, `000E–001F`, `007F`) tranne tabulazione, a capo e ritorno a capo: `422` con `issue` `pattern`; Unicode non ben formato `format`; troppo lungo `maxLength`; tipo sbagliato `type`; campo sconosciuto `unknown`. Il corpo ha un limite di 2 MB: oltre `413 PAYLOAD_TOO_LARGE`; un corpo che non è JSON `415`.
+
+### GET /v1/groups/{groupId}/email-templates
+- **Superficie:** backoffice. **Permesso:** `places:read` + feature `email`.
+- **Query:** `limit` 1–100 (50), `cursor`, `sort` (`name` default, `-name`, `updatedAt`, `-updatedAt`), `q` (1–64 caratteri, cerca nel solo nome, in modo letterale e senza distinzione tra maiuscole e minuscole).
+- **Risposta:** `200` `{ data: [{ id, name, updatedAt }], page: { limit, next } }`.
+- **Errori:** `401`, `403 FORBIDDEN`, `403 FEATURE_DISABLED`, `404 NOT_FOUND` (gruppo fuori perimetro), `422 VALIDATION_ERROR`, `429`.
+
+### POST /v1/groups/{groupId}/email-templates
+- **Permesso:** `places:update` + feature `email`. **`Idempotency-Key`** obbligatoria (UUID): lo stesso invio ripetuto dà la stessa risposta; la stessa chiave con un corpo diverso `409`.
+- **Body:** `{ name, text?, html? }` (`text` e `html` vuoti se mancano).
+- **Risposta:** `201` `{ data }` (il dettaglio), `Location` e `ETag`. Il documento memorizzato ha le sole chiavi `name`, `text`, `html`, `insertDate`, `updateDate`. Registra `emailTemplate.created`.
+- **Errori:** `401`, `403`, `409 CONFLICT` (chiave riusata con altro corpo, o richiesta ancora in corso), `413`, `415`, `422` (`Idempotency-Key` `required`/`format`, campi), `429`.
+
+### GET /v1/groups/{groupId}/email-templates/{templateId}
+- **Permesso:** `places:read` + feature `email`. **Risposta:** `200` `{ data }` con `ETag`. **Errori:** `404 NOT_FOUND` (anche un id di un altro gruppo), `422` per un id malformato.
+
+### PATCH /v1/groups/{groupId}/email-templates/{templateId}
+- **Permesso:** `places:update` + feature `email`. **`If-Match`** obbligatorio (l'`ETag` letto).
+- **Body:** almeno uno tra `name`, `text`, `html` (un corpo vuoto è `422` `(body)`/`required`). Solo i campi inviati cambiano.
+- **Risposta:** `200` `{ data }` con il nuovo `ETag`. Una richiesta che non cambia nulla non scrive e non registra nulla (risposta con lo stesso `ETag`). Registra `emailTemplate.updated`.
+- **Errori:** `404`, `412 PRECONDITION_FAILED` (il template è cambiato dopo che l'hai letto: rileggilo), `409 CONFLICT` (cambiato mentre la richiesta girava), `413`, `415`, `422` (`If-Match` `required`/`format`, campi).
+
+### DELETE /v1/groups/{groupId}/email-templates/{templateId}
+- **Permesso:** `places:update` + feature `email`. Eliminazione definitiva (il legacy non ha un cestino per i template).
+- **Rifiutata con `409 CONFLICT`** finché un punto vendita del gruppo, **cestinati compresi**, nomina il template in `appointment.email.templateId` o in `roomsSettings.reservation.{emailNotification,email,emailConfirmedStatus,emailRefusedStatus,emailChangeStatus}.templateId`; la verifica si fa sulle **copie** dei punti vendita nel database comune. `details` elenca i punti vendita **del perimetro del chiamante**, al massimo 20: `{ field: "places.<placeId>", issue: "referenced" }`. Un CA o un PA non riceve mai l'id di un punto vendita fuori dal proprio perimetro: ne vede uno solo, anonimo, `{ field: "places", issue: "referenced" }` (il `409` resta). PSA, D e SA vedono tutti.
+- **Risposta:** `204` senza corpo. Registra `emailTemplate.deleted`. **Errori:** `404`, `409` (come sopra), `422` per un id malformato.
+
+**Registro attività:** `emailTemplate.created`, `emailTemplate.updated`, `emailTemplate.deleted`, risorsa `emailTemplate` con l'id e il gruppo; `changes` contiene il nome e un'impronta troncata (`textDigest`, `htmlDigest`) del contenuto: mai il testo né l'HTML.
+
+## Listino Tabacchi (`/v1`, passo T3)
+
+Il listino nazionale dei tabacchi (il file ufficiale ADM), **unico per tutta la piattaforma**: collection `tobaccos` del database comune, la stessa che il legacy riempie e legge (la sincronizzazione del catalogo, con il dominio Catalogo). Le due route sono **solo del PSA** (`tobaccos:read` e `tobaccos:import` sono solo nel suo tetto, concessi dai flag `groups.r` / `groups.w` come i permessi `dealers:*`): ogni altro ruolo riceve `403 FORBIDDEN`, anche con la matrice più larga, e la chiave di negozio `403` (le route non sono aperte al negozio). Errori comuni: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN`, `403 PASSWORD_CHANGE_REQUIRED`, `429 RATE_LIMITED`.
+
+### GET /v1/tobaccos
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `tobaccos:read`; solo PSA
+- **Query** (sconosciuti: `422`):
+  | Parametro | Valori | Note |
+  |---|---|---|
+  | `limit` | 1–100 | default 50 |
+  | `cursor` | opaco | quello di `page.next`, valido solo per lo stesso `sort`; altro è `422` `cursor`/`format` |
+  | `sort` | `code` (default), `name`, `category`, `priceKg`, `price`, `barcode`, ciascuno anche con `-` | `barcode` è il primo barcode del prodotto; un valore mancante o del tipo sbagliato (il legacy scriveva ciò che trovava nel file) viene prima in ordine crescente; a parità l'ordine è per `_id` |
+  | `q` | testo 1–64 caratteri | cerca nel nome e nel codice, in modo letterale e senza distinzione tra maiuscole e minuscole |
+  | `category` | testo 1–100 caratteri | categoria uguale (confronto esatto) |
+- **Risposta:** `200` `{ data, page: { limit, next } }` con `ETag` debole e `Cache-Control: no-store`; `If-None-Match` uguale dà `304` senza corpo. Ogni riga è la proiezione delle colonne della tabella (barcode secondari, peso, pezzi e descrizione non escono):
+  ```json
+  { "id": "665f1c2e9b1d4a0012ab3701", "code": "0001", "name": "Marlboro Red 20", "shortName": "MARLBORO R", "category": "Sigarette",
+    "priceKg": 380, "price": 7.6, "barcode": "8000000000017" }
+  ```
+  `priceKg` e `price` sono numeri o `null`; i testi mancanti o del tipo sbagliato sono `''`; `barcode` è `null` se il prodotto non ne ha.
+- **Errori:** `401`, `403 FORBIDDEN`, `422 VALIDATION_ERROR`, `429`
+
+### POST /v1/tobaccos/import
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `tobaccos:import`; solo PSA. **`Idempotency-Key`** obbligatoria (UUID, controllata **prima** di leggere il file: `422` `Idempotency-Key`/`required` o `format`). La stessa chiave con lo stesso file risponde di nuovo la stessa risposta senza rifare nulla; la stessa chiave con un file diverso è `409 CONFLICT`. **Rate limit** dedicato per utente: `RATE_LIMIT_TOBACCOS_IMPORT_PER_USER`, **5 all'ora** di default (`429` con `Retry-After`), oltre a quello generale.
+- **Body:** `multipart/form-data` con **un solo** file nel campo `file` (l'`.xlsx` del listino ADM) e nient'altro. Il file sta in memoria (mai su disco), al massimo **10 MB**; si accetta solo se i primi byte sono la firma ZIP `PK\x03\x04` (il nome e il tipo dichiarati non contano). Un'importazione alla volta nel processo, due in attesa: oltre, `503` con `Retry-After`.
+- **Formato del file** (prima riga di intestazione, primo foglio): colonne 1 categoria, 2 codice, 3 nome, 4 nome breve, 5 prezzo/kg, 6 prezzo, 7 peso unitario, 8 numero pezzi, 9 descrizione, da 10 a 29 fino a dieci coppie (barcode, quantità per confezione). Le righe vuote e quelle di soli spazi si saltano; una coppia con il barcode vuoto si salta con la sua quantità, come nel legacy.
+- **Regole, tutte verificate su ogni riga prima di scrivere** (il legacy non verificava nulla): codice e nome obbligatori; codice unico nel file (`^[A-Za-z0-9._/ -]{1,40}$`); testi tagliati agli spazi, senza caratteri di controllo (tranne tabulazione e a capo), al massimo 100 (categoria, nome breve), 200 (nome), 1000 (descrizione) caratteri; prezzo/kg, prezzo e peso: numeri finiti, **non negativi**, fino a 1 000 000 000, vuoti = `null` (come testo si accetta la virgola decimale); numero di pezzi e quantità: interi (quantità fino a 100 000); barcode **`^[0-9]{8,14}$`** (anche se la cella è un numero); al massimo **20 000** prodotti (il listino nazionale ne ha poche migliaia).
+- **Limiti del lettore per questo file:** 25 000 righe, 29 colonne, 20 MB per voce e 30 MB in tutto da decomprimere, 32 767 caratteri per cella e 20 milioni di caratteri di testo in tutto (un riferimento a una stringa condivisa conta quanto il suo testo); oltre, `422` `file`/`incorrect`.
+- **Cosa succede.** Solo se **l'intero file è valido** l'intero listino è sostituito in **una transazione** sul cluster comune (`deleteMany({})` e `insertMany` a blocchi di 1000, con `readConcern snapshot` e `writeConcern majority`): chi legge vede il listino vecchio o il nuovo, mai una via di mezzo, e un errore a metà lascia il vecchio intatto. Documenti come nel legacy: `{ category, code, name, shortName, priceKg, price, unitWeight, numPieces, description, barcodes: [{ barcode, quantity }] }`.
+- **Risposta:** `200` `{ data: { inserted, previous, elapsedMs } }` (prodotti del nuovo listino, di quello sostituito, millisecondi impiegati dalla lettura del file alla fine della sostituzione). Registra `tobaccos.imported` (solo i due conteggi, nessun prodotto); un file rifiutato (`422`) registra `tobaccos.imported` con esito `failure` e il solo motivo (`file` o `rows`). Il PSA ha sempre l'intero tetto del ruolo (D-28): i flag `groups.r`/`groups.w` della sua matrice non lo limitano.
+- **Errori:**
+  - `413 PAYLOAD_TOO_LARGE`: file oltre 10 MB.
+  - `415 UNSUPPORTED_MEDIA_TYPE`: la richiesta non è `multipart/form-data`, o il file non comincia con la firma ZIP.
+  - `422 VALIDATION_ERROR`:
+    - `file`/`required`: nessun file, o nessun prodotto nel file;
+    - `file`/`tooMany`: più di 20 000 prodotti;
+    - `file`/`unknown` (un file in un altro campo) e `(body)`/`unknown` (più file o un campo di testo);
+    - `file`/`incorrect`, con un messaggio fisso (mai un byte del file): non è un XLSX, è danneggiato, usa ZIP64 o la cifratura, ha un nome di voce non sicuro (assoluto, con `..`, duplicato), contiene una `<!DOCTYPE`, supera i limiti del lettore (50 voci, 50 MB per voce e 100 MB in tutto da decomprimere, rapporto di compressione 100, 100 000 righe, 50 colonne);
+    - **righe non valide**: un dettaglio per problema, al massimo 50, con `field` `rows[<riga del foglio>].<campo>` (`category`, `code`, `name`, `shortName`, `priceKg`, `price`, `unitWeight`, `numPieces`, `description`, oppure `barcodes[<n>].barcode` / `barcodes[<n>].quantity`, con `n` da 0) e `issue` tra `required`, `type`, `minimum`, `maximum`, `maxLength`, `pattern`, `format`, `taken` (codice già presente nel file). La riga 1 è l'intestazione. Il listino resta com'era.
+  - `400 BAD_REQUEST`: corpo multipart non valido. `409 CONFLICT`: chiave già usata con un altro file o richiesta ancora in corso. `429 RATE_LIMITED`. `503 SERVICE_UNAVAILABLE`: troppe importazioni in coda.
+
 ## Registro attività ed errori (`/v1`)
 
 ### GET /v1/activity-log

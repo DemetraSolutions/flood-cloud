@@ -1,0 +1,20 @@
+Ciao %name%,
+%placeName% ha confermato la tua prenotazione.
+
+Data
+%date%
+Ore %hours%
+
+Ospite
+%name% %surname%
+%pax% pax
+
+Contatti
+%contactEmail%
+%contactTelephone%
+
+Note
+%notes%
+
+Vuoi contattare %placeName%?
+Chiama il numero %placeTelephone%

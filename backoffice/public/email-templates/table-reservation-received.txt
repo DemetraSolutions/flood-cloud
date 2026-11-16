@@ -1,0 +1,18 @@
+Ciao %name%,
+abbiamo preso in carico la tua richiesta di prenotazione tavolo presso %placeName%.
+Attendi la ricezione della mail di conferma.
+
+Data
+%date%
+Ore %hours%
+
+Ospite
+%name% %surname%
+%pax% pax
+
+Contatti
+%contactEmail%
+%contactTelephone%
+
+Note
+%notes%

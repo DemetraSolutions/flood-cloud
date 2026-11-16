@@ -24,6 +24,8 @@ export function buildCsp(apiOrigin: string, styleNonce?: string): string {
     "script-src 'self'",
     `style-src ${styleSrc}`,
     "img-src 'self' data:",
+    // The e-mail preview frame (`PREVIEW_PATHS`) is the only frame the application opens.
+    "frame-src 'self'",
     "font-src 'self'",
     `connect-src 'self' ${apiOrigin}`,
     "manifest-src 'self'",
@@ -33,6 +35,48 @@ export function buildCsp(apiOrigin: string, styleNonce?: string): string {
     "require-trusted-types-for 'script'",
     'trusted-types angular angular#bundler',
   ].join('; ');
+}
+
+/**
+ * The two files of the e-mail preview document (`public/email-preview.html` and its script), shown in a
+ * sandboxed frame of the template page. They are the only paths with their own headers ({@link buildPreviewHeaders}).
+ */
+export const PREVIEW_PATHS: ReadonlySet<string> = new Set(['/email-preview.html', '/email-preview.js']);
+
+/**
+ * Content-Security-Policy of the preview document: the HTML of an e-mail is written in it, so nothing may
+ * run but our one script (`'self'`), styles are inline, images come over HTTPS or `data:`, there is no
+ * connection, frame, font or form, only the application may frame it, and the document is sandboxed (opaque origin, scripts allowed) by the policy itself.
+ */
+export const PREVIEW_CSP = [
+  // An opaque origin whatever the context: even if someone opened the file as a page, or framed it without `sandbox`, it never has the origin of the application.
+  'sandbox allow-scripts',
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'unsafe-inline'",
+  'img-src https: data:',
+  "form-action 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'self'",
+].join('; ');
+
+/**
+ * Builds the headers of the preview files: the usual set with the policy of {@link PREVIEW_CSP}, the page
+ * framable by the application only (`SAMEORIGIN`), and `Cross-Origin-Resource-Policy: cross-origin` because
+ * the frame is sandboxed without `allow-same-origin` (opaque origin) and must still load its script.
+ *
+ * @param apiOrigin Origin of the API.
+ * @returns A header map (lower-case names).
+ */
+export function buildPreviewHeaders(apiOrigin: string): Record<string, string> {
+  return {
+    ...buildSecurityHeaders(apiOrigin),
+    'content-security-policy': PREVIEW_CSP,
+    'x-frame-options': 'SAMEORIGIN',
+    'cross-origin-resource-policy': 'cross-origin',
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+  };
 }
 
 /**

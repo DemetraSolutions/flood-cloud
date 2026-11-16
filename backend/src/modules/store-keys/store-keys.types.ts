@@ -95,3 +95,10 @@ export interface RevokedSummary {
   readonly revokedAt: Date;
   readonly reason: RevokeReason;
 }
+
+/** What the diagnostics show of the active key of a place: that it exists, when it was last seen and the version of the app it declared. */
+export interface ActiveKeySummary {
+  readonly placeId: ObjectId;
+  readonly lastSeenAt: Date;
+  readonly appVersion: string | null;
+}

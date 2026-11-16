@@ -34,6 +34,8 @@ export class Textarea {
   readonly error = input<string | null>(null);
   /** Marks the field as required. */
   readonly required = input(false, { transform: booleanAttribute });
+  /** Shows the text in a monospace font (code, markup). */
+  readonly code = input(false, { transform: booleanAttribute });
   /** Disables the field. */
   readonly disabled = input(false, { transform: booleanAttribute });
   /** Emitted when the field loses focus (to start showing errors). */

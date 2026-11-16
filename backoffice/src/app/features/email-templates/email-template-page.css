@@ -1,0 +1,47 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.meta,
+.hint,
+.placeholders {
+  color: var(--color-text-muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.preview {
+  min-inline-size: 0;
+}
+
+.placeholders code {
+  margin-inline-end: var(--space-2);
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}

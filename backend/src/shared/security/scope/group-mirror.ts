@@ -7,6 +7,8 @@ import { assertCountedGroups, countByGroupPipeline, countsByGroup } from './grou
 import type { TrashCount } from './group-counts.ts';
 import type { GroupAccess } from './group-access.ts';
 import type { ScopeHolder } from './principal.ts';
+import { deviceCountPipeline, deviceRowsPipeline, selectionCondition } from './mirror-devices.ts';
+import type { DeviceAfter, DeviceRowsQuery, GroupSelection } from './mirror-devices.ts';
 
 /** The copies kept in the common database (`common.companies`, `common.places`) that this module can read. */
 export type MirrorCollection = 'companies' | 'places';
@@ -309,4 +311,111 @@ export async function countMirrorByGroups(databases: Databases, name: MirrorColl
   const collection = name === 'companies' ? databases.common().collection('companies') : databases.common().collection('places');
   const rows = await collection.aggregate(countByGroupPipeline(groupIds), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
   return countsByGroup(groupIds, rows);
+}
+
+/**
+ * Reads a page of device rows from the copies of the places of several groups (the diagnostics): the only multi-group read of the places that returns data of the places. The pipeline is
+ * built by {@link deviceRowsPipeline}, so nothing but the allowed fields of the devices leaves the database, and the groups and the perimeter must come from the caller's verified scope.
+ *
+ * @param databases Database accessor.
+ * @param query The groups, the perimeter and the filters.
+ * @param after Where to continue from, or `null` for the first page.
+ * @param limit How many rows to read, a positive integer.
+ * @returns The rows, at most `limit`.
+ * @throws {Error} If there is no group to read, or the limit is not a positive integer.
+ */
+export async function readMirrorDevices(databases: Databases, query: DeviceRowsQuery, after: DeviceAfter | null, limit: number): Promise<Document[]> {
+  assertDeviceQuery(query, limit);
+  return databases.common().collection('places').aggregate(deviceRowsPipeline(query, after, limit), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
+}
+
+/**
+ * Counts the device rows of a query, stopping just past `cap`.
+ *
+ * @param databases Database accessor.
+ * @param query The groups, the perimeter and the filters.
+ * @param cap The largest count that matters, a positive integer.
+ * @returns The number of rows, at most `cap + 1`.
+ * @throws {Error} If there is no group to read, or the cap is not a positive integer.
+ */
+export async function countMirrorDevices(databases: Databases, query: DeviceRowsQuery, cap: number): Promise<number> {
+  assertDeviceQuery(query, cap);
+  const [counted] = await databases.common().collection('places').aggregate(deviceCountPipeline(query, cap), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
+  return (counted?.['total'] as number | undefined) ?? 0;
+}
+
+/**
+ * The ids of the companies in the trash of the groups of a read, read from the copies, so that the places of a trashed company can be left out of it. With a `companyId` the
+ * question is only whether that company is in the trash.
+ *
+ * @param databases Database accessor.
+ * @param groups The groups of the read.
+ * @param companyId The company the read is narrowed to, if any.
+ * @param max The most ids to read; reaching it is an error, because the exclusion would be incomplete.
+ * @returns The ids.
+ * @throws {Error} If the groups are not valid or there are `max` trashed companies or more.
+ */
+export async function trashedCompanyIds(databases: Databases, groups: GroupSelection, companyId: ObjectId | undefined, max: number): Promise<ObjectId[]> {
+  assertSelection(groups);
+  const found = await databases
+    .common()
+    .collection('companies')
+    .find({ $and: [selectionCondition(groups), { trash: true }, ...(companyId === undefined ? [] : [{ _id: companyId }])] }, { projection: { _id: 1 }, limit: max, maxTimeMS: LIST_MAX_TIME_MS })
+    .toArray();
+  if (found.length >= max) {
+    throw new Error('Too many companies in the trash to exclude them');
+  }
+  return found.map((company) => company['_id'] as ObjectId);
+}
+
+function assertSelection(groups: GroupSelection): void {
+  if ((groups.kind === 'include' && groups.ids.length === 0) || groups.ids.some((id: unknown) => !(id instanceof ObjectId))) {
+    throw new Error('A read of the devices needs group ids');
+  }
+}
+
+function assertDeviceQuery(query: DeviceRowsQuery, limit: number): void {
+  assertSelection(query.groups);
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error('A read of the devices needs a positive limit');
+  }
+}
+
+/** The stored paths of a place that name an e-mail template: the five of the reservations and the one of the appointments. */
+const TEMPLATE_REFERENCE_PATHS: readonly string[] = Object.freeze([
+  'roomsSettings.reservation.emailNotification.templateId',
+  'roomsSettings.reservation.email.templateId',
+  'roomsSettings.reservation.emailConfirmedStatus.templateId',
+  'roomsSettings.reservation.emailRefusedStatus.templateId',
+  'roomsSettings.reservation.emailChangeStatus.templateId',
+  'appointment.email.templateId',
+]);
+
+/**
+ * Finds the places of a group, trashed ones included, that name an e-mail template in the settings of their reservations or appointments (step T2: the deletion of a template is refused while
+ * one does). It is the only read of the copies that looks inside `appointment` and `roomsSettings`, and it returns nothing of them: only `_id`, `name` and `companyId` (so the caller can tell which places are inside the perimeter of the user). The paths are fixed here and the
+ * template id is the only thing the caller supplies (as an `ObjectId`, matched also in its text form, which the legacy may have stored).
+ *
+ * @param principal The authenticated caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ * @param templateId Id of the template.
+ * @param limit How many places to return at most, a positive integer.
+ * @returns The places (`_id`, `name`, `companyId`), by id, at most `limit`.
+ * @throws {Error} If the access was not issued by `requireGroupAccess` for the principal, the id is not an `ObjectId`, or the limit is not a positive integer.
+ */
+export async function findPlacesUsingTemplate(principal: ScopeHolder, access: GroupAccess, databases: Databases, templateId: ObjectId, limit: number): Promise<Document[]> {
+  assertVerifiedGroupAccess(principal, access);
+  if (!(templateId instanceof ObjectId)) {
+    throw new Error('A read of the places that use a template needs a template id');
+  }
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error('A read of the places that use a template needs a positive limit');
+  }
+  const named = [templateId, templateId.toHexString()];
+  return databases
+    .common()
+    .collection('places')
+    .find({ $and: [groupCondition(access.groupId), { $or: TEMPLATE_REFERENCE_PATHS.map((path) => ({ [path]: { $in: named } })) }] }, { projection: { _id: 1, name: 1, companyId: 1 }, limit, sort: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS })
+    .toArray();
 }

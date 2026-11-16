@@ -111,6 +111,8 @@ export async function renderCatalogPage<C>(
 
 /** Cleanup to run after each test of a page. */
 export function cleanUpPage(): void {
+  // The working group is kept in the session storage: a page that follows must not find the group of the previous one.
+  sessionStorage.clear();
   backend().verify();
   vi.restoreAllMocks();
   document.body.replaceChildren();

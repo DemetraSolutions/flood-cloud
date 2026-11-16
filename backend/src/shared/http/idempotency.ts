@@ -131,6 +131,24 @@ export function createIdempotencyStore(databases: Databases, bodyKey: Buffer, no
 const headerOf = (value: unknown): string | null => (typeof value === 'string' ? value : null);
 
 /**
+ * The `Idempotency-Key` of a request: a UUID, in lower case. A route that reads a large body can call it before reading it, to refuse a request that has no usable key without having read the body.
+ *
+ * @param req The request.
+ * @returns The key.
+ * @throws {AppError} `VALIDATION_ERROR` on `Idempotency-Key`: `required` when the header is missing, `format` when it is not a UUID.
+ */
+export function idempotencyKeyOf(req: Request): string {
+  const raw = req.get('idempotency-key');
+  if (raw === undefined) {
+    throw new AppError('VALIDATION_ERROR', { details: [{ field: 'Idempotency-Key', issue: 'required' }] });
+  }
+  if (!UUID.test(raw.trim())) {
+    throw new AppError('VALIDATION_ERROR', { details: [{ field: 'Idempotency-Key', issue: 'format' }] });
+  }
+  return raw.trim().toLowerCase();
+}
+
+/**
  * Makes a creation idempotent (`doc/API-Guidelines.md` section 6): wraps the handler of a `POST`. The `Idempotency-Key` header (a UUID) is required (`422`, `required` or `format`); the
  * same key with the same body answers again what the first request answered (status, body, `Location`, `ETag`); the same key with another body, or while the first request is still running,
  * is `409`. Keys are scoped per user and per route, and only a successful response is kept: a failure releases the key. It runs after the validation of the body, so what is hashed is a body the route accepts.
@@ -140,17 +158,10 @@ const headerOf = (value: unknown): string | null => (typeof value === 'string' ?
  */
 export function idempotent(store: IdempotencyStore, handler: RequestHandler): RequestHandler {
   return async (req: Request, res, next) => {
-    const raw = req.get('idempotency-key');
-    if (raw === undefined) {
-      throw new AppError('VALIDATION_ERROR', { details: [{ field: 'Idempotency-Key', issue: 'required' }] });
-    }
-    if (!UUID.test(raw.trim())) {
-      throw new AppError('VALIDATION_ERROR', { details: [{ field: 'Idempotency-Key', issue: 'format' }] });
-    }
     const begun = await store.begin({
       principal: res.locals.auth!.userId.toHexString(),
       route: `${req.method} ${req.baseUrl}${req.path}`,
-      key: raw.trim().toLowerCase(),
+      key: idempotencyKeyOf(req),
       bodyHash: store.fingerprint(req.body ?? null),
     });
     if (begun.kind === 'replay') {

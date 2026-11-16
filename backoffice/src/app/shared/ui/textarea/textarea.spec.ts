@@ -24,6 +24,9 @@ class Host {
   readonly blurs = signal(0);
 }
 
+@Component({ imports: [Textarea], template: `<fc-textarea label="Codice" code />` })
+class CodeHost {}
+
 async function render() {
   const fixture = TestBed.createComponent(Host);
   await fixture.whenStable();
@@ -37,6 +40,15 @@ async function render() {
 }
 
 describe('Textarea', () => {
+  it('shows a monospace font only when asked', async () => {
+    const { fixture, area } = await render();
+    expect(area.classList.contains('code')).toBe(false);
+    const code = TestBed.createComponent(CodeHost);
+    await code.whenStable();
+    expect((code.nativeElement as HTMLElement).querySelector('textarea')?.classList.contains('code')).toBe(true);
+    fixture.destroy();
+  });
+
   it('links a visible label to the textarea', async () => {
     const { root, area } = await render();
     const label = root.querySelector('label')!;

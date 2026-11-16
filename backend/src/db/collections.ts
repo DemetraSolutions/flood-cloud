@@ -217,6 +217,13 @@ export const FILES_OWNED_FIELDS: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * Fields of the legacy `email_templates` documents of a group database (the e-mail templates of the group: the legacy writes `name`, `text`, `html`, `insertDate` and `updateDate`, and
+ * nothing else; there is no `trash`) this backend writes: whole new documents inserted by the template routes, and `$set` of `name`, `text`, `html` and `updateDate`. There is no copy in the
+ * common database, no `groupId` and no index (the legacy creates none and neither does this backend).
+ */
+export const EMAIL_TEMPLATES_OWNED_FIELDS: readonly string[] = Object.freeze(['name', 'text', 'html', 'insertDate', 'updateDate']);
+
+/**
  * Fields of the legacy `products_departments` documents of a group database (the departments the POS reads with the tax of each) this backend writes: only whole new documents, inserted
  * by the onboarding of a customer, one per tax rate (`doc/Tasks.md` area 8); no field of an existing department is ever changed from here, and no department is read or deleted.
  * `groupId` is a key of this backend, additive: the legacy ignores it. The legacy creates no index on the collection and neither does this backend.
@@ -255,6 +262,13 @@ export const RESERVE_WITH_GOOGLE_OWNED_FIELDS: readonly string[] = Object.freeze
   'geo.address.postalCode',
   'geo.address.country',
 ]);
+
+/**
+ * Fields of the legacy `tobaccos` documents of the common database (the national tobacco price list: the legacy replaces the whole collection with the official file, and its catalog synchronization
+ * reads it) this backend writes (`doc/Tasks.md` 9-bis, step T3): only whole new documents, inserted by the import of the list inside the transaction that deletes the previous ones; no field of an
+ * existing document is ever changed. The names are the legacy's, and the documents carry nothing else. The legacy creates no index on the collection; this backend adds non-unique ones for the search and the sort.
+ */
+export const TOBACCOS_OWNED_FIELDS: readonly string[] = Object.freeze(['category', 'code', 'name', 'shortName', 'priceKg', 'price', 'unitWeight', 'numPieces', 'description', 'barcodes']);
 
 /**
  * Ownership registry of every collection the backend touches (`doc/Tasks.md` 0.1 and 0.2).
@@ -296,6 +310,15 @@ export const COLLECTIONS = {
     // The server of a point of sale (D-24): the pending activation code of a place and its store keys, hashes only. Ours alone: the legacy knows nothing of them.
     storeActivationCodes: { ownership: 'new', indexes: STORE_ACTIVATION_CODES_INDEXES, validator: STORE_ACTIVATION_CODES_VALIDATOR },
     storeKeys: { ownership: 'new', indexes: STORE_KEYS_INDEXES, validator: STORE_KEYS_VALIDATOR },
+    // The national tobacco price list (step T3): replaced as a whole by the import, read by the list; the legacy writes it too (same documents), so no unique index and no validator.
+    tobaccos: {
+      ownership: 'legacy-write',
+      ownedFields: TOBACCOS_OWNED_FIELDS,
+      indexes: [
+        { name: 'name_1', key: { name: 1 } },
+        { name: 'code_1', key: { code: 1 } },
+      ],
+    },
   },
   group: {
     // Written only by the write service of companies and places (`shared/legacy-write`, `$set` of the owned fields, plus insert and delete of
@@ -307,9 +330,9 @@ export const COLLECTIONS = {
     files: { ownership: 'legacy-write', ownedFields: FILES_OWNED_FIELDS },
     // The departments of a new customer (one per tax rate): whole new documents inserted by the onboarding inside the transaction that creates the group; the collection is created by that insert.
     products_departments: { ownership: 'legacy-write', ownedFields: PRODUCTS_DEPARTMENTS_OWNED_FIELDS },
+    // The e-mail templates of the group (step T2): created, changed and deleted by the template routes; also read to check the ids the reservations and the appointments of a place refer to.
+    email_templates: { ownership: 'legacy-write', ownedFields: EMAIL_TEMPLATES_OWNED_FIELDS },
     // Read only, to check that the ids a catalog of the group refers to exist.
-    // The e-mail templates of the group, read only: to check the ids the reservations and the appointments of a place refer to.
-    email_templates: { ownership: 'legacy-read' },
     products: { ownership: 'legacy-read' },
     products_categories: { ownership: 'legacy-read' },
     contacts: { ownership: 'legacy-read' },

@@ -2,6 +2,7 @@ import { CanMatchFn, Routes } from '@angular/router';
 import {
   anonymousOnly,
   authenticated,
+  feature,
   groupLanding,
   passwordChangeAllowed,
   permission,
@@ -10,6 +11,7 @@ import {
 } from './core/auth/guards';
 import { Shell } from './core/layout/shell';
 import { leaveCompany } from './features/companies/company-leave';
+import { leaveEmailTemplate } from './features/email-templates/email-template-leave';
 import { leavePlace } from './features/places/place-leave';
 
 /**
@@ -222,6 +224,38 @@ const companyRoutes: Routes = [
     canDeactivate: [leaveCompany],
     loadComponent: () => import('./features/companies/company-page').then((m) => m.CompanyPage),
     children: companyTabs,
+  },
+];
+
+/**
+ * E-mail templates of a group (`doc/Tasks.md` step T2): list, page of a new template and page of
+ * one. They need `places:read` (changing, `places:update`, is checked by the page and the server)
+ * and the `email` feature of the group (the module that is off lands on the "feature disabled"
+ * page). Leaving a page with unsaved changes asks for confirmation.
+ */
+const emailTemplateRoutes: Routes = [
+  {
+    path: 'groups/:groupId/email-templates',
+    canMatch: [permission('places:read'), feature('email')],
+    title: 'EMAIL_TEMPLATES.TITLE',
+    loadComponent: () =>
+      import('./features/email-templates/email-templates-list').then((m) => m.EmailTemplatesList),
+  },
+  {
+    path: 'groups/:groupId/email-templates/new',
+    canMatch: [permission('places:update'), feature('email')],
+    canDeactivate: [leaveEmailTemplate],
+    title: 'EMAIL_TEMPLATES.FORM.NEW_TITLE',
+    loadComponent: () =>
+      import('./features/email-templates/email-template-page').then((m) => m.EmailTemplatePage),
+  },
+  {
+    path: 'groups/:groupId/email-templates/:templateId',
+    canMatch: [permission('places:read'), feature('email')],
+    canDeactivate: [leaveEmailTemplate],
+    title: 'EMAIL_TEMPLATES.FORM.EDIT_TITLE',
+    loadComponent: () =>
+      import('./features/email-templates/email-template-page').then((m) => m.EmailTemplatePage),
   },
 ];
 
@@ -487,6 +521,7 @@ export const routes: Routes = [
           ...groupCatalogRoutes,
           ...companyRoutes,
           ...placeRoutes,
+          ...emailTemplateRoutes,
           // The one list of users: `/users` (cross-group, PSA and dealers, while no group is
           // chosen) or the list of a group; both load the same page.
           {
@@ -513,6 +548,20 @@ export const routes: Routes = [
             title: 'NEW_CUSTOMER.TITLE',
             loadComponent: () =>
               import('./features/new-customer/new-customer').then((m) => m.NewCustomer),
+          },
+          {
+            path: 'tools/diagnostics',
+            canMatch: [permission('places:read')],
+            title: 'DIAGNOSTICS.TITLE',
+            loadComponent: () =>
+              import('./features/diagnostics/diagnostics-page').then((m) => m.DiagnosticsPage),
+          },
+          {
+            path: 'tools/tobaccos',
+            canMatch: [role('PSA'), permission('tobaccos:read')],
+            title: 'TOBACCOS.TITLE',
+            loadComponent: () =>
+              import('./features/tobaccos/tobaccos-page').then((m) => m.TobaccosPage),
           },
           {
             path: 'releases',
