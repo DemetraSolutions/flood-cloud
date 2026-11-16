@@ -85,9 +85,7 @@ export class UserForm {
 
   protected readonly userForm = this.state.userForm;
   protected readonly listRoute = computed(() =>
-    this.state.area().kind === 'platform'
-      ? ['/platform', 'users']
-      : ['/groups', this.groupId(), 'users'],
+    this.state.area().kind === 'platform' ? ['/users'] : ['/groups', this.groupId(), 'users'],
   );
   protected readonly failure = signal<string | null>(null);
   protected readonly submitting = computed(() => this.userForm().submitting());

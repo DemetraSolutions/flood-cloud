@@ -50,8 +50,11 @@ const PLATFORM_FILTER_ROLES: readonly Role[] = ['PSA', 'D', 'SA', 'CA', 'PA', 'E
 type QueryChange = Record<string, string | null>;
 
 /**
- * Users of a group (`/groups/:groupId/users`) or of the platform (`/platform/users`): filters,
- * sorting and cursor pagination live in the URL, so a view can be shared and survives a reload.
+ * The one list of users, filtered by what the user selected: the users of a group
+ * (`/groups/:groupId/users`: the group chosen by a PSA or dealer, the own group of an SA, and the
+ * perimeter of a CA or PA, which the server applies) or, for a PSA or dealer with no group
+ * chosen, every user of the perimeter (`/users`, with a group column). Filters, sorting and
+ * cursor pagination live in the URL, so a view can be shared and survives a reload.
  * Rows offer actions according to the user's permissions; several rows can be selected to move
  * them to the trash or restore them in one go.
  */
@@ -86,7 +89,7 @@ export class UsersList {
   private readonly debouncer = createDebouncer();
   protected readonly i18n = inject(I18nService);
 
-  /** Route parameter; absent in the platform area. */
+  /** Route parameter of the group list; in the cross-group list it is the `groupId` query filter. */
   readonly groupId = input<string>();
   /** Query parameters (bound by the router). */
   readonly q = input<string>();
@@ -102,26 +105,25 @@ export class UsersList {
   /** Route data: `all` for the cross-group view (`/users`), where `groupId` is a query filter. */
   readonly scope = input<string>();
 
-  /** `group` (path parameter), `all` (every group of the perimeter) or `platform`. */
-  protected readonly mode = computed<'group' | 'all' | 'platform'>(() => {
-    if (this.scope() === 'all') {
-      return 'all';
-    }
-    return this.groupId() === undefined ? 'platform' : 'group';
-  });
-  protected readonly isPlatform = computed(() => this.mode() === 'platform');
+  /** `group` (path parameter) or `all` (the cross-group list of PSA and dealers, no group chosen). */
+  protected readonly mode = computed<'group' | 'all'>(() =>
+    this.scope() === 'all' ? 'all' : 'group',
+  );
   protected readonly isAll = computed(() => this.mode() === 'all');
-  /** Where "new user" leads; the cross-group view has no group to create in. */
+  /**
+   * Where "new user" leads: the form of the group; in the cross-group list a PSA creates platform
+   * users (PSA and dealers), while a dealer must choose a group first (`null`).
+   */
   protected readonly newRoute = computed(() => {
-    switch (this.mode()) {
-      case 'platform':
-        return ['/platform', 'users', 'new'];
-      case 'group':
-        return ['/groups', this.groupId(), 'users', 'new'];
-      case 'all':
-        return null;
+    if (this.mode() === 'group') {
+      return ['/groups', this.groupId(), 'users', 'new'];
     }
+    return this.session.me()?.role === 'PSA' ? ['/platform', 'users', 'new'] : null;
   });
+  /** A dealer who may create users is told to choose a group first. */
+  protected readonly chooseGroupHint = computed(
+    () => this.isAll() && this.session.me()?.role === 'D' && this.session.can('users:create'),
+  );
 
   protected readonly sortValue = computed(() => {
     const value = this.sort() ?? '';
@@ -138,13 +140,12 @@ export class UsersList {
     return (USER_PAGE_SIZES as readonly number[]).includes(value) ? value : DEFAULT_LIMIT;
   });
   protected readonly roleOptions = computed(() =>
-    (this.isPlatform() || (this.isAll() && this.session.me()?.role === 'PSA')
-      ? PLATFORM_FILTER_ROLES
-      : GROUP_ROLES
-    ).map((role) => ({
-      value: role,
-      label: this.i18n.t(`ROLE.${role}`),
-    })),
+    (this.isAll() && this.session.me()?.role === 'PSA' ? PLATFORM_FILTER_ROLES : GROUP_ROLES).map(
+      (role) => ({
+        value: role,
+        label: this.i18n.t(`ROLE.${role}`),
+      }),
+    ),
   );
   protected readonly statusOptions = computed(() => [
     { value: 'active', label: this.i18n.t('USERS.STATUS.ACTIVE') },

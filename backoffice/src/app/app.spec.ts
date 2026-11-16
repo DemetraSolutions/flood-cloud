@@ -1,3 +1,4 @@
+import { GroupContext } from './core/groups/group-context';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -149,7 +150,7 @@ describe('routes', () => {
       [`/groups/${GROUP}/users`, sa(), '⟦USERS.TITLE⟧'],
       [`/groups/${GROUP}/users/new`, sa([...READ, 'users:create']), '⟦USERS.FORM.NEW_TITLE⟧'],
       [`/groups/${GROUP}/users/u1`, sa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
-      ['/platform/users', psa(), '⟦USERS.PLATFORM_TITLE⟧'],
+      ['/platform/users', psa(), '⟦USERS.TITLE⟧'],
       ['/users', psa(), '⟦USERS.TITLE⟧'],
       ['/dealers', psa(['dealers:read']), '⟦DEALERS.TITLE⟧'],
       [
@@ -167,6 +168,23 @@ describe('routes', () => {
       ['/activity-log', sa(['activityLog:read', 'profile:read']), '⟦ACTIVITY.TITLE⟧'],
     ])('lazy-loads %s', async (url, profile, expected) => {
       expect(await go(url, profile)).toBe(expected);
+    });
+
+    it('redirects the old platform list to the one list, keeping the filters', async () => {
+      await go('/platform/users?role=D&q=ann', psa());
+      expect(location()).toBe('/users?role=D&q=ann');
+    });
+
+    it('opens the list of the chosen group when a PSA goes to the cross-group list', async () => {
+      setup();
+      sessionStorage.clear();
+      signIn(psa());
+      TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Alfa' });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl('/users?status=active&cursor=c1');
+      expect(location()).toBe(`/groups/${GROUP}/users?status=active`);
+      sessionStorage.clear();
     });
 
     it.each([

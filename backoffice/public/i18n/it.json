@@ -36,7 +36,6 @@
     "HOME": "Home",
     "PROFILE": "Profilo",
     "USERS": "Utenti",
-    "PLATFORM_USERS": "Utenti di piattaforma",
     "ACTIVITY_LOG": "Registro attività",
     "DEALERS": "Dealer",
     "GROUPS": "Gruppi",
@@ -316,8 +315,8 @@
   },
   "USERS": {
     "TITLE": "Utenti",
-    "PLATFORM_TITLE": "Utenti di piattaforma",
     "NEW": "Nuovo utente",
+    "CHOOSE_GROUP_TO_CREATE": "Scegli un gruppo con il selettore in alto per creare un utente.",
     "LOAD_ERROR": "Impossibile caricare gli utenti",
     "EMPTY": "Nessun utente",
     "EMPTY_MESSAGE": "Nessun utente corrisponde ai filtri.",

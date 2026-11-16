@@ -46,14 +46,6 @@ export const MENU: readonly MenuItem[] = [
     permission: 'users:read',
   },
   {
-    id: 'platform-users',
-    labelKey: 'MENU.PLATFORM_USERS',
-    icon: 'users',
-    route: '/platform/users',
-    permission: 'users:read',
-    roles: ['PSA'],
-  },
-  {
     id: 'dealers',
     labelKey: 'MENU.DEALERS',
     icon: 'building',

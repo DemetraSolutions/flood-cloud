@@ -59,7 +59,6 @@ async function render(
       provideRouter(
         [
           { path: 'groups/:groupId/users', component: UsersList },
-          { path: 'platform/users', component: UsersList },
           { path: 'users', component: UsersList, data: { scope: 'all' } },
           { path: '**', children: [] },
         ],
@@ -76,7 +75,7 @@ async function render(
   const root = harness.routeNativeElement as HTMLElement;
   document.body.appendChild(root);
   const router = TestBed.inject(Router);
-  const listUrl = /^\/(platform\/)?users/.test(url) ? PLATFORM_LIST : LIST;
+  const listUrl = /^\/users/.test(url) ? PLATFORM_LIST : LIST;
   const request = () => backend().expectOne((r) => r.url === listUrl);
   // Not `whenStable()`: a request still pending keeps the application unstable.
   const view = async () => {
@@ -167,13 +166,14 @@ describe('UsersList', () => {
       expect(root.querySelector('tbody img')).toBeNull();
     });
 
-    it('links the users of the platform area to their own pages', async () => {
-      const { flush, root } = await render('/platform/users');
+    it('links the users of the platform to their own pages in the cross-group list', async () => {
+      const { flush, root } = await render('/users', { role: 'PSA', groupId: null, group: null });
       const platformUser = fakeUser({ id: '665f1c2e9b1d4a0012ab3499', groupId: null, role: 'D' });
       await flush([platformUser, ONE]);
-      expect(root.querySelector('h1')?.textContent).toBe('USERS.PLATFORM_TITLE');
+      expect(root.querySelector('h1')?.textContent).toBe('USERS.TITLE');
       expect([...root.querySelectorAll('tbody a')].map((a) => a.getAttribute('href'))).toEqual([
         `/platform/users/${platformUser.id}`,
+        `/groups/${GROUP}/users`,
         `/groups/${GROUP}/users/${ONE.id}`,
       ]);
       expect(root.querySelector('a.new')?.getAttribute('href')).toBe('/platform/users/new');
@@ -185,7 +185,7 @@ describe('UsersList', () => {
       expect([...group.field('USERS.FILTER.ROLE').querySelectorAll('option')]).toHaveLength(5);
       document.body.replaceChildren();
       TestBed.resetTestingModule();
-      const platform = await render('/platform/users');
+      const platform = await render('/users', { role: 'PSA', groupId: null, group: null });
       await platform.flush([]);
       expect([...platform.field('USERS.FILTER.ROLE').querySelectorAll('option')]).toHaveLength(7);
     });
@@ -232,14 +232,51 @@ describe('UsersList', () => {
       expect(root.querySelector('tbody td a')?.getAttribute('href')).toBe(`/groups/${GROUP}/users`);
       expect(cells(1)[1]).toBe('');
       expect(root.querySelectorAll('tbody td a')).toHaveLength(1);
-      expect(root.querySelector('a.new')).toBeNull();
       expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     });
 
-    it('has no new-user link in the empty state either', async () => {
+    it('sends only the paging defaults to /v1/users and shows the one title', async () => {
+      const { request, root } = await render('/users', PSA);
+      const req = request();
+      expect(req.request.params.keys().sort()).toEqual(['limit', 'sort']);
+      expect(root.querySelector('h1')?.textContent).toBe('USERS.TITLE');
+      expect(root.querySelector('.hint')).toBeNull();
+      req.flush(page([]));
+    });
+
+    it('lets a PSA create platform users, also from the empty state', async () => {
       const { flush, root } = await render('/users', PSA);
       await flush([]);
+      expect(root.querySelector('a.new')?.getAttribute('href')).toBe('/platform/users/new');
+      expect(root.querySelector('fc-empty-state a')?.getAttribute('href')).toBe(
+        '/platform/users/new',
+      );
+      expect(root.querySelector('.hint')).toBeNull();
+    });
+
+    it('asks a dealer to choose a group first instead of offering to create', async () => {
+      const { flush, root } = await render('/users', { ...PSA, role: 'D' });
+      await flush([]);
+      expect(root.querySelector('a.new')).toBeNull();
       expect(root.querySelector('fc-empty-state a')).toBeNull();
+      expect(root.querySelector('.hint')?.textContent).toContain('USERS.CHOOSE_GROUP_TO_CREATE');
+    });
+
+    it('does not even hint at creation to a dealer without the permission', async () => {
+      const { flush, root } = await render('/users', {
+        ...PSA,
+        role: 'D',
+        permissions: ['users:read'],
+      });
+      await flush([]);
+      expect(root.querySelector('a.new')).toBeNull();
+      expect(root.querySelector('.hint')).toBeNull();
+    });
+
+    it('hides the creation link from a PSA without the permission', async () => {
+      const { flush, root } = await render('/users', { ...PSA, permissions: ['users:read'] });
+      await flush([]);
+      expect(root.querySelector('a.new')).toBeNull();
     });
 
     it('sends the group and dealer filters of the URL, for a PSA only and only if valid', async () => {
@@ -274,6 +311,64 @@ describe('UsersList', () => {
     });
   });
 
+  describe('one list for every role', () => {
+    it.each(['SA', 'CA', 'PA'] as const)(
+      'lists a %s the users of the group through the group endpoint only',
+      async (role) => {
+        const { flush, root, cells, field } = await render(undefined, { role, groupId: GROUP });
+        await flush([ONE]);
+        expect(root.querySelector('h1')?.textContent).toBe('USERS.TITLE');
+        expect(root.querySelector('.hint')).toBeNull();
+        expect(cells(0)[1]).toBe('AVone');
+        expect(root.querySelectorAll('thead th')).toHaveLength(7);
+        expect(field('USERS.FILTER.ROLE').querySelectorAll('option')).toHaveLength(5);
+      },
+    );
+
+    it.each(['PSA', 'D'] as const)(
+      'lists a %s with a group chosen the users of that group, not the cross list',
+      async (role) => {
+        const ctx = await render(`/groups/${GROUP}/users?role=SA&status=active`, {
+          role,
+          groupId: null,
+          group: null,
+        });
+        const req = ctx.request();
+        expect(req.request.params.get('role')).toBe('SA');
+        expect(req.request.params.get('status')).toBe('active');
+        expect(req.request.params.has('groupId')).toBe(false);
+        req.flush(page([]));
+        await ctx.view();
+        expect(ctx.root.querySelector('.hint')).toBeNull();
+        expect(ctx.root.querySelector('a.new')?.getAttribute('href')).toBe(
+          `/groups/${GROUP}/users/new`,
+        );
+      },
+    );
+
+    it('sends every filter of the cross list to /v1/users for a PSA', async () => {
+      const { request } = await render(
+        '/users?q=%20ann%20&role=PSA&status=disabled&trashed=true&sort=-createdAt&limit=50&cursor=c1',
+        { role: 'PSA', groupId: null, group: null },
+      );
+      const { params } = request().request;
+      expect(Object.fromEntries(params.keys().map((k) => [k, params.get(k)]))).toEqual({
+        q: 'ann',
+        role: 'PSA',
+        status: 'disabled',
+        trashed: 'true',
+        sort: '-createdAt',
+        limit: '50',
+        cursor: 'c1',
+      });
+    });
+
+    it('ignores a platform role filter in a group list', async () => {
+      const { request } = await render(`/groups/${GROUP}/users?role=PSA`);
+      expect(request().request.params.has('role')).toBe(false);
+    });
+  });
+
   describe('working group', () => {
     it('is not adopted when the list fails to load', async () => {
       sessionStorage.clear();
@@ -290,7 +385,7 @@ describe('UsersList', () => {
       sessionStorage.clear();
     });
 
-    it('is adopted after a successful load, and not in the platform area', async () => {
+    it('is adopted after a successful load, and not in the cross-group list', async () => {
       sessionStorage.clear();
       const group = await render(undefined, { role: 'PSA', groupId: null, group: null });
       await group.flush([ONE]);
@@ -298,7 +393,7 @@ describe('UsersList', () => {
       sessionStorage.clear();
       document.body.replaceChildren();
       TestBed.resetTestingModule();
-      const platform = await render('/platform/users', { role: 'PSA', groupId: null, group: null });
+      const platform = await render('/users', { role: 'PSA', groupId: null, group: null });
       await platform.flush([ONE]);
       expect(TestBed.inject(GroupContext).groupId()).toBeNull();
       sessionStorage.clear();

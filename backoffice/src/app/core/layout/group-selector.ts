@@ -1,5 +1,6 @@
 import { Component, computed, ElementRef, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { PRIMARY_OUTLET, Router } from '@angular/router';
+import { USERS_LIST_FILTERS } from '../auth/guards';
 import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { failureMessage } from '../../shared/forms/form-errors';
 import { uniqueId } from '../../shared/ui/unique-id';
@@ -136,7 +137,33 @@ export class GroupSelector {
     }
     this.context.choose({ id: group.id, name: group.name });
     this.close();
-    void this.router.navigate(['/groups', group.id, 'users']);
+    const filters = this.usersFilters(true);
+    void this.router.navigate(
+      ['/groups', group.id, 'users'],
+      ...(filters === null ? [] : [{ queryParams: filters }]),
+    );
+  }
+
+  /**
+   * Filters of the users list on screen (if the page is one), to carry over to the list of the
+   * new selection: never the cursor or the cross-group `groupId`/`dealerId`, and not a platform
+   * role filter when the target is a group (it has none of those roles).
+   */
+  private usersFilters(toGroup: boolean): Record<string, string> | null {
+    const tree = this.router.parseUrl(this.router.url);
+    const path = tree.root.children[PRIMARY_OUTLET]?.segments.map((s) => s.path).join('/') ?? '';
+    if (!/^(groups\/[^/]+\/)?users$/.test(path)) {
+      return null;
+    }
+    const filters: Record<string, string> = {};
+    for (const name of USERS_LIST_FILTERS) {
+      const value = tree.queryParams[name];
+      const platformRole = name === 'role' && (value === 'PSA' || value === 'D');
+      if (typeof value === 'string' && !(toGroup && platformRole)) {
+        filters[name] = value;
+      }
+    }
+    return Object.keys(filters).length === 0 ? null : filters;
   }
 
   /**
@@ -148,7 +175,11 @@ export class GroupSelector {
     this.close();
     const path = this.router.url.split('?')[0];
     if (/^\/groups\/[^/]+/.test(path)) {
-      void this.router.navigate(['/users']);
+      const filters = this.usersFilters(false);
+      void this.router.navigate(
+        ['/users'],
+        ...(filters === null ? [] : [{ queryParams: filters }]),
+      );
     } else if (path === '/activity-log') {
       void this.router.navigate(['/activity-log'], {
         queryParams: { groupId: null },

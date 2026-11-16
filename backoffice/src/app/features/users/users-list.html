@@ -1,9 +1,12 @@
 <header class="page-header">
-  <h1>{{ (isPlatform() ? 'USERS.PLATFORM_TITLE' : 'USERS.TITLE') | t }}</h1>
+  <h1>{{ 'USERS.TITLE' | t }}</h1>
   @if (newRoute(); as route) {
     <a *fcCan="'users:create'" class="new" [routerLink]="route">{{ 'USERS.NEW' | t }}</a>
   }
 </header>
+@if (chooseGroupHint()) {
+  <p class="hint" role="note">{{ 'USERS.CHOOSE_GROUP_TO_CREATE' | t }}</p>
+}
 
 <form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
   <fc-text-field

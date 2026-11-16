@@ -111,3 +111,28 @@ export const groupLanding: CanMatchFn = (): boolean | UrlTree => {
   const groupId = inject(GroupContext).groupId();
   return groupId === null ? true : inject(Router).createUrlTree(['/groups', groupId, 'users']);
 };
+
+/** Query parameters of the users list that follow the working group (the others belong to the previous view). */
+export const USERS_LIST_FILTERS = ['q', 'role', 'status', 'trashed', 'sort', 'limit'] as const;
+
+/**
+ * Cross-group list of users (`/users`, PSA and dealers): when a working group is chosen the
+ * list is that group's, so it redirects to the group list keeping the filters of the URL
+ * (never the cursor, and `groupId`/`dealerId`, which belong to the cross-group view). Without
+ * a chosen group the cross-group list is shown.
+ */
+export const usersLanding: CanMatchFn = (): boolean | UrlTree => {
+  const groupId = inject(GroupContext).groupId();
+  if (groupId === null) {
+    return true;
+  }
+  const router = inject(Router);
+  const params = router.getCurrentNavigation()?.extractedUrl.queryParams ?? {};
+  const queryParams = Object.fromEntries(
+    USERS_LIST_FILTERS.filter((name) => params[name] !== undefined).map((name) => [
+      name,
+      params[name],
+    ]),
+  );
+  return router.createUrlTree(['/groups', groupId, 'users'], { queryParams });
+};

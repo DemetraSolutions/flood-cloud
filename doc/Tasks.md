@@ -95,7 +95,7 @@ Non si usa una migrazione automatica all'avvio dell'API: le repliche sono più d
 - [x] **D-15** Univocità dello username: globale, confrontando NFKC, spazi e minuscole, per gli username nuovi o cambiati; i duplicati esistenti (§0.4.1) restano. Decisione dell'utente del 2026-11-02. `vatNumber` (`companies.code`): **univoco nel gruppo** tra le aziende non nel cestino (indice univoco parziale, `409` sui doppioni nuovi), dopo la verifica dei duplicati esistenti nei dati; decisione dell'utente del 2026-11-13, da realizzare nell'area 6.
 - [x] **D-16** Valori ammessi di `APP_ENV`: `development` e `production`, come i database esistenti. Decisione dell'utente del 2026-11-01.
 - [x] **D-17** Login solo con username: corrispondenza esatta, altrimenti senza maiuscole se esiste un solo utente con lo stesso username normalizzato. Email e telefono no (duplicati, §0.4.1). Decisione dell'utente del 2026-11-02.
-- [ ] **D-18** Onboarding: preset per tipologia (risto, retail, beauty) e struttura minima del database di un gruppo nuovo richiesta dal legacy.
+- [x] **D-18** Onboarding: preset per tipologia (risto, retail, beauty) e struttura minima del database di un gruppo nuovo richiesta dal legacy.
 - [x] **D-19** Policy delle password nuove o cambiate: da 12 a 128 code point dopo NFC, nessuna regola sulle classi, diversa dallo username, nessun carattere Unicode non valido. Le password legacy esistenti restano valide. Decisione dell'utente del 2026-11-02.
 - [x] **D-20** Forma della copia nel common: **documento intero** del database del gruppo, con `groupId` impostato dal nome del database. Proposta dell'utente del 2026-11-01. Il nuovo backend traduce i nomi legacy nel modello di dominio (§0.2, tabelle 6.1 e 7.1).
 - [x] **D-21** Cancellazione definitiva nel legacy (`deleteMany` dal cestino): **la copia nel common si rimuove** nello stesso punto in cui il legacy cancella. Il comando `sync:copies` del nuovo backend invece non cancella mai (copia solo lo stato attuale; le copie senza originale si segnalano). Decisione dell'utente del 2026-11-12.
@@ -407,6 +407,7 @@ URL realizzati (passo 3B): utenti di un gruppo sotto `/v1/groups/{groupId}/users
   - errori `422` e `409` sui campi;
   - modello completo a 6 tab con un solo `PATCH`, PIN, avatar, servizi, cassa, listini e turni (passo 4C-2, D-26, D-27, D-31).
 - [x] **3.5.8** Reset della password, disattivazione, cestino e ripristino dall'interfaccia.
+- **Nota (decisione dell'utente, 2026-11-16): una sola pagina "Utenti".** Una sola voce di menu e una sola pagina elenco, filtrata da ciò che l'utente ha selezionato: senza gruppo scelto PSA e D usano l'elenco trasversale (`GET /v1/users`, con colonna del gruppo); con un gruppo scelto, e sempre per SA, CA e PA, l'elenco del gruppo (`GET /v1/groups/{groupId}/users`, perimetro applicato dal server). La voce "Utenti di piattaforma" è rimossa; `/platform/users` reindirizza a `/users` (con i filtri), mentre dettaglio e creazione degli utenti PSA e D restano su `/platform/users/new` e `/platform/users/:userId`. Senza gruppo scelto un PSA crea utenti di piattaforma, un D deve prima scegliere un gruppo.
 
 ### 3.6 Chiusura
 - [x] **3.6.1** `doc/API.md`, `doc/Technical-Guide.md`, `doc/Data-Model.md` (`users`, `userCredentials`, `sessions`, `rateLimits`, `auditLog`).
@@ -760,6 +761,18 @@ Task:
 
 ## 8. Onboarding di un nuovo cliente
 Sostituisce il wizard "Nuovo cliente" e `groups/generate` del legacy, che non era atomico.
+**Decisioni dell'utente del 2026-11-16** (analisi del legacy in `backend/reports/onboarding-legacy.md`, non versionata):
+- **Stesso strumento del legacy:** una pagina rapida "Nuovo cliente" con più o meno gli stessi campi del form legacy; nessun campo nuovo oltre ai miglioramenti decisi qui.
+- **Preset per tipologia:** restano **solo nel client**, come scorciatoia che preimposta le feature e le aliquote del form; nessuna struttura di preset nel server, la tipologia non si salva.
+- **`groups.apiKey`:** generata alla creazione con un CSPRNG come nel legacy, mai restituita né modificabile; **non è una credenziale del nuovo backend** (la usano solo il POS e le app legacy e `ms-integration-service`).
+- **SA:** password provvisoria (policy D-19) con cambio obbligatorio al primo accesso.
+- **Dealer:** il D crea sempre per sé; il PSA può scegliere un dealer attivo da una select facoltativa.
+- **Scelte:** piano come per i punti vendita (il D senza `desk-secondary`); feature del gruppo libere per PSA e D; gruppo demo solo PSA; scadenza obbligatoria con default 31/12 dell'anno alle 23:59:59 Europe/Rome.
+- **Hub di fatturazione:** come il form legacy (nessun campo nuovo).
+- **Dati fiscali:** per le aziende italiane obbligatorio almeno uno tra codice destinatario e PEC.
+- **Email all'SA:** nessuna in questa area.
+- **Scelte tecniche (proposta):** una sola operazione atomica e idempotente (`Idempotency-Key`) in una transazione sul cluster comune; le collection vuote del legacy non si creano (nascono al primo inserimento; evita i database orfani); `dataCluster` non accettato finché il legacy è attivo; route `POST /v1/groups` con corpo composto.
+
 - [ ] **8.1.1** Analisi del `legacy_analyst`: collection e documenti minimi che un database di gruppo nuovo deve avere perché legacy, POS e `ms-integration-service` funzionino (D-18).
 - [ ] **8.1.2** Creazione atomica e idempotente (`Idempotency-Key`) di gruppo, azienda, punto vendita, utente SA e database del gruppo, con scelta del cluster (`dataCluster`, D-25; default finché il legacy è attivo).
 - [ ] **8.1.3** Preset per tipologia (feature e dati iniziali, D-18).

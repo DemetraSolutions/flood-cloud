@@ -234,11 +234,11 @@ describe('UserForm: states', () => {
     expect(root.querySelector('fc-error-state')?.textContent).toContain('ERRORS.GENERIC.MESSAGE');
   });
 
-  it('links back to the platform list in the platform area', async () => {
+  it('links back to the one list of users in the platform area', async () => {
     const { root } = await render('/platform/users/new', {
       profile: { role: 'PSA', groupId: null, groupFeatures: null },
     });
-    expect(root.querySelector('.actions a')?.getAttribute('href')).toBe('/platform/users');
+    expect(root.querySelector('.actions a')?.getAttribute('href')).toBe('/users');
   });
 });
 

@@ -244,6 +244,52 @@ describe('GroupSelector', () => {
     expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users']);
   });
 
+  it.each([
+    ['/users?q=ann&role=SA&cursor=c1&groupId=x', { q: 'ann', role: 'SA' }],
+    [
+      '/users?role=D&status=active&trashed=true&sort=-createdAt&limit=50',
+      {
+        status: 'active',
+        trashed: 'true',
+        sort: '-createdAt',
+        limit: '50',
+      },
+    ],
+    ['/groups/g0/users?q=ann&role=PSA&dealerId=x', { q: 'ann' }],
+  ])(
+    'keeps the filters of the users list on screen when choosing a group (%s)',
+    async (url, expected) => {
+      const { options, open } = await render();
+      await open([G1]);
+      const router = TestBed.inject(Router);
+      vi.spyOn(router, 'url', 'get').mockReturnValue(url);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      options()[0].click();
+      expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users'], { queryParams: expected });
+    },
+  );
+
+  it('keeps the filters of the users list, role included, when going back to all groups', async () => {
+    const { root, fixture } = await render();
+    TestBed.inject(GroupContext).choose(G1);
+    await view(fixture);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/groups/g1/users?q=ann&role=SA&cursor=c1');
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
+    expect(navigate).toHaveBeenCalledWith(['/users'], { queryParams: { q: 'ann', role: 'SA' } });
+  });
+
+  it('carries nothing over from pages that are not a users list', async () => {
+    const { options, open } = await render();
+    await open([G1]);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/?q=ann');
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    options()[0].click();
+    expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users']);
+  });
+
   it('marks the working group as selected', async () => {
     const { options, open } = await render();
     TestBed.inject(GroupContext).choose(G2);

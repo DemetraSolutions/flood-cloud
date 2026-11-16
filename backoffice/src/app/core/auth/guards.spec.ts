@@ -11,6 +11,7 @@ import {
   passwordChangeAllowed,
   permission,
   role,
+  usersLanding,
 } from './guards';
 import { GroupContext } from '../groups/group-context';
 import { fakeFeatureFlags } from '../../../testing/groups';
@@ -133,6 +134,31 @@ describe('groupLanding', () => {
     signIn({ role: 'D' });
     TestBed.inject(GroupContext).choose({ id: '665f1c2e9b1d4a0012ab34a2', name: 'Alfa' });
     expect(serialized(run(groupLanding))).toBe('/groups/665f1c2e9b1d4a0012ab34a2/users');
+    sessionStorage.clear();
+  });
+});
+
+describe('usersLanding', () => {
+  const GROUP = '665f1c2e9b1d4a0012ab34a2';
+
+  it('shows the cross-group list when no group is chosen', () => {
+    sessionStorage.clear();
+    signIn({ role: 'PSA', groupId: null, group: null });
+    expect(run(usersLanding)).toBe(true);
+  });
+
+  it('redirects to the list of the chosen group keeping the filters but not the cursor', () => {
+    signIn({ role: 'D' });
+    TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Alfa' });
+    navigatingTo('/users?q=ann&role=SA&cursor=c1&groupId=x&dealerId=y');
+    expect(serialized(run(usersLanding))).toBe(`/groups/${GROUP}/users?q=ann&role=SA`);
+    sessionStorage.clear();
+  });
+
+  it('redirects without filters outside a navigation', () => {
+    signIn({ role: 'PSA' });
+    TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Alfa' });
+    expect(serialized(run(usersLanding))).toBe(`/groups/${GROUP}/users`);
     sessionStorage.clear();
   });
 });

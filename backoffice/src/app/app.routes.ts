@@ -6,24 +6,19 @@ import {
   passwordChangeAllowed,
   permission,
   role,
+  usersLanding,
 } from './core/auth/guards';
 import { Shell } from './core/layout/shell';
 import { leaveCompany } from './features/companies/company-leave';
 import { leavePlace } from './features/places/place-leave';
 
 /**
- * List, creation and detail of users under a path prefix (the group area and the platform
- * area). Each route carries its full path so that the route parameters reach the pages as
- * inputs without depending on parameter inheritance.
+ * Creation and detail of users under a path prefix (the group area and the platform area; the
+ * one list of users is a separate route). Each route carries its full path so that the route
+ * parameters reach the pages as inputs without depending on parameter inheritance.
  */
 function userRoutes(prefix: string, canMatch: CanMatchFn[]): Routes {
   return [
-    {
-      path: prefix,
-      canMatch,
-      title: 'USERS.TITLE',
-      loadComponent: () => import('./features/users/users-list').then((m) => m.UsersList),
-    },
     {
       path: `${prefix}/new`,
       canMatch: [...canMatch, permission('users:create')],
@@ -492,14 +487,24 @@ export const routes: Routes = [
           ...groupCatalogRoutes,
           ...companyRoutes,
           ...placeRoutes,
+          // The one list of users: `/users` (cross-group, PSA and dealers, while no group is
+          // chosen) or the list of a group; both load the same page.
           {
             path: 'users',
-            canMatch: [role('PSA', 'D'), permission('users:read')],
+            canMatch: [role('PSA', 'D'), permission('users:read'), usersLanding],
             title: 'USERS.TITLE',
             data: { scope: 'all' },
             loadComponent: () => import('./features/users/users-list').then((m) => m.UsersList),
           },
+          {
+            path: 'groups/:groupId/users',
+            canMatch: [permission('users:read')],
+            title: 'USERS.TITLE',
+            loadComponent: () => import('./features/users/users-list').then((m) => m.UsersList),
+          },
           ...userRoutes('groups/:groupId/users', [permission('users:read')]),
+          // Old address of the platform list: bookmarks land on the one list.
+          { path: 'platform/users', pathMatch: 'full', redirectTo: 'users' },
           ...userRoutes('platform/users', [role('PSA'), permission('users:read')]),
           ...dealerRoutes,
           {

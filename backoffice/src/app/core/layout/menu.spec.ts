@@ -123,7 +123,10 @@ describe('visibleMenu', () => {
     expect(ids(visibleMenu(items, allowAll, allowAll, 'PSA'))).toEqual(['p']);
     expect(ids(visibleMenu(items, allowAll, allowAll, 'D'))).toEqual([]);
     expect(ids(visibleMenu(items, allowAll, allowAll))).toEqual([]);
-    expect(ids(visibleMenu(MENU, allowAll, allowAll, 'PSA'))).toContain('platform-users');
+    // One single "Utenti" entry for every role: no separate entry for the platform users.
+    expect(
+      ids(visibleMenu(MENU, allowAll, allowAll, 'PSA')).filter((id) => id.includes('users')),
+    ).toEqual(['users']);
     expect(ids(visibleMenu(MENU, allowAll, allowAll, 'PSA'))).toContain('dealers');
     expect(ids(visibleMenu(MENU, allowAll, allowAll, 'D'))).not.toContain('dealers');
     expect(ids(visibleMenu(MENU, (p) => p !== 'dealers:read', allowAll, 'PSA'))).not.toContain(
