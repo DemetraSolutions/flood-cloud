@@ -1,0 +1,63 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'PLACES.STORAGES.LIST' | t }}</legend>
+    <p class="note">{{ 'PLACES.STORAGES.RULES' | t }}</p>
+    @if (!storages().editable) {
+      <p class="note" role="status">{{ 'PLACES.STORAGES.NOT_EDITABLE' | t }}</p>
+    }
+    @if (state.fieldError(items); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    <div class="rows">
+      @for (storage of storages().items; track $index; let i = $index) {
+        @let f = items[i];
+        <article class="row" [attr.aria-label]="storage.name">
+          <div class="grid">
+            <fc-text-field
+              [formField]="f.name"
+              [label]="'PLACES.STORAGES.NAME' | t"
+              [error]="state.fieldError(f.name)"
+              (blurred)="f.name().markAsTouched()"
+            />
+            @if (showCash()) {
+              <fc-checkbox
+                [label]="'PLACES.STORAGES.CASH' | t"
+                [checked]="storage.cash"
+                [disabled]="f.cash().disabled() || storage.cash"
+                (checkedChange)="choose(i, 'cash')"
+              />
+            }
+            @if (showEcommerce()) {
+              <fc-checkbox
+                [label]="'PLACES.STORAGES.ECOMMERCE' | t"
+                [checked]="storage.ecommerce"
+                [disabled]="f.ecommerce().disabled()"
+                (checkedChange)="setEcommerce(i, $event)"
+              />
+            }
+          </div>
+          @if (editable()) {
+            <div class="row-actions">
+              <button
+                fc-button
+                variant="ghost"
+                [disabled]="storages().items.length <= 1"
+                [attr.aria-label]="'PLACES.STORAGES.REMOVE' | t: { name: storage.name }"
+                (click)="remove(i)"
+              >
+                {{ 'PLACES.REMOVE' | t }}
+              </button>
+            </div>
+          }
+        </article>
+      }
+    </div>
+    @if (editable()) {
+      <div>
+        <button fc-button variant="secondary" (click)="add()">
+          {{ 'PLACES.STORAGES.ADD' | t }}
+        </button>
+      </div>
+    }
+  </fieldset>
+</form>

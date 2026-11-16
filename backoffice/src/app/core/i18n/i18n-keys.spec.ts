@@ -19,6 +19,11 @@ import {
 import { SHIFT_DAY_KEYS } from '../users/shift-time';
 import { PERMISSION_MODULES } from '../../features/users/user.types';
 import { COMPANY_SECTIONS, ECOMMERCE_FLAGS } from '../../features/companies/company.types';
+import {
+  PLACE_TABS,
+  SETTINGS_ENTRIES,
+  SETTINGS_MENU_GROUPS,
+} from '../../features/places/place-nav';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -306,6 +311,16 @@ describe('templates', () => {
     ]) {
       expected.push(`COMPANIES.MEDIA.UPLOAD_ERROR.${part}`);
     }
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the texts of the place page, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    const expected = [
+      ...PLACE_TABS.map((tab) => `PLACES.SECTION.${tab.key}`),
+      ...SETTINGS_ENTRIES.map((entry) => `PLACES.MENU.${entry.key}`),
+      ...SETTINGS_MENU_GROUPS.map((group) => `PLACES.MENU_GROUP.${group}`),
+    ];
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });
 });

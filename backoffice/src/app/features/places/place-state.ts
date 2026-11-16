@@ -43,7 +43,7 @@ import { PriceList } from '../groups/catalogs/catalog.types';
 import { apiErrorOf } from '../profile/sessions';
 import { loadAll } from './lookup-loader';
 import { resolvePlaceField } from './place-errors';
-import { FieldDef, isVisible } from './place-fields';
+import { FIELDS, FieldDef, isVisible } from './place-fields';
 import {
   blockBody,
   createBody,
@@ -54,6 +54,14 @@ import {
   WEEK_DAYS,
   withSections,
 } from './place-model';
+import {
+  PLACE_TABS,
+  PlaceTabId,
+  SETTINGS_ENTRIES,
+  SettingsEntry,
+  sectionLocation,
+  tabSections,
+} from './place-nav';
 import { PlacesApi, VersionedPlace } from './places-api';
 import {
   PLACE_SECTIONS,
@@ -63,8 +71,6 @@ import {
   PLANS,
   DEALER_PLANS,
 } from './place.types';
-
-type Section = (typeof PLACE_SECTIONS)[number];
 
 /** The route parameters of the page. */
 interface Source {
@@ -82,24 +88,24 @@ export type PlaceLookup =
   | 'categories'
   | 'languages'
   | 'templates'
-  | 'series';
-
-/** What a save sends: one section, or every section with unsaved changes. */
-export type SaveScope = PlaceSection | 'all';
+  | 'series'
+  | 'taxes'
+  | 'users'
+  | 'favorites';
 
 /**
- * State of the place page, shared by its tabs (child routes): the place as the server has it with
- * its version (`ETag`), the whole form (one Signal Form with a property per tab, so switching tabs
- * loses nothing), what each tab has changed, the lookups the tabs need and the saves. It is
- * provided by the page, so every opened place has its own.
+ * State of the place page, shared by its tabs and settings entries (child routes): the place as
+ * the server has it with its version (`ETag`), the whole form (one Signal Form with a property
+ * per section, so switching tabs loses nothing), what each tab and each entry of the settings
+ * menu has changed, the lookups they need and the one save.
  *
- * Saving presents the version in `If-Match`: a tab saves with its own request (`PATCH` for the
- * general data, `PUT` for a block), "save all" sends the sections with changes in the unique
- * `PATCH`. A save puts back only the sections it wrote; the drafts of the others stay. `422`,
- * `409` and `403` errors with details land on the fields, whichever tab they are in. What the
- * user may change comes from the role, as the server decides it: the plan (platform
- * administrators; dealers choose it only when creating), the expiration date and the status
- * (platform administrators and dealers), Sentry (platform administrators).
+ * As in the legacy backoffice there is one "Salva": it sends the unique `PATCH` with every section
+ * that changed, presenting the version in `If-Match`, and puts back only what it wrote. `422`,
+ * `409` and `403` errors with details land on the fields, whichever tab or entry they are in, and
+ * the tab and the entry are marked. What the user may change comes from the role, as the server
+ * decides it: the plan (platform administrators; dealers choose it only when creating), the
+ * expiration date, the status and the integration switches (platform administrators and dealers),
+ * Sentry (platform administrators).
  */
 @Service({ autoProvided: false })
 export class PlaceState {
@@ -218,35 +224,43 @@ export class PlaceState {
       feature: (name) => this.features.enabled(name),
     });
 
-  /** Whether the store key tab is offered: platform administrators and dealers, on an existing place. */
+  /** Whether the store key panel is offered: platform administrators and dealers, on an existing place. */
   readonly hasStoreKey = computed(() => !this.isNew() && this.session.can('storeKeys:read'));
 
-  /** The tabs of a place the user sees: the legacy rules by plan, role and by the features of the group. */
-  readonly sections = computed(() => {
-    const secondary = this.place()?.license.plan === 'tgm-secondary';
-    return PLACE_SECTIONS.filter((section) => {
-      switch (section.id) {
+  /** Whether the place has the plan of the secondary tobacco company (its page is only the general tab). */
+  private readonly secondary = computed(() => this.place()?.license.plan === 'tgm-secondary');
+
+  /** The top tabs the user sees: the legacy rules by plan, role and by the features of the group. */
+  readonly tabs = computed(() => {
+    const secondary = this.secondary();
+    const privileged = this.privileged();
+    return PLACE_TABS.filter((tab) => {
+      switch (tab.id) {
         case 'general':
-        case 'license':
           return true;
-        case 'tables':
-        case 'reservations':
-        case 'delivery':
-        case 'selfOrdering':
-          return !secondary && this.features.enabled('rooms');
-        case 'appointments':
-          return !secondary && this.features.enabled('appointments');
-        case 'tobacco':
-          return (
-            !secondary && (this.privileged() || this.features.enabled('tobaccosGamesMonopoly'))
-          );
+        case 'devices':
+          return !secondary && (privileged || this.features.enabled('cash'));
+        case 'printStations':
+          return !secondary && (privileged || this.features.enabled('ordering'));
+        case 'rooms':
+          return !secondary && (privileged || this.features.enabled('rooms'));
         case 'media':
-          return !secondary && this.features.enabled('media');
+          return !secondary && (privileged || this.features.enabled('media'));
         default:
           return !secondary;
       }
     });
   });
+
+  /** The entries of the side menu of the settings the user sees. */
+  readonly entries = computed(() =>
+    SETTINGS_ENTRIES.filter(
+      (entry) =>
+        this.privileged() ||
+        (entry.privileged !== true &&
+          (entry.needs === undefined || this.features.enabled(entry.needs))),
+    ),
+  );
 
   /** The form: one property per section. */
   readonly form = form(this.model, (path) => {
@@ -287,27 +301,132 @@ export class PlaceState {
       required(block.start);
       required(block.end);
     });
+    applyEach(path.devices.items, (device) => {
+      required(device.name);
+      maxLength(device.name, 100);
+    });
+    applyEach(path.printStations.stations, (station) => {
+      required(station.name);
+      required(station.host);
+    });
+    applyEach(path.printStations.productionCenters, (center) => required(center.name));
+    applyEach(path.rooms.items, (room) => {
+      required(room.name);
+      applyEach(room.tables, (table) => required(table.name));
+    });
+    applyEach(path.storages.items, (storage) => required(storage.name));
     disabled(path, { when: () => !this.canWrite() });
+    disabled(path.devices, { when: () => !this.model().devices.editable });
+    disabled(path.printStations.stations, {
+      when: () => !this.model().printStations.stationsEditable,
+    });
+    disabled(path.printStations.productionCenters, {
+      when: () => !this.model().printStations.productionCentersEditable,
+    });
+    disabled(path.rooms, { when: () => !this.model().rooms.editable });
+    disabled(path.storages, { when: () => !this.model().storages.editable });
     disabled(path.general.companyId, { when: () => !this.canCompany() });
     disabled(path.license.plan, { when: () => !this.canPlan() });
     disabled(path.license.expirationDate, { when: () => !this.canReserved() });
     disabled(path.license.status, { when: () => !this.canReserved() });
-    disabled(path.license.sentry, { when: () => !this.canSentry() });
+    disabled(path.dealerSettings.f['sentry'], { when: () => !this.canSentry() });
     disabled(path.appointments.f['webWidgetStatus'], { when: () => !this.canReserved() });
+    for (const definition of FIELDS.integrations.filter((candidate) => candidate.reserved)) {
+      disabled(path.integrations.f[definition.key], { when: () => !this.canReserved() });
+    }
   });
 
-  /** Errors of each tab, to mark it: server errors, and client errors once the field was touched. */
+  /** The errors of a section the user should see: server errors, and client errors once the field was touched. */
+  private errorsOf(section: PlaceSection) {
+    return (this.form[section] as FieldTree<unknown>)()
+      .errorSummary()
+      .filter((error) => error.kind === 'server' || error.fieldTree().touched());
+  }
+
+  /** Whether an error is on the key of the "other settings" entry (the receipts cancellation). */
+  private isCancellation(error: { fieldTree: unknown }): boolean {
+    return error.fieldTree === this.form.cashSettings.f['receiptsCancellation'];
+  }
+
+  /** Errors of each section. */
   readonly errorCounts = computed<Readonly<Record<PlaceSection, number>>>(
     () =>
-      Object.fromEntries(
-        PLACE_SECTIONS.map(({ id }) => [
-          id,
-          (this.form[id] as FieldTree<unknown>)()
-            .errorSummary()
-            .filter((error) => error.kind === 'server' || error.fieldTree().touched()).length,
-        ]),
-      ) as Record<PlaceSection, number>,
+      Object.fromEntries(PLACE_SECTIONS.map((id) => [id, this.errorsOf(id).length])) as Record<
+        PlaceSection,
+        number
+      >,
   );
+
+  /** Errors of a top tab: those of its sections. */
+  readonly tabErrors = computed<Readonly<Record<PlaceTabId, number>>>(
+    () =>
+      Object.fromEntries(
+        PLACE_TABS.map((tab) => [
+          tab.id,
+          tabSections(tab.id).reduce((sum, section) => sum + this.errorCounts()[section], 0),
+        ]),
+      ) as Record<PlaceTabId, number>,
+  );
+
+  /** Errors of each entry of the settings menu (the cash settings are split between two entries). */
+  readonly entryErrors = computed<Readonly<Record<string, number>>>(() => {
+    const cancellation = this.errorsOf('cashSettings').filter((error) =>
+      this.isCancellation(error),
+    ).length;
+    return Object.fromEntries(
+      SETTINGS_ENTRIES.map((entry) => {
+        const count = this.errorCounts()[entry.section];
+        return [
+          entry.id,
+          entry.scope === 'other'
+            ? cancellation
+            : entry.scope === 'main'
+              ? count - cancellation
+              : count,
+        ];
+      }),
+    );
+  });
+
+  /** Whether a top tab has unsaved changes. */
+  readonly tabDirty = computed<Readonly<Record<PlaceTabId, boolean>>>(
+    () =>
+      Object.fromEntries(
+        PLACE_TABS.map((tab) => [
+          tab.id,
+          tabSections(tab.id).some((section) => this.dirty().has(section)),
+        ]),
+      ) as Record<PlaceTabId, boolean>,
+  );
+
+  /** Whether each entry of the settings menu has unsaved changes. */
+  readonly entryDirty = computed<Readonly<Record<string, boolean>>>(() => {
+    const changed = (key: 'model' | 'baseline') =>
+      this[key]().cashSettings.f['receiptsCancellation'];
+    const cancellation = changed('model') !== changed('baseline');
+    return Object.fromEntries(
+      SETTINGS_ENTRIES.map((entry) => {
+        const dirty = this.dirty().has(entry.section);
+        if (entry.section !== 'cashSettings') {
+          return [entry.id, dirty];
+        }
+        return [
+          entry.id,
+          entry.scope === 'other' ? cancellation : dirty && !this.onlyCancellation(),
+        ];
+      }),
+    );
+  });
+
+  /** Whether the only change of the cash settings is the receipts cancellation. */
+  private readonly onlyCancellation = computed(() => {
+    const strip = (model: PlaceModel) => {
+      const { receiptsCancellation, ...rest } = model.cashSettings.f;
+      void receiptsCancellation;
+      return JSON.stringify({ ...model.cashSettings, f: rest });
+    };
+    return strip(this.model()) === strip(this.baseline());
+  });
 
   // Lookups, read when a tab asks for them.
   private readonly needs = signal<ReadonlySet<PlaceLookup>>(new Set());
@@ -356,6 +475,23 @@ export class PlaceState {
     'categories',
     'product-categories',
     'products:read',
+  );
+  private readonly taxesResource = httpResource<
+    ApiData<{ id: string; rate: number; description: string | null }[]>
+  >(() =>
+    this.needs().has('taxes') && this.session.can('groups:read')
+      ? `/v1/groups/${encodeURIComponent(this.groupId())}/taxes`
+      : undefined,
+  );
+  private readonly favoritesResource = httpResource<ApiData<{ id: string; name: string }[]>>(() =>
+    this.needs().has('favorites') && this.session.can('products:read')
+      ? `/v1/groups/${encodeURIComponent(this.groupId())}/product-favorites`
+      : undefined,
+  );
+  private readonly usersResource = httpResource<ApiData<{ id: string; username: string }[]>>(() =>
+    this.needs().has('users') && this.session.can('users:read')
+      ? `/v1/groups/${encodeURIComponent(this.groupId())}/users?limit=100`
+      : undefined,
   );
   private readonly seriesCompany = computed(() => this.model().general.companyId);
   /** Whether the company in the form is not the one the place has: its series come from the company. */
@@ -417,6 +553,18 @@ export class PlaceState {
   readonly categories = computed(() =>
     this.categoriesResource.hasValue() ? this.categoriesResource.value() : [],
   );
+  /** Tax rates of the group (the rooms' service tax); empty when not read. */
+  readonly taxes = computed(() =>
+    this.taxesResource.hasValue() ? this.taxesResource.value().data : [],
+  );
+  /** Lists of favorite products of the group; empty when not read. */
+  readonly favorites = computed(() =>
+    this.favoritesResource.hasValue() ? this.favoritesResource.value().data : [],
+  );
+  /** Users of the group (the table assignment); empty when not read (the first hundred). */
+  readonly users = computed(() =>
+    this.usersResource.hasValue() ? this.usersResource.value().data : [],
+  );
   /** Email templates of the group; empty when not read. */
   readonly templates = computed(() =>
     this.templatesResource.hasValue() ? this.templatesResource.value() : [],
@@ -451,6 +599,9 @@ export class PlaceState {
         this.placesResource.error(),
         this.categoriesResource.error(),
         this.templatesResource.error(),
+        this.taxesResource.error(),
+        this.favoritesResource.error(),
+        this.usersResource.error(),
         this.placeSeriesResource.error(),
         this.seriesResource.error(),
       ].some((error) => error !== undefined),
@@ -488,37 +639,44 @@ export class PlaceState {
   }
 
   /**
-   * Saves one section, or every section with changes. Validates what it saves (the fields of the
-   * section, or the whole form) and moves the focus to the first error.
+   * The unique save: creates the place on the page of a new one, otherwise sends every section
+   * with unsaved changes. Validates the whole form and, when it is not valid (or the server
+   * refuses fields), opens the tab or the entry with the first error and moves the focus to its
+   * first invalid field.
    *
-   * @param scope A section or `all`.
    * @returns Whether the save succeeded.
    */
-  async save(scope: SaveScope): Promise<boolean> {
-    const target = scope === 'all' ? this.form : (this.form[scope] as FieldTree<unknown>);
+  async save(): Promise<boolean> {
     this.saving.set(true);
+    let revealed = false;
     try {
-      return await submit(target as FieldTree<unknown>, {
-        action: () => this.send(scope),
-        onInvalid: () => void this.reveal(scope),
+      const saved = await submit(this.form as FieldTree<unknown>, {
+        action: () => this.send(),
+        onInvalid: () => {
+          revealed = true;
+          void this.reveal();
+        },
       });
+      if (!saved && !revealed) {
+        // The server refused fields: show the first one, as for the errors found by the form.
+        await this.reveal();
+      }
+      return saved;
     } finally {
       this.saving.set(false);
     }
   }
 
-  private async send(scope: SaveScope): Promise<TreeValidationResult> {
+  private async send(): Promise<TreeValidationResult> {
     this.failure.set(null);
     this.stale.set(false);
     const created = this.isNew();
     const sections: ReadonlySet<PlaceSection> = created
-      ? new Set(PLACE_SECTIONS.map((section) => section.id))
-      : scope === 'all'
-        ? this.dirty()
-        : new Set([scope]);
+      ? new Set<PlaceSection>(['general', 'license'])
+      : this.dirty();
     let result: VersionedPlace;
     try {
-      result = await this.request(scope, sections);
+      result = await this.request(sections);
     } catch (error) {
       return this.reject(error);
     }
@@ -527,8 +685,10 @@ export class PlaceState {
     if (companyChanged) {
       this.placeSeriesResource.reload();
     }
-    this.model.update((model) => withSections(model, result.place, sections));
-    for (const id of sections) {
+    // A created place is read back whole: what the server defaults is what the form holds.
+    const written: ReadonlySet<PlaceSection> = created ? new Set(PLACE_SECTIONS) : sections;
+    this.model.update((model) => withSections(model, result.place, written));
+    for (const id of written) {
       (this.form[id] as FieldTree<unknown>)().reset();
     }
     this.toast.success(this.i18n.t(created ? 'PLACES.CREATED' : 'PLACES.SAVED'));
@@ -539,7 +699,7 @@ export class PlaceState {
     return undefined;
   }
 
-  private request(scope: SaveScope, sections: ReadonlySet<PlaceSection>): Promise<VersionedPlace> {
+  private request(sections: ReadonlySet<PlaceSection>): Promise<VersionedPlace> {
     const groupId = this.groupId();
     const model = this.model();
     if (this.isNew()) {
@@ -547,20 +707,9 @@ export class PlaceState {
       return this.api.create(groupId, body, this.createKey.forBody(body));
     }
     const current = this.saved() as VersionedPlace;
-    const placeId = current.place.id;
-    if (scope !== 'all' && scope !== 'general') {
-      return this.api.replace(
-        groupId,
-        placeId,
-        scope,
-        blockBody(model, scope, current.place),
-        current.etag,
-        current.place,
-      );
-    }
     return this.api.patch(
       groupId,
-      placeId,
+      current.place.id,
       patchBody(model, this.baseline(), sections, current.place),
       current.etag,
       current.place,
@@ -593,18 +742,23 @@ export class PlaceState {
     return mapped.errors;
   }
 
-  /** Opens the first tab that has an error and moves the focus to its first invalid field. */
-  private async reveal(scope: SaveScope): Promise<void> {
-    const id =
-      scope === 'all'
-        ? (PLACE_SECTIONS.find((candidate) => this.errorCounts()[candidate.id] > 0) as Section).id
-        : scope;
-    const section = PLACE_SECTIONS.find((candidate) => candidate.id === id) as Section;
+  /**
+   * Opens the first tab or entry that has an error and moves the focus to its first invalid field.
+   * It reads the errors of the form itself: when the save is refused the fields are marked as
+   * touched only after this runs, so the counts shown to the user may still be zero.
+   */
+  private async reveal(): Promise<void> {
+    const failing = (id: PlaceSection) => (this.form[id] as FieldTree<unknown>)().errorSummary();
+    const section = PLACE_SECTIONS.find(
+      (candidate) => failing(candidate).length > 0,
+    ) as PlaceSection;
+    const other =
+      section === 'cashSettings' && failing(section).every((error) => this.isCancellation(error));
     if (!this.isNew()) {
       const base = placeRoute(this.groupId(), this.placeId() as string);
-      await this.router.navigate([...base, section.path].filter((segment) => segment !== ''));
+      await this.router.navigate([...base, ...sectionLocation(section, other)]);
     }
-    afterNextRender(() => focusFirstError(this.form[section.id] as FieldTree<unknown>), {
+    afterNextRender(() => focusFirstError(this.form[section] as FieldTree<unknown>), {
       injector: this.injector,
     });
   }

@@ -1,0 +1,184 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'PLACES.STATIONS.STATIONS' | t }}</legend>
+    @if (!lists().stationsEditable) {
+      <p class="note" role="status">{{ 'PLACES.STATIONS.STATIONS_NOT_EDITABLE' | t }}</p>
+    }
+    @if (state.fieldError(stations); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    <div class="rows">
+      @for (station of lists().stations; track $index; let i = $index) {
+        @let f = stations[i];
+        @let title = stationName(station);
+        <article class="row station" [attr.aria-label]="title">
+          <div class="row-actions">
+            <strong>{{ title }}</strong>
+            @if (stationsEditable()) {
+              <button
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="'PLACES.STATIONS.REMOVE_STATION' | t: { name: title }"
+                (click)="removeStation(i)"
+              >
+                {{ 'PLACES.REMOVE' | t }}
+              </button>
+            }
+          </div>
+          <div class="grid">
+            <fc-text-field
+              [formField]="f.name"
+              [label]="'PLACES.STATIONS.NAME' | t"
+              [error]="state.fieldError(f.name)"
+              (blurred)="f.name().markAsTouched()"
+            />
+            <fc-select
+              [formField]="f.driver"
+              [label]="'PLACES.STATIONS.DRIVER' | t"
+              [placeholder]="'PLACES.STATIONS.SELECT_DRIVER' | t"
+              [options]="driverOptions(station.driver)"
+              [error]="state.fieldError(f.driver)"
+              (blurred)="f.driver().markAsTouched()"
+            />
+            <fc-text-field
+              [formField]="f.host"
+              [label]="'PLACES.STATIONS.HOST' | t"
+              [error]="state.fieldError(f.host)"
+              (blurred)="f.host().markAsTouched()"
+            />
+            <fc-text-field
+              type="number"
+              inputmode="numeric"
+              [formField]="f.pulseNumber"
+              [label]="'PLACES.STATIONS.PULSE_NUMBER' | t"
+              [error]="state.fieldError(f.pulseNumber)"
+              (blurred)="f.pulseNumber().markAsTouched()"
+            />
+            <fc-text-field
+              type="number"
+              inputmode="numeric"
+              [formField]="f.pulseNumberSecondary"
+              [label]="'PLACES.STATIONS.PULSE_NUMBER_SECONDARY' | t"
+              [error]="state.fieldError(f.pulseNumberSecondary)"
+              (blurred)="f.pulseNumberSecondary().markAsTouched()"
+            />
+          </div>
+          <div class="checks">
+            <fc-checkbox
+              [formField]="f.upsideDown"
+              [label]="'PLACES.STATIONS.UPSIDE_DOWN' | t"
+              (blurred)="f.upsideDown().markAsTouched()"
+            />
+            <fc-checkbox
+              [formField]="f.exitsCut"
+              [label]="'PLACES.STATIONS.EXITS_CUT' | t"
+              (blurred)="f.exitsCut().markAsTouched()"
+            />
+          </div>
+          <fieldset>
+            <legend>{{ 'PLACES.STATIONS.SUMMARY' | t }}</legend>
+            <fieldset>
+              <legend>{{ 'PLACES.STATIONS.SUMMARY_BY_STATIONS' | t }}</legend>
+              <div class="checks">
+                @for (other of othersOf(i); track other.id) {
+                  <fc-checkbox
+                    [label]="other.name"
+                    [checked]="has(station.summaryPrintStationsIds, other.id)"
+                    [disabled]="f.summaryPrintStationsIds().disabled()"
+                    (checkedChange)="toggleSummaryStation(i, other.id, $event)"
+                  />
+                } @empty {
+                  <p class="note">{{ 'PLACES.STATIONS.SUMMARY_NO_STATIONS' | t }}</p>
+                }
+              </div>
+              @if (state.fieldError(f.summaryPrintStationsIds); as problem) {
+                <p class="problem" role="alert">{{ problem }}</p>
+              }
+            </fieldset>
+            <fieldset>
+              <legend>{{ 'PLACES.STATIONS.SUMMARY_BY_CATEGORIES' | t }}</legend>
+              <div class="checks">
+                @for (category of state.categories(); track category.id) {
+                  <fc-checkbox
+                    [label]="category.name"
+                    [checked]="has(station.summaryCategoriesIds, category.id)"
+                    [disabled]="f.summaryCategoriesIds().disabled()"
+                    (checkedChange)="toggleSummaryCategory(i, category.id, $event)"
+                  />
+                } @empty {
+                  <p class="note">{{ 'PLACES.STATIONS.SUMMARY_NO_CATEGORIES' | t }}</p>
+                }
+              </div>
+              @if (state.fieldError(f.summaryCategoriesIds); as problem) {
+                <p class="problem" role="alert">{{ problem }}</p>
+              }
+            </fieldset>
+          </fieldset>
+        </article>
+      } @empty {
+        <p class="note">{{ 'PLACES.STATIONS.STATIONS_EMPTY' | t }}</p>
+      }
+    </div>
+    @if (stationsEditable()) {
+      <div>
+        <button fc-button variant="secondary" (click)="addStation()">
+          {{ 'PLACES.STATIONS.ADD_STATION' | t }}
+        </button>
+      </div>
+    }
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ 'PLACES.STATIONS.CENTERS' | t }}</legend>
+    @if (!lists().productionCentersEditable) {
+      <p class="note" role="status">{{ 'PLACES.STATIONS.CENTERS_NOT_EDITABLE' | t }}</p>
+    }
+    @if (state.fieldError(centers); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    <div class="rows">
+      @for (center of lists().productionCenters; track $index; let i = $index) {
+        @let c = centers[i];
+        <article class="row center" [attr.aria-label]="center.name">
+          <div class="grid">
+            <fc-text-field
+              [formField]="c.name"
+              [label]="'PLACES.STATIONS.CENTER_NAME' | t"
+              [error]="state.fieldError(c.name)"
+              (blurred)="c.name().markAsTouched()"
+            />
+            <fc-text-field
+              type="number"
+              inputmode="numeric"
+              [formField]="c.capacity"
+              [label]="'PLACES.STATIONS.CAPACITY' | t"
+              [error]="state.fieldError(c.capacity)"
+              (blurred)="c.capacity().markAsTouched()"
+            />
+          </div>
+          @if (centersEditable()) {
+            <div class="row-actions">
+              <button
+                fc-button
+                variant="ghost"
+                [attr.aria-label]="'PLACES.STATIONS.REMOVE_CENTER' | t: { name: center.name }"
+                (click)="removeCenter(i)"
+              >
+                {{ 'PLACES.REMOVE' | t }}
+              </button>
+            </div>
+          }
+        </article>
+      } @empty {
+        <p class="note">{{ 'PLACES.STATIONS.CENTERS_EMPTY' | t }}</p>
+      }
+    </div>
+    @if (centersEditable()) {
+      <div>
+        <button fc-button variant="secondary" (click)="addCenter()">
+          {{ 'PLACES.STATIONS.ADD_CENTER' | t }}
+        </button>
+      </div>
+    }
+  </fieldset>
+</form>

@@ -2,7 +2,6 @@ import { Component, computed, inject } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { RowColumn, RowsEditor } from './rows-editor';
 
@@ -10,12 +9,12 @@ import { RowColumn, RowsEditor } from './rows-editor';
 export const MAX_WORKSHIFT_NAMES = 20;
 
 /**
- * Cash tab of the place: the behavior of the POS (login, cart, shifts, receipts, warehouse and
- * report) and, for groups with the restaurant module, the names of the work shifts.
+ * "Impostazioni generali" of the settings menu: the behavior of the POS (login, cart, shifts,
+ * receipts, warehouse and report) and the names of the work shifts.
  */
 @Component({
   selector: 'fc-place-cash',
-  imports: [PlaceFieldsView, PlaceSave, RowsEditor, TPipe],
+  imports: [PlaceFieldsView, RowsEditor, TPipe],
   templateUrl: './place-cash.html',
   styleUrl: './place-section.css',
 })

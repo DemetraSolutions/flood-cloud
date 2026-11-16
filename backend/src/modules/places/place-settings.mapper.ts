@@ -119,6 +119,16 @@ const WHOLE: Readonly<Record<WholeName, Codec>> = {
     read: (value) => list(value).flatMap((category) => (typeof category['_id'] === 'string' ? [{ _id: category['_id'], position: wholeNumber(category['position']) }] : [])),
     write: (value) => (value as Array<{ _id: string; position: number | null }>).map((category) => ({ _id: category._id, position: category.position })),
   },
+  // The categories of TS Hospitality the places map to: the ids of the place's categories to ids of the provider, both text.
+  tshCategoriesMap: {
+    read: (value) => Object.fromEntries(Object.entries(isPlain(value) ? value : {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
+    write: (value) => value,
+  },
+  // The categories the provider listed, kept in the document: read only.
+  tshCategories: {
+    read: (value) => list(value).flatMap((category) => (typeof category['id'] === 'string' && typeof category['name'] === 'string' ? [{ id: category['id'], name: category['name'] }] : [])),
+    write: (value) => value,
+  },
   // The texts by language: a write sets the languages of the request and keeps the others the document has.
   languageTexts: {
     read: (value) => Object.fromEntries(Object.entries(isPlain(value) ? value : {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
@@ -135,6 +145,11 @@ export function codecOf(kind: SettingKind): Codec {
       return { read: nonEmptyOrNull, write: (value) => value };
     case 'plain':
       return { read: (value) => textOr(value), write: (value) => value };
+    case 'secret':
+      // Never read back: the leaf is write-only, the flag of the credential is the other key.
+      return { read: () => undefined, write: (value) => value };
+    case 'secretFlag':
+      return { read: (value) => typeof value === 'string' && value !== '', write: (value) => value };
     case 'enum':
       return { read: (value) => (typeof value === 'string' && kind.values.includes(value) ? value : kind.def), write: (value) => value ?? kind.def };
     case 'font':
@@ -159,4 +174,14 @@ export function codecOf(kind: SettingKind): Codec {
 }
 
 /** The leaves of the settings blocks, for `PLACE_LEAVES`: the domain path, the stored path and the codec of every key, and the deprecated copies (not part of the domain) left out. */
-export const SETTING_LEAVES: readonly Leaf[] = Object.freeze(SETTING_FIELDS.map((field): Leaf => ({ domain: field.domain, legacy: field.legacy, codec: codecOf(field.kind) })));
+export const SETTING_LEAVES: readonly Leaf[] = Object.freeze(
+  SETTING_FIELDS.map(
+    (field): Leaf => ({
+      domain: field.domain,
+      legacy: field.legacy,
+      codec: codecOf(field.kind),
+      ...(field.readOnly === true || field.kind.t === 'secretFlag' ? { readOnly: true as const } : {}),
+      ...(field.kind.t === 'secret' ? { writeOnly: true as const } : {}),
+    }),
+  ),
+);

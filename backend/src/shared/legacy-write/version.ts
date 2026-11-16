@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { BSON } from 'mongodb';
 import type { Document } from 'mongodb';
 import { COMPANIES_OWNED_FIELDS, PLACES_OWNED_FIELDS } from '../../db/collections.ts';
+import { listAt, listForVersion } from './place-lists.ts';
 
 /**
  * The paths a version is computed on, in a fixed order: `_id`, then the owned fields of the entity (which include `trash`, and `companyId` for
@@ -34,22 +35,29 @@ function lookup(document: Document, path: string): { readonly found: true; reado
 }
 
 /**
- * The version of a stored document: SHA-256, in base64url, of a canonical form of the parts the write service owns and checks: `_id` and the
+ * The version of a stored document: HMAC-SHA256 with a secret key, in base64url, of a canonical form of the parts the write service owns and checks: `_id` and the
  * owned fields (so `trash`, for a place `companyId` and, for a company, every owned key of its blocks, `banks` and the other arrays included), in a fixed order,
  * each as present with its value or as absent (absent is not `null`; a dotted path is absent when a step of it is missing or is not a sub-document).
  * The document must be read with the exact types (`EXACT_TYPES`), so a changed value or type (`Int32` that becomes `Double`) counts.
- * A change by the legacy to an owned field (`name`, `settings.ecommerce.status`…) changes the version; a write of the POS on `devices`, `rooms`
- * or any key the service does not own (an unknown key of `settings`) does not, so it never makes an update fail. It is the token the routes will expose as `ETag` and accept as
+ * A change by the legacy to an owned field (`name`, `settings.ecommerce.status`…) changes the version; a write of the POS to what the service does not own (an unknown key of
+ * `settings`, the `info` and `status` of a device, which a list of items is hashed without) does not, so it never makes an update fail. The rooms are hashed whole: the POS rewrites
+ * them (the layout of the tables), and a save made on a copy older than that is refused with `412`. It is the token the routes will expose as `ETag` and accept as
  * `If-Match` (`doc/Tasks.md` 5.6.4).
  *
  * @param kind `companies` or `places`.
  * @param document The document as stored in the group database.
+ * @param key The secret key of the HMAC (`VERSION_HMAC_KEY`): the version covers credentials and network data the reader of the `ETag` must not be able to check offline.
  * @returns The version, 43 characters.
  */
-export function versionOf(kind: 'companies' | 'places', document: Document): string {
+export function versionOf(kind: 'companies' | 'places', document: Document, key: Buffer): string {
   const parts = VERSIONED_PATHS[kind].map((path) => {
     const found = lookup(document, path);
-    return found.found ? { path, value: found.value } : { path, absent: true };
+    if (!found.found) {
+      return { path, absent: true };
+    }
+    // A list of items of a place is hashed by what the backend owns of each item (`place-lists.ts`).
+    const list = kind === 'places' ? listAt(path) : undefined;
+    return { path, value: list === undefined ? found.value : listForVersion(list, found.value) };
   });
-  return createHash('sha256').update(BSON.serialize({ parts })).digest('base64url');
+  return createHmac('sha256', key).update(BSON.serialize({ parts })).digest('base64url');
 }

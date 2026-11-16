@@ -230,17 +230,78 @@ const companyRoutes: Routes = [
   },
 ];
 
-/** A tab of the place page that only shows the keys of a settings block. */
+/** An entry of the settings of the place that only shows the keys of a settings block. */
 function placeScalarTab(path: string, section: string, key: string): Routes[number] {
   return {
     path,
-    title: `PLACES.SECTION.${key}`,
+    title: `PLACES.MENU.${key}`,
     data: { section },
     loadComponent: () => import('./features/places/place-scalar-tab').then((m) => m.PlaceScalarTab),
   };
 }
 
-/** The tabs of the place page, as child routes (the general tab is the default one). */
+/** The entries of the side menu of the settings tab, as child routes (the general settings are the default one). */
+const placeSettings: Routes = [
+  { path: '', pathMatch: 'full', redirectTo: 'general' },
+  {
+    path: 'dealer',
+    title: 'PLACES.MENU.DEALER',
+    loadComponent: () => import('./features/places/place-dealer').then((m) => m.PlaceDealer),
+  },
+  {
+    path: 'general',
+    title: 'PLACES.MENU.GENERAL',
+    loadComponent: () => import('./features/places/place-cash').then((m) => m.PlaceCash),
+  },
+  {
+    path: 'rooms-settings',
+    title: 'PLACES.MENU.ROOMS',
+    loadComponent: () => import('./features/places/place-tables').then((m) => m.PlaceTables),
+  },
+  {
+    path: 'delivery',
+    title: 'PLACES.MENU.DELIVERY',
+    loadComponent: () => import('./features/places/place-delivery').then((m) => m.PlaceDelivery),
+  },
+  {
+    path: 'reservations',
+    title: 'PLACES.MENU.RESERVATIONS',
+    loadComponent: () =>
+      import('./features/places/place-reservations').then((m) => m.PlaceReservations),
+  },
+  {
+    path: 'self-ordering',
+    title: 'PLACES.MENU.SELF_ORDERING',
+    loadComponent: () =>
+      import('./features/places/place-self-ordering').then((m) => m.PlaceSelfOrdering),
+  },
+  placeScalarTab('external-display', 'externalDisplay', 'EXTERNAL_DISPLAY'),
+  {
+    path: 'kiosk',
+    title: 'PLACES.MENU.KIOSK',
+    loadComponent: () => import('./features/places/place-kiosk').then((m) => m.PlaceKiosk),
+  },
+  placeScalarTab('appointments', 'appointments', 'APPOINTMENTS'),
+  placeScalarTab('fidelity', 'fidelity', 'FIDELITY'),
+  placeScalarTab('tobacco', 'tobacco', 'TOBACCO'),
+  {
+    path: 'print',
+    title: 'PLACES.MENU.PRINT',
+    loadComponent: () => import('./features/places/place-printing').then((m) => m.PlacePrinting),
+  },
+  {
+    path: 'other',
+    title: 'PLACES.MENU.OTHER',
+    loadComponent: () => import('./features/places/place-other').then((m) => m.PlaceOther),
+  },
+  {
+    path: 'payments',
+    title: 'PLACES.MENU.PAYMENTS',
+    loadComponent: () => import('./features/places/place-payments').then((m) => m.PlacePayments),
+  },
+];
+
+/** The tabs of the place page, as child routes (the general tab is the default one), in the order of the legacy backoffice. */
 const placeTabs: Routes = [
   {
     path: '',
@@ -249,71 +310,47 @@ const placeTabs: Routes = [
     loadComponent: () => import('./features/places/place-general').then((m) => m.PlaceGeneral),
   },
   {
-    path: 'license',
-    title: 'PLACES.SECTION.LICENSE',
-    loadComponent: () => import('./features/places/place-license').then((m) => m.PlaceLicense),
+    path: 'devices',
+    title: 'PLACES.SECTION.DEVICES',
+    loadComponent: () => import('./features/places/place-devices').then((m) => m.PlaceDevices),
   },
   {
-    path: 'opening-hours',
+    path: 'print-stations',
+    title: 'PLACES.SECTION.PRINT_STATIONS',
+    loadComponent: () =>
+      import('./features/places/place-print-stations').then((m) => m.PlacePrintStations),
+  },
+  {
+    path: 'rooms',
+    title: 'PLACES.SECTION.ROOMS',
+    loadComponent: () => import('./features/places/place-rooms').then((m) => m.PlaceRooms),
+  },
+  {
+    path: 'storages',
+    title: 'PLACES.SECTION.STORAGES',
+    loadComponent: () => import('./features/places/place-storages').then((m) => m.PlaceStorages),
+  },
+  {
+    path: 'hours',
     title: 'PLACES.SECTION.OPENING_HOURS',
     loadComponent: () => import('./features/places/place-hours').then((m) => m.PlaceHours),
-  },
-  {
-    path: 'cash',
-    title: 'PLACES.SECTION.CASH',
-    loadComponent: () => import('./features/places/place-cash').then((m) => m.PlaceCash),
-  },
-  {
-    path: 'printing',
-    title: 'PLACES.SECTION.PRINTING',
-    loadComponent: () => import('./features/places/place-printing').then((m) => m.PlacePrinting),
-  },
-  {
-    path: 'payments',
-    title: 'PLACES.SECTION.PAYMENTS',
-    loadComponent: () => import('./features/places/place-payments').then((m) => m.PlacePayments),
-  },
-  {
-    path: 'tables',
-    title: 'PLACES.SECTION.TABLES',
-    loadComponent: () => import('./features/places/place-tables').then((m) => m.PlaceTables),
-  },
-  {
-    path: 'reservations',
-    title: 'PLACES.SECTION.RESERVATIONS',
-    loadComponent: () =>
-      import('./features/places/place-reservations').then((m) => m.PlaceReservations),
-  },
-  {
-    path: 'delivery',
-    title: 'PLACES.SECTION.DELIVERY',
-    loadComponent: () => import('./features/places/place-delivery').then((m) => m.PlaceDelivery),
-  },
-  {
-    path: 'self-ordering',
-    title: 'PLACES.SECTION.SELF_ORDERING',
-    loadComponent: () =>
-      import('./features/places/place-self-ordering').then((m) => m.PlaceSelfOrdering),
-  },
-  {
-    path: 'kiosk',
-    title: 'PLACES.SECTION.KIOSK',
-    loadComponent: () => import('./features/places/place-kiosk').then((m) => m.PlaceKiosk),
-  },
-  placeScalarTab('appointments', 'appointments', 'APPOINTMENTS'),
-  placeScalarTab('external-display', 'externalDisplay', 'EXTERNAL_DISPLAY'),
-  placeScalarTab('fidelity', 'fidelity', 'FIDELITY'),
-  placeScalarTab('tobacco', 'tobacco', 'TOBACCO'),
-  {
-    path: 'store-key',
-    title: 'PLACES.SECTION.STORE_KEY',
-    canMatch: [permission('storeKeys:read')],
-    loadComponent: () => import('./features/places/place-store-key').then((m) => m.PlaceStoreKey),
   },
   {
     path: 'media',
     title: 'PLACES.SECTION.MEDIA',
     loadComponent: () => import('./features/places/place-media').then((m) => m.PlaceMedia),
+  },
+  {
+    path: 'settings',
+    title: 'PLACES.SECTION.SETTINGS',
+    loadComponent: () => import('./features/places/place-settings').then((m) => m.PlaceSettings),
+    children: placeSettings,
+  },
+  {
+    path: 'integrations',
+    title: 'PLACES.SECTION.INTEGRATIONS',
+    loadComponent: () =>
+      import('./features/places/place-integrations').then((m) => m.PlaceIntegrations),
   },
 ];
 

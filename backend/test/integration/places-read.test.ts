@@ -9,6 +9,7 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 import { PRICE_LIST, SLOT } from '../helpers/place-fixtures.ts';
 import { startPlacesWorld } from '../helpers/places.ts';
 import type { PlacesWorld } from '../helpers/places.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: PlacesWorld;
@@ -146,14 +147,14 @@ describe('GET /v1/groups/{groupId}/places/{placeId}', () => {
     const reply = await detail(sa(), P(100));
     assert.equal(reply.status, 200);
     const document = (await world.storedPlace(0, P(100)))!;
-    assert.equal(reply.headers.get('etag'), `"${versionOf('places', document)}"`);
+    assert.equal(reply.headers.get('etag'), `"${versionOf('places', document, TEST_VERSION_KEY)}"`);
     const place = reply.body.data;
-    assert.deepEqual(Object.keys(place), ['id', 'groupId', 'name', 'companyId', 'address', 'contactName', 'email', 'phone', 'priceListId', 'ecommercePriceListId', 'invoiceSeries', 'priceLists', 'trashed', 'createdAt', 'updatedAt', 'license', 'openingHours', 'cashSettings', 'printing', 'payments', 'tables', 'reservations', 'delivery', 'selfOrdering', 'kiosk', 'appointments', 'externalDisplay', 'fidelity', 'tobacco', 'media']);
+    assert.deepEqual(Object.keys(place), ['id', 'groupId', 'name', 'companyId', 'address', 'contactName', 'email', 'phone', 'priceListId', 'ecommercePriceListId', 'invoiceSeries', 'priceLists', 'trashed', 'createdAt', 'updatedAt', 'license', 'openingHours', 'cashSettings', 'printing', 'payments', 'tables', 'reservations', 'delivery', 'selfOrdering', 'kiosk', 'appointments', 'externalDisplay', 'fidelity', 'tobacco', 'media', 'integrations', 'devices', 'printStations', 'rooms', 'storages']);
     assert.deepEqual([place.id, place.groupId, place.name, place.companyId, place.priceListId, place.ecommercePriceListId, place.invoiceSeries, place.trashed], [hex(P(100)), hex(world.group(0).groupId), 'Zeta Bar', hex(C(1)), PRICE_LIST, null, 'FE', false]);
     assert.deepEqual(place.address, { street: 'Via Roma 1', postcode: '20100', city: 'Milano', province: 'MI', country: 'IT' });
     assert.deepEqual([place.contactName, place.email, place.phone], ['Mario Rossi', 'bar@example.test', '+39 02 1234567']);
     assert.deepEqual(place.priceLists, [{ id: PRICE_LIST, allYouCanEat: true, ayceCode1: '12', ayceCode2: null }]);
-    assert.deepEqual(place.license, { plan: 'advanced', expirationDate: '2031-01-01T00:00:00.000Z', status: 'active', sentry: true });
+    assert.deepEqual(place.license, { plan: 'advanced', expirationDate: '2031-01-01T00:00:00.000Z', status: 'active' });
     assert.equal(place.openingHours.timezone, 'Europe/Rome');
     assert.deepEqual(place.openingHours.week['1'], { active: true, values: [SLOT] });
     assert.deepEqual(place.openingHours.special, { '2026-12-25': { closed: true, values: [] } });
@@ -161,10 +162,21 @@ describe('GET /v1/groups/{groupId}/places/{placeId}', () => {
     assert.deepEqual([place.createdAt, place.updatedAt], ['2024-01-15T10:00:00.000Z', '2024-01-15T10:00:00.000Z']);
   });
 
-  it('never returns the integrations, the credentials of the devices, the store server, the connector, the devices, the rooms, the storages or a key the backend does not know', async () => {
-    const text = JSON.stringify((await detail(sa(), P(100))).body);
-    for (const hidden of ['integrations', 'fixture-integration-secret', 'fixture-device-secret', 'fixture-user', '10.0.0.1', 'connector', '"devices"', '"rooms"', '"storages"', '"printStations"', '"productionCenter"', 'futureBlock', 'unknownGeneral', 'legacyOddKey', 'apiKey', 'automaticCash']) {
+  it('never returns a credential, what the POS writes in an item, the dealer settings to a group administrator or a key the backend does not know', async () => {
+    const reply = await detail(sa(), P(100));
+    const text = JSON.stringify(reply.body);
+    for (const hidden of ['fixture-integration-secret', 'fixture-device-secret', 'fixture-user', '10.0.0.1', 'connector.fixture', 'dealerSettings', '"info"', '"battery"', 'futureBlock', 'unknownGeneral', 'legacyOddKey', '"apiKey"', '"automaticCashPassword"', '"automaticCashUsername"', '"password"', '__index']) {
       assert.ok(!text.includes(hidden), hidden);
+    }
+    // What it has instead: whether each credential is set.
+    assert.deepEqual([reply.body.data.integrations.dojo.apiKeySet, reply.body.data.integrations.satispay.keyIdSet, reply.body.data.integrations.floodPay.stripe.privateKeySet], [true, false, false]);
+    assert.deepEqual(reply.body.data.devices.items.map((device: Record<string, unknown>) => [device['id'], device['automaticCashUsernameSet'], device['automaticCashPasswordSet']]), [['device1', true, true], ['device2', false, false]]);
+    // The dealers see the address of the server of the store and of the connector, and the switch of Sentry.
+    const dealer = (await detail(world.office.cluster.dealerA, P(100))).body.data;
+    assert.deepEqual(dealer.dealerSettings, { sentry: true, serverIp: '10.0.0.1', connectorAddress: 'http://connector.fixture.example.test' });
+    assert.ok(!JSON.stringify(dealer).includes('fixture-integration-secret'));
+    for (const other of [world.group(0).ca, world.group(0).pa]) {
+      assert.equal((await detail(other, P(1))).body.data.dealerSettings, undefined);
     }
   });
 
@@ -180,7 +192,7 @@ describe('GET /v1/groups/{groupId}/places/{placeId}', () => {
     await world.seedPlace(0, 111, 1, { companyId: 'nope', general: null, openingTime: [], platform: 5, delivery: 'x', plan: undefined, status: 'yes', expirationDate: 'soon', invoicePS: 7 });
     const odd = await detail(sa(), P(111));
     assert.equal(odd.status, 200, JSON.stringify(odd.body));
-    assert.deepEqual([odd.body.data.companyId, odd.body.data.license, odd.body.data.priceLists, odd.body.data.invoiceSeries], [null, { plan: null, expirationDate: null, status: 'disabled', sentry: false }, [], null]);
+    assert.deepEqual([odd.body.data.companyId, odd.body.data.license, odd.body.data.priceLists, odd.body.data.invoiceSeries], [null, { plan: null, expirationDate: null, status: 'disabled' }, [], null]);
     assert.equal(Object.keys(odd.body.data.openingHours.week).length, 7);
   });
 

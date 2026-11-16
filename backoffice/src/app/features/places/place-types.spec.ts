@@ -28,31 +28,24 @@ describe('plans', () => {
 });
 
 describe('PLACE_SECTIONS', () => {
-  it('starts with the exact general tab at the root of the place', () => {
-    expect(PLACE_SECTIONS[0]).toEqual({ id: 'general', path: '', key: 'GENERAL', exact: true });
-    expect(PLACE_SECTIONS.filter((section) => section.exact)).toHaveLength(1);
+  it('starts with the general data, the license and the opening hours', () => {
+    expect(PLACE_SECTIONS.slice(0, 3)).toEqual(['general', 'license', 'openingHours']);
   });
 
-  it('has unique identifiers, paths and keys', () => {
-    for (const field of ['id', 'path', 'key'] as const) {
-      const values = PLACE_SECTIONS.map((section) => section[field]);
-      expect(new Set(values).size).toBe(values.length);
-    }
-  });
-
-  it('has the license, the opening hours and one tab per settings block', () => {
-    const ids: readonly string[] = PLACE_SECTIONS.map((section) => section.id);
-    expect(ids.slice(0, 3)).toEqual(['general', 'license', 'openingHours']);
+  it('has one section per settings block and the lists of the place', () => {
     for (const block of SETTINGS_BLOCKS) {
-      expect(ids).toContain(block);
+      expect(PLACE_SECTIONS).toContain(block);
     }
-    expect(ids).toHaveLength(SETTINGS_BLOCKS.length + 3);
+    expect(PLACE_SECTIONS.slice(-4)).toEqual(['devices', 'printStations', 'rooms', 'storages']);
+    expect(PLACE_SECTIONS).toHaveLength(SETTINGS_BLOCKS.length + 7);
   });
 
-  it('names the keys in upper snake case', () => {
-    for (const section of PLACE_SECTIONS) {
-      expect(section.key).toMatch(/^[A-Z]+(_[A-Z]+)*$/);
-    }
+  it('has no repeats', () => {
+    expect(new Set(PLACE_SECTIONS).size).toBe(PLACE_SECTIONS.length);
+  });
+
+  it('has the integrations and the dealer settings among the blocks', () => {
+    expect(SETTINGS_BLOCKS.slice(-2)).toEqual(['integrations', 'dealerSettings']);
   });
 });
 

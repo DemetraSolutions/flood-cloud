@@ -1,11 +1,13 @@
 import { listQueryShape } from '../../shared/http/list.ts';
 import { MAX_DAY_SLOTS, MAX_SPECIAL_DAYS } from '../../shared/legacy-write/fields.ts';
+import { MAX_TABLES } from '../../shared/legacy-write/place-lists.ts';
 import { WEEK_DAYS } from '../../shared/legacy-write/place-paths.ts';
 import { array, boolean, email, enumOf, isoDate, nullable, object, objectId, optional, record, refine, string, transform } from '../../shared/validation/schema.ts';
 import type { Infer, Schema } from '../../shared/validation/schema.ts';
 import { addressSchema, emptyAsNull, partial, required } from '../companies/companies.schemas.ts';
 import type { Part } from '../companies/companies.schemas.ts';
 import { lookupIds } from '../group-lookup/lookup.schemas.ts';
+import { LIST_SEGMENTS, listBlockSchema } from './place-lists.schemas.ts';
 import { settingsSchema } from './place-settings.schemas.ts';
 import { SETTING_BLOCKS } from '../../shared/legacy-write/place-settings.ts';
 import { PLACES_LIST } from './places.list.ts';
@@ -16,6 +18,9 @@ import type { PlaceCreation, PlacePatch } from './place.types.ts';
  * the largest part of the document the step 7A writes.
  */
 export const PLACES_BODY_LIMIT = '256kb';
+
+/** Body limit of the writes that can carry the rooms with their tables (the `PATCH` and the `PUT` of the rooms): up to {@link MAX_TABLES} tables with their layout. */
+export const PLACES_LARGE_BODY_LIMIT = '1mb';
 
 /** Most price lists a place can enable (a group has at most {@link MAX_PRICE_LISTS_PER_PLACE}). */
 export const MAX_PRICE_LISTS_PER_PLACE = 50;
@@ -76,15 +81,14 @@ function scheduleSchema(part: Part) {
 }
 
 /**
- * The license block: the plan (any text: which values may be set depends on the role and is decided by the service; a historical one is sent back as it is), the end of the license,
- * the state and the Sentry switch. As a whole block (PUT) every key is required, so what a GET returns can be sent back.
+ * The license block: the plan (any text: which values may be set depends on the role and is decided by the service; a historical one is sent back as it is), the end of the license
+ * and the state (the Sentry switch is in the dealer settings). As a whole block (PUT) every key is required, so what a GET returns can be sent back.
  */
 export function licenseSchema(part: Part): Schema<NonNullable<PlacePatch['license']>> {
   return object({
     plan: part(nullable(string({ max: 30, trim: true }))),
     expirationDate: part(nullable(transform(isoDate(), (date) => date.toISOString(), 'format'))),
     status: part(enumOf(['active', 'disabled'] as const)),
-    sentry: part(boolean()),
   }) as unknown as Schema<NonNullable<PlacePatch['license']>>;
 }
 
@@ -114,6 +118,8 @@ function placeShape(part: Part, creation: boolean) {
     license: optional(licenseSchema(partial)),
     openingHours: optional(openingHoursSchema(partial)),
     ...Object.fromEntries(Object.keys(SETTING_BLOCKS).map((name) => [name, optional(settingsSchema(name, partial))])),
+    // The lists of items are modified, not created: a new place has the defaults of the template.
+    ...(creation ? {} : Object.fromEntries(Object.keys(LIST_SEGMENTS).map((name) => [name, optional(listBlockSchema(name, partial))]))),
   };
 }
 

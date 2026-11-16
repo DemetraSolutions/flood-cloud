@@ -15,16 +15,22 @@ export type WholeName =
   | 'minAmount'
   | 'priceListsConfig'
   | 'kioskCategories'
-  | 'languageTexts';
+  | 'languageTexts'
+  | 'tshCategoriesMap'
+  | 'tshCategories';
 
 /** How the value of a settings key is read, validated and written. */
 export type SettingKind =
   /** A switch: `true` or `false`. */
   | { readonly t: 'flag' }
-  /** A text, `null` when empty (`value || null`). */
-  | { readonly t: 'text'; readonly max: number }
-  /** A text that is `''` when empty, in the domain too (the media names). */
-  | { readonly t: 'plain'; readonly max: number }
+  /** A text, `null` when empty (`value || null`); `pattern` is the form it must have (checked where the value changes). */
+  | { readonly t: 'text'; readonly max: number; readonly pattern?: RegExp }
+  /** A text that is `''` when empty, in the domain too (the media names, the address of the Connector); `url` is a web address (always checked), `pattern` the form it must have (checked where the value changes). */
+  | { readonly t: 'plain'; readonly max: number; readonly url?: true; readonly pattern?: RegExp }
+  /** A credential: write-only (never read back), `null` clears it, an absent key keeps it. `pattern` is the form the provider gives it. */
+  | { readonly t: 'secret'; readonly max: number; readonly pattern?: RegExp }
+  /** Whether a credential is set: read-only, at the stored path of the credential. */
+  | { readonly t: 'secretFlag' }
   /** One of a closed list; `def` is the value of the form when it is empty (`null` for none). */
   | { readonly t: 'enum'; readonly values: readonly string[]; readonly def: string | null }
   /** A font size `R-C` with R and C from 1 to 3. */
@@ -52,6 +58,12 @@ export interface SettingField {
   /** Dotted path in the stored document (`general.fastLogin`). */
   readonly legacy: string;
   readonly kind: SettingKind;
+  /** The switch is the dealers' (a PSA or a dealer): any other role gets `notAllowed` where it changes. */
+  readonly reserved?: true;
+  /** Read only: a request may send it back, it is never written. */
+  readonly readOnly?: true;
+  /** A key of an integration that receives payments (Stripe, Dojo, Satispay, Qodeup): only a PSA or a dealer sets, changes or clears it (`notAllowed`); a request that leaves it out is fine. */
+  readonly payment?: true;
 }
 
 const FLAG: SettingKind = { t: 'flag' };
@@ -245,9 +257,103 @@ const TOBACCO: SettingField[] = block('tobacco', 'tgm', [...flags('status printP
 export const MEDIA_LOGO_SLOTS = Object.freeze(['logoLight', 'coverLight', 'logoKiosk', 'coverKiosk', 'productPlaceholderKiosk'] as const);
 
 const MEDIA: SettingField[] = block('media', 'medias.images', [
-  ...(['internalFileNameLogo', 'externalUrlLogo', 'internalFileName', 'externalUrl'] as const).map((name) => [name, { t: 'plain', max: name.startsWith('external') ? 2048 : 255 } as SettingKind] as const),
+  ...(['internalFileNameLogo', 'externalUrlLogo', 'internalFileName', 'externalUrl'] as const).map((name) => [name, (name.startsWith('external') ? { t: 'plain', max: 2048, url: true } : { t: 'plain', max: 255 }) as SettingKind] as const),
   ...MEDIA_LOGO_SLOTS.map((name) => [name, { t: 'logo' } as SettingKind] as const),
 ]);
+
+
+/** The form of the credentials the providers give (checked where the value changes): the Stripe keys have a fixed prefix, any other secret is printable text without spaces. */
+const PRINTABLE = /^[\x21-\x7E]+$/;
+const secretOf = (max = 512, pattern: RegExp = PRINTABLE): SettingKind => ({ t: 'secret', max, pattern });
+const PUBLIC_TEXT: SettingKind = { t: 'text', max: 255 };
+
+/** The integrations the old tab edits, in the order of the tab. The switch of each (`status`) is the dealers'. */
+const INTEGRATION_ENTRIES: ReadonlyArray<readonly [string, SettingKind]> = [
+  ['floodPay.status', FLAG],
+  ['floodPay.stripe.publicKey', { t: 'text', max: 255, pattern: /^pk_(?:test|live)_[A-Za-z0-9]+$/ }],
+  ['floodPay.stripe.privateKey', secretOf(512, /^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]+$/)],
+  ['floodPay.stripe.webhookPrivateKey', secretOf(512, /^whsec_[A-Za-z0-9]+$/)],
+  ['floodPay.qrCodePayment.status', FLAG],
+  ['floodPay.qrCodePayment.type', enumOf('static dynamic', 'static')],
+  ['floodPay.qrCodePayment.rating', FLAG],
+  ['floodPay.qrCodePayment.eReceipt', FLAG],
+  ['floodPay.qrCodePayment.tips', FLAG],
+  ['floodPay.qrCodePayment.postPaymentText', TEXT],
+  ['floodPay.tapToPay.status', FLAG],
+  ['floodPay.tapToPay.tips', FLAG],
+  ['bizerba.status', FLAG],
+  ['bizerba.importPath', { t: 'text', max: 500 }],
+  ['bizerba.exportPath', { t: 'text', max: 500 }],
+  ['googleMaps.status', FLAG],
+  ['reserveWithGoogle.status', FLAG],
+  ['reserveWithGoogle.category', enumOf('restaurant', 'restaurant')],
+  ['reserveWithGoogle.name', TEXT],
+  ['reserveWithGoogle.telephone', { t: 'text', max: 32, pattern: /^(?=.*\d)[0-9 +()-]+$/ }],
+  ['reserveWithGoogle.url', { t: 'text', max: 2048, pattern: /^https:\/\/[^\s]+$/i }],
+  ['reserveWithGoogle.geo.latitude', { t: 'num', min: -90, max: 90 }],
+  ['reserveWithGoogle.geo.longitude', { t: 'num', min: -180, max: 180 }],
+  ['reserveWithGoogle.geo.address.streetAddress', TEXT],
+  ['reserveWithGoogle.geo.address.locality', TEXT],
+  ['reserveWithGoogle.geo.address.postalCode', { t: 'text', max: 20 }],
+  ['reserveWithGoogle.geo.address.country', { t: 'text', max: 2, pattern: /^[A-Z]{2}$/ }],
+  ['easyappear.status', FLAG],
+  ['easyappear.appToken', secretOf()],
+  ['yellgo.status', FLAG],
+  ['yellgo.apiKey', secretOf()],
+  ['leggimenu.status', FLAG],
+  ['leggimenu.apiKey', secretOf()],
+  ['plateform.status', FLAG],
+  ['plateform.username', secretOf(100)],
+  ['plateform.password', secretOf(100)],
+  ['cooperto.status', FLAG],
+  ['cooperto.apiKey', secretOf()],
+  ['dojo.status', FLAG],
+  ['dojo.apiKey', secretOf()],
+  ['satispay.status', FLAG],
+  ['satispay.activationCode', secretOf(32, /^[A-Za-z0-9]+$/)],
+  ['satispay.keyId', secretOf()],
+  ['satispay.type', enumOf('checkin qrcode', 'checkin')],
+  ['qodeup.status', FLAG],
+  ['qodeup.apiKey', secretOf()],
+  ['tomatoai.status', FLAG],
+  ['tomatoai.apiKey', secretOf()],
+  ['keenon.status', FLAG],
+  ['keenon.storeId', PUBLIC_TEXT],
+  ['tsh.status', FLAG],
+  ['tsh.testMode', FLAG],
+  ['tsh.id', secretOf()],
+  ['tsh.secret', secretOf()],
+  ['tsh.propertyId', PUBLIC_TEXT],
+  ['tsh.serviceName', PUBLIC_TEXT],
+  ['tsh.categoriesMap', whole('tshCategoriesMap')],
+  ['phlex.status', FLAG],
+  ['phlex.username', secretOf(100)],
+  ['phlex.password', secretOf(100)],
+  ['phlex.structureId', PUBLIC_TEXT],
+];
+
+/**
+ * The keys of `integrations`: a credential is two keys, the write-only value (`privateKey`) and the read-only flag `privateKeySet` at the same stored path. The list the TS Hospitality
+ * categories come from (`tsh.tshCategories`) is read only: it is data of the provider, which this backend does not fetch.
+ */
+/** The keys of the integrations that receive payments: whoever holds them is paid, so they are the dealers'. */
+const PAYMENT_KEYS: ReadonlySet<string> = new Set(['floodPay.stripe.publicKey', 'floodPay.stripe.privateKey', 'floodPay.stripe.webhookPrivateKey', 'dojo.apiKey', 'satispay.activationCode', 'satispay.keyId', 'qodeup.apiKey']);
+
+const INTEGRATIONS: SettingField[] = [
+  ...INTEGRATION_ENTRIES.flatMap(([key, kind]): SettingField[] => {
+    const domain = `integrations.${key}`;
+    const field: SettingField = { domain, legacy: domain, kind, ...(key.endsWith('.status') ? { reserved: true as const } : {}), ...(PAYMENT_KEYS.has(key) ? { payment: true as const } : {}) };
+    return kind.t === 'secret' ? [field, { domain: `${domain}Set`, legacy: domain, kind: { t: 'secretFlag' }, readOnly: true }] : [field];
+  }),
+  { domain: 'integrations.tsh.categories', legacy: 'integrations.tsh.tshCategories', kind: whole('tshCategories'), readOnly: true },
+];
+
+/** The dealer settings: the Sentry switch of the POS (a PSA's), the address of the server of the store and the web address of the Connector (a PSA's or a dealer's). */
+const DEALER: SettingField[] = [
+  { domain: 'dealerSettings.sentry', legacy: 'platform.sentry', kind: FLAG },
+  { domain: 'dealerSettings.serverIp', legacy: 'server.ip', kind: { t: 'text', max: 64, pattern: /^[A-Za-z0-9.:\-[\]]+$/ } },
+  { domain: 'dealerSettings.connectorAddress', legacy: 'connectorAddress', kind: { t: 'plain', max: 255, pattern: /^(?:https?:\/\/[^\s]+)?$/i } },
+];
 
 /** The domain blocks the 7B settings add to the place, in the order of the representation, with their keys. */
 export const SETTING_BLOCKS: Readonly<Record<string, readonly SettingField[]>> = Object.freeze({
@@ -264,13 +370,15 @@ export const SETTING_BLOCKS: Readonly<Record<string, readonly SettingField[]>> =
   fidelity: FIDELITY,
   tobacco: TOBACCO,
   media: MEDIA,
+  integrations: INTEGRATIONS,
+  dealerSettings: DEALER,
 });
 
 /** Every settings key of every block. */
 export const SETTING_FIELDS: readonly SettingField[] = Object.freeze(Object.values(SETTING_BLOCKS).flat());
 
-/** The stored paths of every settings key, plus the deprecated copies, which are owned too: `PLACES_OWNED_FIELDS` includes them. */
-export const SETTING_LEGACY_PATHS: readonly string[] = Object.freeze([...SETTING_FIELDS.map((field) => field.legacy), ...DEPRECATED_ROOMS_PATHS]);
+/** The stored paths of every settings key that is written (a credential once, its flag and the read-only keys never), plus the deprecated copies, which are owned too: `PLACES_OWNED_FIELDS` includes them. */
+export const SETTING_LEGACY_PATHS: readonly string[] = Object.freeze([...new Set([...SETTING_FIELDS.filter((field) => field.readOnly !== true).map((field) => field.legacy), ...DEPRECATED_ROOMS_PATHS])]);
 
 /** The containers of the stored document that hold settings keys (completed with defaults when missing or empty), outermost first. */
 export const SETTING_CONTAINERS: readonly string[] = Object.freeze(

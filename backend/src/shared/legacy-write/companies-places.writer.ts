@@ -11,6 +11,8 @@ import { companyContainerDefaults, newCompanyDocument, newPlaceDocument, placeCo
 import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from './errors.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkObjectId } from './fields.ts';
 import type { CompanyChanges, NewCompanyFields, NewPlaceFields, PlaceChanges } from './fields.ts';
+import { PLACE_LISTS, isEditable, itemKey, mergeList } from './place-lists.ts';
+import type { ListDef } from './place-lists.ts';
 import { PLACE_CONTAINERS } from './place-paths.ts';
 import { reserveWithGoogleRecord } from './reserve-with-google.ts';
 import { normalizeVatNumber, vatNumberFilter } from './vat.ts';
@@ -38,7 +40,9 @@ export type WriteOutcome =
   /** A company in the trash cannot be deleted because a place of the group (trashed ones included) still refers to it. Nothing was written. */
   | { readonly outcome: 'referenced' }
   /** A place in the trash cannot be duplicated. Nothing was written. */
-  | { readonly outcome: 'trashed' };
+  | { readonly outcome: 'trashed' }
+  /** A device the POS says is busy (read inside the transaction) would be removed by a write of the devices. Nothing was written. */
+  | { readonly outcome: 'busy' };
 
 /** What the places need to know of the company they belong to: whether it is in the trash and the names of its invoice series (`invoicesPSValues`). */
 export interface CompanyOfPlace {
@@ -52,6 +56,8 @@ export interface CompanyOfPlace {
 export interface WriterOptions {
   /** Clock for `insertDate` and `updateDate`; the system clock by default. */
   readonly now?: () => Date;
+  /** Key of the HMAC that signs the versions (`VERSION_HMAC_KEY`, decoded). */
+  readonly versionKey: Buffer;
   /** Largest number of places of a group that `groups.places[]` can be recalculated for ({@link MAX_GROUP_PLACES} by default). */
   readonly maxGroupPlaces?: number;
 }
@@ -137,9 +143,11 @@ export interface CompaniesPlacesWriter {
    */
   updateCompany(id: ObjectId, expectedVersion: string, changes: CompanyChanges): Promise<WriteOutcome>;
   /**
-   * Changes some owned fields of a place with `$set`, each on its own leaf path (the top-level ones, `general.priceLists`, `platform.sentry`, the opening and delivery hours), and
-   * recalculates `groups.places[]`; nothing else of the document is written but `updateDate`, so what the POS writes (`devices[i].info`, `rooms`, `suspendedToday`…), the integrations and
-   * every key the service does not own survive. A block that is missing or empty is completed with the defaults of the keys the change does not set. A new `companyId` must name a company
+   * Changes some owned fields of a place with `$set`, each on its own leaf path (the top-level ones, `general.priceLists`, the opening and delivery hours, the settings, `integrations.*`, `server.ip`, `connectorAddress`), and
+   * recalculates `groups.places[]`; nothing else of the document is written but `updateDate`, so what the POS writes (`devices[i].info`, `suspendedToday`…) and every key the service does not
+   * own survive. A list of items (`devices`, `printStations`, `productionCenter`, `rooms`, `storages`) is given as the fragments of its items and merged over the stored items inside the
+   * transaction (`mergeList`), so the keys a fragment does not carry, those of the POS included, are the ones the transaction reads. When a key of `integrations.reserveWithGoogle` or the company
+   * changes, the Reserve with Google feed is brought in line with the place in the same transaction. A block that is missing or empty is completed with the defaults of the keys the change does not set. A new `companyId` must name a company
    * of the group that is not in the trash.
    *
    * @param id Id of the place.
@@ -197,6 +205,35 @@ export interface CompaniesPlacesWriter {
   deleteTrashed(kind: EntityKind, id: ObjectId, expectedVersion: string): Promise<WriteOutcome>;
 }
 
+/**
+ * The lists of items a change writes, merged item by item over the stored ones (`mergeList`): what the change carries for a list are fragments, and the stored document is the one read
+ * inside the transaction, so what the POS wrote in the meantime is in the result. Every other value is written as it is.
+ *
+ * @param current The stored document.
+ * @param set The leaves the change sets.
+ * @returns The leaves to `$set`, the lists merged; `null` when a busy device would be removed.
+ * @throws {MalformedDocumentError} If a list the change writes is stored as something that is not an array, or has an item without an id.
+ */
+function mergeLists(current: Document, set: Document): Document | null {
+  const written: Document = { ...set };
+  for (const list of Object.values(PLACE_LISTS) as ListDef[]) {
+    if (Object.hasOwn(set, list.path)) {
+      const stored: unknown = current[list.path];
+      // A list with an item that has no id is not written: the write would lose it.
+      if ((stored !== undefined && !Array.isArray(stored)) || !isEditable(list, stored, list.idKey)) {
+        throw new MalformedDocumentError(list.path);
+      }
+      const merged = mergeList(stored, set[list.path] as Document[], list, list.idKey);
+      // A device the POS marks busy is not removed: checked here, on the document read inside the transaction (the `status` is the POS's and is not part of the version).
+      if (list.path === 'devices' && (Array.isArray(stored) ? (stored as Document[]) : []).some((device) => (device['status'] as Document | undefined)?.['busy'] === true && !merged.some((kept) => itemKey(kept) === itemKey(device)))) {
+        return null;
+      }
+      written[list.path] = merged;
+    }
+  }
+  return written;
+}
+
 /** The result of the version check: the document as stored, or the outcome that stops the write. */
 type Gate = { readonly current: Document } | { readonly stop: WriteOutcome };
 
@@ -207,6 +244,7 @@ const NOT_TRASHED = Object.freeze({ outcome: 'notTrashed' }) satisfies WriteOutc
 const VAT_TAKEN = Object.freeze({ outcome: 'vatNumberTaken' }) satisfies WriteOutcome;
 const REFERENCED = Object.freeze({ outcome: 'referenced' }) satisfies WriteOutcome;
 const TRASHED = Object.freeze({ outcome: 'trashed' }) satisfies WriteOutcome;
+const BUSY = Object.freeze({ outcome: 'busy' }) satisfies WriteOutcome;
 
 /**
  * The leaves a write adds so that no block of the stored document stays half built: for every container the change writes into, when it is missing
@@ -261,12 +299,12 @@ function completionOf(current: Document, set: Document, containers: readonly str
  * @param principal The authenticated caller.
  * @param access A verified group access.
  * @param databases Database accessor.
- * @param options Clock and limit.
+ * @param options The key of the versions, the clock and the limit.
  * @returns The service.
  * @throws {Error} If the access was not issued by `requireGroupAccess` or does not belong to the principal.
  * @throws {UnknownClusterError} If the cluster of the access is not configured.
  */
-export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAccess, databases: Databases, options: WriterOptions = {}): CompaniesPlacesWriter {
+export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAccess, databases: Databases, options: WriterOptions): CompaniesPlacesWriter {
   return createWriter(principal, access, databases, options);
 }
 
@@ -278,14 +316,15 @@ export function companiesPlacesWriter(principal: AuthPrincipal, access: GroupAcc
  * @param access A verified group access.
  * @param databases Database accessor.
  */
-export function companiesPlacesReader(principal: ScopeHolder, access: GroupAccess, databases: Databases): Pick<CompaniesPlacesWriter, 'read'> {
-  const { read } = createWriter(principal, access, databases, {});
+export function companiesPlacesReader(principal: ScopeHolder, access: GroupAccess, databases: Databases, options: Pick<WriterOptions, 'versionKey'>): Pick<CompaniesPlacesWriter, 'read'> {
+  const { read } = createWriter(principal, access, databases, options);
   return { read };
 }
 
 function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Databases, options: WriterOptions): CompaniesPlacesWriter {
   const groupDb = groupDatabaseFor(principal, access, databases);
   const groupId = access.groupId;
+  const versionKey = options.versionKey;
   const clock = options.now ?? (() => new Date());
   const maxPlaces = options.maxGroupPlaces ?? MAX_GROUP_PLACES;
   // Literal names: the collection registry check requires every collection name to be a string literal.
@@ -317,7 +356,7 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
     if (current === null || !inPerimeter(kind, id, current)) {
       return { stop: NOT_FOUND };
     }
-    return versionOf(kind, current) === expected ? { current } : { stop: CONFLICT };
+    return versionOf(kind, current, versionKey) === expected ? { current } : { stop: CONFLICT };
   };
 
   /** Rereads the document written and writes its copy: the version of the document is what the caller gets back. */
@@ -327,7 +366,7 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
       throw new Error('The document just written cannot be read back inside the transaction');
     }
     await copy(kind).replaceOne({ _id: id, groupId }, expectedCopy(document, groupId), { upsert: true, session });
-    return { outcome: 'written', id, version: versionOf(kind, document) };
+    return { outcome: 'written', id, version: versionOf(kind, document, versionKey) };
   };
 
   /** `groups.places[]`: the full list `[{ _id, insertDate }]` of the places of the group database, trashed ones included, written with `$set`. */
@@ -356,6 +395,20 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
     }
   };
 
+  /**
+   * Brings the Reserve with Google feed in line with the place as it is now (the legacy update): the record is written when the integration is active and complete, and the place is
+   * not in the trash; in any other case the record is removed, so the feed never holds a stale one.
+   */
+  const syncFeed = async (id: ObjectId, session: ClientSession): Promise<void> => {
+    const place = await original('places').findOne({ _id: id }, { projection: { companyId: 1, trash: 1, 'integrations.reserveWithGoogle': 1 }, session });
+    const record = place === null || place['trash'] === true ? null : reserveWithGoogleRecord(place, groupId);
+    if (record === null) {
+      await leaveFeed(id, session);
+    } else {
+      await databases.common().collection('reserve_with_google').updateOne({ groupId, placeId: id }, { $set: record }, { upsert: true, session });
+    }
+  };
+
   /** Whether another company of the group that is not in the trash has the same normalized VAT number (`except` is the company being written). */
   const vatNumberTaken = async (code: string, except: ObjectId, session: ClientSession): Promise<boolean> => {
     const normalized = normalizeVatNumber(code);
@@ -380,12 +433,16 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
       if (uses !== undefined && !(await companyIsUsable(uses, session))) {
         return COMPANY_NOT_FOUND;
       }
-      // Only a place has leaves below blocks (a trash or a restore sets `trash` alone).
+      // Only a place has leaves below blocks and lists of items (a trash or a restore sets `trash` alone).
       const completion = kind === 'places' ? completionOf(passed.current, set, PLACE_CONTAINERS, placeContainerDefaults) : {};
-      await original(kind).updateOne({ _id: id }, { $set: { ...set, ...completion, updateDate: clock() } }, { session });
-      const written = await mirror(kind, id, session);
+      const written = kind === 'places' ? mergeLists(passed.current, set) : set;
+      if (written === null) {
+        return BUSY;
+      }
+      await original(kind).updateOne({ _id: id }, { $set: { ...written, ...completion, updateDate: clock() } }, { session });
+      const outcome = await mirror(kind, id, session);
       await effect(session);
-      return written;
+      return outcome;
     });
   const none = async (): Promise<void> => undefined;
   const placeEffects = async (session: ClientSession, feed: (() => Promise<void>) | null): Promise<void> => {
@@ -398,7 +455,7 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
   return {
     currentVersion: async (kind, id) => {
       const document = await original(kind).findOne({ _id: checkObjectId(id, 'id') }, { ...EXACT_TYPES });
-      return document === null ? null : versionOf(kind, document);
+      return document === null ? null : versionOf(kind, document, versionKey);
     },
 
     read: async (kind, id) => {
@@ -411,7 +468,7 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
       if (document === null || (kind === 'places' && !placeInScope(principal.scope, id, document['companyId']))) {
         return null;
       }
-      return { document, version: versionOf(kind, document) };
+      return { document, version: versionOf(kind, document, versionKey) };
     },
 
     companyOfPlace: async (id) => {
@@ -469,7 +526,9 @@ function createWriter(principal: ScopeHolder, access: GroupAccess, databases: Da
 
     updatePlace: async (id, expected, changes) => {
       const set = checkChanges(PLACE_FIELD_KINDS, changes);
-      return change('places', id, expected, set, (session) => placeEffects(session, null), set['companyId'] as ObjectId | undefined);
+      // The feed carries the company and the Reserve with Google data of the place: it follows a change of either.
+      const feeds = Object.keys(set).some((path) => path === 'companyId' || path.startsWith('integrations.reserveWithGoogle.'));
+      return change('places', id, expected, set, (session) => placeEffects(session, feeds ? () => syncFeed(id, session) : null), set['companyId'] as ObjectId | undefined);
     },
 
     duplicatePlace: async (id) => {

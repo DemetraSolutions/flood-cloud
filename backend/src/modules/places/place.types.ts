@@ -35,15 +35,13 @@ export interface PlaceGeneral {
   readonly priceLists: readonly PlacePriceList[];
 }
 
-/** The license of a place: the plan, the end of the license, the state and the Sentry switch of the POS. */
+/** The license of a place: the plan, the end of the license and the state. */
 export interface PlaceLicense {
   /** The plan as stored: `basic`, `advanced`, `enterprice`, `tgm-secondary`, `desk-secondary`, or a historical value (`professional`, `''`) returned as it is; `null` when the document has none. */
   readonly plan: string | null;
   /** ISO instant, `null` for none. */
   readonly expirationDate: string | null;
   readonly status: 'active' | 'disabled';
-  /** Whether the POS reports its errors to Sentry (`platform.sentry`). */
-  readonly sentry: boolean;
 }
 
 /** The hours of one day: whether the day is open and its time slots (`HH:mm`). */
@@ -77,6 +75,141 @@ export interface PlaceOpeningHours extends HoursSchedule {
   readonly deliveryTime: HoursSchedule;
 }
 
+/**
+ * A device of the place (`devices[]`, step 7F). The keys are the ones of the old backoffice; the `info` and the `status` the POS writes on a device are not part of it. A credential
+ * (the user and the password of the automatic cash) is never returned: `automaticCashUsernameSet` and `automaticCashPasswordSet` tell whether it is set. A request may carry the credential
+ * (`automaticCashUsername`, `automaticCashPassword`: a text sets it, `null` clears it, leaving it out keeps it).
+ */
+export interface PlaceDevice {
+  /** The id of the device: `dBJs.createId` of the old backoffice; a request leaves it out for a new device. */
+  readonly id: string;
+  readonly server: boolean;
+  /** `desk`, `handheld`, `ordering`, `room-handheld`, `selfordering`, `waiting-list`, `external-display`, `kiosk` or `tgm`. */
+  readonly type: string;
+  readonly name: string;
+  readonly driver: string;
+  readonly host: string;
+  readonly serialNumber: string;
+  readonly epsonProtocol17: boolean;
+  readonly epsonEreceipt: boolean;
+  readonly DLN502017Rounding: boolean;
+  readonly secondaryDriver: string;
+  readonly secondaryHost: string;
+  readonly automaticCashDriver: string;
+  readonly automaticCashHost: string;
+  readonly automaticCashUsernameSet: boolean;
+  readonly automaticCashPasswordSet: boolean;
+  readonly posProtocol17ip: string;
+  readonly posProtocol17port: string;
+  readonly posProtocol17terminalId: string;
+  readonly posDojoTerminalId: string;
+  /** The id of a device of type `external-display` of the place, `''` for none. */
+  readonly externalDisplayId: string;
+  /** The id of a device of type `tgm` of the place, `''` for none. */
+  readonly secondaryCompanyPrinterId: string;
+  /** The id of a list of favorite products of the group, `''` for none. */
+  readonly favoritesId: string;
+  readonly scaleDialog0204Ip: string;
+  readonly scaleDialog0204Port: string;
+  readonly scaleDialog0204SendPrice: boolean;
+  readonly barcodePriceRule: string;
+  readonly orderingPrintSingleProduct: boolean;
+  readonly orderingPrintSingleProductTables: boolean;
+  /** The ids of the print stations of the device. */
+  readonly printStations: readonly string[];
+  /** The names the old backoffice keeps next to the references: computed by the server. */
+  readonly externalDisplayName: string;
+  readonly secondaryCompanyPrinterName: string;
+  readonly favoritesGroupName: string;
+}
+
+/** A print station (`printStations[]`). */
+export interface PlacePrintStation {
+  readonly id: string;
+  /** `true` for an item the document keeps without an id (read only: the list it is in cannot be written). */
+  readonly withoutId?: true;
+  readonly name: string;
+  /** `EPSON-EPOS-PRINT` or `ESCPOS`. */
+  readonly driver: string;
+  readonly host: string;
+  readonly pulseNumber: number | null;
+  readonly pulseNumberSecondary: number | null;
+  readonly upsideDown: boolean;
+  readonly exitsCut: boolean;
+  /** The ids of the product categories the summary is made for. */
+  readonly summaryCategoriesIds: readonly string[];
+  /** The ids of the print stations the summary is made for. */
+  readonly summaryPrintStationsIds: readonly string[];
+}
+
+/** A production center (`productionCenter[]`). */
+export interface PlaceProductionCenter {
+  readonly id: string;
+  /** `true` for an item the document keeps without an id (read only: the list it is in cannot be written). */
+  readonly withoutId?: true;
+  readonly name: string;
+  readonly capacity: number;
+}
+
+/** The place of a table in the grid of its room (`rooms[].tables[].view`), in cells. */
+export interface PlaceTableView {
+  readonly w: number;
+  readonly h: number;
+  /** The cell at the top left, `null` while the table is not placed. */
+  readonly x: number | null;
+  readonly y: number | null;
+  /** `rect` or `round`. */
+  readonly shape: string;
+}
+
+/** A table of a room. */
+export interface PlaceTable {
+  readonly id: string;
+  /** `true` for an item the document keeps without an id (read only: the list it is in cannot be written). */
+  readonly withoutId?: true;
+  /** The id of the room: the server sets it. */
+  readonly roomId: string;
+  readonly name: string;
+  readonly seats: number | null;
+  /** The id of the user the table is assigned to, `''` for none. */
+  readonly userId: string;
+  readonly view: PlaceTableView;
+}
+
+/** A room (`rooms[]`) with its tables and its layout (`view`). The `view.subtables` the POS writes are not part of it. */
+export interface PlaceRoom {
+  readonly id: string;
+  /** `true` for an item the document keeps without an id (read only: the list it is in cannot be written). */
+  readonly withoutId?: true;
+  readonly name: string;
+  readonly listId: string;
+  readonly service: number | null;
+  readonly tax: string;
+  /** The id of a device of type `desk` of the place, `''` for none. */
+  readonly deviceId: string;
+  readonly seatsRequest: boolean;
+  readonly seatsRequired: boolean;
+  readonly autoService: boolean;
+  readonly priceListsRequest: boolean;
+  readonly handheldVisibility: boolean;
+  /** The ids of the print stations of the room. */
+  readonly printStations: readonly string[];
+  readonly tables: readonly PlaceTable[];
+  /** The layout: `grid` (or `''` for the default list), whether the map is on, its size in cells. */
+  readonly view: { readonly type: string; readonly status: boolean; readonly h: number; readonly w: number };
+}
+
+/** A storage of the place (`storages[]`). */
+export interface PlaceStorage {
+  /** The id of the storage, an `ObjectId` in the document; a request leaves it out for a new storage. */
+  readonly id: string;
+  readonly name: string;
+  /** The storage of the cash desks: exactly one. */
+  readonly cash: boolean;
+  /** The storage of the e-commerce: at most one. */
+  readonly ecommerce: boolean;
+}
+
 /** A settings block of the place (step 7B): an object of the keys of the block, nested like the stored document; the schemas of `place-settings.schemas.ts` are the contract of each key. */
 export type SettingsBlock = { readonly [key: string]: unknown };
 
@@ -104,13 +237,55 @@ export interface PlaceSettings {
   readonly tobacco: SettingsBlock;
   /** `medias.images`. */
   readonly media: SettingsBlock;
+  /** `integrations`: the switch and the settings of every integration; a credential has a `<name>Set` flag and is never returned. */
+  readonly integrations: SettingsBlock;
+  /** `platform.sentry`, `server.ip` and `connectorAddress`: the dealers' (a PSA's or a dealer's; Sentry the PSA's); only they get the block. */
+  readonly dealerSettings?: SettingsBlock;
+}
+
+/** The devices of the place (`devices[]`). */
+export interface PlaceDevices {
+  readonly items: readonly PlaceDevice[];
+  /** `false` when the stored list has an item without an id: the list is read only and a change of it is `409`. */
+  readonly editable: boolean;
+}
+
+/** The print stations and the production centers of the place (`printStations[]` and `productionCenter[]`). */
+export interface PlacePrintStations {
+  readonly stations: readonly PlacePrintStation[];
+  readonly productionCenters: readonly PlaceProductionCenter[];
+  /** `false` when the stored stations (or centers) have an item without an id: read only, a change is `409`. */
+  readonly stationsEditable: boolean;
+  readonly productionCentersEditable: boolean;
+}
+
+/** The rooms of the place (`rooms[]`). */
+export interface PlaceRooms {
+  readonly items: readonly PlaceRoom[];
+  /** `false` when a stored room or table has no id: read only, a change is `409`. */
+  readonly editable: boolean;
+}
+
+/** The storages of the place (`storages[]`). */
+export interface PlaceStorages {
+  readonly items: readonly PlaceStorage[];
+  readonly editable: boolean;
+}
+
+/** The lists of items of the place (step 7F). */
+export interface PlaceLists {
+  readonly devices: PlaceDevices;
+  readonly printStations: PlacePrintStations;
+  readonly rooms: PlaceRooms;
+  readonly storages: PlaceStorages;
 }
 
 /**
- * A place as the detail returns it (`doc/Tasks.md` area 7, step 7A): the general data, the license and the opening hours. Never the integrations, the devices, the rooms, the storages, the
- * address of the store server or of the connector: they are not part of the representation, and the keys the backend does not know are never returned.
+ * A place as the detail returns it (`doc/Tasks.md` area 7): the general data, the license, the opening hours, the settings, the lists of items (devices, print stations, rooms, storages),
+ * the integrations and the dealer settings. A credential is never returned (only whether it is set), the `dealerSettings` are returned to a PSA or a dealer only, and the keys the backend
+ * does not know are never returned.
  */
-export interface Place extends PlaceGeneral, PlaceSettings {
+export interface Place extends PlaceGeneral, PlaceSettings, PlaceLists {
   readonly id: string;
   readonly groupId: string;
   readonly trashed: boolean;

@@ -11,6 +11,7 @@ import type { CompaniesWorld } from '../helpers/companies.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: CompaniesWorld;
@@ -53,7 +54,7 @@ describe('POST /v1/groups/{groupId}/companies', () => {
     assert.equal(reply.headers.get('location'), `/v1${world.path(0, `/${company.id}`)}`);
     const id = ObjectId.createFromHexString(company.id);
     const document = (await world.stored(0, id))!;
-    assert.equal(reply.headers.get('etag'), `"${versionOf('companies', document)}"`);
+    assert.equal(reply.headers.get('etag'), `"${versionOf('companies', document, TEST_VERSION_KEY)}"`);
     assert.deepEqual(
       [company.name, company.vatNumber, company.fiscalCode, company.status, company.trashed, company.currency, company.email, company.phone, company.expirationDate, company.groupId],
       ['Acme Test', '00743110157', null, 'active', false, 'EUR', 'info@acme.example', '+39 02 1', null, hex(world.group(0).groupId)],

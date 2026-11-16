@@ -24,7 +24,7 @@ afterEach(cleanUp);
 
 describe('PlaceDelivery', () => {
   it('shows the stored data', async () => {
-    const view = await renderPlace({ path: 'delivery' });
+    const view = await renderPlace({ path: 'settings/delivery' });
     expect(isChecked(view, f('TAKE_AWAY.STATUS'))).toBe(false);
     expect(view.control(f('TAKE_AWAY.SEND_ORDER_ON_SAVE')).value).toBe('ask');
     expect(view.control(f('TAKE_AWAY.DELIVERY_LIST_ID')).value).toBe('');
@@ -36,7 +36,7 @@ describe('PlaceDelivery', () => {
   });
 
   it('offers the enabled price lists of the group only', async () => {
-    const view = await renderPlace({ path: 'delivery' });
+    const view = await renderPlace({ path: 'settings/delivery' });
     const options = [...view.control(f('TAKE_AWAY.TAKE_AWAY_LIST_ID')).querySelectorAll('option')];
     expect(options.map((o) => o.textContent?.trim())).toEqual([
       'PLACES.NONE',
@@ -46,7 +46,7 @@ describe('PlaceDelivery', () => {
   });
 
   it('saves the whole block with the exact PUT', async () => {
-    const view = await renderPlace({ path: 'delivery' });
+    const view = await renderPlace({ path: 'settings/delivery' });
     await view.toggle(f('TAKE_AWAY.STATUS'), true);
     await view.type(f('TAKE_AWAY.SEND_ORDER_ON_SAVE'), 'always');
     await view.type(f('TAKE_AWAY.DELIVERY_LIST_ID'), LIST_2);
@@ -69,7 +69,7 @@ describe('PlaceDelivery', () => {
   });
 
   it('adds and removes delivery costs', async () => {
-    const view = await renderPlace({ path: 'delivery' });
+    const view = await renderPlace({ path: 'settings/delivery' });
     await view.click('PLACES.DELIVERY.ADD_COST');
     await view.type(col('COST', 2), '5');
     await view.type(col('TO_KM', 2), '10');
@@ -98,7 +98,7 @@ describe('PlaceDelivery', () => {
     const place = fakePlace({
       delivery: { ...stored.delivery, minAmount: { EUR: 10, GBP: 5 } },
     });
-    const view = await renderPlace({ path: 'delivery', place });
+    const view = await renderPlace({ path: 'settings/delivery', place });
     expect(view.control('GBP').value).toBe('5');
     await view.type('EUR', '');
     await savePut(
@@ -109,7 +109,7 @@ describe('PlaceDelivery', () => {
   });
 
   it('shows only the stored currencies when the user cannot read the group', async () => {
-    const view = await renderPlace({ path: 'delivery', permissions: NO_GROUP });
+    const view = await renderPlace({ path: 'settings/delivery', permissions: NO_GROUP });
     expect(view.control('EUR').value).toBe('10');
     expect(view.root.querySelector('fc-keyed-values')?.querySelectorAll('input')).toHaveLength(1);
   });
@@ -117,12 +117,12 @@ describe('PlaceDelivery', () => {
   it('says so when there is no currency at all', async () => {
     const stored = fakePlace();
     const place = fakePlace({ delivery: { ...stored.delivery, minAmount: {} } });
-    const view = await renderPlace({ path: 'delivery', permissions: NO_GROUP, place });
+    const view = await renderPlace({ path: 'settings/delivery', permissions: NO_GROUP, place });
     expect(view.text()).toContain('PLACES.NO_KEYS');
   });
 
   it('puts the 422 on the control of the key', async () => {
-    const view = await renderPlace({ path: 'delivery' });
+    const view = await renderPlace({ path: 'settings/delivery' });
     await view.type(f('RADIUS'), '3');
     await failPut(view, 'settings/delivery', [
       { field: 'delivery.radius', issue: 'incorrect' },
@@ -133,13 +133,13 @@ describe('PlaceDelivery', () => {
   });
 
   it('ignores the submit of the form', async () => {
-    const view = await renderPlace({ path: 'delivery' });
+    const view = await renderPlace({ path: 'settings/delivery' });
     await submitTab(view);
     await view.blurAll();
   });
 
   it('is read-only without the permission to update', async () => {
-    const view = await renderPlace({ path: 'delivery', permissions: READ_ONLY });
+    const view = await renderPlace({ path: 'settings/delivery', permissions: READ_ONLY });
     expect(view.control(f('RADIUS')).disabled).toBe(true);
     expect(view.control('EUR').disabled).toBe(true);
     expect(view.button('COMMON.SAVE')).toBeUndefined();

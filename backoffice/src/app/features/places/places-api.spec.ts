@@ -127,7 +127,7 @@ describe('PlacesApi', () => {
         .flush({
           data: fakePlace({
             phone: '1',
-            license: { ...before.license, plan: 'basic', sentry: true },
+            license: { ...before.license, plan: 'basic', expirationDate: '2031-01-01T00:00:00.000Z' },
           }),
         });
       await done;
@@ -152,6 +152,12 @@ describe('PlacesApi', () => {
       ['fidelity', 'settings/fidelity'],
       ['tobacco', 'settings/tobacco'],
       ['media', 'media'],
+      ['integrations', 'integrations'],
+      ['dealerSettings', 'settings/dealer'],
+      ['devices', 'devices'],
+      ['printStations', 'print-stations'],
+      ['rooms', 'rooms'],
+      ['storages', 'storages'],
     ];
 
     it.each(sections)('puts the %s block at %s with the version', async (section, path) => {
@@ -193,7 +199,6 @@ describe('PlacesApi', () => {
         plan: 'advanced',
         expirationDate: '2032-05-06',
         status: 'active',
-        sentry: false,
       });
       req.flush({ data: fakePlace() }, { headers: { ETag: '"v8"' } });
       expect((await done).etag).toBe('"v8"');

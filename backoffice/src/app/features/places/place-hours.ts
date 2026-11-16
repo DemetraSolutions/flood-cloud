@@ -4,7 +4,6 @@ import { TPipe } from '../../core/i18n/t-pipe';
 import { Select } from '../../shared/ui/select/select';
 import { withCurrent } from '../companies/company-options';
 import { HoursSchedule } from './hours-schedule';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 
 /** The IANA time zones the browser knows, plus `UTC`, which the API accepts. */
@@ -16,7 +15,7 @@ const TIME_ZONES: readonly string[] = [...Intl.supportedValuesOf('timeZone'), 'U
  */
 @Component({
   selector: 'fc-place-hours',
-  imports: [FormField, HoursSchedule, PlaceSave, Select, TPipe],
+  imports: [FormField, HoursSchedule, Select, TPipe],
   templateUrl: './place-hours.html',
   styleUrl: './place-section.css',
 })

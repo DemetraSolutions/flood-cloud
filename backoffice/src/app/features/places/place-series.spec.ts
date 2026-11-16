@@ -79,24 +79,24 @@ describe('invoice series of the place', () => {
   });
 });
 
-describe('store key tab in the navigation', () => {
+describe('store key panel in the dealer settings', () => {
   it('is offered to who can read the store key', async () => {
-    const view = await renderPlacePage({
+    const view = await renderPlace({
+      path: 'settings/dealer',
       permissions: [...PLACE_PERMISSIONS, 'storeKeys:read'],
+      lookups: false,
     });
-    expect(view.tabNames()).toContain('store-key');
+    backend()
+      .expectOne(`${PLACE_URL}/store-key`)
+      .flush({
+        data: { status: 'none', key: null, pendingActivation: null, lastRevoked: null },
+      });
+    await view.view();
+    expect(view.root.querySelector('fc-place-store-key')).not.toBeNull();
   });
 
   it('is not offered without the permission', async () => {
-    const view = await renderPlacePage();
-    expect(view.tabNames()).not.toContain('store-key');
-  });
-
-  it('is not offered on the page of a new place', async () => {
-    const view = await renderPlace({
-      path: 'new',
-      permissions: [...PLACE_PERMISSIONS, 'storeKeys:read'],
-    });
-    expect(view.root.querySelector('a[href$="store-key"]')).toBeNull();
+    const view = await renderPlace({ path: 'settings/dealer', lookups: false });
+    expect(view.root.querySelector('fc-place-store-key')).toBeNull();
   });
 });

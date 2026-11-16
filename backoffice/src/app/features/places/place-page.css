@@ -53,3 +53,11 @@
   border-block-end-color: var(--color-primary);
   font-weight: var(--font-weight-medium);
 }
+
+.file-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  opacity: 0;
+}

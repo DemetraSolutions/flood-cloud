@@ -50,6 +50,33 @@ describe('resolvePlaceField', () => {
     );
   });
 
+  it('finds the typed value of a credential, also when the key has dots', () => {
+    expect(resolvePlaceField(root, 'integrations.easyappear.appToken')).toBe(
+      root.integrations.secrets['easyappear.appToken'].value,
+    );
+    expect(resolvePlaceField(root, 'integrations.floodPay.stripe.privateKey')).toBe(
+      root.integrations.secrets['floodPay.stripe.privateKey'].value,
+    );
+    expect(resolvePlaceField(root, 'integrations.easyappear.status')).toBe(
+      root.integrations.f['easyappear.status'],
+    );
+    expect(resolvePlaceField(root, 'dealerSettings.serverIp')).toBe(
+      root.dealerSettings.f['serverIp'],
+    );
+  });
+
+  it('finds the rows of the lists of the place', () => {
+    expect(resolvePlaceField(root, 'devices.items.0.name')).toBe(root.devices.items[0].name);
+    expect(resolvePlaceField(root, 'devices.items.9.name')).toBe(root.devices.items);
+    expect(resolvePlaceField(root, 'rooms.items.0.tables.1.name')).toBe(
+      root.rooms.items[0].tables[1].name,
+    );
+    expect(resolvePlaceField(root, 'storages.items.0.name')).toBe(root.storages.items[0].name);
+    expect(resolvePlaceField(root, 'printStations.stations.0.host')).toBe(
+      root.printStations.stations[0].host,
+    );
+  });
+
   it('finds the row of a list, or the list when the row does not exist', () => {
     expect(resolvePlaceField(root, 'payments.paymentTypes.0.name')).toBe(
       root.payments.paymentTypes[0].name,

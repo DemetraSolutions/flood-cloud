@@ -99,3 +99,22 @@ dl {
 dd {
   margin: 0;
 }
+
+.credential {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.credential-label {
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.credential-state {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm, 0.875rem);
+}
+
+.part {
+  margin-block: var(--space-3) var(--space-1);
+}

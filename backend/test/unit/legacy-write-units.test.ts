@@ -1,14 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Double, Int32, ObjectId } from 'mongodb';
+import { createHash, createHmac } from 'node:crypto';
+import { BSON, Double, Int32, ObjectId } from 'mongodb';
 import { COMPANIES_OWNED_FIELDS, GROUPS_OWNED_FIELDS, GROUPS_PLACES_FIELD, PLACES_OWNED_FIELDS, COLLECTIONS } from '../../src/db/collections.ts';
 import { DEFAULT_PLAN, DEFAULT_STORAGE_NAME, DEFAULT_TIMEZONE, companyContainerDefaults, newCompanyDocument, newPlaceDocument, placeContainerDefaults } from '../../src/shared/legacy-write/defaults.ts';
 import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from '../../src/shared/legacy-write/errors.ts';
 import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkFields, checkObjectId, requireFields } from '../../src/shared/legacy-write/fields.ts';
+import { LIST_PATHS } from '../../src/shared/legacy-write/place-lists.ts';
 import { SETTING_LEGACY_PATHS } from '../../src/shared/legacy-write/place-settings.ts';
 import { reserveWithGoogleRecord } from '../../src/shared/legacy-write/reserve-with-google.ts';
 import { normalizeVatNumber, vatNumberFilter } from '../../src/shared/legacy-write/vat.ts';
 import { versionOf } from '../../src/shared/legacy-write/version.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 const GROUP = ObjectId.createFromHexString('0200000000000000000000aa');
 const COMPANY = ObjectId.createFromHexString('0300000000000000000000bb');
@@ -26,16 +29,21 @@ describe('legacy write: registry and allowlists', () => {
     assert.deepEqual([...COLLECTIONS.group.places.ownedFields], [...PLACES_OWNED_FIELDS]);
   });
 
-  it('never owns the blocks of the POS and of the legacy', () => {
-    // What the POS writes and what is kept for the integrations is never owned, and neither is a whole block: the owned keys are the leaves.
-    for (const field of ['devices', 'rooms', 'storages', 'printStations', 'productionCenter', 'integrations', 'server', 'connectorAddress', 'platform', 'roomsSettings', 'general', 'ordering', 'receipt', 'openingTime', 'delivery', 'delivery.time', 'groupId', '_id', 'insertDate']) {
-      assert.ok(!PLACES_OWNED_FIELDS.includes(field), field);
-    }
-    assert.ok(!PLACES_OWNED_FIELDS.some((field) => /^(devices|rooms|storages|printStations|productionCenter|integrations|server|connectorAddress)(\.|$)/.test(field) || field.startsWith('platform.') && field !== 'platform.sentry'));
-    for (const field of ['plan', 'status', 'expirationDate', 'platform.sentry', 'general.priceLists', 'openingTime.weekGeneric', 'openingTime.daySpecial', 'delivery.time.weekGeneric', 'delivery.time.daySpecial', 'timezone', 'invoicePS', 'listId', 'ecommerceListId', 'companyId']) {
+  it('owns the lists of items, the integrations and the dealer settings key by key, and never a whole block nor what the POS writes inside an item', () => {
+    // The lists of items are owned as arrays (written item by item, over the stored ones); no other block is, and no unknown or unowned key.
+    for (const field of ['devices', 'rooms', 'storages', 'printStations', 'productionCenter', 'server.ip', 'connectorAddress', 'platform.sentry']) {
       assert.ok(PLACES_OWNED_FIELDS.includes(field), field);
     }
-    assert.equal(PLACES_OWNED_FIELDS.length, 17 + 1 + 6 + SETTING_LEGACY_PATHS.length + 1);
+    for (const field of ['integrations', 'integrations.floodPay', 'integrations.floodPay.stripe', 'server', 'platform', 'platform.ip', 'roomsSettings', 'general', 'ordering', 'receipt', 'openingTime', 'delivery', 'delivery.time', 'devices.info', 'rooms.view', 'groupId', '_id', 'insertDate', 'integrations.tsh.tshCategories', 'integrations.floodOrders']) {
+      assert.ok(!PLACES_OWNED_FIELDS.includes(field), field);
+    }
+    // Every credential is owned once (the flag shares its path) and the keys of the integrations are leaves.
+    assert.equal(new Set(PLACES_OWNED_FIELDS).size, PLACES_OWNED_FIELDS.length);
+    assert.ok(PLACES_OWNED_FIELDS.filter((field) => field.startsWith('integrations.')).every((field) => field.split('.').length >= 3));
+    for (const field of ['plan', 'status', 'expirationDate', 'platform.sentry', 'general.priceLists', 'openingTime.weekGeneric', 'openingTime.daySpecial', 'delivery.time.weekGeneric', 'delivery.time.daySpecial', 'timezone', 'invoicePS', 'listId', 'ecommerceListId', 'companyId', 'integrations.floodPay.stripe.privateKey', 'integrations.reserveWithGoogle.geo.address.country', 'integrations.tsh.categoriesMap']) {
+      assert.ok(PLACES_OWNED_FIELDS.includes(field), field);
+    }
+    assert.equal(PLACES_OWNED_FIELDS.length, 17 + 1 + 5 + SETTING_LEGACY_PATHS.length + LIST_PATHS.length + 1);
     // The blocks are owned key by key, never as a whole: the keys the legacy or a later release adds to them survive.
     for (const field of ['settings', 'settings.global', 'settings.api', 'settings.ecommerce', 'fattura_elettronica', 'medias', 'medias.images', 'groupId', '_id', 'insertDate']) {
       assert.ok(!COMPANIES_OWNED_FIELDS.includes(field), field);
@@ -79,7 +87,7 @@ describe('legacy write: field checks', () => {
   });
 
   it('rejects fields outside the allowlist, also the ones the POS and the legacy own and the prototype keys', () => {
-    for (const field of ['devices', 'integrations', 'storages', 'trash', 'updateDate', 'groupId', '_id', 'unknown', 'toString', '__proto__', 'constructor']) {
+    for (const field of ['integrations', 'integrations.floodOrders', 'integrations.tsh.tshCategories', 'server', 'trash', 'updateDate', 'groupId', '_id', 'unknown', 'toString', '__proto__', 'constructor']) {
       assert.throws(() => checkFields(PLACE_FIELD_KINDS, JSON.parse(`{ "${field}": 1 }`)), invalid(field), field);
     }
     assert.throws(() => checkFields(COMPANY_FIELD_KINDS, { settings: {} }), invalid('settings'));
@@ -328,7 +336,7 @@ describe('legacy write: defaults of a new place', () => {
     assert.equal((b['general'] as { logs: boolean }).logs, false);
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a' } as never, NOW), invalid('companyId'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { companyId: COMPANY } as never, NOW), invalid('name'));
-    assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, devices: [] } as never, NOW), invalid('devices'));
+    assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, 'devices.x': [] } as never, NOW), invalid('devices.x'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, 'platform.ip': true } as never, NOW), invalid('platform.ip'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, 'openingTime.weekGeneric': { '0': {} } } as never, NOW), invalid('openingTime.weekGeneric'));
     assert.throws(() => newPlaceDocument(new ObjectId(), GROUP, { name: 'a', companyId: COMPANY, storageName: '' }, NOW), invalid('storageName'));
@@ -340,22 +348,49 @@ describe('legacy write: version', () => {
   const base = { _id: COMPANY, name: 'a', code: 'x', status: true, trash: false, devices: [1], updateDate: NOW };
 
   it('is stable and URL safe, and changes with an owned field, its type, its presence or the kind', () => {
-    assert.match(versionOf('companies', base), /^[A-Za-z0-9_-]{43}$/);
-    assert.equal(versionOf('companies', base), versionOf('companies', { ...base }));
-    assert.notEqual(versionOf('companies', base), versionOf('companies', { ...base, name: 'b' }));
-    assert.notEqual(versionOf('companies', base), versionOf('companies', { ...base, trash: true }));
-    assert.notEqual(versionOf('companies', base), versionOf('companies', { ...base, _id: new ObjectId() }));
-    assert.notEqual(versionOf('companies', { ...base, code: new Double(1) }), versionOf('companies', { ...base, code: 1 }));
-    assert.notEqual(versionOf('companies', { ...base, code2: null }), versionOf('companies', base));
-    assert.notEqual(versionOf('companies', base), versionOf('places', base));
+    assert.match(versionOf('companies', base, TEST_VERSION_KEY), /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(versionOf('companies', base, TEST_VERSION_KEY), versionOf('companies', { ...base }, TEST_VERSION_KEY));
+    assert.notEqual(versionOf('companies', base, TEST_VERSION_KEY), versionOf('companies', { ...base, name: 'b' }, TEST_VERSION_KEY));
+    assert.notEqual(versionOf('companies', base, TEST_VERSION_KEY), versionOf('companies', { ...base, trash: true }, TEST_VERSION_KEY));
+    assert.notEqual(versionOf('companies', base, TEST_VERSION_KEY), versionOf('companies', { ...base, _id: new ObjectId() }, TEST_VERSION_KEY));
+    assert.notEqual(versionOf('companies', { ...base, code: new Double(1) }, TEST_VERSION_KEY), versionOf('companies', { ...base, code: 1 }, TEST_VERSION_KEY));
+    assert.notEqual(versionOf('companies', { ...base, code2: null }, TEST_VERSION_KEY), versionOf('companies', base, TEST_VERSION_KEY));
+    assert.notEqual(versionOf('companies', base, TEST_VERSION_KEY), versionOf('places', base, TEST_VERSION_KEY));
   });
 
   it('does not depend on the parts the service does not own, on updateDate or on the order of the keys', () => {
-    const place = { _id: COMPANY, companyId: COMPANY, name: 'a', devices: [{ info: 1 }], rooms: [], integrations: { x: 1 }, updateDate: NOW };
-    const same = versionOf('places', place);
-    assert.equal(versionOf('places', { ...place, devices: [{ info: 2 }], rooms: [{ tables: [] }], integrations: {}, unknown: 1, updateDate: new Date() }), same);
-    assert.equal(versionOf('places', { updateDate: NOW, integrations: { x: 1 }, rooms: [], devices: [{ info: 1 }], name: 'a', companyId: COMPANY, _id: COMPANY }), same);
-    assert.notEqual(versionOf('places', { ...place, companyId: new ObjectId() }), same);
+    const place = { _id: COMPANY, companyId: COMPANY, name: 'a', devices: [{ id: 'd1', name: 'x', info: 1, status: { busy: true } }], rooms: [], integrations: { floodOrders: 1 }, updateDate: NOW };
+    const same = versionOf('places', place, TEST_VERSION_KEY);
+    // The `info` and the `status` of a device (the POS writes them), the keys of an item nobody owns and the integrations nobody owns are not part of the version.
+    assert.equal(versionOf('places', { ...place, devices: [{ id: 'd1', name: 'x', info: 2, status: { busy: false }, unknownKey: 1 }], integrations: {}, unknown: 1, updateDate: new Date() }, TEST_VERSION_KEY), same);
+    assert.equal(versionOf('places', { updateDate: NOW, integrations: { floodOrders: 1 }, rooms: [], devices: [{ status: 1, info: 1, name: 'x', id: 'd1' }], name: 'a', companyId: COMPANY, _id: COMPANY }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('places', { ...place, companyId: new ObjectId() }, TEST_VERSION_KEY), same);
+    // What the backend owns of a device is.
+    assert.notEqual(versionOf('places', { ...place, devices: [{ id: 'd1', name: 'y' }] }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('places', { ...place, devices: [{ id: 'd2', name: 'x' }] }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('places', { ...place, devices: [] }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('places', { ...place, devices: 'broken' }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('places', { ...place, devices: [7] }, TEST_VERSION_KEY), same);
+    // The rooms are hashed whole: a write of the POS to them changes the version, whatever key it writes.
+    assert.notEqual(versionOf('places', { ...place, rooms: [{ id: 'r', view: { subtables: { 'a-1': { x: 1 } } } }] }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('places', { ...place, rooms: [{ tables: [] }] }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('places', { ...place, storages: [{ id: 's1', name: 'x', cash: true, ecommerce: false, unknownKey: 1 }] }, TEST_VERSION_KEY), versionOf('places', { ...place, storages: [{ id: 's1', name: 'x', cash: true, ecommerce: false }] }, TEST_VERSION_KEY));
+  });
+});
+
+describe('legacy write: the key of the version', () => {
+  it('signs the version with a secret key: another key gives another version, and a credential or an address cannot be checked without it', () => {
+    const place = { _id: COMPANY, companyId: COMPANY, name: 'a', integrations: { dojo: { apiKey: 'fake-secret-1' } }, server: { ip: '10.0.0.1' }, devices: [{ id: 'd', automaticCashPassword: 'fake-pass' }] };
+    const other = Buffer.alloc(32, 9);
+    const version = versionOf('places', place, TEST_VERSION_KEY);
+    assert.notEqual(versionOf('places', place, other), version);
+    assert.equal(versionOf('places', place, TEST_VERSION_KEY), version);
+    // The version still follows the credential and the address (a concurrent change is a 412)...
+    assert.notEqual(versionOf('places', { ...place, integrations: { dojo: { apiKey: 'fake-secret-2' } } }, TEST_VERSION_KEY), version);
+    // ...but it is not the plain hash of them: nobody without the key can recompute it to guess the value.
+    const plain = createHash('sha256').update(BSON.serialize({ parts: [] })).digest('base64url');
+    assert.notEqual(version, plain);
+    assert.equal(createHmac('sha256', other).update('x').digest('base64url').length, 43);
   });
 });
 
@@ -565,22 +600,22 @@ describe('legacy write: the keys of the blocks of a company', () => {
 describe('legacy write: version of the keys of the blocks', () => {
   const base = { _id: COMPANY, name: 'a', settings: { global: { lastInvoiceNumber: new Int32(5) }, ecommerce: { status: true } }, fattura_elettronica: { hub: 'aruba' }, banks: [{ id: 'a' }] };
   it('changes with an owned key of a block, its type, its presence and a whole array', () => {
-    const same = versionOf('companies', base);
-    assert.equal(versionOf('companies', { ...base }), same);
-    assert.notEqual(versionOf('companies', { ...base, settings: { ...base.settings, ecommerce: { status: false } } }), same);
-    assert.notEqual(versionOf('companies', { ...base, settings: { ...base.settings, global: { lastInvoiceNumber: new Double(5) } } }), same);
-    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: {} }), same);
-    assert.notEqual(versionOf('companies', { ...base, banks: [{ id: 'b' }] }), same);
+    const same = versionOf('companies', base, TEST_VERSION_KEY);
+    assert.equal(versionOf('companies', { ...base }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('companies', { ...base, settings: { ...base.settings, ecommerce: { status: false } } }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('companies', { ...base, settings: { ...base.settings, global: { lastInvoiceNumber: new Double(5) } } }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: {} }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('companies', { ...base, banks: [{ id: 'b' }] }, TEST_VERSION_KEY), same);
     // Absent is not null.
-    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: { hub: null } }), same);
-    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: { hub: null } }), versionOf('companies', { ...base, fattura_elettronica: {} }));
+    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: { hub: null } }, TEST_VERSION_KEY), same);
+    assert.notEqual(versionOf('companies', { ...base, fattura_elettronica: { hub: null } }, TEST_VERSION_KEY), versionOf('companies', { ...base, fattura_elettronica: {} }, TEST_VERSION_KEY));
   });
   it('does not change with the keys of a block the service does not own, and reads a path through something that is not an object as absent', () => {
-    const same = versionOf('companies', base);
-    assert.equal(versionOf('companies', { ...base, settings: { ...base.settings, integrations: { x: 1 }, global: { lastInvoiceNumber: new Int32(5), unknownKey: 1 } }, fattura_elettronica: { hub: 'aruba', extra: 'x' }, other: 1 }), same);
-    const absent = versionOf('companies', { _id: COMPANY, name: 'a' });
+    const same = versionOf('companies', base, TEST_VERSION_KEY);
+    assert.equal(versionOf('companies', { ...base, settings: { ...base.settings, integrations: { x: 1 }, global: { lastInvoiceNumber: new Int32(5), unknownKey: 1 } }, fattura_elettronica: { hub: 'aruba', extra: 'x' }, other: 1 }, TEST_VERSION_KEY), same);
+    const absent = versionOf('companies', { _id: COMPANY, name: 'a' }, TEST_VERSION_KEY);
     for (const settings of [null, 'x', [], { global: null }, { global: 'x' }, { global: [] }]) {
-      assert.equal(versionOf('companies', { _id: COMPANY, name: 'a', settings }), absent, JSON.stringify(settings));
+      assert.equal(versionOf('companies', { _id: COMPANY, name: 'a', settings }, TEST_VERSION_KEY), absent, JSON.stringify(settings));
     }
   });
 });

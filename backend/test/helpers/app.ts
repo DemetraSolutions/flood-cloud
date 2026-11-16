@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../../src/app.ts';
 import type { AppDeps } from '../../src/app.ts';
+import { TEST_VERSION_KEY_TEXT } from './version-key.ts';
 import { loadConfig } from '../../src/config.ts';
 import type { Config } from '../../src/config.ts';
 import { memoryActivityLog, memoryRateLimiter } from './activity.ts';
@@ -15,6 +16,7 @@ export function validEnv(overrides: Record<string, string | undefined> = {}): Re
     APP_ENV: 'development',
     MONGODB_URI: 'mongodb://127.0.0.1:1/?directConnection=true',
     LEGACY_PASSWORD_PEPPER: randomBytes(16).toString('hex'),
+    VERSION_HMAC_KEY: TEST_VERSION_KEY_TEXT,
     ...overrides,
   };
 }
@@ -84,7 +86,9 @@ export async function startApp(
 export async function freePort(): Promise<number> {
   const { createServer } = await import('node:net');
   const probe = createServer();
-  await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', () => resolve()));
+  // Wildcard bind, like every test server: a 127.0.0.1-only bind may get a port another test process holds on the
+  // wildcard address (both binds succeed), and anything listening there would steal that server's requests.
+  await new Promise<void>((resolve) => probe.listen(0, () => resolve()));
   const { port } = probe.address() as AddressInfo;
   await new Promise<void>((resolve) => probe.close(() => resolve()));
   return port;

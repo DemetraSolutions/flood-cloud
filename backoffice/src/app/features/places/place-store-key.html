@@ -39,7 +39,11 @@
       <p class="note">
         {{
           'PLACES.STORE_KEY.LAST_REVOKED'
-            | t: { when: when(revoked.revokedAt), reason: ('PLACES.STORE_KEY.REASON.' + revoked.reason | t) }
+            | t
+              : {
+                  when: when(revoked.revokedAt),
+                  reason: ('PLACES.STORE_KEY.REASON.' + revoked.reason | t),
+                }
         }}
       </p>
     }

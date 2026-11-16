@@ -1,0 +1,450 @@
+<form novalidate (submit)="$event.preventDefault()">
+  @if (!editable()) {
+    <p class="note" role="status">{{ 'PLACES.ROOMS_TAB.NOT_EDITABLE' | t }}</p>
+  }
+
+  @if (mutable()) {
+    <fieldset data-id="add-room" tabindex="-1">
+      <legend>{{ 'PLACES.ROOMS_TAB.ADD_TITLE' | t }}</legend>
+      <div class="grid">
+        <fc-text-field
+          [label]="'PLACES.ROOMS_TAB.NAME' | t"
+          [value]="draft().name"
+          [error]="draftNameError()"
+          (valueChange)="setDraft('name', $event)"
+        />
+        <fc-select
+          [label]="'PLACES.ROOMS_TAB.LIST' | t"
+          [placeholder]="'PLACES.ROOMS_TAB.LIST_PLACEHOLDER' | t"
+          [options]="listOptions(draft().listId)"
+          [value]="draft().listId"
+          (valueChange)="setDraft('listId', $event)"
+        />
+        <fc-text-field
+          type="number"
+          inputmode="decimal"
+          [label]="'PLACES.ROOMS_TAB.SERVICE' | t"
+          [format]="serviceFormat"
+          [value]="draft().service"
+          (valueChange)="setDraft('service', $event)"
+        />
+        <fc-select
+          [label]="'PLACES.ROOMS_TAB.TAX' | t"
+          [placeholder]="'PLACES.ROOMS_TAB.TAX_PLACEHOLDER' | t"
+          [options]="taxesOf(draft().tax)"
+          [value]="draft().tax"
+          (valueChange)="setDraft('tax', $event)"
+        />
+        <fc-select
+          [label]="'PLACES.ROOMS_TAB.DEVICE' | t"
+          [placeholder]="'PLACES.NONE' | t"
+          [hint]="'PLACES.ROOMS_TAB.DEVICE_HINT' | t"
+          [options]="desksOf(draft().deviceId)"
+          [value]="draft().deviceId"
+          (valueChange)="setDraft('deviceId', $event)"
+        />
+      </div>
+      <div class="checks">
+        <fc-checkbox
+          [label]="'PLACES.ROOMS_TAB.HANDHELD' | t"
+          [checked]="draft().handheldVisibility"
+          (checkedChange)="setDraft('handheldVisibility', $event)"
+        />
+        <fc-checkbox
+          [label]="'PLACES.ROOMS_TAB.SEATS_REQUEST' | t"
+          [checked]="draft().seatsRequest"
+          (checkedChange)="setDraft('seatsRequest', $event)"
+        />
+        <fc-checkbox
+          [label]="'PLACES.ROOMS_TAB.SEATS_REQUIRED' | t"
+          [checked]="draft().seatsRequired"
+          (checkedChange)="setDraft('seatsRequired', $event)"
+        />
+        <fc-checkbox
+          [label]="'PLACES.ROOMS_TAB.AUTO_SERVICE' | t"
+          [checked]="draft().autoService"
+          (checkedChange)="setDraft('autoService', $event)"
+        />
+        <fc-checkbox
+          [label]="'PLACES.ROOMS_TAB.PRICE_LISTS_REQUEST' | t"
+          [checked]="draft().priceListsRequest"
+          (checkedChange)="setDraft('priceListsRequest', $event)"
+        />
+      </div>
+      <fieldset class="stations">
+        <legend>{{ 'PLACES.ROOMS_TAB.PRINT_STATIONS' | t }}</legend>
+        @for (station of stations(); track station.id) {
+          <fc-checkbox
+            [label]="station.name"
+            [checked]="draft().printStations.includes(station.id)"
+            (checkedChange)="
+              setDraft('printStations', toggledStations(draft().printStations, station.id, $event))
+            "
+          />
+        } @empty {
+          <p class="note">{{ 'PLACES.ROOMS_TAB.NO_STATIONS' | t }}</p>
+        }
+      </fieldset>
+      <div class="row-actions">
+        <button fc-button [disabled]="!canAddRoom()" (click)="addRoom()">
+          {{ 'PLACES.ROOMS_TAB.ADD' | t }}
+        </button>
+        @if (items().length >= maxRooms) {
+          <p class="note">{{ 'PLACES.ROOMS_TAB.ROOMS_LIMIT' | t: { max: maxRooms } }}</p>
+        }
+      </div>
+    </fieldset>
+  }
+
+  <fieldset>
+    <legend>{{ 'PLACES.ROOMS_TAB.EDITOR_TITLE' | t }}</legend>
+    @if (items().length === 0) {
+      <p class="note">{{ 'PLACES.ROOMS_TAB.NO_ROOMS' | t }}</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="summary">
+          <caption class="visually-hidden">
+            {{
+              'PLACES.ROOMS_TAB.EDITOR_CAPTION' | t
+            }}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{{ 'PLACES.ROOMS_TAB.NAME' | t }}</th>
+              <th scope="col">{{ 'PLACES.ROOMS_TAB.COL_SIZE' | t }}</th>
+              <th scope="col">{{ 'PLACES.ROOMS_TAB.COL_TYPE' | t }}</th>
+              <th scope="col">{{ 'PLACES.ROOMS_TAB.COL_STATUS' | t }}</th>
+              @if (mutable()) {
+                <th scope="col">
+                  <span class="visually-hidden">{{ 'COMMON.ACTIONS' | t }}</span>
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (room of items(); track $index; let i = $index) {
+              <tr>
+                <th scope="row">{{ roomTitle(room.name) }}</th>
+                <td>{{ size(room) }}</td>
+                <td>{{ typeLabel(room.view.type) }}</td>
+                <td>
+                  {{
+                    (room.view.status ? 'PLACES.ROOMS_TAB.ENABLED' : 'PLACES.ROOMS_TAB.DISABLED')
+                      | t
+                  }}
+                </td>
+                @if (mutable()) {
+                  <td>
+                    <button
+                      fc-button
+                      variant="ghost"
+                      [attr.aria-label]="
+                        'PLACES.ROOMS_TAB.EDIT_ROOM' | t: { name: roomTitle(room.name) }
+                      "
+                      (click)="openEditor(i)"
+                    >
+                      {{ 'PLACES.ROOMS_TAB.EDIT' | t }}
+                    </button>
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+    @if (mutable()) {
+      <div class="row-actions">
+        <button
+          fc-button
+          variant="secondary"
+          [disabled]="items().length === 0"
+          (click)="openEditor(0)"
+        >
+          {{ 'PLACES.ROOMS_TAB.DRAW' | t }}
+        </button>
+      </div>
+    }
+  </fieldset>
+
+  @for (card of cards(); track $index; let i = $index) {
+    @let room = card.field;
+    @let count = items()[i].tables.length;
+    <fieldset class="room">
+      <legend>{{ roomTitle(items()[i].name) }}</legend>
+      @if (mutable()) {
+        <div class="row-actions">
+          <button
+            fc-icon-button
+            icon="chevron-up"
+            [attr.data-id]="'room-up-' + i"
+            [label]="'PLACES.ROOMS_TAB.MOVE_ROOM_UP' | t: { name: roomTitle(items()[i].name) }"
+            [disabled]="i === 0"
+            (click)="moveRoom(i, -1)"
+          ></button>
+          <button
+            fc-icon-button
+            icon="chevron-down"
+            [attr.data-id]="'room-down-' + i"
+            [label]="'PLACES.ROOMS_TAB.MOVE_ROOM_DOWN' | t: { name: roomTitle(items()[i].name) }"
+            [disabled]="i === items().length - 1"
+            (click)="moveRoom(i, 1)"
+          ></button>
+          <button
+            fc-button
+            variant="danger"
+            [attr.aria-label]="
+              'PLACES.ROOMS_TAB.REMOVE_ROOM' | t: { name: roomTitle(items()[i].name) }
+            "
+            (click)="removeRoom(i)"
+          >
+            {{ 'PLACES.ROOMS_TAB.REMOVE' | t }}
+          </button>
+        </div>
+      }
+      <div class="grid">
+        <fc-text-field
+          [formField]="room.name"
+          [label]="'PLACES.ROOMS_TAB.NAME' | t"
+          [error]="roomNameError(i, room.name)"
+          (blurred)="room.name().markAsTouched()"
+        />
+        <fc-select
+          [formField]="room.listId"
+          [label]="'PLACES.ROOMS_TAB.LIST' | t"
+          [placeholder]="'PLACES.ROOMS_TAB.LIST_PLACEHOLDER' | t"
+          [options]="listOptions(items()[i].listId)"
+          [error]="state.fieldError(room.listId)"
+          (blurred)="room.listId().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="room.service"
+          type="number"
+          inputmode="decimal"
+          [label]="'PLACES.ROOMS_TAB.SERVICE' | t"
+          [format]="serviceFormat"
+          [error]="state.fieldError(room.service)"
+          (blurred)="room.service().markAsTouched()"
+        />
+        <fc-select
+          [formField]="room.tax"
+          [label]="'PLACES.ROOMS_TAB.TAX' | t"
+          [placeholder]="'PLACES.ROOMS_TAB.TAX_PLACEHOLDER' | t"
+          [options]="taxesOf(items()[i].tax)"
+          [error]="state.fieldError(room.tax)"
+          (blurred)="room.tax().markAsTouched()"
+        />
+        <fc-select
+          [formField]="room.deviceId"
+          [label]="'PLACES.ROOMS_TAB.DEVICE' | t"
+          [placeholder]="'PLACES.NONE' | t"
+          [options]="desksOf(items()[i].deviceId)"
+          [error]="state.fieldError(room.deviceId)"
+          (blurred)="room.deviceId().markAsTouched()"
+        />
+      </div>
+      <div class="checks">
+        <fc-checkbox
+          [formField]="room.handheldVisibility"
+          [label]="'PLACES.ROOMS_TAB.HANDHELD' | t"
+          (blurred)="room.handheldVisibility().markAsTouched()"
+        />
+        <fc-checkbox
+          [formField]="room.seatsRequest"
+          [label]="'PLACES.ROOMS_TAB.SEATS_REQUEST' | t"
+          (blurred)="room.seatsRequest().markAsTouched()"
+        />
+        <fc-checkbox
+          [formField]="room.seatsRequired"
+          [label]="'PLACES.ROOMS_TAB.SEATS_REQUIRED' | t"
+          (blurred)="room.seatsRequired().markAsTouched()"
+        />
+        <fc-checkbox
+          [formField]="room.autoService"
+          [label]="'PLACES.ROOMS_TAB.AUTO_SERVICE' | t"
+          (blurred)="room.autoService().markAsTouched()"
+        />
+        <fc-checkbox
+          [formField]="room.priceListsRequest"
+          [label]="'PLACES.ROOMS_TAB.PRICE_LISTS_REQUEST' | t"
+          (blurred)="room.priceListsRequest().markAsTouched()"
+        />
+      </div>
+      <fieldset class="stations">
+        <legend>{{ 'PLACES.ROOMS_TAB.PRINT_STATIONS' | t }}</legend>
+        @for (station of stations(); track station.id) {
+          <fc-checkbox
+            [label]="station.name"
+            [checked]="hasStation(room, station.id)"
+            [disabled]="room().disabled()"
+            (checkedChange)="toggleStation(room, station.id, $event)"
+          />
+        } @empty {
+          <p class="note">{{ 'PLACES.ROOMS_TAB.NO_STATIONS' | t }}</p>
+        }
+      </fieldset>
+
+      <fieldset class="tables" [attr.data-id]="'tables-' + i" tabindex="-1">
+        <legend>{{ 'PLACES.ROOMS_TAB.TABLES' | t }}</legend>
+        @if (state.fieldError(room.tables); as problem) {
+          <p class="problem" role="alert">{{ problem }}</p>
+        }
+        @if (count === 0) {
+          <p class="note">{{ 'PLACES.ROOMS_TAB.NO_TABLES' | t }}</p>
+        }
+        @for (table of card.tables; track $index; let j = $index) {
+          <div
+            class="table-row"
+            role="group"
+            [attr.aria-label]="tableTitle(items()[i].tables[j].name)"
+          >
+            <div class="grid">
+              <fc-text-field
+                [formField]="table.name"
+                [label]="'PLACES.ROOMS_TAB.TABLE_NAME' | t"
+                [error]="tableNameError(i, j, table.name)"
+                (blurred)="table.name().markAsTouched()"
+              />
+              <fc-text-field
+                [formField]="table.seats"
+                type="number"
+                inputmode="numeric"
+                [label]="'PLACES.ROOMS_TAB.TABLE_SEATS' | t"
+                [format]="wholeFormat"
+                [error]="state.fieldError(table.seats)"
+                (blurred)="table.seats().markAsTouched()"
+              />
+              <fc-select
+                [formField]="table.userId"
+                [label]="'PLACES.ROOMS_TAB.TABLE_USER' | t"
+                [placeholder]="'PLACES.NONE' | t"
+                [options]="usersOf(items()[i].tables[j].userId)"
+                [error]="state.fieldError(table.userId)"
+                (blurred)="table.userId().markAsTouched()"
+              />
+            </div>
+            @if (mutable()) {
+              <div class="row-actions">
+                <button
+                  fc-icon-button
+                  icon="chevron-up"
+                  [attr.data-id]="'table-up-' + i + '-' + j"
+                  [label]="
+                    'PLACES.ROOMS_TAB.MOVE_TABLE_UP'
+                      | t: { name: tableTitle(items()[i].tables[j].name) }
+                  "
+                  [disabled]="j === 0"
+                  (click)="moveTable(i, j, -1)"
+                ></button>
+                <button
+                  fc-icon-button
+                  icon="chevron-down"
+                  [attr.data-id]="'table-down-' + i + '-' + j"
+                  [label]="
+                    'PLACES.ROOMS_TAB.MOVE_TABLE_DOWN'
+                      | t: { name: tableTitle(items()[i].tables[j].name) }
+                  "
+                  [disabled]="j === count - 1"
+                  (click)="moveTable(i, j, 1)"
+                ></button>
+                <button
+                  fc-button
+                  variant="ghost"
+                  [attr.aria-label]="
+                    'PLACES.ROOMS_TAB.REMOVE_TABLE'
+                      | t: { name: tableTitle(items()[i].tables[j].name) }
+                  "
+                  (click)="removeTable(i, j)"
+                >
+                  {{ 'PLACES.ROOMS_TAB.REMOVE' | t }}
+                </button>
+              </div>
+            }
+          </div>
+        }
+
+        @if (mutable()) {
+          @let todo = plan(i);
+          @let full = capacity(i) <= 0;
+          <fieldset class="add-tables">
+            <legend>{{ 'PLACES.ROOMS_TAB.ADD_TABLE_TITLE' | t }}</legend>
+            <p class="note">{{ 'PLACES.ROOMS_TAB.ADD_TABLE_HINT' | t }}</p>
+            <div class="grid">
+              <fc-text-field
+                [label]="'PLACES.ROOMS_TAB.TABLE_NAME' | t"
+                [value]="draftOf(i).name"
+                [disabled]="full"
+                [error]="todo.error"
+                (valueChange)="setTableDraft(i, 'name', $event)"
+              />
+              <fc-text-field
+                type="number"
+                inputmode="numeric"
+                [label]="'PLACES.ROOMS_TAB.TABLE_SEATS' | t"
+                [format]="wholeFormat"
+                [value]="draftOf(i).seats"
+                [disabled]="full"
+                (valueChange)="setTableDraft(i, 'seats', $event)"
+              />
+              <fc-select
+                [label]="'PLACES.ROOMS_TAB.TABLE_USER' | t"
+                [placeholder]="'PLACES.NONE' | t"
+                [options]="usersOf(draftOf(i).userId)"
+                [value]="draftOf(i).userId"
+                [disabled]="full"
+                (valueChange)="setTableDraft(i, 'userId', $event)"
+              />
+              <fc-text-field
+                type="number"
+                inputmode="numeric"
+                [label]="'PLACES.ROOMS_TAB.FROM' | t"
+                [format]="wholeFormat"
+                [value]="draftOf(i).from"
+                [disabled]="full"
+                (valueChange)="setTableDraft(i, 'from', $event)"
+              />
+              <fc-text-field
+                type="number"
+                inputmode="numeric"
+                [label]="'PLACES.ROOMS_TAB.TO' | t"
+                [format]="wholeFormat"
+                [value]="draftOf(i).to"
+                [disabled]="full"
+                (valueChange)="setTableDraft(i, 'to', $event)"
+              />
+            </div>
+            <div class="row-actions">
+              <button
+                fc-button
+                [attr.data-id]="'add-table-' + i"
+                [attr.aria-label]="
+                  'PLACES.ROOMS_TAB.ADD_TABLE_TO' | t: { name: roomTitle(items()[i].name) }
+                "
+                [disabled]="full || todo.names.length === 0 || todo.error !== null"
+                (click)="addTables(i)"
+              >
+                {{ 'PLACES.ROOMS_TAB.ADD' | t }}
+              </button>
+              @if (full) {
+                <p class="note">
+                  {{
+                    'PLACES.ROOMS_TAB.TABLES_LIMIT'
+                      | t: { room: maxTablesPerRoom, total: maxTables }
+                  }}
+                </p>
+              }
+            </div>
+          </fieldset>
+        }
+      </fieldset>
+    </fieldset>
+  }
+</form>
+
+<p class="visually-hidden" role="status">{{ announcement() }}</p>
+
+<fc-room-layout-editor
+  [open]="editorOpen()"
+  (openChange)="editorOpen.set($event)"
+  [roomIndex]="editorRoom()"
+/>

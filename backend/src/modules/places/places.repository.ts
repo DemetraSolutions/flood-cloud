@@ -39,6 +39,17 @@ export interface PlacesRepository extends Pick<CompaniesRepository, 'findCountry
    */
   missingTemplates(principal: AuthPrincipal, access: GroupAccess, ids: readonly ObjectId[]): Promise<Set<number>>;
   /**
+   * Tells which users of a request cannot be assigned to a table of a place: one that does not exist in the group, is in the trash, or has nothing to do with the place (a group administrator
+   * reaches every place; any other user must have the place in `placeId` or `placesId`, or be a company administrator of its company).
+   *
+   * @param groupId Id of the group (from a verified access).
+   * @param placeId Id of the place.
+   * @param companyId Id of the company of the place, `null` when it has none.
+   * @param ids The ids to check.
+   * @returns The positions, in the list, of the ids that are not valid.
+   */
+  missingUsers(groupId: ObjectId, placeId: ObjectId, companyId: ObjectId | null, ids: readonly ObjectId[]): Promise<Set<number>>;
+  /**
    * The language codes of a group (`settings.languages`; `it` when the group lists none).
    *
    * @param groupId Id of the group (from a verified access).
@@ -71,6 +82,17 @@ export function createPlacesRepository(databases: Databases, companies: Pick<Com
         .find({ _id: { $in: [...ids] } }, { projection: { _id: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS })
         .toArray();
       const present = new Set(found.map((template) => template._id.toHexString()));
+      return new Set(ids.flatMap((id, index) => (present.has(id.toHexString()) ? [] : [index])));
+    },
+
+    missingUsers: async (groupId, placeId, companyId, ids) => {
+      const scope: Filter<Document>[] = [{ role: 'SA' }, { placeId }, { placesId: placeId }, ...(companyId === null ? [] : [{ companyId }])];
+      const found = await databases
+        .common()
+        .collection('users')
+        .find({ groupId, _id: { $in: [...ids] }, trash: { $ne: true }, $or: scope }, { projection: { _id: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS })
+        .toArray();
+      const present = new Set(found.map((user) => (user['_id'] as ObjectId).toHexString()));
       return new Set(ids.flatMap((id, index) => (present.has(id.toHexString()) ? [] : [index])));
     },
 

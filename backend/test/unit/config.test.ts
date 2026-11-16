@@ -156,7 +156,7 @@ describe('loadConfig', () => {
       assert.equal(error.name, 'ConfigError');
       assert.deepEqual(
         error.issues.map((issue) => issue.variable),
-        ['APP_ENV', 'MONGODB_URI', 'PORT', 'TRUST_PROXY', 'LEGACY_PASSWORD_PEPPER'],
+        ['APP_ENV', 'MONGODB_URI', 'PORT', 'TRUST_PROXY', 'LEGACY_PASSWORD_PEPPER', 'VERSION_HMAC_KEY'],
       );
       assert.ok(!error.message.includes('secret-value'));
       assert.match(error.message, /APP_ENV: must be one of: development, production/);
@@ -167,8 +167,26 @@ describe('loadConfig', () => {
     const issues = issuesOf({});
     assert.deepEqual(
       issues.map((issue) => `${issue.variable}: ${issue.reason}`),
-      ['APP_ENV: is required', 'MONGODB_URI: is required', 'LEGACY_PASSWORD_PEPPER: is required'],
+      ['APP_ENV: is required', 'MONGODB_URI: is required', 'LEGACY_PASSWORD_PEPPER: is required', 'VERSION_HMAC_KEY: is required'],
     );
+  });
+
+  it('requires the key of the version HMAC: base64 or base64url of at least 32 bytes, never printed', () => {
+    const base = validEnv();
+    for (const value of [undefined, '']) {
+      assert.deepEqual(issuesOf({ ...base, VERSION_HMAC_KEY: value }).map((issue) => issue.reason), ['is required']);
+    }
+    for (const value of ['short', 'a'.repeat(42), 'not base64 at all!!', Buffer.alloc(31, 1).toString('base64')]) {
+      const issues = issuesOf({ ...base, VERSION_HMAC_KEY: value });
+      assert.deepEqual(issues.map((issue) => issue.variable), ['VERSION_HMAC_KEY']);
+      assert.ok(!JSON.stringify(issues).includes(value));
+    }
+    const key = Buffer.alloc(32, 7);
+    for (const value of [key.toString('base64'), key.toString('base64url')]) {
+      const config = loadConfig({ ...base, VERSION_HMAC_KEY: value });
+      assert.equal(Buffer.from(config.versionHmacKey.reveal(), 'base64').length, 32);
+      assert.ok(!`${config.versionHmacKey}`.includes(value));
+    }
   });
 
   it('validates PORT', () => {

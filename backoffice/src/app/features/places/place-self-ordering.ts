@@ -7,7 +7,6 @@ import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { PriceListConfigRow } from './place-model';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { RowColumn, RowsEditor } from './rows-editor';
 
@@ -32,7 +31,7 @@ interface ConfigTree {
  */
 @Component({
   selector: 'fc-place-self-ordering',
-  imports: [Button, Checkbox, FormField, PlaceFieldsView, PlaceSave, RowsEditor, TextField, TPipe],
+  imports: [Button, Checkbox, FormField, PlaceFieldsView, RowsEditor, TextField, TPipe],
   templateUrl: './place-self-ordering.html',
   styleUrl: './place-section.css',
 })

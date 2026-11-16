@@ -7,9 +7,9 @@ import type { Databases } from '../../src/db/databases.ts';
 const FIXTURE_HMAC_KEY = randomBytes(16);
 
 /** Kinds of fixture documents; the kind is the first byte of their ids. */
-export type FixtureKind = 'user' | 'group' | 'company' | 'place' | 'country';
+export type FixtureKind = 'user' | 'group' | 'company' | 'place' | 'country' | 'storage';
 
-const KIND_BYTE: Record<FixtureKind, string> = { user: '01', group: '02', company: '03', place: '04', country: '05' };
+const KIND_BYTE: Record<FixtureKind, string> = { user: '01', group: '02', company: '03', place: '04', country: '05', storage: '06' };
 
 /**
  * Deterministic id of a fixture document (`kind` byte followed by `n` in hex).

@@ -1,4 +1,7 @@
 @for (group of groups(); track group.id) {
+  @if (group.part; as part) {
+    <h3 class="part">{{ part | t }}</h3>
+  }
   <fieldset>
     <legend>{{ group.legend | t }}</legend>
     <div class="grid">
@@ -11,6 +14,13 @@
               [hint]="hint(definition)"
               [error]="state.fieldError(flagField(definition.key))"
               (blurred)="flagField(definition.key)().markAsTouched()"
+            />
+          }
+          @case ('secret') {
+            <fc-credential-field
+              [credential]="secretField(definition.key)"
+              [label]="label(definition)"
+              [locked]="definition.privilegedOnly === true && !state.isPrivileged()"
             />
           }
           @case ('long') {
@@ -26,7 +36,7 @@
               [formField]="textField(definition.key)"
               [label]="label(definition)"
               [hint]="hint(definition)"
-              [placeholder]="hasNone(definition) ? ('PLACES.NONE' | t) : null"
+              [placeholder]="hasNone(definition) ? (definition.noneKey ?? 'PLACES.NONE' | t) : null"
               [options]="options()[definition.key]"
               [error]="state.fieldError(textField(definition.key))"
               (blurred)="textField(definition.key)().markAsTouched()"

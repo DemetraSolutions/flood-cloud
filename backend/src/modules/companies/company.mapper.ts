@@ -21,6 +21,8 @@ export interface Leaf {
   readonly codec: Codec;
   /** `true` for what a request never writes (`trashed`, the dates). */
   readonly readOnly?: true;
+  /** `true` for what a request writes and a response never carries (a credential: the representation has a read-only flag at the same stored path instead). */
+  readonly writeOnly?: true;
 }
 
 /** Whether a stored value is a plain object (not an array, not `null`). */
@@ -286,7 +288,9 @@ export function toCompany(document: Document, groupId: ObjectId): Company {
  */
 export function readLeaves(leaves: readonly Leaf[], document: Document, target: Record<string, unknown>): void {
   for (const leaf of leaves) {
-    setValueAt(target, leaf.domain, leaf.codec.read(valueAt(document, leaf.legacy)));
+    if (leaf.writeOnly !== true) {
+      setValueAt(target, leaf.domain, leaf.codec.read(valueAt(document, leaf.legacy)));
+    }
   }
 }
 

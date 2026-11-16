@@ -48,7 +48,7 @@ describe('place body: creation and modification', () => {
   });
 
   it('refuses unknown keys, operators, the group, the id and the read-only fields, at every level', () => {
-    for (const body of [{ groupId: COMPANY }, { id: COMPANY }, { trashed: true }, { createdAt: '2026-01-01' }, { integrations: {} }, { devices: [] }, { server: { ip: '1.2.3.4' } }, { $set: { name: 'x' } }, { 'address.city': 'x' }]) {
+    for (const body of [{ groupId: COMPANY }, { id: COMPANY }, { trashed: true }, { createdAt: '2026-01-01' }, { integrations: { unknownIntegration: {} } }, { devices: [] }, { server: { ip: '1.2.3.4' } }, { $set: { name: 'x' } }, { 'address.city': 'x' }]) {
       assert.ok(Array.isArray(details(patchPlaceBody, body)), JSON.stringify(body));
     }
     issues(patchPlaceBody, { license: { suspendedToday: true } }, ['license.suspendedToday', 'unknown']);
@@ -90,17 +90,19 @@ describe('place body: creation and modification', () => {
 });
 
 describe('place body: the license', () => {
-  const LICENSE = { plan: 'basic', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active', sentry: false };
+  const LICENSE = { plan: 'basic', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active' };
 
   it('takes the whole block of a PUT, with every key required, and the date normalized', () => {
     assert.deepEqual(parse(putLicenseBody, { ...LICENSE, expirationDate: '2030-01-01' }), LICENSE);
     assert.deepEqual(parse(putLicenseBody, { ...LICENSE, plan: null, expirationDate: null }), { ...LICENSE, plan: null, expirationDate: null });
-    issues(putLicenseBody, {}, ['plan', 'required'], ['expirationDate', 'required'], ['status', 'required'], ['sentry', 'required']);
+    issues(putLicenseBody, {}, ['plan', 'required'], ['expirationDate', 'required'], ['status', 'required']);
+    // The Sentry switch moved to the dealer settings.
+    issues(putLicenseBody, { ...LICENSE, sentry: false }, ['sentry', 'unknown']);
   });
 
-  it('takes any plan as text (the service judges it), refuses a state, a date and a switch that are not valid', () => {
+  it('takes any plan as text (the service judges it), refuses a state and a date that are not valid', () => {
     assert.deepEqual(parse(putLicenseBody, { ...LICENSE, plan: ' professional ' }), { ...LICENSE, plan: 'professional' });
-    issues(putLicenseBody, { ...LICENSE, status: 'on', sentry: 'yes', expirationDate: 'soon', plan: 5 }, ['plan', 'type'], ['expirationDate', 'format'], ['status', 'enum'], ['sentry', 'type']);
+    issues(putLicenseBody, { ...LICENSE, status: 'on', expirationDate: 'soon', plan: 5 }, ['plan', 'type'], ['expirationDate', 'format'], ['status', 'enum']);
     assert.equal(PLANS.length, 5);
   });
 });

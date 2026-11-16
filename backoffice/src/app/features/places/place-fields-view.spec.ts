@@ -4,8 +4,10 @@ import {
   LIST_1,
   LIST_2,
   fakePlace,
+  PLACE_URL,
   renderPlace,
 } from '../../../testing/places';
+import { backend } from '../../../testing/api';
 import { cleanUp, isChecked, savePut, storedBlock, withValue } from '../../../testing/places-tabs';
 
 const C = (key: string) => `PLACES.F.CASH_SETTINGS.${key}`;
@@ -23,7 +25,7 @@ afterEach(cleanUp);
 
 describe('PlaceFieldsView controls', () => {
   it('renders a switch, a text, a number and a time with the right input types', async () => {
-    const view = await renderPlace({ path: 'cash', features: ['rooms', 'productsVariants'] });
+    const view = await renderPlace({ path: 'settings/general', features: ['rooms', 'productsVariants'] });
     expect(view.control(C('FAST_LOGIN')).type).toBe('checkbox');
     expect(view.control(C('CUSTOM_DISCOUNT')).type).toBe('text');
     expect(view.control(C('CUSTOM_DISCOUNT')).getAttribute('inputmode')).toBeNull();
@@ -39,7 +41,7 @@ describe('PlaceFieldsView controls', () => {
   });
 
   it('keeps an emptied number as null and an emptied whole number as its default', async () => {
-    const view = await renderPlace({ path: 'cash', features: ['rooms', 'productsVariants'] });
+    const view = await renderPlace({ path: 'settings/general', features: ['rooms', 'productsVariants'] });
     await view.type(C('CHARGE_DOCUMENT_QT'), '');
     await view.type(C('TOTAL_ROUNDING'), '0.1');
     await view.type(C('TOTAL_ROUNDING'), '');
@@ -53,7 +55,7 @@ describe('PlaceFieldsView controls', () => {
   });
 
   it('shows a duration in minutes with a hint, a color as a color input and a time as a time input', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     expect(view.control('PLACES.F.RESERVATIONS.STEP').getAttribute('inputmode')).toBe('decimal');
     expect(view.text()).toContain('PLACES.MINUTES_HINT');
     expect(view.control('PLACES.F.RESERVATIONS.WEB_WIDGET.COLOR').type).toBe('color');
@@ -65,35 +67,43 @@ describe('PlaceFieldsView controls', () => {
     const place = fakePlace({
       cashSettings: { ...stored.cashSettings, localWarehouseOutOfStock: 'legacy' },
     });
-    const view = await renderPlace({ path: 'cash', place });
+    const view = await renderPlace({ path: 'settings/general', place });
     const select = view.control(C('LOCAL_WAREHOUSE_OUT_OF_STOCK'));
     expect(select.value).toBe('legacy');
     expect(values(select)).toEqual(['disabled', 'enabled', 'alert', 'legacy']);
   });
 
   it('offers the empty choice only on a closed list that can be null', async () => {
-    const view = await renderPlace({ path: 'cash' });
+    const view = await renderPlace({ path: 'settings/other' });
     expect(values(view.control(C('RECEIPTS_CANCELLATION')))).toEqual(['', 'sync', 'notSync']);
-    expect(labelsOf(view.control(C('RECEIPTS_CANCELLATION')))[0]).toBe('PLACES.NONE');
-    expect(values(view.control(C('LOCAL_WAREHOUSE_OUT_OF_STOCK')))).toEqual([
-      'disabled',
-      'enabled',
-      'alert',
-    ]);
     await view.type(C('RECEIPTS_CANCELLATION'), 'notSync');
     await view.type(C('RECEIPTS_CANCELLATION'), '');
     expect(view.control(C('RECEIPTS_CANCELLATION')).value).toBe('');
   });
 
+  it('offers no empty choice on a closed list that cannot be null', async () => {
+    const view = await renderPlace({ path: 'settings/general' });
+    expect(values(view.control(C('LOCAL_WAREHOUSE_OUT_OF_STOCK')))).toEqual([
+      'disabled',
+      'enabled',
+      'alert',
+    ]);
+  });
+
+  it('labels the empty choice with its own text when the key has one', async () => {
+    const view = await renderPlace({ path: 'settings/fidelity' });
+    expect(labelsOf(view.control('PLACES.F.FIDELITY.TYPE'))[0]).toBe('PLACES.NONE_OF.FIDELITY_TYPE');
+  });
+
   it('shows a font size without the empty choice', async () => {
-    const view = await renderPlace({ path: 'printing' });
+    const view = await renderPlace({ path: 'settings/print' });
     const select = view.control('PLACES.F.PRINTING.RECEIPT.SUBTOTAL_FONT_SIZE');
     expect(values(select)).toHaveLength(9);
     expect(values(select)[0]).toBe('1-1');
   });
 
   it('offers the enabled price lists and the categories of the group', async () => {
-    const kiosk = await renderPlace({ path: 'kiosk' });
+    const kiosk = await renderPlace({ path: 'settings/kiosk' });
     expect(labelsOf(kiosk.control('PLACES.F.KIOSK.LIST_ID'))).toEqual([
       'PLACES.NONE',
       'Listino 1',
@@ -108,7 +118,7 @@ describe('PlaceFieldsView controls', () => {
   });
 
   it('offers the companies and the places of the group', async () => {
-    const tobacco = await renderPlace({ path: 'tobacco' });
+    const tobacco = await renderPlace({ path: 'settings/tobacco' });
     expect(labelsOf(tobacco.control('PLACES.F.TOBACCO.COMPANY_ID'))).toContain('Altra Azienda');
     expect(labelsOf(tobacco.control('PLACES.F.TOBACCO.PLACE_ID'))).toContain('Bar Milano');
   });
@@ -120,7 +130,7 @@ describe('PlaceFieldsView controls', () => {
       tobacco: { ...stored.tobacco, companyId: COMPANY },
     });
     const kiosk = await renderPlace({
-      path: 'kiosk',
+      path: 'settings/kiosk',
       place,
       lookupData: {
         priceLists: { data: [] },
@@ -142,7 +152,7 @@ describe('PlaceFieldsView controls', () => {
   });
 
   it('renders a long text as a textarea', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     expect(view.control('PLACES.F.SELF_ORDERING.FIXED_MESSAGE').tagName).toBe('TEXTAREA');
     await view.type('PLACES.F.SELF_ORDERING.FIXED_MESSAGE', 'Ciao');
     expect(isChecked(view, 'PLACES.F.SELF_ORDERING.STATUS')).toBe(false);
@@ -151,89 +161,92 @@ describe('PlaceFieldsView controls', () => {
 });
 
 describe('PlaceFieldsView visibility', () => {
-  it('hides the keys of the groups without the module they need', async () => {
-    const view = await renderPlace({ path: 'cash', features: [] });
-    for (const key of [
-      'LOGS',
-      'WORKSHIFT',
-      'PRODUCT_VARIANTS_QUANTITY',
-      'CHARGE_DOCUMENT',
-      'CHARGE_DOCUMENT_QT',
-    ]) {
+  const GATED = [
+    'LOGS',
+    'ADVANCED_REPORT_LOGS',
+    'PRODUCT_VARIANTS_QUANTITY',
+    'CHARGE_DOCUMENT',
+    'CHARGE_DOCUMENT_QT',
+    'LOCAL_WAREHOUSE',
+    'SIMPLE_WAREHOUSE',
+    'LOCAL_WAREHOUSE_OUT_OF_STOCK',
+  ];
+
+  it('hides the keys that need a module the group does not have from a company administrator', async () => {
+    const view = await renderPlace({ path: 'settings/general', features: [], profile: CA });
+    for (const key of GATED) {
       expect(has(view, C(key))).toBe(false);
     }
-    expect(view.text()).not.toContain('PLACES.G.CASH_SETTINGS.REPORT');
     expect(has(view, C('USERS_SHIFTS'))).toBe(true);
-    expect(view.root.querySelector('fc-rows-editor')).toBeNull();
+    expect(view.root.querySelector('fc-rows-editor')).not.toBeNull();
   });
 
   it('shows them with the modules', async () => {
-    const view = await renderPlace({ path: 'cash', features: ['rooms', 'productsVariants'] });
-    for (const key of [
-      'LOGS',
-      'WORKSHIFT',
-      'PRODUCT_VARIANTS_QUANTITY',
-      'CHARGE_DOCUMENT',
-      'CHARGE_DOCUMENT_QT',
-      'ADVANCED_REPORT_LOGS',
-    ]) {
+    const view = await renderPlace({
+      path: 'settings/general',
+      features: ['rooms', 'productsVariants', 'warehouse'],
+      profile: CA,
+    });
+    for (const key of GATED) {
       expect(has(view, C(key))).toBe(true);
     }
   });
 
-  it('shows the warehouse keys to a platform administrator even without the module', async () => {
-    const view = await renderPlace({ path: 'cash', features: [] });
-    expect(has(view, C('LOCAL_WAREHOUSE'))).toBe(true);
-    expect(has(view, C('SIMPLE_WAREHOUSE'))).toBe(true);
-  });
-
-  it('shows the warehouse keys to a dealer even without the module', async () => {
-    const view = await renderPlace({ path: 'cash', features: [], profile: { role: 'D' } });
-    expect(has(view, C('LOCAL_WAREHOUSE'))).toBe(true);
-  });
-
-  it('hides the warehouse keys from a company administrator without the module', async () => {
-    const view = await renderPlace({ path: 'cash', features: [], profile: CA });
-    expect(has(view, C('LOCAL_WAREHOUSE'))).toBe(false);
-    expect(has(view, C('SIMPLE_WAREHOUSE'))).toBe(false);
-    expect(view.text()).toContain('PLACES.G.CASH_SETTINGS.WAREHOUSE');
-  });
-
-  it('shows the warehouse keys to a company administrator with the module', async () => {
-    const view = await renderPlace({ path: 'cash', features: ['warehouse'], profile: CA });
-    expect(has(view, C('LOCAL_WAREHOUSE'))).toBe(true);
-  });
-
-  it('hides a whole group when none of its keys is visible', async () => {
-    const view = await renderPlace({ path: 'printing', features: [] });
-    expect(view.text()).toContain('PLACES.G.PRINTING.RECEIPT_OPTIONS');
-    for (const group of [
-      'PREBILLING_OPTIONS',
-      'PREBILLING_TEXTS',
-      'PREBILLING_FONTS',
-      'ORDERING_GENERAL',
-      'ORDERING_FONTS',
-      'ORDERING_TEXTS',
-      'ORDERING_OPTIONS',
-    ]) {
-      expect(view.text()).not.toContain(`PLACES.G.PRINTING.${group}`);
+  it('shows every key to a platform administrator even without the modules', async () => {
+    const view = await renderPlace({ path: 'settings/general', features: [] });
+    for (const key of GATED) {
+      expect(has(view, C(key))).toBe(true);
     }
   });
 
+  it('shows every key to a dealer even without the modules', async () => {
+    const view = await renderPlace({
+      path: 'settings/general',
+      features: [],
+      profile: { role: 'D' },
+    });
+    for (const key of GATED) {
+      expect(has(view, C(key))).toBe(true);
+    }
+  });
+
+  it('hides the printing keys of the rooms from a company administrator without the module', async () => {
+    const hidden = await renderPlace({ path: 'settings/print', features: [], profile: CA });
+    expect(has(hidden, 'PLACES.F.PRINTING.RECEIPT.SEATS_TOP')).toBe(false);
+    expect(has(hidden, 'PLACES.F.PRINTING.RECEIPT.USER')).toBe(true);
+  });
+
+  it('titles the parts of the printing once, in order', async () => {
+    const view = await renderPlace({ path: 'settings/print' });
+    const parts = [...view.root.querySelectorAll('h3.part')].map((h) => h.textContent?.trim());
+    expect(parts).toEqual(['PLACES.PART.PRINT_RECEIPT', 'PLACES.PART.PRINT_PREBILLING', 'PLACES.PART.PRINT_ORDERING']);
+  });
+
+  it('shows the groups of the other settings only', async () => {
+    const view = await renderPlace({ path: 'settings/other' });
+    const legends = [...view.root.querySelectorAll('fieldset > legend')].map((l) =>
+      l.textContent?.trim(),
+    );
+    expect(legends).toEqual(['PLACES.G.CASH_SETTINGS.OTHER']);
+    expect(labelsOf(view.control(C('RECEIPTS_CANCELLATION')))[0]).toBe(
+      'PLACES.NONE_OF.RECEIPTS_CANCELLATION',
+    );
+  });
+
   it('shows a reserved key read-only with a note to whoever is not a platform administrator or dealer', async () => {
-    const ca = await renderPlace({ path: 'appointments', profile: CA });
+    const ca = await renderPlace({ path: 'settings/appointments', profile: CA });
     expect(ca.control(RESERVED).disabled).toBe(true);
     expect(ca.text()).toContain('PLACES.RESERVED_NOTE');
   });
 
   it('lets a platform administrator change a reserved key', async () => {
-    const psa = await renderPlace({ path: 'appointments' });
+    const psa = await renderPlace({ path: 'settings/appointments' });
     expect(psa.control(RESERVED).disabled).toBe(false);
     expect(psa.text()).not.toContain('PLACES.RESERVED_NOTE');
   });
 
   it('shows only the groups asked for', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     const legends = [...view.root.querySelectorAll('fieldset > legend')].map((l) =>
       l.textContent?.trim(),
     );
@@ -247,5 +260,67 @@ describe('PlaceFieldsView visibility', () => {
     expect(legends.indexOf('PLACES.RESERVATIONS.TIME_BLOCKS')).toBeLessThan(
       legends.indexOf('PLACES.G.RESERVATIONS.WEB_WIDGET'),
     );
+  });
+});
+
+describe('PlaceFieldsView credentials', () => {
+  const EASY = 'PLACES.F.INTEGRATIONS.EASYAPPEAR.APP_TOKEN';
+  const STRIPE = 'PLACES.F.INTEGRATIONS.FLOOD_PAY.STRIPE.PRIVATE_KEY';
+  const credential = (view: Awaited<ReturnType<typeof renderPlace>>, label: string) =>
+    view.root.querySelector(`[role="group"][aria-label="${label}"]`) as HTMLElement;
+  const press = async (
+    view: Awaited<ReturnType<typeof renderPlace>>,
+    label: string,
+    text: string,
+  ) => {
+    const button = [...credential(view, label).querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === text,
+    ) as HTMLButtonElement;
+    button.click();
+    await view.view();
+  };
+
+  it('shows whether a credential is set, never its value', async () => {
+    const stored = fakePlace();
+    const place = fakePlace({
+      integrations: { ...stored.integrations, easyappear: { status: false, appTokenSet: true } },
+    });
+    const view = await renderPlace({ path: 'integrations', place });
+    expect(credential(view, EASY).textContent).toContain('PLACES.CREDENTIAL.SET');
+    expect(credential(view, STRIPE).textContent).toContain('PLACES.CREDENTIAL.NOT_SET');
+    expect(view.root.querySelectorAll('input[type="password"]')).toHaveLength(0);
+  });
+
+  it('sets, clears and keeps a credential, sending it only when typed or cleared', async () => {
+    const stored = fakePlace();
+    const place = fakePlace({
+      integrations: { ...stored.integrations, easyappear: { status: false, appTokenSet: true } },
+    });
+    const view = await renderPlace({ path: 'integrations', place });
+    await press(view, EASY, 'PLACES.CREDENTIAL.CHANGE');
+    await view.type('PLACES.CREDENTIAL.NEW_VALUE {"label":"' + EASY + '"}', 'tok-1');
+    await press(view, EASY, 'COMMON.CANCEL');
+    expect(view.root.querySelectorAll('input[type="password"]')).toHaveLength(0);
+    await press(view, EASY, 'PLACES.CREDENTIAL.REMOVE');
+    expect(credential(view, EASY).textContent).toContain('PLACES.CREDENTIAL.REMOVING');
+    await press(view, EASY, 'PLACES.CREDENTIAL.KEEP');
+    expect(credential(view, EASY).textContent).toContain('PLACES.CREDENTIAL.SET');
+    await press(view, STRIPE, 'PLACES.CREDENTIAL.SET_NEW');
+    await view.type('PLACES.CREDENTIAL.NEW_VALUE {"label":"' + STRIPE + '"}', 'sk_test_x');
+    await press(view, EASY, 'PLACES.CREDENTIAL.REMOVE');
+    await view.click('COMMON.SAVE');
+    const request = backend().expectOne(PLACE_URL);
+    const body = (request.request.body as { integrations: Record<string, any> }).integrations;
+    expect(body['easyappear']).toEqual({ status: false, appToken: null });
+    expect(body['floodPay'].stripe.privateKey).toBe('sk_test_x');
+    expect(body['floodPay'].stripe).not.toHaveProperty('webhookPrivateKey');
+    request.flush({ data: place }, { headers: { ETag: '"v2"' } });
+    await view.view();
+  });
+
+  it('locks the payment credentials for who is not a platform administrator or dealer', async () => {
+    const view = await renderPlace({ path: 'integrations', profile: CA });
+    expect(credential(view, STRIPE).querySelectorAll('button')).toHaveLength(0);
+    expect(credential(view, EASY).querySelectorAll('button').length).toBeGreaterThan(0);
   });
 });

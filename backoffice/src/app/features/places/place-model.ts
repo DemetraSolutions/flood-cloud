@@ -13,9 +13,15 @@ import {
   MEDIA_SLOTS,
   MediaSlot,
   PLACE_SECTIONS,
+  PlaceDevice,
+  PlaceProductionCenter,
+  PlacePrintStation,
   PlaceRecord,
+  PlaceRoom,
   PlaceSection,
   PlaceStatus,
+  PlaceStorage,
+  PlaceTable,
   SettingsBlockName,
 } from './place.types';
 
@@ -177,12 +183,11 @@ export interface GeneralModel {
   priceLists: PriceListRow[];
 }
 
-/** License tab; `expirationDate` is `YYYY-MM-DD` or empty. */
+/** The license part of the general tab; `expirationDate` is `YYYY-MM-DD` or empty. */
 export interface LicenseModel {
   plan: string;
   expirationDate: string;
   status: PlaceStatus;
-  sentry: boolean;
 }
 
 /** A time slot. */
@@ -216,7 +221,382 @@ export interface HoursModel extends ScheduleModel {
   deliveryTime: ScheduleModel;
 }
 
-/** Everything the form edits, one property per section (tab). */
+// Credentials and the lists of items (devices, print stations, rooms, storages).
+
+/**
+ * A credential the API never returns: whether the server has one (`set`), what the user typed to
+ * replace it (`value`, empty for no change) and whether the user asked to remove it (`clear`).
+ */
+export interface CredentialModel {
+  set: boolean;
+  value: string;
+  clear: boolean;
+}
+
+/** The integrations: the switches and settings by key, and the credentials by key. */
+export interface IntegrationsModel extends ScalarBlock {
+  secrets: Record<string, CredentialModel>;
+}
+
+/** A device (numbers and ids held as text). A device not saved yet has an empty `id`. */
+export interface DeviceRow {
+  id: string;
+  /** The stored list has the item without an id: read only. */
+  withoutId: boolean;
+  server: boolean;
+  type: string;
+  name: string;
+  driver: string;
+  host: string;
+  serialNumber: string;
+  epsonProtocol17: boolean;
+  epsonEreceipt: boolean;
+  DLN502017Rounding: boolean;
+  secondaryDriver: string;
+  secondaryHost: string;
+  automaticCashDriver: string;
+  automaticCashHost: string;
+  automaticCashUsername: CredentialModel;
+  automaticCashPassword: CredentialModel;
+  posProtocol17ip: string;
+  posProtocol17port: string;
+  posProtocol17terminalId: string;
+  posDojoTerminalId: string;
+  externalDisplayId: string;
+  secondaryCompanyPrinterId: string;
+  favoritesId: string;
+  scaleDialog0204Ip: string;
+  scaleDialog0204Port: string;
+  scaleDialog0204SendPrice: boolean;
+  barcodePriceRule: string;
+  orderingPrintSingleProduct: boolean;
+  orderingPrintSingleProductTables: boolean;
+  /** Ids of the print stations of the device. */
+  printStations: string[];
+}
+
+/** The devices and whether the stored list can be changed. */
+export interface DevicesModel {
+  items: DeviceRow[];
+  editable: boolean;
+}
+
+/** A print station. */
+export interface PrintStationRow {
+  id: string;
+  withoutId: boolean;
+  name: string;
+  driver: string;
+  host: string;
+  pulseNumber: string;
+  pulseNumberSecondary: string;
+  upsideDown: boolean;
+  exitsCut: boolean;
+  summaryCategoriesIds: string[];
+  summaryPrintStationsIds: string[];
+}
+
+/** A production center. */
+export interface ProductionCenterRow {
+  id: string;
+  withoutId: boolean;
+  name: string;
+  capacity: string;
+}
+
+/** The print stations and the production centers, each list with whether it can be changed. */
+export interface PrintStationsModel {
+  stations: PrintStationRow[];
+  productionCenters: ProductionCenterRow[];
+  stationsEditable: boolean;
+  productionCentersEditable: boolean;
+}
+
+/** The place of a table in the grid of its room, in cells; `x` and `y` are `null` while not placed. */
+export interface TableViewRow {
+  w: number;
+  h: number;
+  x: number | null;
+  y: number | null;
+  shape: string;
+}
+
+/** A table of a room. */
+export interface TableRow {
+  id: string;
+  withoutId: boolean;
+  name: string;
+  seats: string;
+  userId: string;
+  view: TableViewRow;
+}
+
+/** A room with its tables and its layout (cells, from 1 to {@link MAX_GRID}). */
+export interface RoomRow {
+  id: string;
+  withoutId: boolean;
+  name: string;
+  listId: string;
+  service: string;
+  tax: string;
+  deviceId: string;
+  seatsRequest: boolean;
+  seatsRequired: boolean;
+  autoService: boolean;
+  priceListsRequest: boolean;
+  handheldVisibility: boolean;
+  printStations: string[];
+  tables: TableRow[];
+  view: { type: string; status: boolean; h: number; w: number };
+}
+
+/** The rooms and whether the stored list can be changed. */
+export interface RoomsModel {
+  items: RoomRow[];
+  editable: boolean;
+}
+
+/** A storage. */
+export interface StorageRow {
+  id: string;
+  name: string;
+  cash: boolean;
+  ecommerce: boolean;
+}
+
+/** The storages and whether the stored list can be changed. */
+export interface StoragesModel {
+  items: StorageRow[];
+  editable: boolean;
+}
+
+/** Limits of the API: rooms, tables of a room, tables of the place, and the cells of a room grid. */
+export const MAX_ROOMS = 30;
+export const MAX_TABLES_PER_ROOM = 200;
+export const MAX_TABLES = 1000;
+export const MAX_GRID = 50;
+
+const noCredential = (): CredentialModel => ({ set: false, value: '', clear: false });
+const credential = (set: boolean): CredentialModel => ({ set, value: '', clear: false });
+
+/** A new device with the defaults of the old form (a desk). */
+export function newDevice(): DeviceRow {
+  return {
+    id: '',
+    withoutId: false,
+    server: false,
+    type: 'desk',
+    name: '',
+    driver: '',
+    host: '',
+    serialNumber: '',
+    epsonProtocol17: false,
+    epsonEreceipt: false,
+    DLN502017Rounding: false,
+    secondaryDriver: '',
+    secondaryHost: '',
+    automaticCashDriver: '',
+    automaticCashHost: '',
+    automaticCashUsername: noCredential(),
+    automaticCashPassword: noCredential(),
+    posProtocol17ip: '',
+    posProtocol17port: '',
+    posProtocol17terminalId: '',
+    posDojoTerminalId: '',
+    externalDisplayId: '',
+    secondaryCompanyPrinterId: '',
+    favoritesId: '',
+    scaleDialog0204Ip: '',
+    scaleDialog0204Port: '',
+    scaleDialog0204SendPrice: false,
+    barcodePriceRule: '',
+    orderingPrintSingleProduct: false,
+    orderingPrintSingleProductTables: false,
+    printStations: [],
+  };
+}
+
+/** A new print station (the first driver of the old form). */
+export function newPrintStation(): PrintStationRow {
+  return {
+    id: '',
+    withoutId: false,
+    name: '',
+    driver: 'EPSON-EPOS-PRINT',
+    host: '',
+    pulseNumber: '',
+    pulseNumberSecondary: '',
+    upsideDown: false,
+    exitsCut: false,
+    summaryCategoriesIds: [],
+    summaryPrintStationsIds: [],
+  };
+}
+
+/** A new production center. */
+export function newProductionCenter(): ProductionCenterRow {
+  return { id: '', withoutId: false, name: '', capacity: '' };
+}
+
+/** A new table, not placed in the grid yet (1 × 1 cells, rectangular). */
+export function newTable(name = '', seats = ''): TableRow {
+  return {
+    id: '',
+    withoutId: false,
+    name,
+    seats,
+    userId: '',
+    view: { w: 1, h: 1, x: null, y: null, shape: 'rect' },
+  };
+}
+
+/** A new room with the defaults of the old form: a grid of 8 × 8 cells, switched off. */
+export function newRoom(): RoomRow {
+  return {
+    id: '',
+    withoutId: false,
+    name: '',
+    listId: '',
+    service: '',
+    tax: '',
+    deviceId: '',
+    seatsRequest: false,
+    seatsRequired: false,
+    autoService: false,
+    priceListsRequest: false,
+    handheldVisibility: false,
+    printStations: [],
+    tables: [],
+    view: { type: 'grid', status: false, h: 8, w: 8 },
+  };
+}
+
+/** A new storage. */
+export function newStorage(): StorageRow {
+  return { id: '', name: '', cash: false, ecommerce: false };
+}
+
+const ids = (value: unknown): string[] =>
+  list(value).filter((item): item is string => typeof item === 'string');
+
+function deviceRow(device: PlaceDevice): DeviceRow {
+  return {
+    id: device.id,
+    withoutId: device.withoutId === true,
+    server: device.server === true,
+    type: text(device.type),
+    name: text(device.name),
+    driver: text(device.driver),
+    host: text(device.host),
+    serialNumber: text(device.serialNumber),
+    epsonProtocol17: device.epsonProtocol17 === true,
+    epsonEreceipt: device.epsonEreceipt === true,
+    DLN502017Rounding: device.DLN502017Rounding === true,
+    secondaryDriver: text(device.secondaryDriver),
+    secondaryHost: text(device.secondaryHost),
+    automaticCashDriver: text(device.automaticCashDriver),
+    automaticCashHost: text(device.automaticCashHost),
+    automaticCashUsername: credential(device.automaticCashUsernameSet === true),
+    automaticCashPassword: credential(device.automaticCashPasswordSet === true),
+    posProtocol17ip: text(device.posProtocol17ip),
+    posProtocol17port: text(device.posProtocol17port),
+    posProtocol17terminalId: text(device.posProtocol17terminalId),
+    posDojoTerminalId: text(device.posDojoTerminalId),
+    externalDisplayId: text(device.externalDisplayId),
+    secondaryCompanyPrinterId: text(device.secondaryCompanyPrinterId),
+    favoritesId: text(device.favoritesId),
+    scaleDialog0204Ip: text(device.scaleDialog0204Ip),
+    scaleDialog0204Port: text(device.scaleDialog0204Port),
+    scaleDialog0204SendPrice: device.scaleDialog0204SendPrice === true,
+    barcodePriceRule: text(device.barcodePriceRule),
+    orderingPrintSingleProduct: device.orderingPrintSingleProduct === true,
+    orderingPrintSingleProductTables: device.orderingPrintSingleProductTables === true,
+    printStations: ids(device.printStations),
+  };
+}
+
+function stationRow(station: PlacePrintStation): PrintStationRow {
+  return {
+    id: station.id,
+    withoutId: station.withoutId === true,
+    name: text(station.name),
+    driver: text(station.driver),
+    host: text(station.host),
+    pulseNumber: numberText(station.pulseNumber),
+    pulseNumberSecondary: numberText(station.pulseNumberSecondary),
+    upsideDown: station.upsideDown === true,
+    exitsCut: station.exitsCut === true,
+    summaryCategoriesIds: ids(station.summaryCategoriesIds),
+    summaryPrintStationsIds: ids(station.summaryPrintStationsIds),
+  };
+}
+
+function centerRow(center: PlaceProductionCenter): ProductionCenterRow {
+  return {
+    id: center.id,
+    withoutId: center.withoutId === true,
+    name: text(center.name),
+    capacity: numberText(center.capacity),
+  };
+}
+
+const cell = (value: unknown, fallback: number): number =>
+  typeof value === 'number' ? value : fallback;
+
+function tableRow(table: PlaceTable): TableRow {
+  const view = object(table.view);
+  return {
+    id: table.id,
+    withoutId: table.withoutId === true,
+    name: text(table.name),
+    seats: numberText(table.seats),
+    userId: text(table.userId),
+    view: {
+      w: cell(view['w'], 1),
+      h: cell(view['h'], 1),
+      x: typeof view['x'] === 'number' ? view['x'] : null,
+      y: typeof view['y'] === 'number' ? view['y'] : null,
+      shape: text(view['shape']) === 'round' ? 'round' : 'rect',
+    },
+  };
+}
+
+function roomRow(room: PlaceRoom): RoomRow {
+  const view = object(room.view);
+  return {
+    id: room.id,
+    withoutId: room.withoutId === true,
+    name: text(room.name),
+    listId: text(room.listId),
+    service: numberText(room.service),
+    tax: text(room.tax),
+    deviceId: text(room.deviceId),
+    seatsRequest: room.seatsRequest === true,
+    seatsRequired: room.seatsRequired === true,
+    autoService: room.autoService === true,
+    priceListsRequest: room.priceListsRequest === true,
+    handheldVisibility: room.handheldVisibility === true,
+    printStations: ids(room.printStations),
+    tables: list(room.tables).map((table) => tableRow(table as PlaceTable)),
+    view: {
+      type: text(view['type']) === '' ? '' : 'grid',
+      status: view['status'] === true,
+      h: cell(view['h'], 8),
+      w: cell(view['w'], 8),
+    },
+  };
+}
+
+function storageRow(storage: PlaceStorage): StorageRow {
+  return {
+    id: storage.id,
+    name: text(storage.name),
+    cash: storage.cash === true,
+    ecommerce: storage.ecommerce === true,
+  };
+}
+
+/** Everything the form edits, one property per section. */
 export interface PlaceModel {
   general: GeneralModel;
   license: LicenseModel;
@@ -234,6 +614,12 @@ export interface PlaceModel {
   fidelity: ScalarBlock;
   tobacco: ScalarBlock;
   media: MediaModel;
+  integrations: IntegrationsModel;
+  dealerSettings: ScalarBlock;
+  devices: DevicesModel;
+  printStations: PrintStationsModel;
+  rooms: RoomsModel;
+  storages: StoragesModel;
 }
 
 /** The days of the week the API numbers, `0` being Sunday, in the order of the tabs (Monday first). */
@@ -268,12 +654,31 @@ const object = (value: unknown): Record<string, unknown> =>
 const orNull = (value: string): string | null => (value === '' ? null : value);
 const numberOrNull = (value: string): number | null => (value === '' ? null : Number(value));
 
+const plainFields = (block: SettingsBlockName): readonly FieldDef[] =>
+  FIELDS[block].filter((definition) => definition.type !== 'secret');
+
+function blockOf(record: PlaceRecord | null, block: SettingsBlockName): unknown {
+  return record?.[block];
+}
+
 function scalarsOf(block: SettingsBlockName, record: PlaceRecord | null): Scalars {
   return Object.fromEntries(
-    FIELDS[block].map((definition) => [
+    plainFields(block).map((definition) => [
       definition.key,
-      toFieldValue(definition, valueAt(record?.[block], definition.key)),
+      toFieldValue(definition, valueAt(blockOf(record, block), definition.key)),
     ]),
+  );
+}
+
+/** The credentials of the integrations: whether each is set, nothing typed yet. */
+function secretsOf(record: PlaceRecord | null): Record<string, CredentialModel> {
+  return Object.fromEntries(
+    FIELDS.integrations
+      .filter((definition) => definition.type === 'secret')
+      .map((definition) => [
+        definition.key,
+        credential(valueAt(blockOf(record, 'integrations'), `${definition.key}Set`) === true),
+      ]),
   );
 }
 
@@ -357,7 +762,6 @@ export function toModel(record: PlaceRecord | null): PlaceModel {
       plan: record === null ? 'basic' : text(record.license.plan),
       expirationDate: text(record?.license.expirationDate?.slice(0, 10)),
       status: record?.license.status ?? 'active',
-      sentry: record?.license.sentry === true,
     },
     openingHours: {
       timezone: record === null ? 'Europe/Rome' : text(record.openingHours.timezone),
@@ -460,6 +864,26 @@ export function toModel(record: PlaceRecord | null): PlaceModel {
         MEDIA_SLOTS.map((slot) => [slot, logoOf(record?.media[slot])]),
       ) as Record<MediaSlot, LogoModel | null>,
     },
+    integrations: { f: scalarsOf('integrations', record), secrets: secretsOf(record) },
+    dealerSettings: { f: scalarsOf('dealerSettings', record) },
+    devices: {
+      items: (record?.devices.items ?? []).map(deviceRow),
+      editable: record?.devices.editable !== false,
+    },
+    printStations: {
+      stations: (record?.printStations.stations ?? []).map(stationRow),
+      productionCenters: (record?.printStations.productionCenters ?? []).map(centerRow),
+      stationsEditable: record?.printStations.stationsEditable !== false,
+      productionCentersEditable: record?.printStations.productionCentersEditable !== false,
+    },
+    rooms: {
+      items: (record?.rooms.items ?? []).map(roomRow),
+      editable: record?.rooms.editable !== false,
+    },
+    storages: {
+      items: (record?.storages.items ?? []).map(storageRow),
+      editable: record?.storages.editable !== false,
+    },
   };
 }
 
@@ -471,7 +895,7 @@ export function toModel(record: PlaceRecord | null): PlaceModel {
  */
 export function dirtySections(model: PlaceModel, baseline: PlaceModel): Set<PlaceSection> {
   const dirty = new Set<PlaceSection>();
-  for (const { id } of PLACE_SECTIONS) {
+  for (const id of PLACE_SECTIONS) {
     if (JSON.stringify(model[id]) !== JSON.stringify(baseline[id])) {
       dirty.add(id);
     }
@@ -504,10 +928,124 @@ export function withSections(
 
 function scalarsBody(block: SettingsBlockName, scalars: Scalars): Record<string, unknown> {
   const body: Record<string, unknown> = {};
-  for (const definition of FIELDS[block] as readonly FieldDef[]) {
+  for (const definition of plainFields(block)) {
     setAt(body, definition.key, toBodyValue(definition, scalars[definition.key]));
   }
   return body;
+}
+
+/** The credentials the user changed, nested by key: the typed text sets one, `null` removes it. */
+function secretsBody(secrets: Record<string, CredentialModel>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  for (const [key, secret] of Object.entries(secrets)) {
+    if (secret.clear) {
+      setAt(body, key, null);
+    } else if (secret.value !== '') {
+      setAt(body, key, secret.value);
+    }
+  }
+  return body;
+}
+
+/** Merges a nested object into another (the credentials into the settings of the integrations). */
+function merged(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  for (const [key, value] of Object.entries(source)) {
+    const current = target[key];
+    target[key] =
+      typeof value === 'object' && value !== null && typeof current === 'object' && current !== null
+        ? merged(current as Record<string, unknown>, value as Record<string, unknown>)
+        : value;
+  }
+  return target;
+}
+
+/** A credential of a device for the body: typed text sets it, `null` removes it, nothing keeps it. */
+function deviceSecret(name: string, secret: CredentialModel): Record<string, unknown> {
+  if (secret.clear) {
+    return { [name]: null };
+  }
+  return secret.value === '' ? {} : { [name]: secret.value };
+}
+
+function deviceBody(row: DeviceRow): Record<string, unknown> {
+  return {
+    ...(row.id === '' ? {} : { id: row.id }),
+    server: row.server,
+    type: row.type,
+    name: row.name,
+    driver: row.driver,
+    host: row.host,
+    serialNumber: row.serialNumber,
+    epsonProtocol17: row.epsonProtocol17,
+    epsonEreceipt: row.epsonEreceipt,
+    DLN502017Rounding: row.DLN502017Rounding,
+    secondaryDriver: row.secondaryDriver,
+    secondaryHost: row.secondaryHost,
+    automaticCashDriver: row.automaticCashDriver,
+    automaticCashHost: row.automaticCashHost,
+    ...deviceSecret('automaticCashUsername', row.automaticCashUsername),
+    ...deviceSecret('automaticCashPassword', row.automaticCashPassword),
+    posProtocol17ip: row.posProtocol17ip,
+    posProtocol17port: row.posProtocol17port,
+    posProtocol17terminalId: row.posProtocol17terminalId,
+    posDojoTerminalId: row.posDojoTerminalId,
+    externalDisplayId: row.externalDisplayId,
+    secondaryCompanyPrinterId: row.secondaryCompanyPrinterId,
+    favoritesId: row.favoritesId,
+    scaleDialog0204Ip: row.scaleDialog0204Ip,
+    scaleDialog0204Port: row.scaleDialog0204Port,
+    scaleDialog0204SendPrice: row.scaleDialog0204SendPrice,
+    barcodePriceRule: row.barcodePriceRule,
+    orderingPrintSingleProduct: row.orderingPrintSingleProduct,
+    orderingPrintSingleProductTables: row.orderingPrintSingleProductTables,
+    printStations: row.printStations,
+  };
+}
+
+const idOf = (row: { id: string }): Record<string, unknown> =>
+  row.id === '' ? {} : { id: row.id };
+
+function stationBody(row: PrintStationRow): Record<string, unknown> {
+  return {
+    ...idOf(row),
+    name: row.name,
+    driver: row.driver,
+    host: row.host,
+    pulseNumber: numberOrNull(row.pulseNumber),
+    pulseNumberSecondary: numberOrNull(row.pulseNumberSecondary),
+    upsideDown: row.upsideDown,
+    exitsCut: row.exitsCut,
+    summaryCategoriesIds: row.summaryCategoriesIds,
+    summaryPrintStationsIds: row.summaryPrintStationsIds,
+  };
+}
+
+function roomBody(row: RoomRow): Record<string, unknown> {
+  return {
+    ...idOf(row),
+    name: row.name,
+    listId: row.listId,
+    service: numberOrNull(row.service),
+    tax: row.tax,
+    deviceId: row.deviceId,
+    seatsRequest: row.seatsRequest,
+    seatsRequired: row.seatsRequired,
+    autoService: row.autoService,
+    priceListsRequest: row.priceListsRequest,
+    handheldVisibility: row.handheldVisibility,
+    printStations: row.printStations,
+    tables: row.tables.map((table) => ({
+      ...idOf(table),
+      name: table.name,
+      seats: numberOrNull(table.seats),
+      userId: table.userId,
+      view: { ...table.view },
+    })),
+    view: { ...row.view },
+  };
 }
 
 function logoBody(logo: LogoModel | null): unknown {
@@ -561,7 +1099,6 @@ function licenseBody(license: LicenseModel, record: PlaceRecord | null): unknown
         ? stored
         : orNull(license.expirationDate),
     status: license.status,
-    sentry: license.sentry,
   };
 }
 
@@ -720,6 +1257,39 @@ export function blockBody(
         ...scalarsBody(section, model.media.f),
         ...Object.fromEntries(MEDIA_SLOTS.map((slot) => [slot, logoBody(model.media.logos[slot])])),
       };
+    case 'integrations':
+      return merged(
+        scalarsBody(section, model.integrations.f),
+        secretsBody(model.integrations.secrets),
+      );
+    case 'devices':
+      return { items: model.devices.items.map(deviceBody) };
+    case 'printStations': {
+      const lists = model.printStations;
+      return {
+        ...(lists.stationsEditable ? { stations: lists.stations.map(stationBody) } : {}),
+        ...(lists.productionCentersEditable
+          ? {
+              productionCenters: lists.productionCenters.map((center) => ({
+                ...idOf(center),
+                name: center.name,
+                capacity: Number(center.capacity),
+              })),
+            }
+          : {}),
+      };
+    }
+    case 'rooms':
+      return { items: model.rooms.items.map(roomBody) };
+    case 'storages':
+      return {
+        items: model.storages.items.map((row) => ({
+          ...idOf(row),
+          name: row.name,
+          cash: row.cash,
+          ecommerce: row.ecommerce,
+        })),
+      };
     default:
       return scalarsBody(section, model[section].f);
   }
@@ -743,7 +1313,7 @@ export function patchBody(
   const body: Record<string, unknown> = sections.has('general')
     ? generalChanges(model.general, baseline.general)
     : {};
-  for (const { id } of PLACE_SECTIONS) {
+  for (const id of PLACE_SECTIONS) {
     if (id !== 'general' && sections.has(id)) {
       body[id] = blockBody(model, id, record);
     }

@@ -16,8 +16,10 @@ import {
   groupLabelKey,
   groupsOf,
   optionLabelKey,
+  partOf,
 } from './place-fields';
-import { ScalarBlock } from './place-model';
+import { CredentialField } from './credential-field';
+import { CredentialModel, ScalarBlock } from './place-model';
 import { PlaceLookup, PlaceState } from './place-state';
 import { SettingsBlockName } from './place.types';
 
@@ -42,7 +44,7 @@ const CHOICES: readonly FieldType[] = [
 ];
 
 /** The control a key is edited with. */
-type Control = 'flag' | 'long' | 'choice' | 'text';
+type Control = 'flag' | 'long' | 'choice' | 'secret' | 'text';
 
 /**
  * The keys of a settings block as controls, grouped in fieldsets: switches, texts, numbers,
@@ -53,8 +55,9 @@ type Control = 'flag' | 'long' | 'choice' | 'text';
  */
 @Component({
   selector: 'fc-place-fields',
-  imports: [Checkbox, FormField, Select, TextField, Textarea, TPipe],
+  imports: [Checkbox, CredentialField, FormField, Select, TextField, Textarea, TPipe],
   templateUrl: './place-fields-view.html',
+  styleUrl: './place-section.css',
 })
 export class PlaceFieldsView {
   protected readonly state = inject(PlaceState);
@@ -70,20 +73,27 @@ export class PlaceFieldsView {
     () => (this.state.form[this.block()] as unknown as { f: Record<string, FieldTree<unknown>> }).f,
   );
 
-  /** The groups with the keys the user sees. */
+  /** The groups with the keys the user sees; `part` is the title of the part the group starts, if any. */
   protected readonly groups = computed(() => {
     const block = this.block();
     const only = this.only();
+    let previous: string | null = null;
     return groupsOf(block)
       .filter((group) => only === null || only.includes(group))
       .map((group) => ({
         id: group,
         legend: groupLabelKey(block, group),
+        part: partOf(block, group),
         fields: FIELDS[block].filter(
           (definition) => definition.group === group && this.state.isShown(definition),
         ),
       }))
-      .filter((group) => group.fields.length > 0);
+      .filter((group) => group.fields.length > 0)
+      .map((group) => {
+        const part = group.part === previous ? null : group.part;
+        previous = group.part;
+        return { ...group, part };
+      });
   });
 
   /** The options of every select of the block, with the stored value always among them. */
@@ -122,6 +132,14 @@ export class PlaceFieldsView {
     return this.tree()[key] as FieldTree<string>;
   }
 
+  protected secretField(key: string): FieldTree<CredentialModel> {
+    return (
+      this.state.form[this.block()] as unknown as {
+        secrets: Record<string, FieldTree<CredentialModel>>;
+      }
+    ).secrets[key];
+  }
+
   protected label(definition: FieldDef): string {
     return this.i18n.t(fieldLabelKey(this.block(), definition.key));
   }
@@ -140,6 +158,9 @@ export class PlaceFieldsView {
     }
     if (definition.type === 'long') {
       return 'long';
+    }
+    if (definition.type === 'secret') {
+      return 'secret';
     }
     return CHOICES.includes(definition.type) ? 'choice' : 'text';
   }

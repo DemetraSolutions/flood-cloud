@@ -63,7 +63,7 @@ const addButtons = (root: HTMLElement) =>
 
 describe('PlaceSelfOrdering', () => {
   it('shows the stored data', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     const list = fieldsetOf(view.root, 'Listino 1');
     expect(isChecked(view, f('STATUS'))).toBe(false);
     expect(within(list, S('ROUND_TIME')).value).toBe('5');
@@ -79,7 +79,7 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('saves the whole block with the exact PUT', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     const list = fieldsetOf(view.root, 'Listino 1');
     await view.toggle(f('STATUS'), true);
     await view.type(f('FIXED_MESSAGE'), 'Ordina qui');
@@ -123,7 +123,7 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('empties a number to null', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     const list = fieldsetOf(view.root, 'Listino 1');
     await typeWithin(view, list, S('ROUND_TIME'), '');
     await savePut(
@@ -134,7 +134,7 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('offers only the enabled price lists that have no limits yet', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     expect(addButtons(view.root)).toEqual([`${S('ADD_LIST')} {"list":"Listino 2"}`]);
     await view.click(`${S('ADD_LIST')} {"list":"Listino 2"}`);
     expect(addButtons(view.root)).toEqual([]);
@@ -149,7 +149,7 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('removes the limits of a price list', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     await view.click(`${S('REMOVE_LIST')} {"list":"Listino 1"}`);
     expect(fieldsetOf(view.root, 'Listino 1')).toBeUndefined();
     expect(addButtons(view.root)).toHaveLength(2);
@@ -157,7 +157,7 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('adds and removes the categories of a price list', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     const list = fieldsetOf(view.root, 'Listino 1');
     await clickIn(view, list, S('ADD_CATEGORY'));
     expect((within(list, `${S('PURCHASABLE')} 2`) as HTMLInputElement).checked).toBe(true);
@@ -197,7 +197,7 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('adds a category to one price list without touching the others', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     await view.click(`${S('ADD_LIST')} {"list":"Listino 2"}`);
     await clickIn(view, fieldsetOf(view.root, 'Listino 2'), S('ADD_CATEGORY'));
     await typeWithin(view, fieldsetOf(view.root, 'Listino 2'), `${S('CATEGORY')} 1`, CATEGORY_2);
@@ -240,7 +240,7 @@ describe('PlaceSelfOrdering', () => {
         },
       },
     });
-    const view = await renderPlace({ path: 'self-ordering', place });
+    const view = await renderPlace({ path: 'settings/self-ordering', place });
     const list = fieldsetOf(view.root, UNKNOWN_LIST);
     expect(list).toBeDefined();
     expect(within(list, `${S('CATEGORY')} 1`).value).toBe(UNKNOWN_CATEGORY);
@@ -249,7 +249,7 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('puts the 422 of a price list on the list of limits and the others on their control', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     await view.toggle(f('STATUS'), true);
     await failPut(view, 'settings/self-ordering', [
       { field: `selfOrdering.priceListsConfig.${LIST_1}.roundTime`, issue: 'incorrect' },
@@ -262,14 +262,14 @@ describe('PlaceSelfOrdering', () => {
   });
 
   it('marks every field as touched when the user leaves them', async () => {
-    const view = await renderPlace({ path: 'self-ordering' });
+    const view = await renderPlace({ path: 'settings/self-ordering' });
     await view.blurAll();
     await submitTab(view);
     expect(view.root.querySelector('form')).not.toBeNull();
   });
 
   it('is read-only without the permission to update', async () => {
-    const view = await renderPlace({ path: 'self-ordering', permissions: READ_ONLY });
+    const view = await renderPlace({ path: 'settings/self-ordering', permissions: READ_ONLY });
     const list = fieldsetOf(view.root, 'Listino 1');
     expect(within(list, S('ROUND_TIME')).disabled).toBe(true);
     expect(view.control(f('STATUS')).disabled).toBe(true);

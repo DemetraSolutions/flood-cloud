@@ -18,6 +18,7 @@ import { differences, missingId, snapshotOf, withHooks } from '../helpers/legacy
 import { openTestClusters, openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalOf } from '../helpers/principal.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 const G1 = fixtureId('group', 1);
 const G2 = fixtureId('group', 2);
@@ -44,7 +45,7 @@ let access: GroupAccess;
 
 const common = (): Db => ctx.databases.common();
 const groupDb = (n = 1): Db => ctx.databases.group(n === 1 ? G1 : G2, 'cluster0');
-const writerOn = (databases: Databases = ctx.databases): CompaniesPlacesWriter => companiesPlacesWriter(principal, access, databases, { now: clock });
+const writerOn = (databases: Databases = ctx.databases): CompaniesPlacesWriter => companiesPlacesWriter(principal, access, databases, { versionKey: TEST_VERSION_KEY, now: clock });
 const names = (): string[] => [`${ctx.prefix}development_common`, `${ctx.prefix}development_${G1.toHexString()}`, `${ctx.prefix}development_${G2.toHexString()}`];
 const snapshot = (): Promise<Record<string, Document[]>> => snapshotOf(ctx.client, names());
 
@@ -136,7 +137,7 @@ describe('companies and places writer: creation', () => {
     assert.deepEqual([stored['groupId'], stored['name'], stored['code'], stored['trash'], stored['status'], stored['invoicesPSValues']], [G1, 'New Co', 'IT01234567890', false, true, []]);
     assert.ok(stored['settings'] !== null && typeof stored['settings'] === 'object' && 'global' in stored['settings']);
     assert.ok(stored['updateDate'] instanceof Date && (stored['insertDate'] as Date).getTime() === (stored['updateDate'] as Date).getTime());
-    assert.equal(outcome.version, versionOf('companies', stored));
+    assert.equal(outcome.version, versionOf('companies', stored, TEST_VERSION_KEY));
     assert.equal(await writerOn().currentVersion('companies', outcome.id), outcome.version);
     await assertMirrored('companies', outcome.id);
     assert.deepEqual(await groupPlaces(), SENTINEL);
@@ -152,7 +153,7 @@ describe('companies and places writer: creation', () => {
     assert.ok(storages[0]!['id'] instanceof ObjectId);
     assert.deepEqual([storages[0]!['name'], storages[0]!['cash'], storages[0]!['ecommerce']], ['Magazzino', true, false]);
     assert.equal(Object.keys((stored['openingTime'] as { weekGeneric: object }).weekGeneric).length, 7);
-    assert.equal(outcome.version, versionOf('places', stored));
+    assert.equal(outcome.version, versionOf('places', stored, TEST_VERSION_KEY));
     await assertMirrored('places', outcome.id);
     await assertGroupPlaces();
     assert.equal(((await groupPlaces()) as unknown[]).length, 3);
@@ -183,7 +184,7 @@ describe('companies and places writer: creation', () => {
 
   it('uses the system clock when no clock is given', async () => {
     const before = Date.now();
-    const outcome = written(await companiesPlacesWriter(principal, access, ctx.databases).createCompany({ name: 'Clock' }));
+    const outcome = written(await companiesPlacesWriter(principal, access, ctx.databases, { versionKey: TEST_VERSION_KEY }).createCompany({ name: 'Clock' }));
     const stored = must(await original('companies', outcome.id));
     assert.ok((stored['updateDate'] as Date).getTime() >= before - 1000 && (stored['updateDate'] as Date).getTime() <= Date.now() + 1000);
   });
@@ -198,7 +199,7 @@ describe('companies and places writer: update', () => {
     const after = must(await original('companies', C(1)));
     assert.deepEqual(differences(before, after, ['code', 'email', 'updateDate']).sort(), ['code', 'email', 'updateDate']);
     assert.equal(after['code'], 'NEWCODE');
-    assert.equal(outcome.version, versionOf('companies', after));
+    assert.equal(outcome.version, versionOf('companies', after, TEST_VERSION_KEY));
     await assertMirrored('companies', C(1));
     assert.deepEqual(await groupPlaces(), SENTINEL);
   });
@@ -210,7 +211,7 @@ describe('companies and places writer: update', () => {
     const after = must(await original('places', P(1)));
     differences(before, after, ['name', 'timezone', 'expirationDate', 'updateDate']);
     assert.equal(after['name'], 'Renamed');
-    assert.equal(outcome.version, versionOf('places', after));
+    assert.equal(outcome.version, versionOf('places', after, TEST_VERSION_KEY));
     await assertMirrored('places', P(1));
     await assertGroupPlaces();
   });
@@ -239,7 +240,9 @@ describe('companies and places writer: update', () => {
     const before = await snapshot();
     const version = (await writerOn().currentVersion('places', P(1)))!;
     await assert.rejects(() => writerOn().updatePlace(P(1), version, {}), InvalidWriteInputError);
-    await assert.rejects(() => writerOn().updatePlace(P(1), version, { devices: [] } as never), InvalidWriteInputError);
+    await assert.rejects(() => writerOn().updatePlace(P(1), version, { 'devices.0.info': { os: 'x' } } as never), InvalidWriteInputError);
+    await assert.rejects(() => writerOn().updatePlace(P(1), version, { devices: 'x' } as never), InvalidWriteInputError);
+    await assert.rejects(() => writerOn().updatePlace(P(1), version, { devices: [{ id: 'd', name: () => 1 }] } as never), InvalidWriteInputError);
     await assert.rejects(() => writerOn().updatePlace(P(1), version, { trash: true } as never), InvalidWriteInputError);
     await assert.rejects(() => writerOn().updateCompany(C(1), version, { settings: {} } as never), InvalidWriteInputError);
     assert.deepEqual(await snapshot(), before);
@@ -420,14 +423,45 @@ describe('companies and places writer: optimistic concurrency', () => {
     assert.deepEqual(await snapshot(), before);
   });
 
-  it('does not conflict on a POS write on devices or rooms done after the version was read, and still writes only its own fields', async () => {
+  it('does not conflict on a POS write on the info or the status of a device done after the version was read, and still writes only its own fields', async () => {
     const version = (await writerOn().currentVersion('places', P(1)))!;
-    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { 'devices.0.info.os': 'changed by the POS', 'rooms.0.name': 'Sala 2', updateDate: new Date() } });
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { 'devices.0.info.os': 'changed by the POS', 'devices.0.status.busy': true, 'devices.0.posKey': 1, updateDate: new Date() } });
     assert.equal(await writerOn().currentVersion('places', P(1)), version);
     written(await writerOn().updatePlace(P(1), version, { name: 'not late' }));
     const stored = must(await original('places', P(1)));
-    assert.deepEqual([stored['name'], ((stored['devices'] as Document[])[0]!['info'] as Document)['os'], (stored['rooms'] as Document[])[0]!['name']], ['not late', 'changed by the POS', 'Sala 2']);
+    const device = (stored['devices'] as Document[])[0]!;
+    assert.deepEqual([stored['name'], (device['info'] as Document)['os'], (device['status'] as Document)['busy'], JSON.stringify(device['posKey'])], ['not late', 'changed by the POS', true, '1']);
     await assertMirrored('places', P(1));
+  });
+
+  it('decides in the transaction whether a device is busy: a status the POS wrote after the service read is not missed, and nothing is written', async () => {
+    const saved = (must(await original('places', P(1)))['devices']) as Document[];
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { devices: [{ id: 'd1', name: 'A', status: { busy: true, userName: 'u' } }, { id: 'd2', name: 'B' }] } });
+    const version = (await writerOn().currentVersion('places', P(1)))!;
+    const before = await snapshot();
+    assert.deepEqual(await writerOn().updatePlace(P(1), version, { devices: [{ id: 'd2' }] }), { outcome: 'busy' });
+    assert.deepEqual(await snapshot(), before);
+    written(await writerOn().updatePlace(P(1), version, { devices: [{ id: 'd1' }] }));
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { devices: saved } });
+  });
+
+  it('refuses to write a list that has an item without an id, whatever the caller did, and writes nothing', async () => {
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $push: { devices: { name: 'no id' } } as never } );
+    const version = (await writerOn().currentVersion('places', P(1)))!;
+    const before = await snapshot();
+    await assert.rejects(() => writerOn().updatePlace(P(1), version, { devices: [{ id: 'device1' }] }), MalformedDocumentError);
+    assert.deepEqual(await snapshot(), before);
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $pull: { devices: { name: 'no id' } } as never });
+  });
+
+  it('conflicts on a POS write on the rooms, which are hashed whole, and on a legacy write to what a device owns', async () => {
+    const version = (await writerOn().currentVersion('places', P(1)))!;
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { 'rooms.0.view': { subtables: { 'room1-1': { x: 1 } } } } });
+    assert.notEqual(await writerOn().currentVersion('places', P(1)), version);
+    assert.deepEqual(await writerOn().updatePlace(P(1), version, { name: 'late' }), { outcome: 'conflict' });
+    const fresh = (await writerOn().currentVersion('places', P(1)))!;
+    await groupDb().collection('places').updateOne({ _id: P(1) }, { $set: { 'devices.0.name': 'renamed by the legacy' } });
+    assert.deepEqual(await writerOn().updatePlace(P(1), fresh, { name: 'late' }), { outcome: 'conflict' });
   });
 
   it('detects a legacy change to an owned field done after the version was read', async () => {
@@ -547,8 +581,8 @@ describe('companies and places writer: all or nothing', () => {
 
   it('fails and rolls back above the largest list of places it recalculates', async () => {
     assert.equal(MAX_GROUP_PLACES, 10_000);
-    await assertRolledBack(() => companiesPlacesWriter(principal, access, ctx.databases, { now: clock, maxGroupPlaces: 2 }).createPlace({ name: 'x', companyId: C(1) }), /Too many places/);
-    written(await companiesPlacesWriter(principal, access, ctx.databases, { now: clock, maxGroupPlaces: 3 }).createPlace({ name: 'x', companyId: C(1) }));
+    await assertRolledBack(() => companiesPlacesWriter(principal, access, ctx.databases, { versionKey: TEST_VERSION_KEY, now: clock, maxGroupPlaces: 2 }).createPlace({ name: 'x', companyId: C(1) }), /Too many places/);
+    written(await companiesPlacesWriter(principal, access, ctx.databases, { versionKey: TEST_VERSION_KEY, now: clock, maxGroupPlaces: 3 }).createPlace({ name: 'x', companyId: C(1) }));
   });
 });
 
@@ -565,15 +599,15 @@ describe('companies and places writer: guards', () => {
   });
 
   it('is opened only with a verified access of the same principal', async () => {
-    assert.throws(() => companiesPlacesWriter(principal, { ...access }, ctx.databases), /verified group access/);
-    assert.throws(() => companiesPlacesWriter(principalOf('SA', { groupId: G2 }), access, ctx.databases), /verified group access/);
+    assert.throws(() => companiesPlacesWriter(principal, { ...access }, ctx.databases, { versionKey: TEST_VERSION_KEY }), /verified group access/);
+    assert.throws(() => companiesPlacesWriter(principalOf('SA', { groupId: G2 }), access, ctx.databases, { versionKey: TEST_VERSION_KEY }), /verified group access/);
   });
 
   it('does not see, change, trash or delete the documents of another group, and refuses its companies', async () => {
     const before = await snapshot();
     assert.equal(await writerOn().currentVersion('places', P(3)), null);
     assert.equal(await writerOn().currentVersion('companies', C(3)), null);
-    const foreign = versionOf('places', must(await original('places', P(3), 2)));
+    const foreign = versionOf('places', must(await original('places', P(3), 2)), TEST_VERSION_KEY);
     assert.deepEqual(await writerOn().updatePlace(P(3), foreign, { name: 'x' }), { outcome: 'notFound' });
     assert.deepEqual(await writerOn().trash('places', P(3), foreign), { outcome: 'notFound' });
     assert.deepEqual(await writerOn().restore('places', P(3), foreign), { outcome: 'notFound' });
@@ -626,7 +660,7 @@ describe('companies and places writer: groups on another cluster', () => {
     const clusters = await openTestClusters();
     try {
       const remote = (await accessFor(principal, G1, 'cluster1'))!;
-      const writer = companiesPlacesWriter(principal, remote, clusters.databases, { now: clock });
+      const writer = companiesPlacesWriter(principal, remote, clusters.databases, { versionKey: TEST_VERSION_KEY, now: clock });
       const checks: Array<() => Promise<unknown>> = [
         () => writer.createCompany({ name: 'x' }),
         () => writer.createPlace({ name: 'x', companyId: C(1) }),
@@ -674,7 +708,7 @@ describe('companies and places writer: the blocks of a place', () => {
     assert.equal(Number((after['openingTime'] as Document)['unknownOpening']), 1);
     assert.deepEqual(((after['delivery'] as Document)['minAmount'] as Document)['EUR'], (before['delivery'] as Document)['minAmount'] !== undefined ? ((before['delivery'] as Document)['minAmount'] as Document)['EUR'] : undefined);
     assert.ok(((after['delivery'] as Document)['step']) instanceof Double);
-    assert.equal(outcome.version, versionOf('places', after));
+    assert.equal(outcome.version, versionOf('places', after, TEST_VERSION_KEY));
     await assertMirrored('places', P(1));
     await assertGroupPlaces();
   });
@@ -763,12 +797,11 @@ describe('companies and places writer: the blocks of a place', () => {
       ['openingTime.daySpecial', { '2026-01-01': { active: true, values: [] } }],
       ['openingTime.daySpecial', [] as never],
       ['openingTime.daySpecial', Object.fromEntries(Array.from({ length: 401 }, (_unused, index) => [new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10), { closed: true, values: [] }]))],
-      ['platform.sentry', 'yes'],
       ['plan', 5],
     ] as const) {
       await assert.rejects(() => writerOn().updatePlace(P(1), version, { [field]: value } as never), invalid(field), field);
     }
-    for (const field of ['platform', 'platform.ip', 'general', 'general.unknownKey', 'openingTime', 'delivery', 'delivery.unknownKey', 'roomsSettings', 'roomsSettings.reservation', 'integrations.dojo.apiKey', 'devices.0.info', 'server.ip', 'connectorAddress']) {
+    for (const field of ['platform', 'platform.ip', 'general', 'general.unknownKey', 'openingTime', 'delivery', 'delivery.unknownKey', 'roomsSettings', 'roomsSettings.reservation', 'integrations', 'integrations.dojo', 'integrations.floodOrders', 'integrations.tsh.tshCategories', 'devices.0.info', 'server']) {
       await assert.rejects(() => writerOn().updatePlace(P(1), version, { [field]: {} } as never), invalid(field), field);
     }
     // A date key that is not a date is kept as it is, and an operator is not.
@@ -803,7 +836,7 @@ describe('companies and places writer: duplicating a place', () => {
     for (const key of ['devices', 'rooms', 'storages', 'integrations', 'server', 'general', 'futureBlock']) {
       assert.ok(sameDocument({ v: source[key] }, { v: copy[key] }), key);
     }
-    assert.equal(outcome.version, versionOf('places', copy));
+    assert.equal(outcome.version, versionOf('places', copy, TEST_VERSION_KEY));
     await assertMirrored('places', outcome.id);
     await assertGroupPlaces();
     assert.equal(((await groupPlaces()) as unknown[]).length, 3);
@@ -857,7 +890,7 @@ describe('companies and places writer: duplicating a place', () => {
 describe('companies and places writer: the perimeter of every write', () => {
   const writerFor = async (companyIds: ObjectId[]): Promise<CompaniesPlacesWriter> => {
     const ca = principalOf('CA', { groupId: G1, companyIds });
-    return companiesPlacesWriter(ca, (await accessFor(ca, G1))!, ctx.databases, { now: clock });
+    return companiesPlacesWriter(ca, (await accessFor(ca, G1))!, ctx.databases, { versionKey: TEST_VERSION_KEY, now: clock });
   };
 
   it('does not write, trash, restore, delete or duplicate a document outside the perimeter of the caller: it does not exist for him', async () => {

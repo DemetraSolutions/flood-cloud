@@ -357,21 +357,28 @@ describe('routes', () => {
 
     it.each([
       ['', 'fc-place-general'],
-      ['/license', 'fc-place-license'],
-      ['/opening-hours', 'fc-place-hours'],
-      ['/cash', 'fc-place-cash'],
-      ['/printing', 'fc-place-printing'],
-      ['/payments', 'fc-place-payments'],
-      ['/tables', 'fc-place-tables'],
-      ['/reservations', 'fc-place-reservations'],
-      ['/delivery', 'fc-place-delivery'],
-      ['/self-ordering', 'fc-place-self-ordering'],
-      ['/kiosk', 'fc-place-kiosk'],
-      ['/appointments', 'fc-place-scalar-tab'],
-      ['/external-display', 'fc-place-scalar-tab'],
-      ['/fidelity', 'fc-place-scalar-tab'],
-      ['/tobacco', 'fc-place-scalar-tab'],
+      ['/devices', 'fc-place-devices'],
+      ['/print-stations', 'fc-place-print-stations'],
+      ['/rooms', 'fc-place-rooms'],
+      ['/storages', 'fc-place-storages'],
+      ['/hours', 'fc-place-hours'],
       ['/media', 'fc-place-media'],
+      ['/integrations', 'fc-place-integrations'],
+      ['/settings', 'fc-place-settings'],
+      ['/settings/dealer', 'fc-place-dealer'],
+      ['/settings/general', 'fc-place-cash'],
+      ['/settings/rooms-settings', 'fc-place-tables'],
+      ['/settings/delivery', 'fc-place-delivery'],
+      ['/settings/reservations', 'fc-place-reservations'],
+      ['/settings/self-ordering', 'fc-place-self-ordering'],
+      ['/settings/external-display', 'fc-place-scalar-tab'],
+      ['/settings/kiosk', 'fc-place-kiosk'],
+      ['/settings/appointments', 'fc-place-scalar-tab'],
+      ['/settings/fidelity', 'fc-place-scalar-tab'],
+      ['/settings/tobacco', 'fc-place-scalar-tab'],
+      ['/settings/print', 'fc-place-printing'],
+      ['/settings/other', 'fc-place-other'],
+      ['/settings/payments', 'fc-place-payments'],
     ])('lazy-loads the tab %s of a place', async (path, selector) => {
       const harness = await open(`/groups/${GROUP}/places/${PLACE}${path}`, ['places:read']);
       TestBed.inject(HttpTestingController)
@@ -384,32 +391,10 @@ describe('routes', () => {
       expect((harness.routeNativeElement as HTMLElement).querySelector(selector)).not.toBeNull();
     });
 
-    it('lazy-loads the store key tab with storeKeys:read', async () => {
-      const harness = await open(`/groups/${GROUP}/places/${PLACE}/store-key`, [
-        'places:read',
-        'storeKeys:read',
-      ]);
-      TestBed.inject(HttpTestingController)
-        .expectOne((r) => r.url.endsWith(`/v1/groups/${GROUP}/places/${PLACE}`))
-        .flush({ data: fakePlace() });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      harness.detectChanges();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      harness.detectChanges();
-      expect(
-        (harness.routeNativeElement as HTMLElement).querySelector('fc-place-store-key'),
-      ).not.toBeNull();
-    });
-
-    it('protects the store key tab without storeKeys:read', async () => {
-      await open(`/groups/${GROUP}/places/${PLACE}/store-key`, ['places:read']);
-      expect(location()).toBe('/forbidden');
-    });
-
     it.each([
       [`/groups/${GROUP}/places`, []],
       [`/groups/${GROUP}/places/${PLACE}`, []],
-      [`/groups/${GROUP}/places/${PLACE}/license`, []],
+      [`/groups/${GROUP}/places/${PLACE}/settings/general`, []],
       [`/groups/${GROUP}/places/new`, ['places:read']],
       [`/groups/${GROUP}/places/new`, ['places:create']],
     ])('protects %s', async (url, permissions) => {

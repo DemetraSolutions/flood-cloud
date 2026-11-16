@@ -10,6 +10,7 @@ import {
   groupLabelKey,
   groupsOf,
   isVisible,
+  partOf,
   optionLabelKey,
   setAt,
   snake,
@@ -17,7 +18,8 @@ import {
   toFieldValue,
   valueAt,
 } from './place-fields';
-import { MEDIA_SLOTS, PLACE_SECTIONS, PLANS, SETTINGS_BLOCKS } from './place.types';
+import { MEDIA_SLOTS, PLANS, SETTINGS_BLOCKS } from './place.types';
+import { PLACE_TABS, SETTINGS_ENTRIES, SETTINGS_MENU_GROUPS } from './place-nav';
 import { KIOSK_TEXTS } from './place-model';
 
 const def = (type: FieldType, extra: Partial<FieldDef> = {}): FieldDef => ({
@@ -50,8 +52,8 @@ describe('keys of the dictionary', () => {
   });
 
   it('lists the groups of a block in order, without repeats', () => {
-    expect(groupsOf('payments')).toEqual(['DEFAULTS']);
-    expect(groupsOf('cashSettings').slice(0, 3)).toEqual(['LOGIN', 'CART', 'SHIFTS']);
+    expect(groupsOf('cashSettings')).toEqual(['GENERAL', 'OTHER']);
+    expect(groupsOf('dealerSettings')).toEqual(['TRACKING', 'SERVER', 'CONNECTOR']);
     expect(new Set(groupsOf('printing')).size).toBe(groupsOf('printing').length);
   });
 
@@ -73,13 +75,47 @@ describe('isVisible', () => {
     const gated = def('flag', { needs: 'rooms' });
     expect(isVisible(gated, { privileged: false, feature: feature(['rooms']) })).toBe(true);
     expect(isVisible(gated, { privileged: false, feature: feature([]) })).toBe(false);
-    expect(isVisible(gated, { privileged: true, feature: feature([]) })).toBe(false);
   });
 
-  it('shows a key marked for privileged users to them without the feature', () => {
-    const gated = def('flag', { needs: 'warehouse', orPrivileged: true });
+  it('always shows a gated key to platform administrators and dealers', () => {
+    const gated = def('flag', { needs: 'warehouse' });
     expect(isVisible(gated, { privileged: true, feature: feature([]) })).toBe(true);
     expect(isVisible(gated, { privileged: false, feature: feature([]) })).toBe(false);
+  });
+});
+
+describe('partOf', () => {
+  it('gives the title of the part of a printing group', () => {
+    expect(partOf('printing', 'RECEIPT_GENERAL')).toBe('PLACES.PART.PRINT_RECEIPT');
+    expect(partOf('printing', 'PREBILLING_LAYOUT')).toBe('PLACES.PART.PRINT_PREBILLING');
+    expect(partOf('printing', 'ORDERING_TEXTS')).toBe('PLACES.PART.PRINT_ORDERING');
+  });
+
+  it('gives none for the other blocks', () => {
+    expect(partOf('cashSettings', 'GENERAL')).toBeNull();
+  });
+});
+
+describe('FIELDS', () => {
+  const all = SETTINGS_BLOCKS.flatMap((block) => FIELDS[block]);
+
+  it('has unique keys in every block', () => {
+    for (const block of SETTINGS_BLOCKS) {
+      const keys = FIELDS[block].map((definition) => definition.key);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+  });
+
+  it('marks the payment credentials that only privileged users change', () => {
+    const only = all.filter((definition) => definition.privilegedOnly);
+    expect(only.length).toBeGreaterThan(0);
+    expect(only.every((definition) => definition.type === 'secret')).toBe(true);
+  });
+
+  it('has the dictionary text of every empty choice that has its own', () => {
+    for (const definition of all.filter((candidate) => candidate.noneKey)) {
+      expect(definition.type).toBe('select');
+    }
   });
 });
 
@@ -136,6 +172,7 @@ describe('toFieldValue', () => {
     'template',
     'company',
     'place',
+    'secret',
   ] as const)('reads a %s as the string or empty', (type) => {
     expect(toFieldValue(def(type), 'abc')).toBe('abc');
     expect(toFieldValue(def(type), 4)).toBe('');
@@ -184,6 +221,7 @@ describe('toBodyValue', () => {
     'template',
     'company',
     'place',
+    'secret',
   ] as const)('sends a %s as text or null when empty', (type) => {
     expect(toBodyValue(def(type), 'abc')).toBe('abc');
     expect(toBodyValue(def(type), '')).toBeNull();
@@ -232,7 +270,9 @@ describe('the dictionary', () => {
   it('has the names of the sections, plans, days, kiosk texts and image slots', () => {
     expect(
       missing([
-        ...PLACE_SECTIONS.map((section) => `PLACES.SECTION.${section.key}`),
+        ...PLACE_TABS.map((tab) => `PLACES.SECTION.${tab.key}`),
+        ...SETTINGS_ENTRIES.map((entry) => `PLACES.MENU.${entry.key}`),
+        ...SETTINGS_MENU_GROUPS.map((group) => `PLACES.MENU_GROUP.${group}`),
         ...PLANS.map((plan) => `PLACES.PLAN.${plan.toUpperCase().replace('-', '_')}`),
         ...[0, 1, 2, 3, 4, 5, 6].map((day) => `PLACES.DAY.${day}`),
         ...KIOSK_TEXTS.map((name) => `PLACES.KIOSK.TEXT.${snake(name)}`),

@@ -10,6 +10,8 @@ import type { CatalogsRepository } from '../groups/catalogs/catalogs.repository.
 import { currencies } from '../groups/catalogs/currencies.ts';
 import { newElementId } from '../groups/catalogs/kit.ts';
 import { priceLists } from '../groups/catalogs/price-lists.ts';
+import { productFavorites } from '../groups/catalogs/product-favorites.ts';
+import { taxes } from '../groups/catalogs/taxes.ts';
 import { COMPANIES_LIST } from './companies.list.ts';
 import { COMPANY_SUMMARY_PROJECTION } from './company.mapper.ts';
 
@@ -20,10 +22,12 @@ export interface Country {
   readonly areas: ReadonlySet<string> | null;
 }
 
-/** What a group offers to a company: the codes of its currencies and the ids of its enabled price lists. */
+/** What a group offers to its companies and places: the codes of its currencies, the ids of its enabled price lists and of its tax rates, and its lists of favorite products (id and name). */
 export interface GroupLists {
   readonly currencies: ReadonlySet<string>;
   readonly priceLists: ReadonlySet<string>;
+  readonly taxes: ReadonlySet<string>;
+  readonly favorites: ReadonlyMap<string, string>;
 }
 
 /** The reads of the company routes that are not the company itself: the compact list (from the copies), the countries, the dealers and the lists of the group. */
@@ -57,7 +61,7 @@ export interface CompaniesRepository {
    */
   listDealers(only: ObjectId | null): Promise<ReadonlyArray<{ readonly id: string; readonly label: string }>>;
   /**
-   * The currencies and the enabled price lists of a group, read through the catalogs of the group document.
+   * The currencies, the enabled price lists, the tax rates and the favorites lists of a group, read through the catalogs of the group document.
    *
    * @param groupId Id of the group (from a verified access).
    * @returns The lists, or `null` when the group does not exist.
@@ -123,7 +127,7 @@ export function createCompaniesRepository(databases: Databases, catalogs: Pick<C
     },
 
     groupLists: async (groupId) => {
-      const stored = await catalogs.read(groupId, ['currencies', 'priceLists']);
+      const stored = await catalogs.read(groupId, ['currencies', 'priceLists', 'taxes', 'productsFavorites']);
       if (stored === null) {
         return null;
       }
@@ -131,6 +135,8 @@ export function createCompaniesRepository(databases: Databases, catalogs: Pick<C
       return {
         currencies: new Set(currencies.list(state, []).map((currency) => currency.code)),
         priceLists: new Set(priceLists.list(state, []).filter((list) => list.enabled).map((list) => list.id)),
+        taxes: new Set(taxes.list(state, []).map((tax) => tax.id)),
+        favorites: new Map(productFavorites.list(state, []).map((favorite) => [favorite.id, favorite.name])),
       };
     },
   };

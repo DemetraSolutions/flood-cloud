@@ -69,7 +69,12 @@
   </div>
   @if (state.canWrite()) {
     <div>
-      <button fc-button variant="secondary" [disabled]="items().length >= max()" (click)="add.emit()">
+      <button
+        fc-button
+        variant="secondary"
+        [disabled]="items().length >= max()"
+        (click)="add.emit()"
+      >
         {{ addLabel() }}
       </button>
     </div>

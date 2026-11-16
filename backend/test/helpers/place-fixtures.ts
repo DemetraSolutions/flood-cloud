@@ -61,7 +61,7 @@ export function fullLegacyPlace(n: number, groupId: ObjectId, companyId: ObjectI
       { id: 'device2', type: 'handheld', name: 'Palmare', info: { appVersion: '1.2.0' } },
     ],
     rooms: [{ id: 'room1', name: 'Sala', tables: [{ id: 't1', name: '1', seats: new Int32(4) }, { id: 't2', name: '2', seats: new Int32(2) }], __index: 0 }],
-    storages: [{ id: new ObjectId(), name: 'Deposito 1', cash: true, ecommerce: false }],
+    storages: [{ id: fixtureId('storage', n), name: 'Deposito 1', cash: true, ecommerce: false }],
     printStations: [{ id: 'ps1', name: 'Cucina', driver: 'epson', host: '10.0.0.6', pulseNumber: new Int32(1) }],
     productionCenter: [{ id: 'pc1', name: 'Forno', capacity: new Int32(5) }],
     openingTime: { weekGeneric: openWeek(), daySpecial: { '2026-12-25': { closed: true, values: [] }, legacyOddKey: { keep: true } }, unknownOpening: 1 },

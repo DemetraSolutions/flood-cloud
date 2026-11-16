@@ -66,7 +66,11 @@ describe('the requests of a store key', () => {
     assert.equal(reply.body.data.id, hex(own()));
     assert.match(reply.headers.get('etag') ?? '', /^"[A-Za-z0-9_-]+"$/);
     const asUser = await call(world.office.cluster.psa, 'GET', placeUrl(own()));
-    assert.deepEqual(reply.body, asUser.body, 'the same representation the backoffice sees');
+    // The same representation the backoffice sees, but for the dealer settings (the address of the server of the store and of the connector), which only a PSA or a dealer gets.
+    const { dealerSettings, ...visible } = asUser.body.data;
+    assert.ok(dealerSettings !== undefined);
+    assert.deepEqual(reply.body.data, visible);
+    assert.equal(reply.body.data.dealerSettings, undefined);
     assert.ok(!JSON.stringify(reply.body).includes('fixture-integration-secret'));
   });
 
@@ -97,6 +101,9 @@ describe('the requests of a store key', () => {
       ['PATCH', placeUrl(own()), { name: 'x' }],
       ['POST', `${placeUrl(own())}/trash`],
       ['DELETE', placeUrl(own())],
+      ['PUT', `${placeUrl(own())}/settings/dealer`, { sentry: true, serverIp: '1.1.1.1', connectorAddress: '' }],
+      ['PUT', `${placeUrl(own())}/integrations`, {}],
+      ['PUT', `${placeUrl(own())}/devices`, { items: [] }],
       ['GET', world.keyPath(0, own())],
       ['POST', world.keyPath(0, own(), '/activation-codes')],
       ['DELETE', world.keyPath(0, own())],

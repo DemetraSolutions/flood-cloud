@@ -3,7 +3,6 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { groupsOf } from './place-fields';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { RowColumn, RowsEditor } from './rows-editor';
 
@@ -17,7 +16,7 @@ export const MAX_TIME_BLOCKS = 50;
  */
 @Component({
   selector: 'fc-place-reservations',
-  imports: [PlaceFieldsView, PlaceSave, RowsEditor, TPipe],
+  imports: [PlaceFieldsView, RowsEditor, TPipe],
   templateUrl: './place-reservations.html',
   styleUrl: './place-section.css',
 })
@@ -27,8 +26,10 @@ export class PlaceReservations {
 
   protected readonly rows = this.state.form.reservations.timeBlocks;
   protected readonly max = MAX_TIME_BLOCKS;
-  protected readonly general = ['GENERAL'];
-  protected readonly others = groupsOf('reservations').filter((group) => group !== 'GENERAL');
+  protected readonly general = ['MASTER', 'GENERAL'];
+  protected readonly others = groupsOf('reservations').filter(
+    (group) => !this.general.includes(group),
+  );
   protected readonly columns = computed<RowColumn[]>(() => [
     { key: 'weekDays', type: 'days', label: this.i18n.t('PLACES.RESERVATIONS.WEEK_DAYS') },
     { key: 'start', type: 'time', label: this.i18n.t('PLACES.RESERVATIONS.START') },

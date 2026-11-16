@@ -1,4 +1,4 @@
-import { describe, it, mock } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { connect, createServer } from 'node:net';
@@ -10,7 +10,10 @@ import type { ProcessLike, RunningServer } from '../../src/server.ts';
 import { closeClusters } from '../../src/db/clusters.ts';
 import { freePort } from '../helpers/app.ts';
 import { credentialsFile, testKeyPair } from '../helpers/fake-gcs.ts';
-import { mongoEnv, singleCluster, testMongoUri } from '../helpers/mongo.ts';
+import { dropMongoEnvDatabases, mongoEnv, singleCluster, testMongoUri } from '../helpers/mongo.ts';
+
+// The servers started by these tests create databases under the mongoEnv prefixes: drop them at the end.
+after(dropMongoEnvDatabases);
 
 type Listener = (...args: unknown[]) => void;
 

@@ -62,6 +62,10 @@ function wholeSchema(name: WholeName): Schema<unknown> {
       return array(object({ _id: id(), position: wholeInt() }), { max: MAX_SETTING_ITEMS });
     case 'languageTexts':
       return record(string({ max: 200 }), { max: MAX_LANGUAGES, key: /^[a-z]{2}$/ });
+    case 'tshCategoriesMap':
+      return record(string({ max: 64, pattern: ID }), { max: MAX_SETTING_ITEMS, key: ID });
+    case 'tshCategories':
+      return array(object({ id: string({ max: 64 }), name: string({ max: 200 }) }), { max: MAX_SETTING_ITEMS });
   }
 }
 
@@ -72,10 +76,18 @@ function kindSchema(field: SettingField): Schema<unknown> {
     case 'flag':
       return boolean();
     case 'text':
+      // The form (`pattern`) is checked by the service where the value changes, so a historical value sent back unchanged is accepted.
       return emptyAsNull(nullable(string({ max: kind.max, trim: true })));
     case 'plain':
-      // The plain texts are the media names: a simple file name, or an `http(s)` URL.
-      return field.legacy.includes('externalUrl') ? urlText() : fileNameText();
+      // The plain texts are the media names (a simple file name, or an `http(s)` URL) and the address of the Connector (a text whose form the service checks where it changes).
+      return kind.url === true ? urlText() : kind.pattern !== undefined ? string({ max: kind.max, trim: true }) : fileNameText();
+    case 'secret':
+      // A credential: absent keeps it, `null` or `''` clears it, a text sets it (in the form the provider gives it).
+      // Not trimmed: a credential is never changed silently, one with spaces at the ends is refused by the pattern.
+      return optional(emptyAsNull(nullable(string({ max: kind.max, ...(kind.pattern === undefined ? {} : { pattern: kind.pattern }) }))));
+    case 'secretFlag':
+      // The flag a response carries: a request may send it back, it is ignored.
+      return optional(boolean());
     case 'enum':
       return kind.def === null ? emptyAsNull(nullable(enumOf(kind.values))) : enumOf(kind.values);
     case 'font':
@@ -117,7 +129,12 @@ function treeOf(fields: readonly SettingField[], strip: number): Tree {
 }
 
 function schemaOfTree(tree: Tree, part: Part): Schema<unknown> {
-  return object(Object.fromEntries(Object.entries(tree).map(([key, node]) => [key, part('legacy' in node ? kindSchema(node as SettingField) : schemaOfTree(node as Tree, part))])));
+  return object(Object.fromEntries(Object.entries(tree).map(([key, node]) => [key, part('legacy' in node ? fieldSchema(node as SettingField) : schemaOfTree(node as Tree, part))])));
+}
+
+/** A read-only key (the list of the provider's categories) is accepted and ignored, so what a `GET` returns can be sent back. */
+function fieldSchema(field: SettingField): Schema<unknown> {
+  return field.readOnly === true ? optional(kindSchema(field)) : kindSchema(field);
 }
 
 /**
@@ -147,4 +164,6 @@ export const SETTING_SEGMENTS: Readonly<Record<string, string>> = Object.freeze(
   fidelity: 'settings/fidelity',
   tobacco: 'settings/tobacco',
   media: 'media',
+  integrations: 'integrations',
+  dealerSettings: 'settings/dealer',
 });

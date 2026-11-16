@@ -3,6 +3,7 @@ import type { Document } from 'mongodb';
 import { WEEK_DAYS } from '../../shared/legacy-write/place-paths.ts';
 import { flag, instant, isPlain, nonEmptyOrNull, optionalText, readLeaves, status, stringOrNull, text } from '../companies/company.mapper.ts';
 import type { Codec, Leaf } from '../companies/company.mapper.ts';
+import { LIST_LEAVES } from './place-lists.mapper.ts';
 import { SETTING_LEAVES } from './place-settings.mapper.ts';
 import type { Place, PlacePriceList, PlaceSummary, SpecialDays, WeekHours } from './place.types.ts';
 
@@ -97,20 +98,21 @@ export const PLACE_LEAVES: readonly Leaf[] = Object.freeze([
   { domain: 'license.plan', legacy: 'plan', codec: text },
   { domain: 'license.expirationDate', legacy: 'expirationDate', codec: instant },
   { domain: 'license.status', legacy: 'status', codec: status },
-  { domain: 'license.sentry', legacy: 'platform.sentry', codec: flag },
   { domain: 'openingHours.timezone', legacy: 'timezone', codec: text },
   { domain: 'openingHours.week', legacy: 'openingTime.weekGeneric', codec: week },
   { domain: 'openingHours.special', legacy: 'openingTime.daySpecial', codec: special },
   { domain: 'openingHours.deliveryTime.week', legacy: 'delivery.time.weekGeneric', codec: week },
   { domain: 'openingHours.deliveryTime.special', legacy: 'delivery.time.daySpecial', codec: special },
-  // The settings blocks (step 7B), from the table of `place-settings.ts`.
+  // The settings blocks (step 7B), the integrations and the dealer settings (step 7F), from the table of `place-settings.ts`.
   ...SETTING_LEAVES,
+  // The lists of items (step 7F): the devices, the print stations and production centers, the rooms and the storages.
+  ...LIST_LEAVES,
 ]);
 
 /**
  * Maps a stored place to its representation: every key by its codec, so a value that is missing or has the wrong type is `null` (or the neutral value of its kind: `false`, `[]`, a
  * closed week) and the read never fails, not even on the null registry data the legacy leaves on a place it trashed. Keys the backend does not know, and everything that is not
- * in the representation (the integrations, the devices, the rooms, the storages, the address of the store server), are not in the result.
+ * in the representation (the `info` and `status` of a device, the `subtables` of a room, a credential, whatever a later release adds), are not in the result.
  *
  * @param document The place as stored, read with the exact types (`Int32` and `Double` wrappers are tolerated).
  * @param groupId The group the place was read from (the verified one, not the stored `groupId`).

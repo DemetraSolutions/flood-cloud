@@ -2,7 +2,6 @@ import { Component, computed, inject } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { RowColumn, RowsEditor } from './rows-editor';
 
@@ -15,7 +14,7 @@ export const MAX_TIP_VALUES = 20;
  */
 @Component({
   selector: 'fc-place-tables',
-  imports: [PlaceFieldsView, PlaceSave, RowsEditor, TPipe],
+  imports: [PlaceFieldsView, RowsEditor, TPipe],
   templateUrl: './place-tables.html',
   styleUrl: './place-section.css',
 })

@@ -34,7 +34,7 @@ describe('place settings: the table of keys against the template of a new place'
     for (const field of SETTING_FIELDS) {
       assert.notEqual(valueAt(document, field.legacy), undefined, field.legacy);
     }
-    const roots = ['general', 'advancedReport', 'receipt', 'prebilling', 'ordering', 'roomsSettings', 'payments', 'paymentTypes', 'deliveryTakeAway', 'delivery', 'selfOrdering', 'kiosk', 'appointment', 'externalDisplay', 'fidelity', 'tgm', 'medias'];
+    const roots = ['general', 'advancedReport', 'receipt', 'prebilling', 'ordering', 'roomsSettings', 'payments', 'paymentTypes', 'deliveryTakeAway', 'delivery', 'selfOrdering', 'kiosk', 'appointment', 'externalDisplay', 'fidelity', 'tgm', 'medias', 'integrations', 'server', 'connectorAddress'];
     const covered = (path: string): boolean => owned.has(path) || NOT_SETTINGS.some((skip) => path === skip || path.startsWith(`${skip}.`)) || [...owned].some((own) => path.startsWith(`${own}.`));
     for (const root of roots) {
       for (const path of leafPaths(document[root], root, wholes)) {
@@ -45,7 +45,8 @@ describe('place settings: the table of keys against the template of a new place'
 
   it('reads the default of the template as the default of the form and writes it back as the same stored value (the numbers of the same BSON type)', () => {
     const document = template();
-    for (const field of SETTING_FIELDS) {
+    // A credential is never read (its flag is) and a read-only key is never written: they have no round trip.
+    for (const field of SETTING_FIELDS.filter((one) => one.readOnly !== true && one.kind.t !== 'secret')) {
       const codec = codecOf(field.kind);
       const stored = valueAt(document, field.legacy);
       const domain = codec.read(stored);
@@ -63,13 +64,13 @@ describe('place settings: the table of keys against the template of a new place'
   });
 
   it('checks every key of the table in the write service, the images as descriptors, and lets the deprecated copies through', () => {
-    for (const field of SETTING_FIELDS) {
+    for (const field of SETTING_FIELDS.filter((one) => one.readOnly !== true)) {
       assert.equal(PLACE_FIELD_KINDS[field.legacy], field.kind.t === 'logo' ? 'logoOrNull' : 'setting', field.legacy);
     }
     for (const path of DEPRECATED_ROOMS_PATHS) {
       assert.deepEqual(checkFields(PLACE_FIELD_KINDS, { [path]: true }), { [path]: true });
     }
-    assert.equal(Object.keys(SETTING_BLOCKS).length, 13);
+    assert.equal(Object.keys(SETTING_BLOCKS).length, 15);
   });
 
   it('accepts as a setting the values the codecs write and refuses operators, paths and what is too large or too deep', () => {

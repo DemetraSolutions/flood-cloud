@@ -10,6 +10,7 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 import { PRICE_LIST } from '../helpers/place-fixtures.ts';
 import { startPlacesWorld } from '../helpers/places.ts';
 import type { PlacesWorld } from '../helpers/places.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: PlacesWorld;
@@ -260,7 +261,7 @@ describe('the settings blocks: PUT, PATCH, exact types, keys of other writers', 
       assert.equal(reply.status, 200, JSON.stringify(reply.body));
       const after = await stored(P(100));
       settings.check(after, before);
-      assert.equal(reply.headers.get('etag'), `"${versionOf('places', after)}"`);
+      assert.equal(reply.headers.get('etag'), `"${versionOf('places', after, TEST_VERSION_KEY)}"`);
       assert.ok(sameDocument(expectedCopy(after, world.group(0).groupId), (await world.copyOfPlace(P(100)))!));
       // What the POS and the legacy own is byte for byte what it was.
       for (const key of ['devices', 'rooms', 'storages', 'integrations', 'server', 'connectorAddress', 'futureBlock', 'printStations']) {
@@ -504,7 +505,7 @@ describe('the settings blocks: the rules of each', () => {
     assert.deepEqual(failure(await patch(psa(), P(101), { cashSettings: { operatingTime: '25:00' }, kiosk: { backgroundColor: 'red', titleText: { 'it.x': 'a' } } })), issues(['kiosk.titleText.(key)', 'forbiddenKey']));
     assert.deepEqual(failure(await patch(psa(), P(101), { delivery: { minAmount: { $ne: 1 } }, printing: { receipt: { subtotalFontSize: '9-9' } } })), issues(['delivery.minAmount.(key)', 'forbiddenKey']));
     assert.equal(failure(await patch(psa(), P(101), { tables: { tipValues: Array.from({ length: 30 }, () => ({ type: 'v', value: 1 })) } })).status, 422);
-    assert.equal(failure(await patch(psa(), P(101), { integrations: {} })).status, 422);
+    assert.equal(failure(await patch(psa(), P(101), { integrations: { dojo: { status: 'yes' } } })).status, 422);
   });
 });
 

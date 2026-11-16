@@ -10,6 +10,7 @@ import { insertCopies } from '../helpers/mirror.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { EXACT_TYPES } from '../../src/shared/legacy-write/copy-rule.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: CompaniesWorld;
@@ -132,7 +133,7 @@ describe('GET /v1/groups/{groupId}/companies/{companyId}', () => {
     assert.equal(company.createdAt, '2024-01-15T10:00:00.000Z');
     // The version of the stored document, the one If-Match expects.
     const document = (await world.stored(0, full))!;
-    assert.equal(reply.headers.get('etag'), `"${versionOf('companies', document)}"`);
+    assert.equal(reply.headers.get('etag'), `"${versionOf('companies', document, TEST_VERSION_KEY)}"`);
     const text = JSON.stringify(reply.body);
     for (const unknown of ['unknownEInvoicing', 'unknownGlobal', 'unknownEcommerce', 'unknownSettings', 'unknownMedia', 'futureKey', 'mmThumb', 'fattura_elettronica']) {
       assert.ok(!text.includes(unknown), unknown);
@@ -184,6 +185,6 @@ describe('GET /v1/groups/{groupId}/companies/{companyId}', () => {
   it('shows every company of the group with the document of the group database as the source of its version', async () => {
     const document = (await ctx.databases.group(world.group(0).groupId, 'cluster0').collection('companies').findOne({ _id: full }, { ...EXACT_TYPES }))!;
     const reply = await call(world.office.cluster.psa, 'GET', world.path(0, `/${hex(full)}`));
-    assert.equal(reply.headers.get('etag'), `"${versionOf('companies', document)}"`);
+    assert.equal(reply.headers.get('etag'), `"${versionOf('companies', document, TEST_VERSION_KEY)}"`);
   });
 });

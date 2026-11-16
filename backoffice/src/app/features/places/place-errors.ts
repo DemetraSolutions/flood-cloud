@@ -31,19 +31,23 @@ export function resolvePlaceField(
     .replace(/^delivery\.takeAway\.shippingCosts/, 'delivery.shippingCosts')
     .split('.');
   const definitions = Object.hasOwn(FIELDS, block)
-    ? (FIELDS[block as SettingsBlockName] as readonly { key: string }[])
+    ? (FIELDS[block as SettingsBlockName] as readonly { key: string; type: string }[])
     : undefined;
   if (definitions === undefined) {
     return resolveField(root, field);
   }
   for (let length = rest.length; length > 0; length--) {
     const key = rest.slice(0, length).join('.');
-    if (definitions.some((definition) => definition.key === key)) {
-      const scalars = resolveField(root, `${block}.f`) as unknown as Record<
-        string,
-        FieldTree<unknown>
-      >;
-      return scalars[key];
+    const definition = definitions.find((candidate) => candidate.key === key);
+    if (definition !== undefined) {
+      // A credential is typed in the `value` of its model; the other keys are scalars of the block.
+      const tree = resolveField(
+        root,
+        definition.type === 'secret' ? `${block}.secrets` : `${block}.f`,
+      ) as unknown as Record<string, FieldTree<unknown>>;
+      return definition.type === 'secret'
+        ? (tree[key] as unknown as { value: FieldTree<unknown> }).value
+        : tree[key];
     }
   }
   return resolveField(

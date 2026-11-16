@@ -12,12 +12,13 @@ import {
 
 const f = (key: string) => `PLACES.F.RESERVATIONS.${key}`;
 const col = (key: string, row: number) => `PLACES.RESERVATIONS.${key} ${row}`;
+/** The five email groups: the legend of each and the prefix of its keys. */
 const EMAILS = [
-  'EMAIL_NOTIFICATION',
-  'EMAIL',
-  'EMAIL_CONFIRMED_STATUS',
-  'EMAIL_REFUSED_STATUS',
-  'EMAIL_CHANGE_STATUS',
+  ['EMAIL_NOTIFICATION', 'EMAIL_NOTIFICATION'],
+  ['EMAIL', 'EMAIL'],
+  ['EMAIL_CONFIRMED', 'EMAIL_CONFIRMED_STATUS'],
+  ['EMAIL_REFUSED', 'EMAIL_REFUSED_STATUS'],
+  ['EMAIL_CHANGE', 'EMAIL_CHANGE_STATUS'],
 ];
 
 afterEach(cleanUp);
@@ -33,7 +34,7 @@ function dayBox(root: HTMLElement, row: number, day: number): HTMLInputElement {
 
 describe('PlaceReservations', () => {
   it('shows the stored data', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     expect(isChecked(view, f('STATUS'))).toBe(false);
     expect(view.control(f('STEP')).value).toBe('15');
     expect(view.control(f('STEP')).type).toBe('number');
@@ -49,9 +50,9 @@ describe('PlaceReservations', () => {
   });
 
   it('shows the five email groups with a select of the email templates', async () => {
-    const view = await renderPlace({ path: 'reservations' });
-    for (const name of EMAILS) {
-      expect(view.text()).toContain(`PLACES.G.RESERVATIONS.${name}`);
+    const view = await renderPlace({ path: 'settings/reservations' });
+    for (const [group, name] of EMAILS) {
+      expect(view.text()).toContain(`PLACES.G.RESERVATIONS.${group}`);
       const template = view.control(f(`${name}.TEMPLATE_ID`));
       expect(template.type).toBe('select-one');
       expect(template.value).toBe('');
@@ -65,7 +66,7 @@ describe('PlaceReservations', () => {
   });
 
   it('saves the whole block with the exact PUT', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     await view.toggle(f('STATUS'), true);
     await view.type(f('STEP'), '30');
     await view.type(f('UNTIL_HOURS'), '22:30');
@@ -86,7 +87,7 @@ describe('PlaceReservations', () => {
   });
 
   it('toggles the days of a time block and keeps them sorted', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     dayBox(view.root, 0, 3).checked = true;
     dayBox(view.root, 0, 3).dispatchEvent(new Event('change'));
     await view.view();
@@ -105,7 +106,7 @@ describe('PlaceReservations', () => {
   });
 
   it('adds and removes time blocks', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     await view.click('PLACES.RESERVATIONS.ADD_BLOCK');
     expect(view.root.querySelectorAll('fc-rows-editor .rows > .row')).toHaveLength(2);
     expect(dayBox(view.root, 1, 2).checked).toBe(false);
@@ -135,7 +136,7 @@ describe('PlaceReservations', () => {
   });
 
   it('does not save a time block without start and end', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     await view.click('PLACES.RESERVATIONS.ADD_BLOCK');
     await view.click('COMMON.SAVE');
     expect(view.error(col('START', 2))).toBe('FORM.ISSUE.REQUIRED');
@@ -143,7 +144,7 @@ describe('PlaceReservations', () => {
   });
 
   it('puts the 422 on the time block and on the email fields', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     await view.type(f('STEP'), '45');
     await failPut(view, 'settings/reservations', [
       { field: 'reservations.timeBlocks.0.end', issue: 'incorrect' },
@@ -156,14 +157,18 @@ describe('PlaceReservations', () => {
   });
 
   it('ignores the submit of the form', async () => {
-    const view = await renderPlace({ path: 'reservations' });
+    const view = await renderPlace({ path: 'settings/reservations' });
     await submitTab(view);
     await view.blurAll();
   });
 
   it('is read-only without the permission to update', async () => {
     const place = fakePlace();
-    const view = await renderPlace({ path: 'reservations', permissions: READ_ONLY, place });
+    const view = await renderPlace({
+      path: 'settings/reservations',
+      permissions: READ_ONLY,
+      place,
+    });
     expect(view.control(f('STEP')).disabled).toBe(true);
     expect(dayBox(view.root, 0, 1).disabled).toBe(true);
     expect(view.button('COMMON.SAVE')).toBeUndefined();

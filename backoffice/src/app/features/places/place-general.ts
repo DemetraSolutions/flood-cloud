@@ -7,7 +7,6 @@ import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { Select, SelectOption } from '../../shared/ui/select/select';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { withCurrent } from '../companies/company-options';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 
 /** A price list of the group as the price list controls show it: with the row of the place that enables it. */
@@ -19,14 +18,15 @@ interface PriceListEntry {
 }
 
 /**
- * General tab of the place: the company, the registry data, the address, the contact, the price
- * lists the place sells with (and the all-you-can-eat codes when the group has the restaurant
- * module) and the invoice series of the company. On the page of a new place, platform
- * administrators and dealers also choose the plan here.
+ * General tab of the place, in the order of the legacy backoffice: the company, the plan, the
+ * expiration date and the status (platform administrators and dealers; the plan only platform
+ * administrators change, and dealers choose it when creating), the sign, the price lists, the
+ * address, the invoice series and the contact, then the price lists the place sells with (and the
+ * all-you-can-eat codes when the group has the restaurant module).
  */
 @Component({
   selector: 'fc-place-general',
-  imports: [Checkbox, FormField, PlaceSave, Select, TextField, TPipe],
+  imports: [Checkbox, FormField, Select, TextField, TPipe],
   templateUrl: './place-general.html',
   styleUrl: './place-section.css',
 })
@@ -62,6 +62,10 @@ export class PlaceGeneral {
     ),
   );
   protected readonly planOptions = this.state.planOptions;
+  protected readonly statusOptions = computed(() => [
+    { value: 'active', label: this.i18n.t('PLACES.STATUS.ACTIVE') },
+    { value: 'disabled', label: this.i18n.t('PLACES.STATUS.DISABLED') },
+  ]);
   private readonly enabledLists = computed<SelectOption[]>(() =>
     this.state
       .priceLists()

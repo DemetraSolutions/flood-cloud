@@ -136,11 +136,11 @@ const BLOCKS = ['eInvoicing', 'invoiceNumbering', 'bankAccounts', 'mealVoucherIs
 /** What a VAT number or fiscal code of a country other than Italy may be: printable ASCII, without spaces at the ends (no invisible or non-ASCII characters, which would defeat the uniqueness check). */
 const PRINTABLE_ASCII = /^[\x21-\x7E](?:[\x20-\x7E]*[\x21-\x7E])?$/;
 
-const NO_LISTS: GroupLists = { currencies: new Set(), priceLists: new Set() };
+const NO_LISTS: GroupLists = { currencies: new Set(), priceLists: new Set(), taxes: new Set(), favorites: new Map() };
 
 /** What each outcome of the write service that is not a success becomes. A company never has `companyNotFound` (it is the answer for a place); both are a missing document. */
 const notFound = (): AppError => new AppError('NOT_FOUND');
-const REFUSALS: Readonly<Record<Exclude<WriteOutcome['outcome'], 'written' | 'deleted' | 'trashed'>, () => AppError>> = {
+const REFUSALS: Readonly<Record<Exclude<WriteOutcome['outcome'], 'written' | 'deleted' | 'trashed' | 'busy'>, () => AppError>> = {
   notFound,
   companyNotFound: notFound,
   conflict: () => new AppError('PRECONDITION_FAILED'),

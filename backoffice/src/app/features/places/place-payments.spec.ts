@@ -34,7 +34,7 @@ afterEach(cleanUp);
 
 describe('PlacePayments', () => {
   it('shows the stored data', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     expect(view.control(f('DEFAULT_TYPE')).value).toBe('cash');
     expect(view.control(f('DEFAULT_TYPE')).querySelectorAll('option')).toHaveLength(2);
     expect(view.control(col('NAME', 1)).value).toBe('Contanti');
@@ -45,7 +45,7 @@ describe('PlacePayments', () => {
   });
 
   it('saves the whole block with the exact PUT', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     await view.type(f('DEFAULT_TYPE'), 'electronic');
     await view.toggle(f('CHEQUE'), true);
     await view.type(col('NAME', 1), 'Cassa');
@@ -64,7 +64,7 @@ describe('PlacePayments', () => {
   });
 
   it('sends a new type without an id and an existing one with its id', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     await view.click('PLACES.PAYMENTS.ADD');
     expect(view.control(col('NAME', 2)).value).toBe('');
     expect(view.control(col('INVOICE_MODE', 2)).value).toBe('');
@@ -79,7 +79,7 @@ describe('PlacePayments', () => {
   });
 
   it('removes a type', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     (
       view.root.querySelector('button[aria-label*="PLACES.REMOVE_ROW"]') as HTMLButtonElement
     ).click();
@@ -89,14 +89,14 @@ describe('PlacePayments', () => {
   });
 
   it('does not save a type without a name', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     await view.click('PLACES.PAYMENTS.ADD');
     await view.click('COMMON.SAVE');
     expect(view.error(col('NAME', 2))).toBe('FORM.ISSUE.REQUIRED');
   });
 
   it('puts the 422 of a row on its control', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     await view.type(col('NAME', 1), 'Altro');
     await failPut(view, 'settings/payments', [
       { field: 'payments.paymentTypes.0.name', issue: 'incorrect' },
@@ -107,7 +107,7 @@ describe('PlacePayments', () => {
   });
 
   it('shows the 422 of the whole list above the rows', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     await view.type(col('NAME', 1), 'Altro');
     await failPut(view, 'settings/payments', [
       { field: 'payments.paymentTypes', issue: 'incorrect' },
@@ -118,13 +118,13 @@ describe('PlacePayments', () => {
   });
 
   it('ignores the submit of the form', async () => {
-    const view = await renderPlace({ path: 'payments' });
+    const view = await renderPlace({ path: 'settings/payments' });
     await submitTab(view);
     await view.blurAll();
   });
 
   it('is read-only without the permission to update', async () => {
-    const view = await renderPlace({ path: 'payments', permissions: READ_ONLY });
+    const view = await renderPlace({ path: 'settings/payments', permissions: READ_ONLY });
     expect(view.control(col('NAME', 1)).disabled).toBe(true);
     expect(view.control(f('DEFAULT_TYPE')).disabled).toBe(true);
     expect(view.button('COMMON.SAVE')).toBeUndefined();

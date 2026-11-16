@@ -10,6 +10,7 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 import { PRICE_LIST } from '../helpers/place-fixtures.ts';
 import { startPlacesWorld } from '../helpers/places.ts';
 import type { PlacesWorld } from '../helpers/places.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: PlacesWorld;
@@ -53,11 +54,14 @@ describe('POST /v1/groups/{groupId}/places', () => {
     assert.equal(reply.headers.get('location'), `/v1${world.placePath(0, `/${place.id}`)}`);
     const id = ObjectId.createFromHexString(place.id);
     const document = (await world.storedPlace(0, id))!;
-    assert.equal(reply.headers.get('etag'), `"${versionOf('places', document)}"`);
+    assert.equal(reply.headers.get('etag'), `"${versionOf('places', document, TEST_VERSION_KEY)}"`);
     assert.deepEqual([place.name, place.companyId, place.groupId, place.trashed, place.contactName, place.email, place.phone], ['New Bar', COMPANY, hex(world.group(0).groupId), false, 'Mario', 'bar@example.test', '+39 02 1']);
     assert.deepEqual(place.address, { street: 'Via Roma 1', postcode: '20100', city: 'Milano', province: 'MI', country: 'IT' });
     assert.deepEqual([place.priceListId, place.ecommercePriceListId, place.invoiceSeries, place.priceLists], [null, null, null, []]);
-    assert.deepEqual(place.license, { plan: 'basic', expirationDate: null, status: 'active', sentry: false });
+    assert.deepEqual(place.license, { plan: 'basic', expirationDate: null, status: 'active' });
+    // A dealer sees the dealer settings of the template; a group administrator does not.
+    assert.deepEqual(place.dealerSettings, { sentry: false, serverIp: null, connectorAddress: '' });
+    assert.equal((await call(world.group(0).sa, 'GET', world.placePath(0, `/${place.id}`))).body.data.dealerSettings, undefined);
     assert.equal(place.openingHours.timezone, 'Europe/Rome');
     assert.deepEqual(Object.keys(place.openingHours.week), ['0', '1', '2', '3', '4', '5', '6']);
     // The legacy document: top-level names and types.
@@ -102,7 +106,8 @@ describe('POST /v1/groups/{groupId}/places', () => {
     assert.equal(entry!.resource!.id, hex(id));
     assert.deepEqual(entry!.changes!.map((change) => [change.field, change.after]), [['name', 'New Bar'], ['status', 'active']]);
     // The read back is the same.
-    assert.deepEqual((await call(world.group(0).sa, 'GET', world.placePath(0, `/${place.id}`))).body.data, place);
+    const { dealerSettings: _dealer, ...general } = place;
+    assert.deepEqual((await call(world.group(0).sa, 'GET', world.placePath(0, `/${place.id}`))).body.data, general);
   });
 
   it('creates a place with every field the step has, giving the stored forms of the legacy, and the price list among the price lists of the place', async () => {
@@ -117,7 +122,9 @@ describe('POST /v1/groups/{groupId}/places', () => {
         priceListId: PRICE_LIST,
         ecommercePriceListId: PRICE_LIST,
         invoiceSeries: 'NC',
-        license: { plan: 'enterprice', status: 'disabled', expirationDate: '2030-06-01', sentry: true },
+        license: { plan: 'enterprice', status: 'disabled', expirationDate: '2030-06-01' },
+        dealerSettings: { sentry: true, serverIp: '10.1.2.3', connectorAddress: 'http://connector.example.test' },
+        integrations: { dojo: { status: true, apiKey: 'fake-dojo-key' } }, // gitleaks:allow (fake test value)
         openingHours: { timezone: 'Europe/London', week: WEEK, special: { '2026-12-25': { closed: true, values: [] } }, deliveryTime: { week: WEEK, special: { '2026-12-31': { closed: false, values: [{ start: '10:00', end: '12:00' }] } } } },
       }),
     );
@@ -126,6 +133,11 @@ describe('POST /v1/groups/{groupId}/places', () => {
     const document = (await world.storedPlace(0, ObjectId.createFromHexString(place.id)))!;
     assert.deepEqual([document['listId'], document['ecommerceListId'], document['invoicePS'], document['plan'], document['status'], document['expirationDate'], document['timezone']], [PRICE_LIST, PRICE_LIST, 'NC', 'enterprice', false, new Date('2030-06-01T00:00:00.000Z'), 'Europe/London']);
     assert.deepEqual((document['platform'] as Document)['sentry'], true);
+    assert.deepEqual([(document['server'] as Document)['ip'], document['connectorAddress']], ['10.1.2.3', 'http://connector.example.test']);
+    // A credential is written at creation and never returned: only whether it is set.
+    assert.deepEqual([(document['integrations'] as Document)['dojo']], [{ status: true, apiKey: 'fake-dojo-key' }]); // gitleaks:allow (fake test value)
+    assert.deepEqual([place.integrations.dojo.status, place.integrations.dojo.apiKeySet, place.integrations.dojo.apiKey], [true, true, undefined]);
+    assert.ok(!JSON.stringify(reply.body).includes('fake-dojo-key'));
     assert.deepEqual((document['general'] as Document)['priceLists'], [{ id: PRICE_LIST, allYouCanEat: false, ayceCode1: null, ayceCode2: null }]);
     assert.deepEqual(place.priceLists, [{ id: PRICE_LIST, allYouCanEat: false, ayceCode1: null, ayceCode2: null }]);
     const opening = document['openingTime'] as { weekGeneric: Document; daySpecial: Document };
@@ -135,18 +147,26 @@ describe('POST /v1/groups/{groupId}/places', () => {
     const delivery = (document['delivery'] as { time: { daySpecial: Document; weekGeneric: Document } }).time;
     assert.deepEqual(delivery.daySpecial, { '2026-12-31': { closed: false, values: [{ start: '10:00', end: '12:00' }] } });
     assert.deepEqual(delivery.weekGeneric['6'], { active: true, values: [{ start: '09:00', end: '13:00' }, { start: '15:00', end: '19:00' }] });
-    assert.deepEqual([place.license, place.openingHours.timezone, place.invoiceSeries, place.ecommercePriceListId], [{ plan: 'enterprice', expirationDate: '2030-06-01T00:00:00.000Z', status: 'disabled', sentry: true }, 'Europe/London', 'NC', PRICE_LIST]);
+    assert.deepEqual([place.license, place.openingHours.timezone, place.invoiceSeries, place.ecommercePriceListId], [{ plan: 'enterprice', expirationDate: '2030-06-01T00:00:00.000Z', status: 'disabled' }, 'Europe/London', 'NC', PRICE_LIST]);
     assert.ok(sameDocument(expectedCopy(document, world.group(0).groupId), (await world.copyOfPlace(ObjectId.createFromHexString(place.id)))!));
     // The exact types of a number written by a JavaScript integer: an Int32, as the old backoffice writes it.
     assert.ok(((document['general'] as Document)['chargeDocumentQt']) instanceof Int32 && !(((document['general'] as Document)['totalRounding']) instanceof Double));
   });
 
-  it('lets a dealer choose the plan of a new place, but never the Sentry switch', async () => {
+  it('lets a dealer choose the plan of a new place, but never the Sentry switch of the dealer settings', async () => {
     await clean();
     const reply = await call(world.office.cluster.dealerA, 'POST', world.placePath(0), body({ name: 'New Dealer', license: { plan: 'advanced', status: 'disabled', expirationDate: '2031-01-01' } }));
     assert.equal(reply.status, 201, JSON.stringify(reply.body));
     assert.deepEqual([reply.body.data.license.plan, reply.body.data.license.status, reply.body.data.license.expirationDate], ['advanced', 'disabled', '2031-01-01T00:00:00.000Z']);
-    assert.deepEqual(failure(await call(world.office.cluster.dealerA, 'POST', world.placePath(0), body({ license: { sentry: true } }))), notAllowed('license.sentry'));
+    assert.deepEqual(failure(await call(world.office.cluster.dealerA, 'POST', world.placePath(0), body({ dealerSettings: { sentry: true } }))), notAllowed('dealerSettings.sentry'));
+    await clean();
+  });
+
+  it('lets a dealer create a place sending the default of the Sentry switch', async () => {
+    await clean();
+    const reply = await call(world.office.cluster.dealerA, 'POST', world.placePath(0), body({ name: 'New Dealer', dealerSettings: { sentry: false, serverIp: '10.2.2.2' } }));
+    assert.equal(reply.status, 201, JSON.stringify(reply.body));
+    assert.equal(reply.body.data.dealerSettings.serverIp, '10.2.2.2');
     await clean();
   });
 
@@ -208,7 +228,9 @@ describe('POST /v1/groups/{groupId}/places', () => {
   it('requires the name, the company and the address, and refuses unknown fields, operators and the fields that are not the place’s to set', async () => {
     const sa = world.office.cluster.dealerA;
     assert.deepEqual(failure(await call(sa, 'POST', world.placePath(0), {})), issues(['name', 'required'], ['companyId', 'required'], ['address', 'required']));
-    assert.deepEqual(failure(await call(sa, 'POST', world.placePath(0), body({ integrations: { dojo: { apiKey: 'x' } } }))), issues(['integrations', 'unknown']));
+    assert.deepEqual(failure(await call(sa, 'POST', world.placePath(0), body({ integrations: { unknownIntegration: { apiKey: 'x' } } }))), issues(['integrations.unknownIntegration', 'unknown']));
+    // The lists of items are modified, never created: a new place has the template.
+    assert.deepEqual(failure(await call(sa, 'POST', world.placePath(0), body({ devices: { items: [] } }))), issues(['devices', 'unknown']));
     assert.deepEqual(failure(await call(sa, 'POST', world.placePath(0), body({ groupId: hex(world.group(1).groupId) }))), issues(['groupId', 'unknown']));
     assert.deepEqual(failure(await call(sa, 'POST', world.placePath(0), body({ $set: { name: 'x' } }))), issues(['(key)', 'forbiddenKey']));
     assert.equal(failure(await call(sa, 'POST', world.placePath(0), undefined)).status, 422);

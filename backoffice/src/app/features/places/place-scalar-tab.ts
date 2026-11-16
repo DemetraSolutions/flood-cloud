@@ -1,6 +1,5 @@
 import { Component, input } from '@angular/core';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { SettingsBlockName } from './place.types';
 
 /**
@@ -9,11 +8,10 @@ import { SettingsBlockName } from './place.types';
  */
 @Component({
   selector: 'fc-place-scalar-tab',
-  imports: [PlaceFieldsView, PlaceSave],
+  imports: [PlaceFieldsView],
   template: `
     <form novalidate (submit)="$event.preventDefault()">
       <fc-place-fields [block]="section()" />
-      <fc-place-save [section]="section()" />
     </form>
   `,
   styleUrl: './place-section.css',

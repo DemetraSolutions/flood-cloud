@@ -34,7 +34,7 @@ afterEach(cleanUp);
 
 describe('PlaceKiosk', () => {
   it('shows the stored data', async () => {
-    const view = await renderPlace({ path: 'kiosk' });
+    const view = await renderPlace({ path: 'settings/kiosk' });
     expect(view.control(f('MODE')).value).toBe('sale');
     expect(view.control(f('LIST_ID')).value).toBe('');
     expect(view.control(f('BACKGROUND_COLOR')).type).toBe('color');
@@ -51,7 +51,7 @@ describe('PlaceKiosk', () => {
   });
 
   it('saves the whole block with the exact PUT', async () => {
-    const view = await renderPlace({ path: 'kiosk' });
+    const view = await renderPlace({ path: 'settings/kiosk' });
     await view.type(f('MODE'), 'catalog');
     await view.type(f('LIST_ID'), LIST_2);
     await view.type(f('UPSELLING_CATEGORY_ID'), CATEGORY_2);
@@ -76,7 +76,7 @@ describe('PlaceKiosk', () => {
   });
 
   it('adds and removes categories', async () => {
-    const view = await renderPlace({ path: 'kiosk' });
+    const view = await renderPlace({ path: 'settings/kiosk' });
     await view.click('PLACES.KIOSK.ADD_CATEGORY');
     await view.type(col('CATEGORY', 2), CATEGORY_2);
     await savePut(
@@ -100,7 +100,7 @@ describe('PlaceKiosk', () => {
   });
 
   it('shows the texts once the dictionary of the interface is loaded', async () => {
-    const view = await renderPlace({ path: 'kiosk' });
+    const view = await renderPlace({ path: 'settings/kiosk' });
     const i18n = TestBed.inject(I18nService);
     const loaded = i18n.use('it');
     backend().expectOne('/i18n/it.json').flush({});
@@ -116,7 +116,7 @@ describe('PlaceKiosk', () => {
     const place = fakePlace({
       kiosk: { ...stored.kiosk, titleText: { it: 'Ciao', de: 'Hallo' }, eatHereText: {} },
     });
-    const view = await renderPlace({ path: 'kiosk', permissions: NO_GROUP, place });
+    const view = await renderPlace({ path: 'settings/kiosk', permissions: NO_GROUP, place });
     const title = fieldsetOf(view.root, TEXT('TITLE_TEXT'));
     expect(title.querySelectorAll('input')).toHaveLength(3);
     expect(within(title, lang('de')).value).toBe('Hallo');
@@ -126,7 +126,7 @@ describe('PlaceKiosk', () => {
   });
 
   it('puts the 422 on the controls', async () => {
-    const view = await renderPlace({ path: 'kiosk' });
+    const view = await renderPlace({ path: 'settings/kiosk' });
     await view.type(col('POSITION', 1), '9');
     await failPut(view, 'settings/kiosk', [
       { field: 'kiosk.productsCategories.0.position', issue: 'incorrect' },
@@ -139,13 +139,13 @@ describe('PlaceKiosk', () => {
   });
 
   it('ignores the submit of the form', async () => {
-    const view = await renderPlace({ path: 'kiosk' });
+    const view = await renderPlace({ path: 'settings/kiosk' });
     await submitTab(view);
     await view.blurAll();
   });
 
   it('is read-only without the permission to update', async () => {
-    const view = await renderPlace({ path: 'kiosk', permissions: READ_ONLY });
+    const view = await renderPlace({ path: 'settings/kiosk', permissions: READ_ONLY });
     expect(view.control(f('MODE')).disabled).toBe(true);
     expect(view.control(col('POSITION', 1)).disabled).toBe(true);
     expect(within(fieldsetOf(view.root, TEXT('TITLE_TEXT')), lang('it')).disabled).toBe(true);

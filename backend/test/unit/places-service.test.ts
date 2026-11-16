@@ -17,6 +17,7 @@ import { memoryLogger } from '../helpers/app.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { PRICE_LIST, fullLegacyPlace } from '../helpers/place-fixtures.ts';
 import { principalOf } from '../helpers/principal.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 const GROUP = fixtureId('group', 1);
 const COMPANY = fixtureId('company', 1);
@@ -24,7 +25,7 @@ const ID = fixtureId('place', 1);
 const access = { groupId: GROUP, clusterId: 'cluster0', crossGroup: false, features: {} } as unknown as GroupAccess;
 const client = { requestId: 'r', ip: null, userAgent: null };
 const document = (overrides: Document = {}): Document => fullLegacyPlace(1, GROUP, COMPANY, { countryCode: 'DE', countryAreaCode: '', ...overrides });
-const versionOfDocument = (overrides: Document = {}): string => versionOf('places', document(overrides));
+const versionOfDocument = (overrides: Document = {}): string => versionOf('places', document(overrides), TEST_VERSION_KEY);
 const CREATION = { name: 'x', companyId: COMPANY.toHexString(), address: { street: 's', postcode: 'p', city: 'c', country: 'DE' } };
 
 /** What every refusal of the write service becomes: the code, and the details when it has any. */
@@ -34,6 +35,7 @@ const REFUSED = {
   companyNotFound: ['VALIDATION_ERROR', [{ field: 'companyId', issue: 'incorrect' }]],
   notTrashed: ['CONFLICT', undefined],
   trashed: ['CONFLICT', undefined],
+  busy: ['CONFLICT', [{ field: 'devices.items', issue: 'busy' }]],
 } as const;
 const refused = (outcome: WriteOutcome, overrides: Partial<Record<string, readonly [string, unknown]>> = {}) => (error: unknown) => {
   const [code, details] = overrides[outcome.outcome] ?? REFUSED[outcome.outcome as keyof typeof REFUSED];
@@ -61,7 +63,7 @@ function writerOf(script: Script): { writer: CompaniesPlacesWriter; writes: stri
   const writer = {
     read: async () => {
       const next = reads.length > 1 ? reads.shift()! : reads[0]!;
-      return next === null ? null : { document: next, version: versionOf('places', next) };
+      return next === null ? null : { document: next, version: versionOf('places', next, TEST_VERSION_KEY) };
     },
     companyOfPlace: async (id: ObjectId) => {
       companyReads.push(id);
@@ -88,9 +90,10 @@ function serviceOf(writer: CompaniesPlacesWriter, overrides: Partial<PlacesRepos
     list: async () => ({ items: [], page: { limit: 50, next: null } }),
     hasUsers: async () => false,
     missingTemplates: async () => new Set<number>(),
+    missingUsers: async () => new Set<number>(),
     groupLanguages: async () => new Set(['it']),
     findCountry: async () => ({ code: 'DE', areas: null }),
-    groupLists: async () => ({ currencies: new Set(['EUR']), priceLists: new Set([PRICE_LIST, 'pl2']) }),
+    groupLists: async () => ({ currencies: new Set(['EUR']), priceLists: new Set([PRICE_LIST, 'pl2']), taxes: new Set(['tax1']), favorites: new Map([['fav1', 'Preferiti']]) }),
     ...overrides,
   };
   return { service: createPlacesService({ repository, writerFor: () => writer, activityLog: activity, references: { missing: async () => [] }, images: { logoSource: async () => null }, readerFor: () => writer, logger: logs.logger, storeKeys: { revokeForPlace: async (...args) => { if (revokeFails) { throw new Error('mongo down'); } revoked.push(args); } }, newId: () => 'generated1' }), activity };
@@ -103,7 +106,7 @@ const pa = (): AuthPrincipal => principalOf('PA', { placeIds: [ID] });
 const details = (...list: Array<[string, string]>) => (error: unknown) => error instanceof AppError && JSON.stringify(error.details) === JSON.stringify(list.map(([field, issue]) => ({ field, issue })));
 
 describe('places service: what the write service answers', () => {
-  const refusals: WriteOutcome[] = [{ outcome: 'notFound' }, { outcome: 'conflict' }, { outcome: 'companyNotFound' }, { outcome: 'notTrashed' }, { outcome: 'trashed' }];
+  const refusals: WriteOutcome[] = [{ outcome: 'notFound' }, { outcome: 'conflict' }, { outcome: 'companyNotFound' }, { outcome: 'notTrashed' }, { outcome: 'trashed' }, { outcome: 'busy' }];
 
   it('turns every refusal into its error, for every write', async () => {
     for (const outcome of refusals) {
@@ -131,7 +134,7 @@ describe('places service: what the write service answers', () => {
   it('answers 409 with a message when the stored place has a block that is not an object', async () => {
     const { service } = serviceOf(writerOf({ outcome: new MalformedDocumentError('platform') }).writer);
     await assert.rejects(
-      () => service.update(psa(), access, ID, versionOfDocument(), { license: { sentry: false } }, client),
+      () => service.update(psa(), access, ID, versionOfDocument(), { dealerSettings: { sentry: false } }, client),
       (error: unknown) => error instanceof AppError && error.code === 'CONFLICT' && error.message.includes('block') && !error.message.includes('platform'),
     );
   });
@@ -320,7 +323,7 @@ describe('places service: the rules on the data', () => {
 
   it('refuses the fields of the license to the roles that may not change them, by name', async () => {
     await assert.rejects(run({ license: { status: 'disabled' } }, { principal: ca() }).result, details(['license.status', 'notAllowed']));
-    await assert.rejects(run({ license: { plan: 'basic', sentry: false } }, { principal: dealer() }).result, details(['license.plan', 'notAllowed'], ['license.sentry', 'notAllowed']));
+    await assert.rejects(run({ license: { plan: 'basic' }, dealerSettings: { sentry: false } }, { principal: dealer() }).result, details(['license.plan', 'notAllowed'], ['dealerSettings.sentry', 'notAllowed']));
     await run({ license: { status: 'disabled', expirationDate: null } }, { principal: dealer() }).result();
     const { service } = serviceOf(writerOf({}).writer);
     await assert.rejects(() => service.create(sa(), access, { ...CREATION, license: { plan: 'advanced' } } as never, client), details(['license.plan', 'notAllowed']));

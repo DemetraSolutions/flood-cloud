@@ -184,12 +184,37 @@ export async function dropDatabasesWithPrefix(client: MongoClient, prefix: strin
  * @param overrides Variables to add or replace.
  */
 export function mongoEnv(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
+  const prefix = `${TEST_DB_PREFIX}${randomBytes(3).toString('hex')}_`;
+  issuedPrefixes.add(prefix);
   return validEnv({
     MONGODB_URI: testMongoUri(),
-    DB_NAME_PREFIX: `${TEST_DB_PREFIX}${randomBytes(3).toString('hex')}_`,
+    DB_NAME_PREFIX: prefix,
     MONGODB_SERVER_SELECTION_TIMEOUT_MS: '2000',
     ...overrides,
   });
+}
+
+/** Prefixes handed out by {@link mongoEnv} in this process: the servers started with them create databases nobody else drops. */
+const issuedPrefixes = new Set<string>();
+
+/**
+ * Drops every database created under a prefix handed out by {@link mongoEnv} in this process. Call it in an `after` hook of
+ * every test file that uses `mongoEnv`, otherwise each run leaves throw-away databases behind on the test MongoDB.
+ */
+export async function dropMongoEnvDatabases(): Promise<void> {
+  if (issuedPrefixes.size === 0) {
+    return;
+  }
+  const client = createTestClient();
+  await client.connect();
+  try {
+    for (const prefix of issuedPrefixes) {
+      await dropDatabasesWithPrefix(client, prefix);
+    }
+    issuedPrefixes.clear();
+  } finally {
+    await client.close();
+  }
 }
 
 /** Two clusters (`cluster0`, `cluster1`) over the one local MongoDB, with distinct clients so routing is observable. */

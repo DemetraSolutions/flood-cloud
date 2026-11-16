@@ -25,6 +25,9 @@ const PRICE_LIST = 'PLACES.GENERAL.PRICE_LIST';
 const ECOMMERCE = 'PLACES.GENERAL.ECOMMERCE_PRICE_LIST';
 const SERIES = 'PLACES.GENERAL.INVOICE_SERIES';
 const SAVE = 'COMMON.SAVE';
+const PLAN = 'PLACES.LICENSE.PLAN';
+const EXPIRATION = 'PLACES.LICENSE.EXPIRATION_DATE';
+const STATUS = 'PLACES.LICENSE.STATUS';
 
 const isChecked = (field: HTMLInputElement | HTMLSelectElement) =>
   (field as HTMLInputElement).checked;
@@ -68,7 +71,37 @@ describe('PlaceGeneral', () => {
       expect(control(ECOMMERCE).value).toBe('');
       expect(control(SERIES).value).toBe('FE');
       expect(button(SAVE)?.disabled).toBe(true);
-      expect(text()).not.toContain('PLACES.LICENSE.PLAN');
+      expect(control(PLAN).value).toBe('advanced');
+      expect(control(EXPIRATION).value).toBe('2030-01-01');
+      expect(control(STATUS).value).toBe('active');
+      expect(text()).not.toContain('PLACES.LICENSE.PLAN_HINT');
+    });
+
+    it('lays the fields out in the order of the legacy backoffice', async () => {
+      const { root } = await renderPlacePage({ features: ['rooms', 'customersApp'] });
+      const labels = [...root.querySelectorAll('form label')].map((label) =>
+        label.textContent?.trim(),
+      );
+      const order = [
+        COMPANY,
+        PLAN,
+        EXPIRATION,
+        STATUS,
+        NAME,
+        PRICE_LIST,
+        ECOMMERCE,
+        STREET,
+        POSTCODE,
+        CITY,
+        COUNTRY,
+        PROVINCE,
+        SERIES,
+        CONTACT,
+        EMAIL,
+        PHONE,
+      ].map((label) => labels.indexOf(label));
+      expect(order.every((at) => at >= 0)).toBe(true);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
     });
 
     it('offers the companies, the countries, the areas, the price lists and the series', async () => {
@@ -187,6 +220,85 @@ describe('PlaceGeneral', () => {
       expect(error(NAME)).toBe('FORM.ISSUE.REQUIRED');
       expect(error(STREET)).toBe('FORM.ISSUE.REQUIRED');
       expect(error(COUNTRY)).toBe('');
+    });
+  });
+
+  describe('license', () => {
+    it('lets a platform administrator change the plan, the expiration date and the status', async () => {
+      const { control, type, click, view } = await renderPlacePage();
+      expect(control(PLAN).disabled).toBe(false);
+      expect(optionsOf(control(PLAN) as HTMLSelectElement)).toEqual([
+        'basic',
+        'advanced',
+        'enterprice',
+        'tgm-secondary',
+        'desk-secondary',
+      ]);
+      await type(PLAN, 'enterprice');
+      await type(EXPIRATION, '2031-06-30');
+      await type(STATUS, 'disabled');
+      await click(SAVE);
+      const req = expectPlace();
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({
+        license: { plan: 'enterprice', expirationDate: '2031-06-30', status: 'disabled' },
+      });
+      flushPlace(req, fakePlace());
+      await view();
+    });
+
+    it('sends the expiration instant as stored when only the status changes', async () => {
+      const { type, click, view } = await renderPlacePage();
+      await type(STATUS, 'disabled');
+      await click(SAVE);
+      const req = expectPlace();
+      expect(req.request.body).toEqual({
+        license: {
+          plan: 'advanced',
+          expirationDate: '2030-01-01T10:30:00.000Z',
+          status: 'disabled',
+        },
+      });
+      flushPlace(req, fakePlace());
+      await view();
+    });
+
+    it('lets a dealer change the expiration date and the status, not the plan', async () => {
+      const { control, text } = await renderPlacePage({ profile: { role: 'D' } });
+      expect(control(PLAN).disabled).toBe(true);
+      expect(text()).toContain('PLACES.LICENSE.PLAN_HINT');
+      expect(optionsOf(control(PLAN) as HTMLSelectElement)).toEqual([
+        'basic',
+        'advanced',
+        'enterprice',
+        'tgm-secondary',
+      ]);
+      expect(control(EXPIRATION).disabled).toBe(false);
+      expect(control(STATUS).disabled).toBe(false);
+    });
+
+    it('lets a dealer choose the plan of a new place, without the date and the status', async () => {
+      const { control, text } = await renderPlacePage({ path: 'new', profile: { role: 'D' } });
+      expect(control(PLAN).disabled).toBe(false);
+      expect(optionsOf(control(PLAN) as HTMLSelectElement)).not.toContain('desk-secondary');
+      expect(text()).not.toContain(EXPIRATION);
+      expect(text()).not.toContain(STATUS);
+    });
+
+    it.each(['CA', 'SA', 'PA'] as const)('does not show the license to a %s', async (role) => {
+      const { text } = await renderPlacePage({ profile: { role, groupId: GROUP } });
+      expect(text()).not.toContain(PLAN);
+      expect(text()).not.toContain(EXPIRATION);
+      expect(text()).not.toContain(STATUS);
+    });
+
+    it('shows the license read-only without the permission to update', async () => {
+      const { control } = await renderPlacePage({
+        permissions: ['places:read', 'companies:read', 'groups:read', 'profile:read'],
+      });
+      expect(control(PLAN).disabled).toBe(true);
+      expect(control(EXPIRATION).disabled).toBe(true);
+      expect(control(STATUS).disabled).toBe(true);
     });
   });
 
@@ -347,6 +459,19 @@ describe('PlaceGeneral', () => {
   });
 
   describe('series', () => {
+    it('warns that the series of a new place are unknown to a user who cannot read companies', async () => {
+      const { text } = await renderPlacePage({
+        path: 'new',
+        permissions: ['places:read', 'places:create', 'groups:read', 'profile:read'],
+      });
+      expect(text()).toContain('PLACES.GENERAL.SERIES_UNKNOWN');
+    });
+
+    it('does not warn an existing place whose company did not change', async () => {
+      const { text } = await renderPlacePage();
+      expect(text()).not.toContain('PLACES.GENERAL.SERIES_UNKNOWN');
+    });
+
     it('offers the series of the company the user chose', async () => {
       const { control, type, view } = await renderPlacePage();
       expect(optionsOf(control(SERIES) as HTMLSelectElement)).toEqual(['', 'FE', 'NC']);

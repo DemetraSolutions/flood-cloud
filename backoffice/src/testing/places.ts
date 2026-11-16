@@ -8,24 +8,32 @@ import { Profile } from '../app/core/session/session.types';
 import { FIELDS, FieldDef, setAt } from '../app/features/places/place-fields';
 import { HoursSchedule } from '../app/features/places/place.types';
 import { PlaceCash } from '../app/features/places/place-cash';
+import { PlaceDealer } from '../app/features/places/place-dealer';
 import { PlaceDelivery } from '../app/features/places/place-delivery';
+import { PlaceDevices } from '../app/features/places/place-devices';
 import { PlaceGeneral } from '../app/features/places/place-general';
 import { PlaceHours } from '../app/features/places/place-hours';
+import { PlaceIntegrations } from '../app/features/places/place-integrations';
 import { PlaceKiosk } from '../app/features/places/place-kiosk';
-import { PlaceLicense } from '../app/features/places/place-license';
 import { leavePlace } from '../app/features/places/place-leave';
 import { PlaceMedia } from '../app/features/places/place-media';
+import { PlaceOther } from '../app/features/places/place-other';
 import { PlacePage } from '../app/features/places/place-page';
 import { PlacePayments } from '../app/features/places/place-payments';
+import { PlacePrintStations } from '../app/features/places/place-print-stations';
 import { PlacePrinting } from '../app/features/places/place-printing';
 import { PlaceReservations } from '../app/features/places/place-reservations';
+import { PlaceRooms } from '../app/features/places/place-rooms';
 import { PlaceScalarTab } from '../app/features/places/place-scalar-tab';
 import { PlaceSelfOrdering } from '../app/features/places/place-self-ordering';
-import { PlaceStoreKey } from '../app/features/places/place-store-key';
+import { PlaceSettings } from '../app/features/places/place-settings';
+import { PlaceStorages } from '../app/features/places/place-storages';
 import { PlaceTables } from '../app/features/places/place-tables';
 import {
+  PlaceDevice,
   PlaceListItem,
   PlaceRecord,
+  PlaceRoom,
   SettingsBlockName,
   SETTINGS_BLOCKS,
 } from '../app/features/places/place.types';
@@ -89,7 +97,11 @@ function defaultValue(definition: FieldDef): unknown {
 export function blockDefaults(block: SettingsBlockName): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   for (const definition of FIELDS[block]) {
-    setAt(body, definition.key, defaultValue(definition));
+    if (definition.type === 'secret') {
+      setAt(body, `${definition.key}Set`, false);
+    } else {
+      setAt(body, definition.key, defaultValue(definition));
+    }
   }
   return body;
 }
@@ -105,6 +117,118 @@ const DESCRIPTOR = {
   dirname: '/media/image',
   type: 'image',
   filectime: 1700000000000,
+};
+
+export const DEVICE_ID_1 = 'dev0001';
+export const DEVICE_ID_2 = 'dev0002';
+export const STATION_ID = 'ps00001';
+export const ROOM_ID = 'room001';
+export const TAX_ID = 'tax0001';
+
+/** A device of the default place: the server desk, with the automatic cash credentials set. */
+export const DEVICE_1: PlaceDevice = {
+  id: DEVICE_ID_1,
+  server: true,
+  type: 'desk',
+  name: 'Cassa 1',
+  driver: 'EPSON-FP-81-II-RT',
+  host: '192.168.1.10',
+  serialNumber: 'SN001',
+  epsonProtocol17: false,
+  epsonEreceipt: false,
+  DLN502017Rounding: false,
+  secondaryDriver: '',
+  secondaryHost: '',
+  automaticCashDriver: 'GLORY-CI5',
+  automaticCashHost: '192.168.1.30',
+  automaticCashUsernameSet: true,
+  automaticCashPasswordSet: false,
+  posProtocol17ip: '',
+  posProtocol17port: '',
+  posProtocol17terminalId: '',
+  posDojoTerminalId: '',
+  externalDisplayId: DEVICE_ID_2,
+  secondaryCompanyPrinterId: '',
+  favoritesId: '',
+  scaleDialog0204Ip: '',
+  scaleDialog0204Port: '',
+  scaleDialog0204SendPrice: false,
+  barcodePriceRule: '',
+  orderingPrintSingleProduct: false,
+  orderingPrintSingleProductTables: false,
+  printStations: [STATION_ID],
+};
+
+/** The external display linked to the desk. */
+export const DEVICE_2: PlaceDevice = {
+  ...DEVICE_1,
+  id: DEVICE_ID_2,
+  server: false,
+  type: 'external-display',
+  name: 'Display',
+  driver: '',
+  host: '',
+  serialNumber: '',
+  automaticCashDriver: '',
+  automaticCashHost: '',
+  automaticCashUsernameSet: false,
+  externalDisplayId: '',
+  printStations: [],
+};
+
+export const STATION = {
+  id: STATION_ID,
+  name: 'Cucina',
+  driver: 'EPSON-EPOS-PRINT',
+  host: '192.168.1.20',
+  pulseNumber: 1,
+  pulseNumberSecondary: null,
+  upsideDown: false,
+  exitsCut: false,
+  summaryCategoriesIds: [] as string[],
+  summaryPrintStationsIds: [] as string[],
+};
+
+export const CENTER = { id: 'pc00001', name: 'Forno', capacity: 10 };
+
+/** A room with two tables: one placed in the grid, one not. */
+export const ROOM: PlaceRoom = {
+  id: ROOM_ID,
+  name: 'Sala 1',
+  listId: LIST_1,
+  service: 10,
+  tax: TAX_ID,
+  deviceId: DEVICE_ID_1,
+  seatsRequest: false,
+  seatsRequired: false,
+  autoService: false,
+  priceListsRequest: false,
+  handheldVisibility: true,
+  printStations: [STATION_ID],
+  tables: [
+    {
+      id: 'tab0001',
+      name: 'T1',
+      seats: 4,
+      userId: '',
+      view: { w: 1, h: 1, x: 0, y: 0, shape: 'rect' },
+    },
+    {
+      id: 'tab0002',
+      name: 'T2',
+      seats: 2,
+      userId: '',
+      view: { w: 2, h: 1, x: null, y: null, shape: 'round' },
+    },
+  ],
+  view: { type: 'grid', status: true, h: 8, w: 8 },
+};
+
+export const STORAGE = {
+  id: '665f1c2e9b1d4a0012ab3501',
+  name: 'Deposito 1',
+  cash: true,
+  ecommerce: false,
 };
 
 /** A complete place for tests; override what the test cares about. */
@@ -183,7 +307,6 @@ export function fakePlace(overrides: Partial<PlaceRecord> = {}): PlaceRecord {
       plan: 'advanced',
       expirationDate: '2030-01-01T10:30:00.000Z',
       status: 'active',
-      sentry: false,
     },
     openingHours: {
       timezone: 'Europe/Rome',
@@ -191,6 +314,16 @@ export function fakePlace(overrides: Partial<PlaceRecord> = {}): PlaceRecord {
       deliveryTime: schedule(),
     },
     ...blocks,
+    devices: { items: [DEVICE_1, DEVICE_2], editable: true },
+    printStations: {
+      stations: [STATION],
+      productionCenters: [CENTER],
+      stationsEditable: true,
+      productionCentersEditable: true,
+    },
+    rooms: { items: [ROOM], editable: true },
+    storages: { items: [STORAGE], editable: true },
+    dealerSettings: { sentry: false, serverIp: null, connectorAddress: '' },
     ...overrides,
   };
 }
@@ -225,25 +358,36 @@ export const PLACE_PERMISSIONS = [
   'profile:read',
 ];
 
+/** The entries of the settings tab, as the router config. */
+export const PLACE_SETTINGS_ROUTES: Route[] = [
+  { path: '', pathMatch: 'full', redirectTo: 'general' },
+  { path: 'dealer', component: PlaceDealer },
+  { path: 'general', component: PlaceCash },
+  { path: 'rooms-settings', component: PlaceTables },
+  { path: 'delivery', component: PlaceDelivery },
+  { path: 'reservations', component: PlaceReservations },
+  { path: 'self-ordering', component: PlaceSelfOrdering },
+  { path: 'external-display', component: PlaceScalarTab, data: { section: 'externalDisplay' } },
+  { path: 'kiosk', component: PlaceKiosk },
+  { path: 'appointments', component: PlaceScalarTab, data: { section: 'appointments' } },
+  { path: 'fidelity', component: PlaceScalarTab, data: { section: 'fidelity' } },
+  { path: 'tobacco', component: PlaceScalarTab, data: { section: 'tobacco' } },
+  { path: 'print', component: PlacePrinting },
+  { path: 'other', component: PlaceOther },
+  { path: 'payments', component: PlacePayments },
+];
+
 /** The tabs of the place page, as the router config. */
 export const PLACE_TAB_ROUTES: Route[] = [
   { path: '', pathMatch: 'full', component: PlaceGeneral },
-  { path: 'license', component: PlaceLicense },
-  { path: 'opening-hours', component: PlaceHours },
-  { path: 'cash', component: PlaceCash },
-  { path: 'printing', component: PlacePrinting },
-  { path: 'payments', component: PlacePayments },
-  { path: 'tables', component: PlaceTables },
-  { path: 'reservations', component: PlaceReservations },
-  { path: 'delivery', component: PlaceDelivery },
-  { path: 'self-ordering', component: PlaceSelfOrdering },
-  { path: 'kiosk', component: PlaceKiosk },
-  { path: 'appointments', component: PlaceScalarTab, data: { section: 'appointments' } },
-  { path: 'external-display', component: PlaceScalarTab, data: { section: 'externalDisplay' } },
-  { path: 'fidelity', component: PlaceScalarTab, data: { section: 'fidelity' } },
-  { path: 'tobacco', component: PlaceScalarTab, data: { section: 'tobacco' } },
-  { path: 'store-key', component: PlaceStoreKey },
+  { path: 'devices', component: PlaceDevices },
+  { path: 'print-stations', component: PlacePrintStations },
+  { path: 'rooms', component: PlaceRooms },
+  { path: 'storages', component: PlaceStorages },
+  { path: 'hours', component: PlaceHours },
   { path: 'media', component: PlaceMedia },
+  { path: 'settings', component: PlaceSettings, children: PLACE_SETTINGS_ROUTES },
+  { path: 'integrations', component: PlaceIntegrations },
   { path: 'elsewhere', children: [] },
 ];
 
@@ -256,13 +400,16 @@ export interface PlaceLookupData {
 }
 
 const LOOKUP_URL =
-  /\/v1\/countries$|\/currencies$|\/lookup\/price-lists$|\/companies$|\/places$|\/lookup\/product-categories$|\/lookup\/email-templates$|\/lookup\/languages$|\/invoice-series$/;
+  /\/v1\/countries$|\/currencies$|\/lookup\/price-lists$|\/companies$|\/places$|\/lookup\/product-categories$|\/lookup\/email-templates$|\/lookup\/languages$|\/invoice-series$|\/taxes$|\/product-favorites$|\/users\?limit=100$/;
 
 const page = (data: unknown[]) => ({ data, page: { limit: 100, next: null } });
 
 /** Answers the lookups the open tab asked for, with the given data or the defaults. */
 export async function answerPlaceLookups(data: PlaceLookupData = {}): Promise<void> {
   for (const request of backend().match((r) => LOOKUP_URL.test(r.url) && r.method === 'GET')) {
+    if (request.cancelled) {
+      continue;
+    }
     const url = request.request.url;
     if (url.endsWith('/countries')) {
       request.flush(data.countries ?? COUNTRIES);
@@ -293,6 +440,12 @@ export async function answerPlaceLookups(data: PlaceLookupData = {}): Promise<vo
           { id: TEMPLATE_2, name: 'Rifiuto' },
         ]),
       );
+    } else if (url.endsWith('/taxes')) {
+      request.flush({ data: [{ id: TAX_ID, rate: 22, description: 'IVA ordinaria' }] });
+    } else if (url.endsWith('/product-favorites')) {
+      request.flush({ data: [{ id: 'fav0001', name: 'Preferiti' }] });
+    } else if (url.endsWith('/users?limit=100')) {
+      request.flush({ data: [{ id: 'usr0001', username: 'mario' }] });
     } else if (url.endsWith('/lookup/languages')) {
       request.flush({ data: [{ code: 'it' }, { code: 'en' }] });
     } else if (url.endsWith('/invoice-series')) {

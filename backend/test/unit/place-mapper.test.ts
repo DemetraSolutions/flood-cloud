@@ -4,7 +4,7 @@ import { Double, Int32, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { leafWrites } from '../../src/modules/companies/company.mapper.ts';
 import { PLACE_LEAVES, PLACE_SUMMARY_PROJECTION, toPlace, toPlaceSummary } from '../../src/modules/places/place.mapper.ts';
-import { DEPRECATED_ROOMS_PATHS } from '../../src/shared/legacy-write/place-settings.ts';
+import { DEPRECATED_ROOMS_PATHS, SETTING_FIELDS } from '../../src/shared/legacy-write/place-settings.ts';
 import { PLACES_OWNED_FIELDS } from '../../src/db/collections.ts';
 import { PRICE_LIST, SLOT, fullLegacyPlace } from '../helpers/place-fixtures.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
@@ -30,17 +30,19 @@ describe('place mapper: reading', () => {
     assert.equal(read.updatedAt, '2024-01-15T10:00:00.000Z');
   });
 
-  it('maps the license: the plan as stored, the date, the state and the Sentry switch', () => {
-    assert.deepEqual(place().license, { plan: 'advanced', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active', sentry: true });
+  it('maps the license: the plan as stored, the date and the state, and the Sentry switch of the dealer settings', () => {
+    assert.deepEqual(place().license, { plan: 'advanced', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active' });
+    assert.equal(place().dealerSettings!['sentry'], true);
     for (const plan of ['professional', '', 'enterprice', 'tgm-secondary']) {
       assert.equal(place(fullLegacyPlace(1, GROUP, COMPANY, { plan })).license.plan, plan);
     }
     for (const plan of [undefined, null, 7, true]) {
       assert.equal(place(fullLegacyPlace(1, GROUP, COMPANY, { plan })).license.plan, null);
     }
-    assert.deepEqual(place(fullLegacyPlace(1, GROUP, COMPANY, { status: false, expirationDate: null, platform: { ip: true } })).license, { plan: 'advanced', expirationDate: null, status: 'disabled', sentry: false });
-    // A historical platform that is not even an object reads as no Sentry.
-    assert.equal(place(fullLegacyPlace(1, GROUP, COMPANY, { platform: 'web' })).license.sentry, false);
+    assert.deepEqual(place(fullLegacyPlace(1, GROUP, COMPANY, { status: false, expirationDate: null, platform: { ip: true } })).license, { plan: 'advanced', expirationDate: null, status: 'disabled' });
+    // The Sentry switch is in the dealer settings: a historical platform that is not even an object reads as no Sentry.
+    assert.equal(place(fullLegacyPlace(1, GROUP, COMPANY, { platform: 'web' })).dealerSettings!['sentry'], false);
+    assert.equal(place(fullLegacyPlace(1, GROUP, COMPANY, { status: false, platform: { ip: true } })).dealerSettings!['sentry'], false);
   });
 
   it('maps the opening hours: the zone, the week, the special days and the delivery hours', () => {
@@ -84,11 +86,18 @@ describe('place mapper: reading', () => {
     assert.equal(place(fullLegacyPlace(1, GROUP, COMPANY, { invoicePS: '' })).invoiceSeries, null);
   });
 
-  it('never returns what is not part of the representation: the integrations, the devices, the rooms, the storages, the store server, the connector and every unknown key', () => {
+  it('never returns what is not part of the representation: a credential, what the POS writes, the keys of a later release and every unknown key', () => {
     const text = JSON.stringify(place());
-    for (const hidden of ['integrations', 'fixture-integration-secret', 'fixture-device-secret', 'fixture-user', '"devices"', '"rooms"', '"storages"', '10.0.0.1', 'connector', 'futureBlock', 'unknownGeneral', 'legacyOddKey', 'apiKey']) {
+    for (const hidden of ['fixture-integration-secret', 'fixture-device-secret', 'fixture-user', '"info"', '"status":{', '"battery"', 'futureBlock', 'unknownGeneral', 'legacyOddKey', '__index', '"port"']) {
       assert.ok(!text.includes(hidden), hidden);
     }
+    // What the representation has instead of the credentials: whether each is set.
+    const shown = place();
+    assert.equal(((shown.integrations as Record<string, Record<string, unknown>>)['dojo'] as Record<string, unknown>)['apiKeySet'], true);
+    assert.equal(((shown.integrations as Record<string, Record<string, unknown>>)['dojo'] as Record<string, unknown>)['apiKey'], undefined);
+    assert.deepEqual(shown.devices.items.map((device) => [device.id, device.automaticCashUsernameSet, device.automaticCashPasswordSet]), [['device1', true, true], ['device2', false, false]]);
+    // The address of the server of the store and of the connector are the dealer settings.
+    assert.deepEqual(shown.dealerSettings, { sentry: true, serverIp: '10.0.0.1', connectorAddress: 'http://connector.fixture.example.test' });
   });
 
   it('unwraps the numbers of the exact types the places are read with', () => {
@@ -126,10 +135,19 @@ describe('place mapper: the table of keys', () => {
     const owned = PLACES_OWNED_FIELDS.filter((field) => field !== 'updateDate' && !DEPRECATED_ROOMS_PATHS.includes(field as never));
     const writable = PLACE_LEAVES.filter((leaf) => leaf.readOnly !== true).map((leaf) => leaf.legacy);
     assert.deepEqual([...writable].sort(), owned.filter((field) => field !== 'trash').sort());
+    // The read-only keys: the state and the dates, the flag of every credential (at the path of the credential) and the list of categories the provider gave.
     assert.deepEqual(
       PLACE_LEAVES.filter((leaf) => leaf.readOnly === true).map((leaf) => leaf.legacy),
-      ['trash', 'insertDate', 'updateDate'],
+      ['trash', 'insertDate', 'updateDate', ...SETTING_FIELDS.filter((field) => field.readOnly === true).map((field) => field.legacy), 'devices', 'printStations', 'productionCenter', 'rooms', 'storages'],
     );
+    // The flags of the lists (whether they can be written) are read only and never written.
+    const flags = PLACE_LEAVES.filter((leaf) => leaf.domain.endsWith('ditable') || leaf.domain.endsWith('Editable'));
+    assert.equal(flags.length, 5);
+    assert.ok(flags.every((leaf) => leaf.readOnly === true && leaf.codec.write(true, undefined) === true));
+    // The credentials are write-only leaves: never in a representation.
+    const secrets = PLACE_LEAVES.filter((leaf) => leaf.writeOnly === true);
+    assert.equal(secrets.length, 17);
+    assert.ok(secrets.every((leaf) => leaf.legacy.startsWith('integrations.') && PLACE_LEAVES.some((flag) => flag.legacy === leaf.legacy && flag.domain === `${leaf.domain}Set`)));
     assert.equal(new Set(PLACE_LEAVES.map((leaf) => leaf.domain)).size, PLACE_LEAVES.length);
   });
 });
@@ -151,7 +169,8 @@ describe('place mapper: choosing the keys to write', () => {
       contactName: null,
       priceListId: null,
       invoiceSeries: null,
-      license: { plan: 'basic', status: 'disabled', expirationDate: '2031-06-01T00:00:00.000Z', sentry: false },
+      license: { plan: 'basic', status: 'disabled', expirationDate: '2031-06-01T00:00:00.000Z' },
+      dealerSettings: { sentry: false },
     });
     assert.deepEqual(
       result.map((write) => [write.legacy, write.value]),

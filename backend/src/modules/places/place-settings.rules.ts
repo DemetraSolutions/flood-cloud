@@ -71,12 +71,29 @@ export async function applySettingsRules(c: SettingsRules): Promise<void> {
       issue(field.domain, 'pattern');
     }
   }
+  // The texts with a form (the Stripe public key, the country of Reserve with Google, the address of the server) are judged where they change, as the times above.
+  for (const field of SETTING_FIELDS) {
+    const value = valueAt(request, field.domain);
+    if ((field.kind.t === 'text' || field.kind.t === 'plain') && field.kind.pattern !== undefined && typeof value === 'string' && changes(field.domain) && !field.kind.pattern.test(value)) {
+      issue(field.domain, 'pattern');
+    }
+  }
   const knownBlocks = new Set(asList(valueAt(current, 'reservations.timeBlocks')).map((block) => JSON.stringify(block)));
   asList(valueAt(request, 'reservations.timeBlocks')).forEach((block, index) => {
     if (!knownBlocks.has(JSON.stringify(block))) {
       (['start', 'end'] as const).filter((edge) => !FORMS.time.test(block[edge] as string)).forEach((edge) => issue(`reservations.timeBlocks.${String(index)}.${edge}`, 'pattern'));
     }
   });
+
+  // Reserve with Google: while the integration is on, its data is complete (the feed of the provider takes a place only then; a latitude or a longitude of `0` counts as missing, as in the legacy).
+  const rwg = (key: string): string => `integrations.reserveWithGoogle.${key}`;
+  const rwgData = ['category', 'name', 'geo.latitude', 'geo.longitude', 'geo.address.streetAddress', 'geo.address.locality', 'geo.address.postalCode', 'geo.address.country'].map(rwg);
+  if ([rwg('status'), ...rwgData].some(changes)) {
+    const effective = (path: string): unknown => (valueAt(request, path) !== undefined ? valueAt(request, path) : valueAt(current, path));
+    if (effective(rwg('status')) === true) {
+      rwgData.filter((path) => !effective(path)).forEach((path) => issue(path, 'required'));
+    }
+  }
 
   // The e-mail templates exist in the group.
   const templates = TEMPLATE_PATHS.filter((path) => changes(path) && valueAt(request, path) !== null);

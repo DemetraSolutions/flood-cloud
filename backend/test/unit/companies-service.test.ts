@@ -16,6 +16,7 @@ import { memoryActivityLog } from '../helpers/activity.ts';
 import { fullLegacyCompany } from '../helpers/company-fixtures.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { principalOf } from '../helpers/principal.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 const GROUP = fixtureId('group', 1);
 const ID = fixtureId('company', 1);
@@ -39,7 +40,7 @@ function writerOf(script: { reads?: Array<Document | null>; outcome?: WriteOutco
   const writer = {
     read: async () => {
       const next = reads.length > 1 ? reads.shift()! : reads[0]!;
-      return next === null ? null : { document: next, version: versionOf('companies', next) };
+      return next === null ? null : { document: next, version: versionOf('companies', next, TEST_VERSION_KEY) };
     },
     createCompany: () => answer('create'),
     updateCompany: () => answer('update'),
@@ -57,14 +58,14 @@ function serviceOf(writer: CompaniesPlacesWriter, overrides: Partial<CompaniesRe
     findCountry: async () => ({ code: 'DE', areas: null }),
     isDealer: async () => true,
     listDealers: async () => [],
-    groupLists: async () => ({ currencies: new Set(['EUR', 'USD']), priceLists: new Set(['pl1']) }),
+    groupLists: async () => ({ currencies: new Set(['EUR', 'USD']), priceLists: new Set(['pl1']), taxes: new Set(), favorites: new Map() }),
     ...overrides,
   };
   return { service: createCompaniesService({ repository, writerFor: () => writer, images: { logoSource: async () => null }, activityLog: activity, newId: () => 'a'.repeat(24) }), activity };
 }
 
 const psa = (): AuthPrincipal => principalOf('PSA');
-const versionOfDocument = (): string => versionOf('companies', document());
+const versionOfDocument = (): string => versionOf('companies', document(), TEST_VERSION_KEY);
 
 describe('companies service: what the write service answers', () => {
   const refusals: WriteOutcome[] = [{ outcome: 'notFound' }, { outcome: 'conflict' }, { outcome: 'companyNotFound' }, { outcome: 'notTrashed' }, { outcome: 'vatNumberTaken' }, { outcome: 'referenced' }];
@@ -79,7 +80,7 @@ describe('companies service: what the write service answers', () => {
       await assert.rejects(() => service.remove(psa(), access, ID, versionOfDocument(), client), refused(outcome), `remove ${outcome.outcome}`);
     }
     const { service } = serviceOf(writerOf({ outcome: { outcome: 'conflict' }, reads: [{ ...document(), trash: true }] }).writer);
-    await assert.rejects(() => service.restore(psa(), access, ID, versionOf('companies', { ...document(), trash: true }), client), refused({ outcome: 'conflict' }));
+    await assert.rejects(() => service.restore(psa(), access, ID, versionOf('companies', { ...document(), trash: true }, TEST_VERSION_KEY), client), refused({ outcome: 'conflict' }));
   });
 
   it('gives the details of a taken VAT number and of a referenced company', async () => {

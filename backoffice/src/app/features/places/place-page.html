@@ -18,15 +18,39 @@
       } @else if (place?.license.status === 'disabled') {
         <fc-status-badge tone="warning">{{ 'PLACES.STATUS.DISABLED' | t }}</fc-status-badge>
       }
-      @if (!state.isNew() && state.canWrite()) {
+      @if (state.canWrite()) {
         <button
           fc-button
           [loading]="state.saving()"
-          [disabled]="!state.anyDirty()"
-          (click)="state.save('all')"
+          [disabled]="!state.isNew() && !state.anyDirty()"
+          (click)="state.save()"
         >
-          {{ 'PLACES.SAVE_ALL' | t }}
+          {{ (state.isNew() ? 'PLACES.CREATE' : 'COMMON.SAVE') | t }}
         </button>
+      }
+      @if (state.isPrivileged() && !state.isNew()) {
+        <fc-actions-menu
+          [text]="'PLACES.TRANSFER.MENU' | t"
+          [label]="'PLACES.TRANSFER.MENU_LABEL' | t"
+        >
+          <button fc-button variant="ghost" (click)="download()">
+            {{ 'PLACES.TRANSFER.DOWNLOAD' | t }}
+          </button>
+          @if (state.canWrite()) {
+            <button fc-button variant="ghost" (click)="fileChooser.click()">
+              {{ 'PLACES.TRANSFER.UPLOAD' | t }}
+            </button>
+          }
+        </fc-actions-menu>
+        <input
+          #fileChooser
+          class="file-input"
+          type="file"
+          accept=".json,application/json"
+          tabindex="-1"
+          [attr.aria-label]="'PLACES.TRANSFER.UPLOAD' | t"
+          (change)="upload($event)"
+        />
       }
     </header>
 
@@ -50,30 +74,23 @@
     @if (!state.isNew()) {
       <nav class="sections" [attr.aria-label]="'PLACES.SECTIONS' | t">
         <ul>
-          @for (section of state.sections(); track section.id) {
+          @for (tab of state.tabs(); track tab.id) {
             <li>
               <a
-                [routerLink]="section.path === '' ? '.' : section.path"
+                [routerLink]="tab.path === '' ? '.' : tab.path"
                 routerLinkActive="active"
                 ariaCurrentWhenActive="page"
-                [routerLinkActiveOptions]="{ exact: section.exact }"
+                [routerLinkActiveOptions]="{ exact: tab.exact }"
               >
-                {{ 'PLACES.SECTION.' + section.key | t }}
-                @if (state.dirty().has(section.id)) {
+                {{ 'PLACES.SECTION.' + tab.key | t }}
+                @if (state.tabDirty()[tab.id]) {
                   <fc-status-badge tone="warning">{{ 'PLACES.UNSAVED' | t }}</fc-status-badge>
                 }
-                @if (state.errorCounts()[section.id] > 0) {
+                @if (state.tabErrors()[tab.id] > 0) {
                   <fc-status-badge tone="danger">
-                    {{ 'PLACES.SECTION_ERRORS' | t: { count: state.errorCounts()[section.id] } }}
+                    {{ 'PLACES.SECTION_ERRORS' | t: { count: state.tabErrors()[tab.id] } }}
                   </fc-status-badge>
                 }
-              </a>
-            </li>
-          }
-          @if (state.hasStoreKey()) {
-            <li>
-              <a routerLink="store-key" routerLinkActive="active" ariaCurrentWhenActive="page">
-                {{ 'PLACES.SECTION.STORE_KEY' | t }}
               </a>
             </li>
           }

@@ -3,7 +3,6 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { KeyedValues } from './keyed-values';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { RowColumn, RowsEditor } from './rows-editor';
 
@@ -17,7 +16,7 @@ export const MAX_SHIPPING_COSTS = 50;
  */
 @Component({
   selector: 'fc-place-delivery',
-  imports: [KeyedValues, PlaceFieldsView, PlaceSave, RowsEditor, TPipe],
+  imports: [KeyedValues, PlaceFieldsView, RowsEditor, TPipe],
   templateUrl: './place-delivery.html',
   styleUrl: './place-section.css',
 })
@@ -27,8 +26,16 @@ export class PlaceDelivery {
 
   protected readonly rows = this.state.form.delivery.shippingCosts;
   protected readonly max = MAX_SHIPPING_COSTS;
-  protected readonly orders = ['TAKE_AWAY', 'ORDERS'];
-  protected readonly area = ['AREA'];
+  protected readonly orders = [
+    'MASTER',
+    'DELIVERY',
+    'TAKEAWAY',
+    'SEND_PRINT',
+    'ORDERS_STATUS',
+    'LOAD_ALERT',
+    'PRICE_LISTS',
+  ];
+  protected readonly area = ['DELIVERY_AREA'];
   protected readonly columns = computed<RowColumn[]>(() => [
     { key: 'taxed', type: 'number', label: this.i18n.t('PLACES.DELIVERY.COST') },
     { key: 'toKm', type: 'number', label: this.i18n.t('PLACES.DELIVERY.TO_KM') },

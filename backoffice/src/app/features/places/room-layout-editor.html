@@ -1,0 +1,197 @@
+<fc-dialog wide [heading]="'PLACES.ROOM_EDITOR.TITLE' | t" [open]="open()" (openChange)="open.set($event)">
+  @if (room(); as room) {
+    <div class="editor">
+      <section class="side" [attr.aria-label]="'PLACES.ROOM_EDITOR.SETTINGS' | t">
+        <fc-select
+          [label]="'PLACES.ROOM_EDITOR.ROOM' | t"
+          [options]="roomOptions()"
+          [value]="'' + current()"
+          (valueChange)="chooseRoom($event)"
+        />
+        <fc-select
+          [label]="'PLACES.ROOM_EDITOR.TYPE' | t"
+          [options]="typeOptions()"
+          [value]="room.view.type"
+          (valueChange)="setType($event)"
+        />
+        <fc-checkbox
+          [label]="'PLACES.ROOM_EDITOR.STATUS' | t"
+          [checked]="room.view.status"
+          (checkedChange)="setStatus($event)"
+        />
+        <div class="pair">
+          <fc-text-field
+            type="number"
+            [label]="'PLACES.ROOM_EDITOR.WIDTH' | t"
+            [format]="gridWidthFormat"
+            [value]="'' + room.view.w"
+            (valueChange)="setGrid('w', $event)"
+          />
+          <fc-text-field
+            type="number"
+            [label]="'PLACES.ROOM_EDITOR.HEIGHT' | t"
+            [format]="gridWidthFormat"
+            [value]="'' + room.view.h"
+            (valueChange)="setGrid('h', $event)"
+          />
+        </div>
+        <button fc-button variant="secondary" (click)="clear()">
+          {{ 'PLACES.ROOM_EDITOR.CLEAR' | t }}
+        </button>
+
+        <h3>{{ 'PLACES.ROOM_EDITOR.UNPLACED' | t }}</h3>
+        @if (unplaced().length === 0) {
+          <p class="note">{{ 'PLACES.ROOM_EDITOR.NO_UNPLACED' | t }}</p>
+        } @else {
+          <ul class="unplaced">
+            @for (item of unplaced(); track item.index) {
+              <li>
+                <button
+                  fc-button
+                  variant="secondary"
+                  [attr.aria-pressed]="selected() === item.index"
+                  (click)="select(item.index)"
+                >
+                  {{ item.name }}
+                </button>
+              </li>
+            }
+          </ul>
+        }
+
+        @if (table(); as chosen) {
+          <fieldset class="panel">
+            <legend>{{ 'PLACES.ROOM_EDITOR.TABLE_PANEL' | t: { name: chosen.name } }}</legend>
+            @if (chosen.view.x === null) {
+              <p class="note">{{ 'PLACES.ROOM_EDITOR.PLACE_HINT' | t }}</p>
+            }
+            <fc-select
+              [label]="'PLACES.ROOM_EDITOR.SHAPE' | t"
+              [options]="shapeOptions()"
+              [value]="chosen.view.shape"
+              (valueChange)="setShape($event)"
+            />
+            <div class="pair">
+              <fc-text-field
+                type="number"
+                [label]="'PLACES.ROOM_EDITOR.TABLE_WIDTH' | t"
+                [format]="sizeWidthFormat"
+                [value]="'' + chosen.view.w"
+                (valueChange)="setSize('w', $event)"
+              />
+              <fc-text-field
+                type="number"
+                [label]="'PLACES.ROOM_EDITOR.TABLE_HEIGHT' | t"
+                [format]="sizeHeightFormat"
+                [value]="'' + chosen.view.h"
+                (valueChange)="setSize('h', $event)"
+              />
+            </div>
+            <div class="pair">
+              <fc-text-field
+                type="number"
+                [label]="'PLACES.ROOM_EDITOR.POSITION_X' | t"
+                [format]="positionXFormat"
+                [value]="chosen.view.x === null ? '' : '' + chosen.view.x"
+                (valueChange)="setPosition('x', $event)"
+              />
+              <fc-text-field
+                type="number"
+                [label]="'PLACES.ROOM_EDITOR.POSITION_Y' | t"
+                [format]="positionYFormat"
+                [value]="chosen.view.y === null ? '' : '' + chosen.view.y"
+                (valueChange)="setPosition('y', $event)"
+              />
+            </div>
+            <button
+              fc-button
+              variant="secondary"
+              [disabled]="chosen.view.x === null"
+              (click)="unplace(chosen.index)"
+            >
+              {{ 'PLACES.ROOM_EDITOR.REMOVE_FROM_MAP' | t }}
+            </button>
+          </fieldset>
+        } @else {
+          <p class="note">{{ 'PLACES.ROOM_EDITOR.NONE_SELECTED' | t }}</p>
+        }
+      </section>
+
+      <section class="map">
+        <p class="note" id="room-editor-help">{{ 'PLACES.ROOM_EDITOR.INSTRUCTIONS' | t }}</p>
+        @if (anyOverlap()) {
+          <p class="problem" role="status">
+            <fc-icon name="alert" />
+            <span>{{ 'PLACES.ROOM_EDITOR.OVERLAP_WARNING' | t }}</span>
+          </p>
+        }
+        <div class="viewport">
+          <div #surface class="surface" [style.--cols]="width()" [style.--rows]="height()">
+            <div
+              class="cells"
+              role="group"
+              [attr.aria-label]="
+                'PLACES.ROOM_EDITOR.GRID_LABEL' | t: { name: room.name, w: width(), h: height() }
+              "
+              (click)="onCellClick($event)"
+              (keydown)="onCellKey($event)"
+              (focusin)="onCellFocus($event)"
+            >
+              @for (cell of cells(); track $index) {
+                <button
+                  type="button"
+                  class="cell"
+                  [attr.data-x]="cell.x"
+                  [attr.data-y]="cell.y"
+                  [attr.aria-label]="cellLabel(cell)"
+                  [tabindex]="isStop(cell) ? 0 : -1"
+                >
+                  @if (showCoordinates()) {
+                    <span aria-hidden="true">{{ coordinates(cell) }}</span>
+                  }
+                </button>
+              }
+            </div>
+            <div class="layer">
+              @for (item of placed(); track item.index) {
+                <div
+                  class="table"
+                  role="button"
+                  tabindex="0"
+                  aria-describedby="room-editor-help"
+                  [class.round]="room.tables[item.index].view.shape === 'round'"
+                  [class.selected]="selected() === item.index"
+                  [class.overlap]="item.overlaps"
+                  [attr.aria-pressed]="selected() === item.index"
+                  [attr.aria-label]="tableLabel(item)"
+                  [style.grid-column]="item.view.x + 1 + ' / span ' + item.view.w"
+                  [style.grid-row]="item.view.y + 1 + ' / span ' + item.view.h"
+                  (keydown)="onTableKey($event, item.index)"
+                  (pointerdown)="onPointerDown($event, item.index, 'move')"
+                  (pointermove)="onPointerMove($event)"
+                  (pointerup)="onPointerUp($event)"
+                  (pointercancel)="onPointerCancel($event)"
+                >
+                  <span class="name" aria-hidden="true">{{ item.name }}</span>
+                  @if (item.overlaps) {
+                    <fc-icon name="alert" />
+                  }
+                  <span
+                    class="handle"
+                    aria-hidden="true"
+                    (pointerdown)="onPointerDown($event, item.index, 'resize')"
+                  ></span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <p class="visually-hidden" role="status">{{ announcement() }}</p>
+  }
+  <button fcDialogActions fc-button variant="secondary" (click)="open.set(false)">
+    {{ 'COMMON.CANCEL' | t }}
+  </button>
+  <button fcDialogActions fc-button (click)="confirm()">{{ 'COMMON.CONFIRM' | t }}</button>
+</fc-dialog>

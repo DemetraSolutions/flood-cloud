@@ -176,11 +176,13 @@ export const COMPANIES_OWNED_FIELDS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * Fields of the legacy `places` documents of a group database this backend may `$set` (`doc/Tasks.md` 5.6.3 and area 7, step 7A): the registry data, the license
- * (`plan`, `expirationDate`, `status`, `platform.sentry`) and the state of the place, the timezone, and the leaf paths of the blocks listed in `PLACE_BLOCK_PATHS`
- * (`general.priceLists`, `openingTime.weekGeneric|daySpecial`, `delivery.time.weekGeneric|daySpecial`). The blocks themselves (`general`, `openingTime`, `delivery`, `platform`)
- * are never written whole. `devices`, `rooms`, `storages`, `printStations`, `productionCenter`, `integrations`, `server`, `connectorAddress`, `platform` (but for `platform.sentry`)
- * and every unknown key are never written: the POS and the legacy replace them, so writing them from here would corrupt them. `trash` is written by trash and restore only.
+ * Fields of the legacy `places` documents of a group database this backend may `$set` (`doc/Tasks.md` 5.6.3 and area 7, steps 7A, 7B and 7F): the registry data, the license
+ * (`plan`, `expirationDate`, `status`) and the state of the place, the timezone, and the leaf paths listed in `PLACE_BLOCK_PATHS`: `general.priceLists`, the hours, the settings of the
+ * tabs (7B), `integrations.*` key by key (credentials included, write-only), the dealer settings (`platform.sentry`, `server.ip`, `connectorAddress`) and the five lists of items
+ * (`devices`, `printStations`, `productionCenter`, `rooms`, `storages`). A list is written as a whole array but item by item over the stored items inside the transaction (`mergeList`),
+ * and only if every stored item has a distinct id, so what the POS writes in an item (`devices[i].info|status`, `rooms[].view.subtables`) and every key of an item the backend does not own survive.
+ * The blocks themselves (`general`, `openingTime`, `delivery`, `platform`, `server`, `integrations`) are never written whole, and every unknown key is never written.
+ * `trash` is written by trash and restore only.
  */
 export const PLACES_OWNED_FIELDS: readonly string[] = Object.freeze([...PLACE_TOP_KEYS, 'trash', ...PLACE_BLOCK_PATHS, 'updateDate']);
 

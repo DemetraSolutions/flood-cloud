@@ -1,8 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import { API, backend, errorBody, settle } from '../../../testing/api';
+import { backend, errorBody, provideApiTesting } from '../../../testing/api';
+import { signIn } from '../../../testing/session';
 import { emulateNativeDialog } from '../../../testing/dialog';
-import { PLACE_PERMISSIONS, PLACE_URL, renderPlace } from '../../../testing/places';
+import { GROUP, PLACE, PLACE_PERMISSIONS, PLACE_URL, renderPlace } from '../../../testing/places';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { PlaceState } from './place-state';
+import { PlaceStoreKey } from './place-store-key';
 import { StoreKeyStatus } from './store-key.types';
 
 const URL_KEY = `${PLACE_URL}/store-key`;
@@ -45,7 +48,7 @@ afterEach(() => {
 
 async function render(status: StoreKeyStatus | null = NONE, permissions = MANAGE) {
   emulateNativeDialog();
-  const view = await renderPlace({ path: 'store-key', permissions, lookups: false });
+  const view = await renderPlace({ path: 'settings/dealer', permissions, lookups: false });
   if (status !== null) {
     backend().expectOne(URL_KEY).flush({ data: status });
     await view.view();
@@ -273,10 +276,24 @@ describe('PlaceStoreKey', () => {
     expect(view.text()).toContain('PLACES.STORE_KEY.NONE');
   });
 
-  it('does not read the key without storeKeys:read', async () => {
+  it('does not offer the panel in the dealer settings without storeKeys:read', async () => {
     const view = await render(null, PLACE_PERMISSIONS);
     expect(view.text()).not.toContain('PLACES.STORE_KEY.NONE');
-    expect(API).toBeDefined();
-    await settle();
+    expect(view.text()).not.toContain('PLACES.STORE_KEY.TITLE');
+  });
+
+  it('does not read the key when the user cannot, even when mounted', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        ...provideApiTesting(),
+        { provide: PlaceState, useValue: { groupId: () => GROUP, placeId: () => PLACE } },
+      ],
+    });
+    vi.spyOn(TestBed.inject(I18nService), 't').mockImplementation((key) => key);
+    signIn({ role: 'PSA', groupId: null, permissions: ['places:read', 'profile:read'] });
+    const fixture = TestBed.createComponent(PlaceStoreKey);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).not.toContain('PLACES.STORE_KEY.TITLE');
+    backend().expectNone(URL_KEY);
   });
 });

@@ -32,8 +32,22 @@ export async function renderPlacePage(options: RenderOptions = {}) {
     await view.view();
   }
   const router = TestBed.inject(Router);
-  const tabs = () => [...view.root.querySelectorAll<HTMLAnchorElement>('nav a')];
+  const tabs = () => [...view.root.querySelectorAll<HTMLAnchorElement>('nav.sections a')];
   const tabNames = () => tabs().map((a) => a.getAttribute('href')!.split('/').pop());
+  /** The links of the side menu of the settings tab (when it is open). */
+  const entries = () => [
+    ...view.root.querySelectorAll<HTMLAnchorElement>('fc-place-settings nav a'),
+  ];
+  const entryNames = () => entries().map((a) => a.getAttribute('href')!.split('/').pop());
+  const goToEntry = async (path: string) => {
+    drainSeries();
+    entries()
+      .find((a) => a.getAttribute('href')!.endsWith(`/${path}`))!
+      .click();
+    await view.view();
+    await answerPlaceLookups();
+    await view.view();
+  };
   const goTo = async (path: string) => {
     drainSeries();
     tabs()
@@ -64,7 +78,9 @@ export async function renderPlacePage(options: RenderOptions = {}) {
   const typeIn = async (scope: Element, label: string, value: string, nth = 0) => {
     const field = within(scope, label, nth);
     field.value = value;
-    field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? 'change' : 'input'));
+    // A native select fires both events, so the helper does the same for every kind of field.
+    field.dispatchEvent(new Event('input'));
+    field.dispatchEvent(new Event('change'));
     await view.view();
   };
   const toggleIn = async (scope: Element, label: string, checked: boolean, nth = 0) => {
@@ -73,7 +89,21 @@ export async function renderPlacePage(options: RenderOptions = {}) {
     box.dispatchEvent(new Event('change'));
     await view.view();
   };
-  return { ...view, router, tabs, tabNames, goTo, leave, dialogButton, within, typeIn, toggleIn };
+  return {
+    ...view,
+    router,
+    tabs,
+    tabNames,
+    entries,
+    entryNames,
+    goToEntry,
+    goTo,
+    leave,
+    dialogButton,
+    within,
+    typeIn,
+    toggleIn,
+  };
 }
 
 /** Renders again in a new test module, for tests that compare several users. */

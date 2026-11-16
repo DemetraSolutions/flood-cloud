@@ -34,7 +34,9 @@ export type FieldType =
   /** A company of the group. */
   | 'company'
   /** A place of the group. */
-  | 'place';
+  | 'place'
+  /** A credential: write-only, never returned (only whether it is set). */
+  | 'secret';
 
 /** One settings key of a tab. */
 export interface FieldDef {
@@ -49,274 +51,702 @@ export interface FieldDef {
   readonly nullable?: boolean;
   /** The value an empty `int` or `duration` stands for when the key cannot be `null`. */
   readonly def?: number;
-  /** The feature the group must have for the key to be shown. */
+  /** The feature the group must have for the key to be shown (platform administrators and dealers always see it). */
   readonly needs?: FeatureName;
-  /** Platform administrators and dealers see the key even without the feature. */
-  readonly orPrivileged?: boolean;
+  /** Dictionary key of the text of the empty choice of a `select`, when it is not the generic one. */
+  readonly noneKey?: string;
   /** Only platform administrators and dealers may change the key. */
   readonly reserved?: boolean;
+  /** A payment credential: only platform administrators and dealers may set or remove it (the others see whether it is set). */
+  readonly privilegedOnly?: boolean;
 }
-
-type Extra = Partial<Omit<FieldDef, 'key' | 'type' | 'group'>>;
-
-const flags = (group: string, keys: string, extra: Extra = {}): FieldDef[] =>
-  keys.split(' ').map((key) => ({ key, type: 'flag', group, ...extra }));
-const texts = (group: string, keys: string, extra: Extra = {}): FieldDef[] =>
-  keys.split(' ').map((key) => ({ key, type: 'text', group, ...extra }));
-const fonts = (group: string, keys: string, extra: Extra = {}): FieldDef[] =>
-  keys.split(' ').map((key) => ({ key, type: 'font', group, ...extra }));
-const field = (key: string, type: FieldType, group: string, extra: Extra = {}): FieldDef => ({
-  key,
-  type,
-  group,
-  ...extra,
-});
-const choice = (key: string, group: string, values: string, extra: Extra = {}): FieldDef => ({
-  key,
-  type: 'select',
-  group,
-  values: values.split(' '),
-  ...extra,
-});
-
-const ROOMS: Extra = { needs: 'rooms' };
-const ORDERING: Extra = { needs: 'ordering' };
 
 /** The font sizes of a printout: rows by columns, each from 1 to 3. */
 export const FONT_SIZES: readonly string[] = [1, 2, 3].flatMap((rows) =>
   [1, 2, 3].map((columns) => `${rows}-${columns}`),
 );
 
-const EMAIL = (name: string, withTo: boolean): FieldDef[] => {
-  const group = name.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase();
-  return [
-    field(`${name}.status`, 'flag', group),
-    ...(withTo ? [field(`${name}.to`, 'text', group)] : []),
-    field(`${name}.templateId`, 'template', group),
-    field(`${name}.subject`, 'text', group),
-  ];
-};
-
 /**
- * The scalar keys of every settings block, in display order: what the old backoffice shows in
- * the tab, with the feature that gates it. The lists and maps (workshift names, payment types,
- * time blocks…) are not here: the tabs edit them with their own controls. The names are the keys
- * of the API, below the block.
+ * The scalar keys of every settings block, in the display order of the legacy backoffice: each key
+ * has the group (card) it is in, the groups follow one another as in the old page, and the keys
+ * inside a group keep the old order. The lists and maps (workshift names, payment types, time
+ * blocks…) are not here: the tabs edit them with their own controls. The names are the keys of the
+ * API, below the block. The groups are named in English; the legends and labels are in the
+ * dictionary (`PLACES.G`, `PLACES.F`).
  */
 export const FIELDS: Readonly<Record<SettingsBlockName, readonly FieldDef[]>> = {
   cashSettings: [
-    ...flags('LOGIN', 'fastLogin urersLoginRequiredToReceipt urersLoginRequiredToReceiptOnlyDesk'),
-    ...flags(
-      'CART',
-      'singleCartRow totalPriceCartRow combinesVariantsPrice discountPercentageOnlyNoDiscount resetPriceListOnSale checkoutContactNote returnedGoods productsWeightKg',
-    ),
-    ...flags('CART', 'productVariantsQuantity', { needs: 'productsVariants' }),
-    ...flags('SHIFTS', 'logs workshift', ROOMS),
-    ...flags('SHIFTS', 'usersShifts usersShiftsPrintReceipt'),
-    field('operatingTime', 'time', 'SHIFTS'),
-    ...flags(
-      'RECEIPT',
-      'noTaxedProductsPrintReceipt onlyNoTaxedProductsPrintReceipt noTaxedProductsSummaryPrintReceipt',
-    ),
-    ...flags('RECEIPT', 'chargeDocument', { needs: 'productsVariants' }),
-    field('chargeDocumentQt', 'int', 'RECEIPT', { needs: 'productsVariants', def: 1 }),
-    field('customDiscount', 'text', 'RECEIPT'),
-    field('totalRounding', 'number', 'RECEIPT'),
-    choice('receiptsCancellation', 'RECEIPT', 'sync notSync', { nullable: true }),
-    ...flags('WAREHOUSE', 'deskBackoffice'),
-    ...flags('WAREHOUSE', 'localWarehouse simpleWarehouse', {
+    { key: 'fastLogin', type: 'flag', group: 'GENERAL' },
+    { key: 'urersLoginRequiredToReceipt', type: 'flag', group: 'GENERAL' },
+    { key: 'urersLoginRequiredToReceiptOnlyDesk', type: 'flag', group: 'GENERAL' },
+    { key: 'singleCartRow', type: 'flag', group: 'GENERAL' },
+    { key: 'totalPriceCartRow', type: 'flag', group: 'GENERAL' },
+    { key: 'combinesVariantsPrice', type: 'flag', group: 'GENERAL' },
+    { key: 'logs', type: 'flag', group: 'GENERAL', needs: 'rooms' },
+    { key: 'advancedReportLogs', type: 'flag', group: 'GENERAL', needs: 'rooms' },
+    { key: 'workshift', type: 'flag', group: 'GENERAL' },
+    { key: 'usersShifts', type: 'flag', group: 'GENERAL' },
+    { key: 'usersShiftsPrintReceipt', type: 'flag', group: 'GENERAL' },
+    { key: 'noTaxedProductsPrintReceipt', type: 'flag', group: 'GENERAL' },
+    { key: 'onlyNoTaxedProductsPrintReceipt', type: 'flag', group: 'GENERAL' },
+    { key: 'noTaxedProductsSummaryPrintReceipt', type: 'flag', group: 'GENERAL' },
+    { key: 'returnedGoods', type: 'flag', group: 'GENERAL' },
+    { key: 'checkoutContactNote', type: 'flag', group: 'GENERAL' },
+    { key: 'productVariantsQuantity', type: 'flag', group: 'GENERAL', needs: 'productsVariants' },
+    { key: 'chargeDocument', type: 'flag', group: 'GENERAL', needs: 'productsVariants' },
+    { key: 'chargeDocumentQt', type: 'int', group: 'GENERAL', def: 1, needs: 'productsVariants' },
+    { key: 'productsWeightKg', type: 'flag', group: 'GENERAL' },
+    { key: 'discountPercentageOnlyNoDiscount', type: 'flag', group: 'GENERAL' },
+    { key: 'resetPriceListOnSale', type: 'flag', group: 'GENERAL' },
+    { key: 'deskBackoffice', type: 'flag', group: 'GENERAL' },
+    { key: 'localWarehouse', type: 'flag', group: 'GENERAL', needs: 'warehouse' },
+    { key: 'simpleWarehouse', type: 'flag', group: 'GENERAL', needs: 'warehouse' },
+    {
+      key: 'localWarehouseOutOfStock',
+      type: 'select',
+      group: 'GENERAL',
+      values: ['disabled', 'enabled', 'alert'],
       needs: 'warehouse',
-      orPrivileged: true,
-    }),
-    choice('localWarehouseOutOfStock', 'WAREHOUSE', 'disabled enabled alert'),
-    ...flags('REPORT', 'advancedReportLogs', ROOMS),
+    },
+    { key: 'totalRounding', type: 'number', group: 'GENERAL' },
+    { key: 'operatingTime', type: 'time', group: 'GENERAL' },
+    { key: 'customDiscount', type: 'text', group: 'GENERAL' },
+    {
+      key: 'receiptsCancellation',
+      type: 'select',
+      group: 'OTHER',
+      values: ['sync', 'notSync'],
+      nullable: true,
+      noneKey: 'PLACES.NONE_OF.RECEIPTS_CANCELLATION',
+    },
   ],
   printing: [
-    ...flags(
-      'RECEIPT_OPTIONS',
-      'user barcode mergedVariants noPrintPrice0Products price0ProductsBottom printReceiptCopy printDivisionNumber printPriceLists printUnpaidReceipt unpaidReceiptCustomerRequired note invoice giftReceipt serverPrint verifyClousures'
-        .split(' ')
-        .map((key) => `receipt.${key}`)
-        .join(' '),
-    ),
-    ...flags(
-      'RECEIPT_OPTIONS',
-      'receipt.seatsTop receipt.serviceTop receipt.subtotalServiceBottom',
-      ROOMS,
-    ),
-    ...flags(
-      'RECEIPT_NON_FISCAL',
-      'noFiscalDefaultNoPrint noFiscalHeader noFiscalTaxes noFiscalTaxesTotal noFiscalRest'
-        .split(' ')
-        .map((key) => `receipt.${key}`)
-        .join(' '),
-    ),
-    field('receipt.subtotalFontSize', 'font', 'RECEIPT_FORMAT'),
-    field('receipt.invoiceQt', 'int', 'RECEIPT_FORMAT', { def: 1 }),
-    field('receipt.noFiscalBottomText', 'text', 'RECEIPT_FORMAT'),
-    ...flags(
-      'PREBILLING_OPTIONS',
-      'prebilling.header prebilling.printMergedVariants prebilling.noPrintPrice0Products prebilling.printCategoriesTotalizers prebilling.printTableUser prebilling.printUser',
-      ORDERING,
-    ),
-    ...texts('PREBILLING_TEXTS', 'prebilling.titleText prebilling.bottomText', ORDERING),
-    ...fonts(
-      'PREBILLING_FONTS',
-      'prebilling.titleFontSize prebilling.sequentialNumberFontSize prebilling.bottomTextFontSize prebilling.customerDataFontSize',
-      ORDERING,
-    ),
-    choice('ordering.productsSorting', 'ORDERING_GENERAL', 'cart alphabetical position', ORDERING),
-    field('ordering.startReturnNumber', 'int', 'ORDERING_GENERAL', { ...ORDERING, def: 0 }),
-    field('ordering.endReturnNumber', 'int', 'ORDERING_GENERAL', { ...ORDERING, def: 0 }),
-    ...fonts(
-      'ORDERING_FONTS',
-      'printStationFontSize deviceFontSize piecesFontSize seatsFontSize customerNameFontSize callerFontSize involvedStationsFontSize productsFontSize variantsFontSize summaryProductsFontSize summaryVariantsFontSize titleFontSize tableFontSize exitsFontSize categoriesGropusFontSize numberFontSize'
-        .split(' ')
-        .map((key) => `ordering.${key}`)
-        .join(' '),
-      ORDERING,
-    ),
-    ...texts(
-      'ORDERING_TEXTS',
-      'tableText deskText takeAwayText deliveryText variantPlusText variantMinusText variantInfoText exitText proceedText removalText moveText additionText resendText changeOrderText cancellationOrderText noteText tableNoteText orderNoteText quiklyText involvedStationsText'
-        .split(' ')
-        .map((key) => `ordering.${key}`)
-        .join(' '),
-      ORDERING,
-    ),
-    ...flags(
-      'ORDERING_OPTIONS',
-      'titleReverse categoriesGropus noRemoval noRemovalOnDeleteTable noRemovalOnDeleteOrder device printStation priceListName mergeProductsPrint roomName total totalPc allPrices seatsNumber productsProceed firstExitOnExitsCut sequentialNumberTop sequentialNumberBottom roomsSequentialNumberTop roomsSequentialNumberBottom shortName shortDescription note tableNote printStationsInvolved tableBottom additionInfo productsSpace summaryExits move partialMoveProducts contactInfo tableUser productsBold productsCode'
-        .split(' ')
-        .map((key) => `ordering.${key}`)
-        .join(' '),
-      ORDERING,
-    ),
+    { key: 'receipt.serverPrint', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.verifyClousures', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.giftReceipt', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.mergedVariants', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.seatsTop', type: 'flag', group: 'RECEIPT_GENERAL', needs: 'rooms' },
+    { key: 'receipt.serviceTop', type: 'flag', group: 'RECEIPT_GENERAL', needs: 'rooms' },
+    {
+      key: 'receipt.subtotalServiceBottom',
+      type: 'flag',
+      group: 'RECEIPT_GENERAL',
+      needs: 'rooms',
+    },
+    { key: 'receipt.user', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.barcode', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.note', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.noPrintPrice0Products', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.price0ProductsBottom', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.printReceiptCopy', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.printDivisionNumber', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.printPriceLists', type: 'flag', group: 'RECEIPT_GENERAL' },
+    { key: 'receipt.unpaidReceiptCustomerRequired', type: 'flag', group: 'RECEIPT_UNPAID' },
+    { key: 'receipt.printUnpaidReceipt', type: 'flag', group: 'RECEIPT_UNPAID' },
+    { key: 'receipt.subtotalFontSize', type: 'font', group: 'RECEIPT_LAYOUT' },
+    { key: 'receipt.invoice', type: 'flag', group: 'RECEIPT_COURTESY_INVOICE' },
+    { key: 'receipt.invoiceQt', type: 'int', group: 'RECEIPT_COURTESY_INVOICE', def: 1 },
+    { key: 'receipt.noFiscalDefaultNoPrint', type: 'flag', group: 'RECEIPT_NO_FISCAL' },
+    { key: 'receipt.noFiscalHeader', type: 'flag', group: 'RECEIPT_NO_FISCAL' },
+    { key: 'receipt.noFiscalTaxes', type: 'flag', group: 'RECEIPT_NO_FISCAL' },
+    { key: 'receipt.noFiscalTaxesTotal', type: 'flag', group: 'RECEIPT_NO_FISCAL' },
+    { key: 'receipt.noFiscalRest', type: 'flag', group: 'RECEIPT_NO_FISCAL' },
+    { key: 'receipt.noFiscalBottomText', type: 'text', group: 'RECEIPT_NO_FISCAL' },
+    { key: 'prebilling.header', type: 'flag', group: 'PREBILLING_GENERAL', needs: 'ordering' },
+    {
+      key: 'prebilling.printMergedVariants',
+      type: 'flag',
+      group: 'PREBILLING_GENERAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'prebilling.noPrintPrice0Products',
+      type: 'flag',
+      group: 'PREBILLING_GENERAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'prebilling.printCategoriesTotalizers',
+      type: 'flag',
+      group: 'PREBILLING_GENERAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'prebilling.printTableUser',
+      type: 'flag',
+      group: 'PREBILLING_GENERAL',
+      needs: 'ordering',
+    },
+    { key: 'prebilling.printUser', type: 'flag', group: 'PREBILLING_GENERAL', needs: 'ordering' },
+    { key: 'prebilling.bottomText', type: 'text', group: 'PREBILLING_GENERAL', needs: 'ordering' },
+    { key: 'prebilling.titleText', type: 'text', group: 'PREBILLING_LAYOUT', needs: 'ordering' },
+    {
+      key: 'prebilling.titleFontSize',
+      type: 'font',
+      group: 'PREBILLING_LAYOUT',
+      needs: 'ordering',
+    },
+    {
+      key: 'prebilling.sequentialNumberFontSize',
+      type: 'font',
+      group: 'PREBILLING_LAYOUT',
+      needs: 'ordering',
+    },
+    {
+      key: 'prebilling.bottomTextFontSize',
+      type: 'font',
+      group: 'PREBILLING_LAYOUT',
+      needs: 'ordering',
+    },
+    {
+      key: 'prebilling.customerDataFontSize',
+      type: 'font',
+      group: 'PREBILLING_LAYOUT',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.productsSorting',
+      type: 'select',
+      group: 'ORDERING_GENERAL',
+      values: ['cart', 'alphabetical', 'position'],
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.categoriesGropus',
+      type: 'flag',
+      group: 'ORDERING_GENERAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.mergeProductsPrint',
+      type: 'flag',
+      group: 'ORDERING_GENERAL',
+      needs: 'ordering',
+    },
+    { key: 'ordering.device', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.printStation', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.priceListName', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.roomName', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.tableUser', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.contactInfo', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.totalPc', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.seatsNumber', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.note', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    { key: 'ordering.tableNote', type: 'flag', group: 'ORDERING_INFO', needs: 'ordering' },
+    {
+      key: 'ordering.printStationsInvolved',
+      type: 'flag',
+      group: 'ORDERING_INFO',
+      needs: 'ordering',
+    },
+    { key: 'ordering.shortName', type: 'flag', group: 'ORDERING_PRODUCTS', needs: 'ordering' },
+    {
+      key: 'ordering.shortDescription',
+      type: 'flag',
+      group: 'ORDERING_PRODUCTS',
+      needs: 'ordering',
+    },
+    { key: 'ordering.productsCode', type: 'flag', group: 'ORDERING_PRODUCTS', needs: 'ordering' },
+    { key: 'ordering.productsBold', type: 'flag', group: 'ORDERING_PRODUCTS', needs: 'ordering' },
+    { key: 'ordering.productsSpace', type: 'flag', group: 'ORDERING_PRODUCTS', needs: 'ordering' },
+    { key: 'ordering.summaryExits', type: 'flag', group: 'ORDERING_PRODUCTS', needs: 'ordering' },
+    { key: 'ordering.total', type: 'flag', group: 'ORDERING_PRICES', needs: 'ordering' },
+    { key: 'ordering.allPrices', type: 'flag', group: 'ORDERING_PRICES', needs: 'ordering' },
+    { key: 'ordering.noRemoval', type: 'flag', group: 'ORDERING_REMOVAL', needs: 'ordering' },
+    {
+      key: 'ordering.noRemovalOnDeleteTable',
+      type: 'flag',
+      group: 'ORDERING_REMOVAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.noRemovalOnDeleteOrder',
+      type: 'flag',
+      group: 'ORDERING_REMOVAL',
+      needs: 'ordering',
+    },
+    { key: 'ordering.productsProceed', type: 'flag', group: 'ORDERING_EXITS', needs: 'ordering' },
+    {
+      key: 'ordering.firstExitOnExitsCut',
+      type: 'flag',
+      group: 'ORDERING_EXITS',
+      needs: 'ordering',
+    },
+    { key: 'ordering.move', type: 'flag', group: 'ORDERING_MOVE', needs: 'ordering' },
+    {
+      key: 'ordering.partialMoveProducts',
+      type: 'flag',
+      group: 'ORDERING_MOVE',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.sequentialNumberTop',
+      type: 'flag',
+      group: 'ORDERING_SEQUENTIAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.sequentialNumberBottom',
+      type: 'flag',
+      group: 'ORDERING_SEQUENTIAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.roomsSequentialNumberTop',
+      type: 'flag',
+      group: 'ORDERING_SEQUENTIAL',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.roomsSequentialNumberBottom',
+      type: 'flag',
+      group: 'ORDERING_SEQUENTIAL',
+      needs: 'ordering',
+    },
+    { key: 'ordering.tableBottom', type: 'flag', group: 'ORDERING_OTHER', needs: 'ordering' },
+    { key: 'ordering.additionInfo', type: 'flag', group: 'ORDERING_OTHER', needs: 'ordering' },
+    { key: 'ordering.titleReverse', type: 'flag', group: 'ORDERING_OTHER', needs: 'ordering' },
+    {
+      key: 'ordering.titleFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_TITLE',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.tableFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_TITLE',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.numberFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.piecesFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.seatsFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.printStationFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.deviceFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.customerNameFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.callerFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.involvedStationsFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_INFO',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.productsFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_BODY',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.variantsFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_BODY',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.summaryProductsFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_BODY',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.summaryVariantsFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_BODY',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.exitsFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_BODY',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.categoriesGropusFontSize',
+      type: 'font',
+      group: 'ORDERING_LAYOUT_BODY',
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.startReturnNumber',
+      type: 'int',
+      group: 'ORDERING_HEADER_FOOTER',
+      def: 0,
+      needs: 'ordering',
+    },
+    {
+      key: 'ordering.endReturnNumber',
+      type: 'int',
+      group: 'ORDERING_HEADER_FOOTER',
+      def: 0,
+      needs: 'ordering',
+    },
+    { key: 'ordering.tableText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.deskText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.takeAwayText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.deliveryText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.variantPlusText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.variantMinusText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.variantInfoText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.exitText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.proceedText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.removalText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.moveText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.additionText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.resendText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.changeOrderText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    {
+      key: 'ordering.cancellationOrderText',
+      type: 'text',
+      group: 'ORDERING_TEXTS',
+      needs: 'ordering',
+    },
+    { key: 'ordering.noteText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.tableNoteText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.orderNoteText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    { key: 'ordering.quiklyText', type: 'text', group: 'ORDERING_TEXTS', needs: 'ordering' },
+    {
+      key: 'ordering.involvedStationsText',
+      type: 'text',
+      group: 'ORDERING_TEXTS',
+      needs: 'ordering',
+    },
   ],
   payments: [
-    choice('defaultType', 'DEFAULTS', 'cash electronic'),
-    ...flags('DEFAULTS', 'cheque tickets paymentDiscount'),
+    { key: 'defaultType', type: 'select', group: 'DEFAULTS', values: ['cash', 'electronic'] },
+    { key: 'cheque', type: 'flag', group: 'DEFAULTS' },
+    { key: 'tickets', type: 'flag', group: 'DEFAULTS' },
+    { key: 'paymentDiscount', type: 'flag', group: 'DEFAULTS' },
   ],
   tables: [
-    ...flags(
-      'GENERAL',
-      'exits proceedNoPrint sendOrderPrebilling deskCheckoutPrintersPriority checkoutTableValue0 discountTicketsDifference waitingList',
-    ),
-    field('exitsNumber', 'int', 'GENERAL', { def: 5 }),
-    ...flags(
-      'ACCESS',
-      'urersLoginRequiredToTableDesk urersLoginRequiredToTable tableUserSelect tableUserSelectPin tableUserSelectEachOpening exclusiveUserTable',
-    ),
-    ...flags(
-      'STATUS',
-      'tableSeats waitingPaymentTableStatus prebillingRequestTableStatus handheldReceiptRequestDelegate roomsGridHandhelds',
-    ),
-    field('halfPortionValue', 'int', 'PORTIONS'),
-    field('halfPortionVariantsValue', 'int', 'PORTIONS'),
-    field('resetDeskNumber', 'int', 'RESETS'),
-    field('resetRoomsNumber', 'int', 'RESETS'),
-    field('resetDeliveryNumber', 'int', 'RESETS'),
-    ...flags('TABLE_GROUPS', 'tableGroups.status tableGroups.name tableGroups.autoCreateFirst'),
+    { key: 'exits', type: 'flag', group: 'GENERAL' },
+    { key: 'proceedNoPrint', type: 'flag', group: 'GENERAL' },
+    { key: 'exitsNumber', type: 'int', group: 'GENERAL', def: 5 },
+    { key: 'urersLoginRequiredToTableDesk', type: 'flag', group: 'GENERAL' },
+    { key: 'urersLoginRequiredToTable', type: 'flag', group: 'GENERAL' },
+    { key: 'tableSeats', type: 'flag', group: 'GENERAL' },
+    { key: 'tableUserSelect', type: 'flag', group: 'GENERAL' },
+    { key: 'tableUserSelectPin', type: 'flag', group: 'GENERAL' },
+    { key: 'tableUserSelectEachOpening', type: 'flag', group: 'GENERAL' },
+    { key: 'exclusiveUserTable', type: 'flag', group: 'GENERAL' },
+    { key: 'waitingPaymentTableStatus', type: 'flag', group: 'GENERAL' },
+    { key: 'prebillingRequestTableStatus', type: 'flag', group: 'GENERAL' },
+    { key: 'sendOrderPrebilling', type: 'flag', group: 'GENERAL' },
+    { key: 'deskCheckoutPrintersPriority', type: 'flag', group: 'GENERAL' },
+    { key: 'checkoutTableValue0', type: 'flag', group: 'GENERAL' },
+    { key: 'waitingList', type: 'flag', group: 'GENERAL' },
+    { key: 'discountTicketsDifference', type: 'flag', group: 'GENERAL' },
+    { key: 'handheldReceiptRequestDelegate', type: 'flag', group: 'GENERAL' },
+    { key: 'halfPortionValue', type: 'int', group: 'GENERAL' },
+    { key: 'halfPortionVariantsValue', type: 'int', group: 'GENERAL' },
+    { key: 'resetDeskNumber', type: 'int', group: 'GENERAL' },
+    { key: 'resetRoomsNumber', type: 'int', group: 'GENERAL' },
+    { key: 'resetDeliveryNumber', type: 'int', group: 'GENERAL' },
+    { key: 'roomsGridHandhelds', type: 'flag', group: 'GENERAL' },
+    { key: 'tableGroups.status', type: 'flag', group: 'TABLE_GROUPS' },
+    { key: 'tableGroups.name', type: 'flag', group: 'TABLE_GROUPS' },
+    { key: 'tableGroups.autoCreateFirst', type: 'flag', group: 'TABLE_GROUPS' },
   ],
   reservations: [
-    ...flags('GENERAL', 'status suspendedToday'),
-    field('step', 'duration', 'GENERAL', { def: 900000 }),
-    field('duration', 'duration', 'GENERAL', { def: 1800000 }),
-    field('untilHours', 'time', 'GENERAL'),
-    field('webWidget.status', 'flag', 'WEB_WIDGET'),
-    field('webWidget.color', 'color', 'WEB_WIDGET'),
-    choice('webWidget.brightness', 'WEB_WIDGET', 'light dark auto'),
-    ...EMAIL('emailNotification', true),
-    ...EMAIL('email', false),
-    ...EMAIL('emailConfirmedStatus', false),
-    ...EMAIL('emailRefusedStatus', false),
-    ...EMAIL('emailChangeStatus', false),
+    { key: 'status', type: 'flag', group: 'MASTER' },
+    { key: 'step', type: 'duration', group: 'GENERAL', def: 900000 },
+    { key: 'duration', type: 'duration', group: 'GENERAL', def: 1800000 },
+    { key: 'emailNotification.status', type: 'flag', group: 'EMAIL_NOTIFICATION' },
+    { key: 'emailNotification.to', type: 'text', group: 'EMAIL_NOTIFICATION' },
+    { key: 'emailNotification.templateId', type: 'template', group: 'EMAIL_NOTIFICATION' },
+    { key: 'emailNotification.subject', type: 'text', group: 'EMAIL_NOTIFICATION' },
+    { key: 'email.status', type: 'flag', group: 'EMAIL' },
+    { key: 'email.templateId', type: 'template', group: 'EMAIL' },
+    { key: 'email.subject', type: 'text', group: 'EMAIL' },
+    { key: 'emailConfirmedStatus.status', type: 'flag', group: 'EMAIL_CONFIRMED' },
+    { key: 'emailConfirmedStatus.templateId', type: 'template', group: 'EMAIL_CONFIRMED' },
+    { key: 'emailConfirmedStatus.subject', type: 'text', group: 'EMAIL_CONFIRMED' },
+    { key: 'emailRefusedStatus.status', type: 'flag', group: 'EMAIL_REFUSED' },
+    { key: 'emailRefusedStatus.templateId', type: 'template', group: 'EMAIL_REFUSED' },
+    { key: 'emailRefusedStatus.subject', type: 'text', group: 'EMAIL_REFUSED' },
+    { key: 'emailChangeStatus.status', type: 'flag', group: 'EMAIL_CHANGE' },
+    { key: 'emailChangeStatus.templateId', type: 'template', group: 'EMAIL_CHANGE' },
+    { key: 'emailChangeStatus.subject', type: 'text', group: 'EMAIL_CHANGE' },
+    { key: 'suspendedToday', type: 'flag', group: 'WEB_WIDGET' },
+    { key: 'untilHours', type: 'time', group: 'WEB_WIDGET' },
+    { key: 'webWidget.color', type: 'color', group: 'WEB_WIDGET_THEME' },
+    {
+      key: 'webWidget.brightness',
+      type: 'select',
+      group: 'WEB_WIDGET_THEME',
+      values: ['light', 'dark', 'auto'],
+    },
+    { key: 'webWidget.status', type: 'flag', group: 'WEB_WIDGET_THEME' },
   ],
   delivery: [
-    ...flags(
-      'TAKE_AWAY',
-      'takeAway.status takeAway.delivery takeAway.autoDeliveryCost takeAway.fastTakeAway takeAway.callerRequired takeAway.sendPrebillingOnSave takeAway.printOrderNumber takeAway.createOrderNumberOnSave takeAway.autoOrderStatusComplete takeAway.roomsProductionCenterValue',
-    ),
-    choice('takeAway.sendOrderOnSave', 'ORDERS', 'ask never always'),
-    choice('takeAway.sendOrderOnSaveFast', 'ORDERS', 'ask never always'),
-    field('takeAway.autoOrderingTime', 'int', 'ORDERS'),
-    field('takeAway.alertMaxDeliveryInStep', 'int', 'ORDERS'),
-    field('takeAway.alertMaxTakeAwayInStep', 'int', 'ORDERS'),
-    field('takeAway.step', 'duration', 'ORDERS'),
-    field('takeAway.deliveryListId', 'priceList', 'ORDERS'),
-    field('takeAway.takeAwayListId', 'priceList', 'ORDERS'),
-    field('step', 'number', 'AREA'),
-    field('maxContemporary', 'number', 'AREA'),
-    field('radius', 'number', 'AREA'),
-    field('margin', 'number', 'AREA'),
-    field('lat', 'number', 'AREA'),
-    field('lng', 'number', 'AREA'),
+    { key: 'takeAway.status', type: 'flag', group: 'MASTER' },
+    { key: 'takeAway.delivery', type: 'flag', group: 'DELIVERY' },
+    { key: 'takeAway.autoDeliveryCost', type: 'flag', group: 'DELIVERY' },
+    { key: 'takeAway.fastTakeAway', type: 'flag', group: 'TAKEAWAY' },
+    { key: 'takeAway.callerRequired', type: 'flag', group: 'TAKEAWAY' },
+    {
+      key: 'takeAway.sendOrderOnSave',
+      type: 'select',
+      group: 'SEND_PRINT',
+      values: ['ask', 'never', 'always'],
+    },
+    { key: 'takeAway.autoOrderingTime', type: 'int', group: 'SEND_PRINT' },
+    {
+      key: 'takeAway.sendOrderOnSaveFast',
+      type: 'select',
+      group: 'SEND_PRINT',
+      values: ['ask', 'never', 'always'],
+    },
+    { key: 'takeAway.sendPrebillingOnSave', type: 'flag', group: 'SEND_PRINT' },
+    { key: 'takeAway.printOrderNumber', type: 'flag', group: 'SEND_PRINT' },
+    { key: 'takeAway.autoOrderStatusComplete', type: 'flag', group: 'ORDERS_STATUS' },
+    { key: 'takeAway.createOrderNumberOnSave', type: 'flag', group: 'ORDERS_STATUS' },
+    { key: 'takeAway.step', type: 'duration', group: 'LOAD_ALERT' },
+    { key: 'takeAway.alertMaxDeliveryInStep', type: 'int', group: 'LOAD_ALERT' },
+    { key: 'takeAway.alertMaxTakeAwayInStep', type: 'int', group: 'LOAD_ALERT' },
+    { key: 'takeAway.roomsProductionCenterValue', type: 'flag', group: 'LOAD_ALERT' },
+    { key: 'takeAway.deliveryListId', type: 'priceList', group: 'PRICE_LISTS' },
+    { key: 'takeAway.takeAwayListId', type: 'priceList', group: 'PRICE_LISTS' },
+    { key: 'step', type: 'number', group: 'DELIVERY_AREA' },
+    { key: 'maxContemporary', type: 'number', group: 'DELIVERY_AREA' },
+    { key: 'lat', type: 'number', group: 'DELIVERY_AREA' },
+    { key: 'lng', type: 'number', group: 'DELIVERY_AREA' },
+    { key: 'radius', type: 'number', group: 'DELIVERY_AREA' },
+    { key: 'margin', type: 'number', group: 'DELIVERY_AREA' },
   ],
   selfOrdering: [
-    field('status', 'flag', 'GENERAL'),
-    field('fixedMessage', 'long', 'GENERAL'),
-    field('additionalInfoLabel', 'long', 'GENERAL'),
-    field('additionalInfo', 'long', 'GENERAL'),
+    { key: 'status', type: 'flag', group: 'GENERAL' },
+    { key: 'fixedMessage', type: 'long', group: 'GENERAL' },
+    { key: 'additionalInfoLabel', type: 'long', group: 'GENERAL' },
+    { key: 'additionalInfo', type: 'long', group: 'GENERAL' },
   ],
   kiosk: [
-    field('listId', 'priceList', 'GENERAL'),
-    choice('mode', 'GENERAL', 'sale catalog'),
-    choice('catalogLayout', 'GENERAL', 'cols-4 cols-3 list'),
-    choice('tablePlaceholder', 'GENERAL', 'none optional required'),
-    choice('tablePlaceholderType', 'GENERAL', 'table stand pager'),
-    choice('takeawayPlaceholder', 'GENERAL', 'none optional required'),
-    choice('takeawayPlaceholderType', 'GENERAL', 'pager'),
-    field('upsellingCategoryId', 'category', 'GENERAL'),
-    ...flags(
-      'SERVICES',
-      'eatHere takeAway deskPay posPay prebillingDeskPay prebillingPosPay paymentsCards paymentsCash paymentsSatispay',
-    ),
-    ...flags(
-      'DISPLAY',
-      'hideCategories hideNotAvailableProducts hidePhotos productVariants quickAddToCart categoriesIcons',
-    ),
-    field('backgroundColor', 'color', 'DISPLAY'),
-    field('textColor', 'color', 'DISPLAY'),
-    ...flags(
-      'ORDER',
-      'unpaidNotPrint printOrderCheckoutDefault autoOrderStatusComplete paperReceipt eReceiptEmail eReceiptQr manageFidelity',
-    ),
-    field('idleTimeAlert', 'int', 'SESSION'),
-    field('closeSessionTime', 'int', 'SESSION'),
+    { key: 'listId', type: 'priceList', group: 'GENERAL' },
+    { key: 'mode', type: 'select', group: 'GENERAL', values: ['sale', 'catalog'] },
+    { key: 'idleTimeAlert', type: 'int', group: 'GENERAL' },
+    { key: 'closeSessionTime', type: 'int', group: 'GENERAL' },
+    { key: 'eatHere', type: 'flag', group: 'SERVICES' },
+    { key: 'takeAway', type: 'flag', group: 'SERVICES' },
+    { key: 'deskPay', type: 'flag', group: 'PAYMENT_MODE' },
+    { key: 'posPay', type: 'flag', group: 'PAYMENT_MODE' },
+    { key: 'paymentsCards', type: 'flag', group: 'PAYMENTS' },
+    { key: 'paymentsCash', type: 'flag', group: 'PAYMENTS' },
+    { key: 'paymentsSatispay', type: 'flag', group: 'PAYMENTS' },
+    {
+      key: 'catalogLayout',
+      type: 'select',
+      group: 'CATALOG',
+      values: ['cols-4', 'cols-3', 'list'],
+    },
+    { key: 'hideCategories', type: 'flag', group: 'CATALOG' },
+    { key: 'hideNotAvailableProducts', type: 'flag', group: 'CATALOG' },
+    { key: 'hidePhotos', type: 'flag', group: 'CATALOG' },
+    { key: 'productVariants', type: 'flag', group: 'CATALOG' },
+    { key: 'quickAddToCart', type: 'flag', group: 'CATALOG' },
+    { key: 'upsellingCategoryId', type: 'category', group: 'CATALOG' },
+    { key: 'unpaidNotPrint', type: 'flag', group: 'PRINTERS' },
+    { key: 'prebillingDeskPay', type: 'flag', group: 'PRINTERS' },
+    { key: 'prebillingPosPay', type: 'flag', group: 'PRINTERS' },
+    { key: 'printOrderCheckoutDefault', type: 'flag', group: 'PRINTERS' },
+    { key: 'autoOrderStatusComplete', type: 'flag', group: 'ORDERS_STATUS' },
+    { key: 'paperReceipt', type: 'flag', group: 'DOCUMENTS' },
+    { key: 'eReceiptEmail', type: 'flag', group: 'DOCUMENTS' },
+    { key: 'eReceiptQr', type: 'flag', group: 'DOCUMENTS' },
+    {
+      key: 'tablePlaceholder',
+      type: 'select',
+      group: 'OTHER',
+      values: ['none', 'optional', 'required'],
+    },
+    {
+      key: 'tablePlaceholderType',
+      type: 'select',
+      group: 'OTHER',
+      values: ['table', 'stand', 'pager'],
+    },
+    {
+      key: 'takeawayPlaceholder',
+      type: 'select',
+      group: 'OTHER',
+      values: ['none', 'optional', 'required'],
+    },
+    { key: 'takeawayPlaceholderType', type: 'select', group: 'OTHER', values: ['pager'] },
+    { key: 'manageFidelity', type: 'flag', group: 'OTHER' },
+    { key: 'backgroundColor', type: 'color', group: 'LAYOUT' },
+    { key: 'textColor', type: 'color', group: 'LAYOUT' },
+    { key: 'categoriesIcons', type: 'flag', group: 'LAYOUT' },
   ],
   appointments: [
-    ...flags('GENERAL', 'staffChoice staffChoiceRequired'),
-    field('webWidgetStatus', 'flag', 'GENERAL', { reserved: true }),
-    field('step', 'duration', 'GENERAL'),
-    field('maxContemporary', 'int', 'GENERAL'),
-    field('maxDaily', 'int', 'GENERAL'),
-    choice('type', 'GENERAL', 'single multiple'),
-    field('email.templateId', 'template', 'EMAIL'),
-    field('email.from', 'text', 'EMAIL'),
-    field('email.subject', 'text', 'EMAIL'),
+    { key: 'staffChoice', type: 'flag', group: 'GENERAL' },
+    { key: 'staffChoiceRequired', type: 'flag', group: 'GENERAL' },
+    { key: 'step', type: 'duration', group: 'GENERAL' },
+    { key: 'maxContemporary', type: 'int', group: 'GENERAL' },
+    { key: 'maxDaily', type: 'int', group: 'GENERAL' },
+    { key: 'type', type: 'select', group: 'GENERAL', values: ['single', 'multiple'] },
+    { key: 'email.templateId', type: 'template', group: 'GENERAL' },
+    { key: 'email.from', type: 'text', group: 'GENERAL' },
+    { key: 'email.subject', type: 'text', group: 'GENERAL' },
+    { key: 'webWidgetStatus', type: 'flag', group: 'GENERAL', reserved: true },
   ],
   externalDisplay: [
-    ...flags('GENERAL', 'tips receiptType fidelity'),
-    field('backgroundColor', 'color', 'GENERAL'),
-    field('textColor', 'color', 'GENERAL'),
+    { key: 'tips', type: 'flag', group: 'GENERAL' },
+    { key: 'receiptType', type: 'flag', group: 'GENERAL' },
+    { key: 'fidelity', type: 'flag', group: 'GENERAL' },
+    { key: 'backgroundColor', type: 'color', group: 'LAYOUT' },
+    { key: 'textColor', type: 'color', group: 'LAYOUT' },
   ],
   fidelity: [
-    choice('type', 'GENERAL', 'advanced base', { nullable: true }),
-    ...flags(
-      'GENERAL',
-      'showPoints showPointsCheckout printDataOnFiscalReceipt printDataOnReceipt',
-    ),
+    {
+      key: 'type',
+      type: 'select',
+      group: 'GENERAL',
+      values: ['advanced', 'base'],
+      nullable: true,
+      noneKey: 'PLACES.NONE_OF.FIDELITY_TYPE',
+    },
+    { key: 'showPoints', type: 'flag', group: 'GENERAL' },
+    { key: 'showPointsCheckout', type: 'flag', group: 'GENERAL' },
+    { key: 'printDataOnFiscalReceipt', type: 'flag', group: 'GENERAL' },
+    { key: 'printDataOnReceipt', type: 'flag', group: 'GENERAL' },
   ],
   tobacco: [
-    ...flags('GENERAL', 'status printProductsOnReceipt winningsManagement'),
-    field('companyId', 'company', 'SECONDARY'),
-    field('placeId', 'place', 'SECONDARY'),
+    { key: 'status', type: 'flag', group: 'MASTER' },
+    { key: 'printProductsOnReceipt', type: 'flag', group: 'PRINT' },
+    { key: 'companyId', type: 'company', group: 'SECONDARY_COMPANY' },
+    { key: 'placeId', type: 'place', group: 'SECONDARY_COMPANY' },
+    { key: 'winningsManagement', type: 'flag', group: 'SCRATCH_AND_WIN' },
   ],
   media: [
-    field('internalFileNameLogo', 'plain', 'FILES'),
-    field('externalUrlLogo', 'plain', 'FILES'),
-    field('internalFileName', 'plain', 'FILES'),
-    field('externalUrl', 'plain', 'FILES'),
+    { key: 'internalFileNameLogo', type: 'plain', group: 'FILES' },
+    { key: 'externalUrlLogo', type: 'plain', group: 'FILES' },
+    { key: 'internalFileName', type: 'plain', group: 'FILES' },
+    { key: 'externalUrl', type: 'plain', group: 'FILES' },
+  ],
+  integrations: [
+    { key: 'floodPay.status', type: 'flag', group: 'FLOOD_PAY', reserved: true },
+    { key: 'floodPay.stripe.publicKey', type: 'text', group: 'FLOOD_PAY', reserved: true },
+    { key: 'floodPay.stripe.privateKey', type: 'secret', group: 'FLOOD_PAY', privilegedOnly: true },
+    {
+      key: 'floodPay.stripe.webhookPrivateKey',
+      type: 'secret',
+      group: 'FLOOD_PAY',
+      privilegedOnly: true,
+    },
+    {
+      key: 'floodPay.qrCodePayment.status',
+      type: 'flag',
+      group: 'QR_CODE_PAYMENT',
+      reserved: true,
+    },
+    {
+      key: 'floodPay.qrCodePayment.type',
+      type: 'select',
+      group: 'QR_CODE_PAYMENT',
+      values: ['static', 'dynamic'],
+    },
+    { key: 'floodPay.qrCodePayment.rating', type: 'flag', group: 'QR_CODE_PAYMENT' },
+    { key: 'floodPay.qrCodePayment.eReceipt', type: 'flag', group: 'QR_CODE_PAYMENT' },
+    { key: 'floodPay.qrCodePayment.tips', type: 'flag', group: 'QR_CODE_PAYMENT' },
+    { key: 'floodPay.qrCodePayment.postPaymentText', type: 'text', group: 'QR_CODE_PAYMENT' },
+    { key: 'floodPay.tapToPay.status', type: 'flag', group: 'TAP_TO_PAY', reserved: true },
+    { key: 'floodPay.tapToPay.tips', type: 'flag', group: 'TAP_TO_PAY' },
+    { key: 'dojo.status', type: 'flag', group: 'DOJO', reserved: true },
+    { key: 'dojo.apiKey', type: 'secret', group: 'DOJO', privilegedOnly: true },
+    { key: 'satispay.status', type: 'flag', group: 'SATISPAY', reserved: true },
+    { key: 'satispay.activationCode', type: 'secret', group: 'SATISPAY', privilegedOnly: true },
+    { key: 'satispay.type', type: 'select', group: 'SATISPAY', values: ['checkin', 'qrcode'] },
+    { key: 'satispay.keyId', type: 'secret', group: 'SATISPAY', privilegedOnly: true },
+    { key: 'qodeup.status', type: 'flag', group: 'QODEUP', reserved: true },
+    { key: 'qodeup.apiKey', type: 'secret', group: 'QODEUP', privilegedOnly: true },
+    { key: 'bizerba.status', type: 'flag', group: 'BIZERBA', reserved: true },
+    { key: 'bizerba.importPath', type: 'text', group: 'BIZERBA' },
+    { key: 'bizerba.exportPath', type: 'text', group: 'BIZERBA' },
+    { key: 'googleMaps.status', type: 'flag', group: 'GOOGLE_MAPS', reserved: true },
+    { key: 'reserveWithGoogle.status', type: 'flag', group: 'RESERVE_WITH_GOOGLE', reserved: true },
+    {
+      key: 'reserveWithGoogle.category',
+      type: 'select',
+      group: 'RESERVE_WITH_GOOGLE',
+      values: ['restaurant'],
+    },
+    { key: 'reserveWithGoogle.name', type: 'text', group: 'RESERVE_WITH_GOOGLE' },
+    { key: 'reserveWithGoogle.telephone', type: 'text', group: 'RESERVE_WITH_GOOGLE' },
+    { key: 'reserveWithGoogle.url', type: 'text', group: 'RESERVE_WITH_GOOGLE' },
+    { key: 'reserveWithGoogle.geo.latitude', type: 'number', group: 'RESERVE_WITH_GOOGLE' },
+    { key: 'reserveWithGoogle.geo.longitude', type: 'number', group: 'RESERVE_WITH_GOOGLE' },
+    {
+      key: 'reserveWithGoogle.geo.address.streetAddress',
+      type: 'text',
+      group: 'RESERVE_WITH_GOOGLE',
+    },
+    { key: 'reserveWithGoogle.geo.address.locality', type: 'text', group: 'RESERVE_WITH_GOOGLE' },
+    { key: 'reserveWithGoogle.geo.address.postalCode', type: 'text', group: 'RESERVE_WITH_GOOGLE' },
+    { key: 'reserveWithGoogle.geo.address.country', type: 'text', group: 'RESERVE_WITH_GOOGLE' },
+    { key: 'easyappear.status', type: 'flag', group: 'EASY_APPEAR', reserved: true },
+    { key: 'easyappear.appToken', type: 'secret', group: 'EASY_APPEAR' },
+    { key: 'yellgo.status', type: 'flag', group: 'YELLGO', reserved: true },
+    { key: 'yellgo.apiKey', type: 'secret', group: 'YELLGO' },
+    { key: 'leggimenu.status', type: 'flag', group: 'LEGGIMENU', reserved: true },
+    { key: 'leggimenu.apiKey', type: 'secret', group: 'LEGGIMENU' },
+    { key: 'plateform.status', type: 'flag', group: 'PLATEFORM', reserved: true },
+    { key: 'plateform.username', type: 'secret', group: 'PLATEFORM' },
+    { key: 'plateform.password', type: 'secret', group: 'PLATEFORM' },
+    { key: 'cooperto.status', type: 'flag', group: 'COOPERTO', reserved: true },
+    { key: 'cooperto.apiKey', type: 'secret', group: 'COOPERTO' },
+    { key: 'tomatoai.status', type: 'flag', group: 'TOMATO_AI', reserved: true },
+    { key: 'tomatoai.apiKey', type: 'secret', group: 'TOMATO_AI' },
+    { key: 'keenon.status', type: 'flag', group: 'KEENON', reserved: true },
+    { key: 'keenon.storeId', type: 'text', group: 'KEENON' },
+    { key: 'tsh.status', type: 'flag', group: 'TSH', reserved: true },
+    { key: 'tsh.testMode', type: 'flag', group: 'TSH' },
+    { key: 'tsh.id', type: 'secret', group: 'TSH' },
+    { key: 'tsh.secret', type: 'secret', group: 'TSH' },
+    { key: 'tsh.propertyId', type: 'text', group: 'TSH' },
+    { key: 'tsh.serviceName', type: 'text', group: 'TSH' },
+    { key: 'phlex.status', type: 'flag', group: 'PHLEX', reserved: true },
+    { key: 'phlex.username', type: 'secret', group: 'PHLEX' },
+    { key: 'phlex.password', type: 'secret', group: 'PHLEX' },
+    { key: 'phlex.structureId', type: 'text', group: 'PHLEX' },
+  ],
+  dealerSettings: [
+    { key: 'sentry', type: 'flag', group: 'TRACKING' },
+    { key: 'serverIp', type: 'text', group: 'SERVER' },
+    { key: 'connectorAddress', type: 'plain', group: 'CONNECTOR' },
   ],
 };
 
@@ -354,17 +784,21 @@ export interface Visibility {
 }
 
 /**
- * Whether a key is shown: when the group has the feature it needs (platform administrators and
- * dealers also see the keys marked for them). A hidden key keeps its stored value.
+ * Whether a key is shown: platform administrators and dealers always see it, the others when the
+ * group has the feature it needs. A hidden key keeps its stored value.
  */
 export function isVisible(definition: FieldDef, visibility: Visibility): boolean {
-  if (definition.needs === undefined) {
-    return true;
-  }
   return (
-    visibility.feature(definition.needs) ||
-    (definition.orPrivileged === true && visibility.privileged)
+    definition.needs === undefined || visibility.privileged || visibility.feature(definition.needs)
   );
+}
+
+/** Dictionary key of the title of a part of a block (the receipt, the pre-bill and the order of the printouts). */
+export function partOf(block: SettingsBlockName, group: string): string | null {
+  if (block !== 'printing') {
+    return null;
+  }
+  return `PLACES.PART.PRINT_${group.split('_')[0]}`;
 }
 
 // Values of the form, from and to the API.

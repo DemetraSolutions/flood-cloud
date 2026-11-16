@@ -17,6 +17,7 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalOf } from '../helpers/principal.ts';
 import { copyGroupsToMirror } from '../helpers/mirror.ts';
 import { snapshotOf } from '../helpers/legacy-write.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 const G1 = fixtureId('group', 1);
 const G2 = fixtureId('group', 2);
@@ -28,7 +29,7 @@ let access: GroupAccess;
 let tick = 0;
 const principal = principalOf('PSA');
 const clock = (): Date => new Date(Date.UTC(2026, 10, 13, 10, 0, tick++));
-const writer = (): CompaniesPlacesWriter => companiesPlacesWriter(principal, access, ctx.databases, { now: clock });
+const writer = (): CompaniesPlacesWriter => companiesPlacesWriter(principal, access, ctx.databases, { versionKey: TEST_VERSION_KEY, now: clock });
 const groupDb = (group = G1) => ctx.databases.group(group, 'cluster0');
 const stored = async (id: ObjectId, group = G1): Promise<Document> => (await groupDb(group).collection('companies').findOne({ _id: id }, { ...EXACT_TYPES }))!;
 const copy = async (id: ObjectId): Promise<Document> => (await ctx.databases.common().collection('companies').findOne({ _id: id }, { ...EXACT_TYPES }))!;
@@ -115,8 +116,8 @@ describe('companies writer: the keys of the blocks', () => {
     assert.ok(sameDocument({ v: settings['unknownSettings' as keyof typeof settings] }, { v: (before['settings'] as Document)['unknownSettings'] }));
     assert.ok(sameDocument({ v: (after['medias'] as Document)['unknownMedia'] }, { v: (before['medias'] as Document)['unknownMedia'] }));
     assert.ok(sameDocument({ v: (after['futureKey']) }, { v: before['futureKey'] }));
-    assert.equal(outcome.version, versionOf('companies', after));
-    assert.notEqual(outcome.version, versionOf('companies', before));
+    assert.equal(outcome.version, versionOf('companies', after, TEST_VERSION_KEY));
+    assert.notEqual(outcome.version, versionOf('companies', before, TEST_VERSION_KEY));
     await assertMirrored(C(1));
   });
 
@@ -209,7 +210,7 @@ describe('companies writer: the keys of the blocks', () => {
         }),
       }),
     } as never;
-    await assert.rejects(() => companiesPlacesWriter(principal, access, failing, { now: clock }).updateCompany(C(1), version, { 'settings.api.cerved': false }), /boom/);
+    await assert.rejects(() => companiesPlacesWriter(principal, access, failing, { versionKey: TEST_VERSION_KEY, now: clock }).updateCompany(C(1), version, { 'settings.api.cerved': false }), /boom/);
     assert.deepEqual(await snapshotOf(ctx.client, names()), before);
   });
 });
@@ -238,7 +239,7 @@ describe('companies writer: creation with the keys of the blocks', () => {
     assert.equal(Object.keys(settings.ecommerce).length, 27);
     assert.equal(Object.keys(created['fattura_elettronica'] as Document).length, 16);
     assert.equal(((created['medias'] as Document)['images'] as Document)['internalFileName'], 'a.png');
-    assert.equal(outcome.version, versionOf('companies', created));
+    assert.equal(outcome.version, versionOf('companies', created, TEST_VERSION_KEY));
     assert.ok(sameDocument(expectedCopy(created, G1), await copy(outcome.id)));
     assert.equal(ECOMMERCE_FLAGS.length + 3, Object.keys(settings.ecommerce).length);
   });
@@ -294,13 +295,13 @@ describe('companies writer: reading and deleting', () => {
   it('applies the perimeter of the principal to what it reads', async () => {
     const own = principalOf('CA', { groupId: G1, companyIds: [C(1)], placeIds: [P(1)] });
     const ownAccess = (await accessFor(own, G1))!;
-    const reader = companiesPlacesWriter(own, ownAccess, ctx.databases);
+    const reader = companiesPlacesWriter(own, ownAccess, ctx.databases, { versionKey: TEST_VERSION_KEY });
     assert.notEqual(await reader.read('companies', C(1)), null);
     assert.equal(await reader.read('companies', C(2)), null);
     assert.notEqual(await reader.read('places', P(1)), null);
     assert.equal(await reader.read('places', P(2)), null);
     const placeAdmin = principalOf('PA', { groupId: G1, placeIds: [P(2)] });
-    const paReader = companiesPlacesWriter(placeAdmin, (await accessFor(placeAdmin, G1))!, ctx.databases);
+    const paReader = companiesPlacesWriter(placeAdmin, (await accessFor(placeAdmin, G1))!, ctx.databases, { versionKey: TEST_VERSION_KEY });
     assert.equal(await paReader.read('companies', C(1)), null);
     assert.notEqual(await paReader.read('places', P(2)), null);
     assert.equal(await paReader.read('places', P(1)), null);

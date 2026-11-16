@@ -120,6 +120,7 @@ export interface BackofficeDeps {
 export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules {
   const { config, databases, activityLog, logger, rateLimiter } = deps;
   const now = deps.now ?? Date.now;
+  const versionKey = Buffer.from(config.versionHmacKey.reveal(), 'base64');
   const users = createUsersRepository(databases);
   const credentials = createCredentialsRepository(databases);
   const sessions = createSessionsRepository(databases);
@@ -187,7 +188,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const companies = createCompaniesController(
     createCompaniesService({
       repository: companiesRepository,
-      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()) }),
+      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
       images: mediaService,
       activityLog,
       newId: () => randomBytes(12).toString('hex'),
@@ -211,8 +212,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const places = createPlacesController(
     createPlacesService({
       repository: createPlacesRepository(databases, companiesRepository),
-      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()) }),
-      readerFor: (principal, access) => companiesPlacesReader(principal, access, databases),
+      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
+      readerFor: (principal, access) => companiesPlacesReader(principal, access, databases, { versionKey }),
       logger,
       activityLog,
       references: createReferencesRepository(databases),

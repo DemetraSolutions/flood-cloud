@@ -1,0 +1,27 @@
+<div class="settings">
+  <nav [attr.aria-label]="'PLACES.MENU_LABEL' | t">
+    @for (group of groups(); track group.id) {
+      <h2>{{ 'PLACES.MENU_GROUP.' + group.id | t }}</h2>
+      <ul>
+        @for (entry of group.entries; track entry.id) {
+          <li>
+            <a [routerLink]="entry.id" routerLinkActive="active" ariaCurrentWhenActive="page">
+              {{ 'PLACES.MENU.' + entry.key | t }}
+              @if (state.entryDirty()[entry.id]) {
+                <fc-status-badge tone="warning">{{ 'PLACES.UNSAVED' | t }}</fc-status-badge>
+              }
+              @if (state.entryErrors()[entry.id] > 0) {
+                <fc-status-badge tone="danger">
+                  {{ 'PLACES.SECTION_ERRORS' | t: { count: state.entryErrors()[entry.id] } }}
+                </fc-status-badge>
+              }
+            </a>
+          </li>
+        }
+      </ul>
+    }
+  </nav>
+  <section class="entry">
+    <router-outlet />
+  </section>
+</div>

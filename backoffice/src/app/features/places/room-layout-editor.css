@@ -1,0 +1,184 @@
+:host {
+  display: block;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+@media (max-width: 48rem) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.side,
+.map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+h3 {
+  margin: 0;
+  font-size: var(--font-size-md);
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.problem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-on-warning-soft);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.unplaced {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The selected button of the list is told apart by more than colour: a thick border. */
+.unplaced button[aria-pressed='true'] {
+  border-width: 4px;
+}
+
+.viewport {
+  max-block-size: 60vh;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.surface {
+  --cell: 2rem;
+  position: relative;
+  inline-size: calc(var(--cols) * var(--cell));
+  block-size: calc(var(--rows) * var(--cell));
+}
+
+.cells {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  grid-auto-rows: var(--cell);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.cell:hover {
+  background: var(--color-surface-muted);
+}
+
+/* The layer of the tables sits over the cells and lets the pointer through, except on the tables. */
+.layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-rows: repeat(var(--rows), 1fr);
+  pointer-events: none;
+}
+
+.table {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  overflow: hidden;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-on-primary-soft);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.table.round {
+  border-radius: 50%;
+}
+
+.table.selected {
+  border-width: 4px;
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+/* Overlapping tables: a dashed danger border and a warning icon, never colour alone. */
+.table.overlap {
+  border-style: dashed;
+  border-color: var(--color-danger);
+  background: var(--color-warning-soft);
+  color: var(--color-on-warning-soft);
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handle {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-end: 0;
+  inline-size: 1rem;
+  block-size: 1rem;
+  background: var(--color-primary);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+@media (pointer: coarse) {
+  .handle {
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+  }
+}

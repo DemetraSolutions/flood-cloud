@@ -11,6 +11,7 @@ import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { differences } from '../helpers/legacy-write.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: CompaniesWorld;
@@ -125,7 +126,7 @@ describe('PATCH /v1/groups/{groupId}/companies/{companyId}', () => {
     ]) {
       assert.ok(sameDocument({ v: a }, { v: b }));
     }
-    assert.equal(etagOf(reply), `"${versionOf('companies', after)}"`);
+    assert.equal(etagOf(reply), `"${versionOf('companies', after, TEST_VERSION_KEY)}"`);
     assert.ok(sameDocument(expectedCopy(after, world.group(0).groupId), (await world.copyOf(id))!));
     assert.deepEqual([reply.body.data.name, reply.body.data.status, reply.body.data.address.city, reply.body.data.invoiceNumbering.lastInvoiceNumber, reply.body.data.fiscalCode], ['Renamed', 'disabled', 'Roma', 77, null]);
     assert.deepEqual((await call(psa(), 'GET', sub(id))).body.data, reply.body.data);

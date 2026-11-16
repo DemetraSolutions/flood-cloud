@@ -7,7 +7,6 @@ import { KeyedValues } from './keyed-values';
 import { snake } from './place-fields';
 import { PlaceFieldsView } from './place-fields-view';
 import { KIOSK_TEXTS } from './place-model';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { RowColumn, RowsEditor } from './rows-editor';
 
@@ -21,7 +20,7 @@ export const MAX_KIOSK_CATEGORIES = 500;
  */
 @Component({
   selector: 'fc-place-kiosk',
-  imports: [KeyedValues, PlaceFieldsView, PlaceSave, RowsEditor, TPipe],
+  imports: [KeyedValues, PlaceFieldsView, RowsEditor, TPipe],
   templateUrl: './place-kiosk.html',
   styleUrl: './place-section.css',
 })

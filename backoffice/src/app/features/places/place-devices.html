@@ -1,0 +1,348 @@
+<form novalidate (submit)="$event.preventDefault()">
+  <fieldset>
+    <legend>{{ 'PLACES.DEVICES.TITLE' | t }}</legend>
+    <p class="note">{{ 'PLACES.DEVICES.SERVER_INFO' | t }}</p>
+    @if (!devices().editable) {
+      <p class="note" role="status">{{ 'PLACES.DEVICES.NOT_EDITABLE' | t }}</p>
+    }
+    @if (state.fieldError(items); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    @if (editable()) {
+      <div>
+        <button fc-button variant="secondary" (click)="add()">
+          {{ 'PLACES.DEVICES.ADD' | t }}
+        </button>
+      </div>
+    }
+  </fieldset>
+
+  <section class="rows" [attr.aria-label]="'PLACES.DEVICES.LIST' | t">
+    @for (device of devices().items; track $index; let i = $index) {
+      @let f = items[i];
+      @let name = device.name || ('PLACES.DEVICES.UNNAMED' | t);
+      <article class="row device" [attr.aria-label]="name">
+        <div class="row-actions">
+          <strong>{{ name }}</strong>
+          @if (device.server) {
+            <fc-status-badge tone="info">{{ 'PLACES.DEVICES.SERVER' | t }}</fc-status-badge>
+          }
+          <span class="note">{{ typeLabel(device.type) }}</span>
+          @let toggleKey = toggleKeyOf(isOpen(i));
+          <button
+            fc-button
+            variant="secondary"
+            [disabled]="f().invalid()"
+            [attr.aria-expanded]="isOpen(i)"
+            [attr.aria-label]="toggleKey + '_LABEL' | t: { name: name }"
+            (click)="toggle(i)"
+          >
+            {{ toggleKey | t }}
+          </button>
+          @if (editable()) {
+            <button
+              fc-button
+              variant="secondary"
+              [attr.aria-label]="'PLACES.DEVICES.COPY_LABEL' | t: { name: name }"
+              (click)="copy(i)"
+            >
+              {{ 'PLACES.DEVICES.COPY' | t }}
+            </button>
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="'PLACES.DEVICES.DELETE_LABEL' | t: { name: name }"
+              (click)="remove(i)"
+            >
+              {{ 'PLACES.DEVICES.DELETE' | t }}
+            </button>
+          }
+        </div>
+
+        @if (isOpen(i)) {
+          <div class="grid">
+            <fc-checkbox
+              [label]="'PLACES.DEVICES.SERVER' | t"
+              [checked]="device.server"
+              [disabled]="f.server().disabled()"
+              (checkedChange)="setServer(i, $event)"
+            />
+            <fc-text-field
+              [formField]="f.name"
+              [label]="'PLACES.DEVICES.NAME' | t"
+              [error]="state.fieldError(f.name)"
+              (blurred)="f.name().markAsTouched()"
+            />
+          </div>
+
+          <fieldset>
+            <legend>{{ 'PLACES.DEVICES.TYPE_LABEL' | t }}</legend>
+            <div class="checks">
+              @for (type of typesFor(device); track type) {
+                <span class="radio">
+                  <input
+                    type="radio"
+                    [id]="'device-type-' + i + '-' + type"
+                    [name]="'device-type-' + i"
+                    [checked]="device.type === type"
+                    [disabled]="f.type().disabled()"
+                    (change)="setType(i, type)"
+                  />
+                  <label [for]="'device-type-' + i + '-' + type">{{ typeLabel(type) }}</label>
+                </span>
+              }
+            </div>
+            @if (state.fieldError(f.type); as problem) {
+              <p class="problem" role="alert">{{ problem }}</p>
+            }
+          </fieldset>
+
+          @if (shows(device, 'fiscal')) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.FISCAL' | t }}</legend>
+              <div class="grid">
+                <fc-select
+                  [formField]="f.driver"
+                  [label]="'PLACES.DEVICES.FISCAL_DRIVER' | t"
+                  [placeholder]="'PLACES.DEVICES.SELECT_DRIVER' | t"
+                  [options]="driverOptions(fiscalDrivers, device.driver)"
+                  [error]="state.fieldError(f.driver)"
+                  (blurred)="f.driver().markAsTouched()"
+                />
+                <fc-text-field
+                  [formField]="f.host"
+                  [label]="'PLACES.DEVICES.HOST' | t"
+                  [error]="state.fieldError(f.host)"
+                  (blurred)="f.host().markAsTouched()"
+                />
+                <fc-text-field
+                  [formField]="f.serialNumber"
+                  [label]="'PLACES.DEVICES.SERIAL_NUMBER' | t"
+                  [error]="state.fieldError(f.serialNumber)"
+                  (blurred)="f.serialNumber().markAsTouched()"
+                />
+              </div>
+              <div class="checks">
+                <fc-checkbox
+                  [formField]="f.epsonProtocol17"
+                  [label]="'PLACES.DEVICES.EPSON_PROTOCOL_17' | t"
+                  (blurred)="f.epsonProtocol17().markAsTouched()"
+                />
+                <fc-checkbox
+                  [formField]="f.epsonEreceipt"
+                  [label]="'PLACES.DEVICES.EPSON_ERECEIPT' | t"
+                  (blurred)="f.epsonEreceipt().markAsTouched()"
+                />
+                <fc-checkbox
+                  [formField]="f.DLN502017Rounding"
+                  [label]="'PLACES.DEVICES.ROUNDING' | t"
+                  (blurred)="f.DLN502017Rounding().markAsTouched()"
+                />
+              </div>
+            </fieldset>
+          }
+
+          @if (shows(device, 'secondary')) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.SECONDARY' | t }}</legend>
+              <div class="grid">
+                <fc-select
+                  [formField]="f.secondaryDriver"
+                  [label]="'PLACES.DEVICES.SECONDARY_DRIVER' | t"
+                  [placeholder]="'PLACES.DEVICES.SELECT_SECONDARY_DRIVER' | t"
+                  [options]="driverOptions(secondaryDrivers, device.secondaryDriver)"
+                  [error]="state.fieldError(f.secondaryDriver)"
+                  (blurred)="f.secondaryDriver().markAsTouched()"
+                />
+                <fc-text-field
+                  [formField]="f.secondaryHost"
+                  [label]="'PLACES.DEVICES.SECONDARY_HOST' | t"
+                  [error]="state.fieldError(f.secondaryHost)"
+                  (blurred)="f.secondaryHost().markAsTouched()"
+                />
+              </div>
+            </fieldset>
+          }
+
+          @if (shows(device, 'automaticCash')) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.CASH' | t }}</legend>
+              <div class="grid">
+                <fc-select
+                  [formField]="f.automaticCashDriver"
+                  [label]="'PLACES.DEVICES.CASH_DRIVER' | t"
+                  [placeholder]="'PLACES.DEVICES.SELECT_CASH_DRIVER' | t"
+                  [options]="driverOptions(cashDrivers, device.automaticCashDriver)"
+                  [error]="state.fieldError(f.automaticCashDriver)"
+                  (blurred)="f.automaticCashDriver().markAsTouched()"
+                />
+                <fc-text-field
+                  [formField]="f.automaticCashHost"
+                  [label]="'PLACES.DEVICES.CASH_HOST' | t"
+                  [error]="state.fieldError(f.automaticCashHost)"
+                  (blurred)="f.automaticCashHost().markAsTouched()"
+                />
+                <fc-credential-field
+                  [credential]="f.automaticCashUsername"
+                  [label]="'PLACES.DEVICES.USERNAME' | t"
+                  [error]="state.fieldError(f.automaticCashUsername)"
+                />
+                <fc-credential-field
+                  [credential]="f.automaticCashPassword"
+                  [label]="'PLACES.DEVICES.PASSWORD' | t"
+                  [error]="state.fieldError(f.automaticCashPassword)"
+                />
+              </div>
+            </fieldset>
+          }
+
+          @if (shows(device, 'pos')) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.POS17' | t }}</legend>
+              <div class="grid">
+                <fc-text-field
+                  [formField]="f.posProtocol17ip"
+                  [label]="'PLACES.DEVICES.IP' | t"
+                  [error]="state.fieldError(f.posProtocol17ip)"
+                  (blurred)="f.posProtocol17ip().markAsTouched()"
+                />
+                <fc-text-field
+                  [formField]="f.posProtocol17port"
+                  [label]="'PLACES.DEVICES.PORT' | t"
+                  [error]="state.fieldError(f.posProtocol17port)"
+                  (blurred)="f.posProtocol17port().markAsTouched()"
+                />
+                <fc-text-field
+                  [formField]="f.posProtocol17terminalId"
+                  [label]="'PLACES.DEVICES.TERMINAL_ID' | t"
+                  [error]="state.fieldError(f.posProtocol17terminalId)"
+                  (blurred)="f.posProtocol17terminalId().markAsTouched()"
+                />
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.DOJO' | t }}</legend>
+              <fc-text-field
+                [formField]="f.posDojoTerminalId"
+                [label]="'PLACES.DEVICES.TERMINAL_ID' | t"
+                [error]="state.fieldError(f.posDojoTerminalId)"
+                (blurred)="f.posDojoTerminalId().markAsTouched()"
+              />
+            </fieldset>
+          }
+
+          @if (shows(device, 'externalDisplay')) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.DISPLAY' | t }}</legend>
+              <fc-select
+                [formField]="f.externalDisplayId"
+                [label]="'PLACES.DEVICES.DISPLAY' | t"
+                [placeholder]="'PLACES.DEVICES.SELECT_DISPLAY' | t"
+                [options]="linkOptions('external-display', device.externalDisplayId, i)"
+                [error]="state.fieldError(f.externalDisplayId)"
+                (blurred)="f.externalDisplayId().markAsTouched()"
+              />
+            </fieldset>
+          }
+
+          @if (shows(device, 'companyPrinter') && companyPrinterVisible()) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.COMPANY_PRINTER' | t }}</legend>
+              <fc-select
+                [formField]="f.secondaryCompanyPrinterId"
+                [label]="'PLACES.DEVICES.COMPANY_PRINTER' | t"
+                [placeholder]="'PLACES.DEVICES.SELECT_COMPANY_PRINTER' | t"
+                [options]="linkOptions('tgm', device.secondaryCompanyPrinterId, i)"
+                [error]="state.fieldError(f.secondaryCompanyPrinterId)"
+                (blurred)="f.secondaryCompanyPrinterId().markAsTouched()"
+              />
+            </fieldset>
+          }
+
+          @if (shows(device, 'favorites')) {
+            <fc-select
+              [formField]="f.favoritesId"
+              [label]="'PLACES.DEVICES.FAVORITES' | t"
+              [placeholder]="'PLACES.DEVICES.SELECT_FAVORITES' | t"
+              [options]="favoritesOptions(device.favoritesId)"
+              [error]="state.fieldError(f.favoritesId)"
+              (blurred)="f.favoritesId().markAsTouched()"
+            />
+          }
+
+          @if (shows(device, 'ordering')) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.ORDERING' | t }}</legend>
+              <p class="note">{{ 'PLACES.DEVICES.ORDERING_INFO' | t }}</p>
+              @if (stations().length === 0) {
+                <p class="note">{{ 'PLACES.DEVICES.NO_STATIONS' | t }}</p>
+              }
+              <div class="checks">
+                @for (station of stations(); track station.id) {
+                  <fc-checkbox
+                    [label]="station.name"
+                    [checked]="hasStation(device, station.id)"
+                    [disabled]="f.printStations().disabled()"
+                    (checkedChange)="toggleStation(i, station.id, $event)"
+                  />
+                }
+              </div>
+              @if (state.fieldError(f.printStations); as problem) {
+                <p class="problem" role="alert">{{ problem }}</p>
+              }
+              <div class="checks">
+                <fc-checkbox
+                  [formField]="f.orderingPrintSingleProduct"
+                  [label]="'PLACES.DEVICES.SINGLE_PRODUCT' | t"
+                  (blurred)="f.orderingPrintSingleProduct().markAsTouched()"
+                />
+                <fc-checkbox
+                  [formField]="f.orderingPrintSingleProductTables"
+                  [label]="'PLACES.DEVICES.SINGLE_PRODUCT_TABLES' | t"
+                  (blurred)="f.orderingPrintSingleProductTables().markAsTouched()"
+                />
+              </div>
+            </fieldset>
+          }
+
+          @if (shows(device, 'scale')) {
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.SCALE' | t }}</legend>
+              <div class="grid">
+                <fc-text-field
+                  [formField]="f.scaleDialog0204Ip"
+                  [label]="'PLACES.DEVICES.SCALE_IP' | t"
+                  [error]="state.fieldError(f.scaleDialog0204Ip)"
+                  (blurred)="f.scaleDialog0204Ip().markAsTouched()"
+                />
+                <fc-text-field
+                  [formField]="f.scaleDialog0204Port"
+                  [label]="'PLACES.DEVICES.SCALE_PORT' | t"
+                  [error]="state.fieldError(f.scaleDialog0204Port)"
+                  (blurred)="f.scaleDialog0204Port().markAsTouched()"
+                />
+              </div>
+              <fc-checkbox
+                [formField]="f.scaleDialog0204SendPrice"
+                [label]="'PLACES.DEVICES.SCALE_SEND_PRICE' | t"
+                (blurred)="f.scaleDialog0204SendPrice().markAsTouched()"
+              />
+            </fieldset>
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.BARCODE' | t }}</legend>
+              <fc-text-field
+                [formField]="f.barcodePriceRule"
+                [label]="'PLACES.DEVICES.BARCODE_RULE' | t"
+                [hint]="'PLACES.DEVICES.BARCODE_INFO' | t"
+                [error]="state.fieldError(f.barcodePriceRule)"
+                (blurred)="f.barcodePriceRule().markAsTouched()"
+              />
+            </fieldset>
+          }
+        }
+      </article>
+    } @empty {
+      <p class="note">{{ 'PLACES.DEVICES.EMPTY' | t }}</p>
+    }
+  </section>
+</form>

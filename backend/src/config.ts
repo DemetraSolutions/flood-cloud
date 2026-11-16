@@ -79,6 +79,11 @@ export interface Config {
   readonly requestTimeoutMs: number;
   /** Pepper of the legacy password hashes (`LEGACY_PASSWORD_PEPPER`), a secret. */
   readonly legacyPasswordPepper: Secret;
+  /**
+   * Key of the HMAC-SHA256 that signs the version (`ETag`) of the companies and places of a group (`VERSION_HMAC_KEY`), a secret: base64 or base64url of at least 32 bytes
+   * (for example `openssl rand -base64 32`). Without it the version would be a plain hash of data (credentials included) that anyone who reads the `ETag` could check offline.
+   */
+  readonly versionHmacKey: Secret;
   /** Whether the legacy system still runs, so password changes also write the legacy hash (`LEGACY_PASSWORD_COEXISTENCE`). */
   readonly legacyPasswordCoexistence: boolean;
   /** Requests per minute allowed to a login username (`RATE_LIMIT_LOGIN_PER_USERNAME`). */
@@ -488,7 +493,7 @@ export function loadDatabaseConfig(env: Env): DatabaseConfig {
  * @returns The validated configuration, deeply frozen.
  * @throws {ConfigError} When any variable is missing or invalid; the message names variables only.
  * @example
- * const config = loadConfig({ APP_ENV: 'development', MONGODB_URI: 'mongodb://localhost', LEGACY_PASSWORD_PEPPER: 'x' });
+ * const config = loadConfig({ APP_ENV: 'development', MONGODB_URI: 'mongodb://localhost', LEGACY_PASSWORD_PEPPER: 'x', VERSION_HMAC_KEY: '<base64 of 32 bytes>' });
  */
 export function loadConfig(env: Env): Config {
   const issues: ConfigIssue[] = [];
@@ -561,6 +566,16 @@ export function loadConfig(env: Env): Config {
     legacyPasswordPepper = new Secret(pepperRaw);
   }
 
+  const versionKeyRaw = env['VERSION_HMAC_KEY'];
+  let versionHmacKey: Secret | undefined;
+  if (versionKeyRaw === undefined || versionKeyRaw === '') {
+    issues.push({ variable: 'VERSION_HMAC_KEY', reason: 'is required' });
+  } else if (!/^(?:[A-Za-z0-9+/]+={0,2}|[A-Za-z0-9_-]+)$/.test(versionKeyRaw) || Buffer.from(versionKeyRaw, 'base64').length < 32) {
+    issues.push({ variable: 'VERSION_HMAC_KEY', reason: 'must be base64 or base64url text of at least 32 bytes' });
+  } else {
+    versionHmacKey = new Secret(versionKeyRaw);
+  }
+
   const coexistenceRaw = optionalVariable(env, 'LEGACY_PASSWORD_COEXISTENCE');
   let legacyPasswordCoexistence: boolean | undefined = true;
   if (coexistenceRaw === 'true' || coexistenceRaw === 'false') {
@@ -582,6 +597,7 @@ export function loadConfig(env: Env): Config {
     requestTimeoutMs === undefined ||
     shutdownDrainMs === undefined ||
     legacyPasswordPepper === undefined ||
+    versionHmacKey === undefined ||
     legacyPasswordCoexistence === undefined ||
     rateLimitLoginPerUsername === undefined ||
     rateLimitLoginPerIp === undefined ||
@@ -617,6 +633,7 @@ export function loadConfig(env: Env): Config {
     shutdownDrainMs,
     requestTimeoutMs,
     legacyPasswordPepper,
+    versionHmacKey,
     legacyPasswordCoexistence,
     rateLimitLoginPerUsername,
     rateLimitLoginPerIp,

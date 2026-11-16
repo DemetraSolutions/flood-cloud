@@ -2,7 +2,6 @@ import { Component, computed, inject } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { RowColumn, RowsEditor } from './rows-editor';
 
@@ -21,7 +20,7 @@ export const PAYMENT_MODES: readonly string[] = Array.from(
  */
 @Component({
   selector: 'fc-place-payments',
-  imports: [PlaceFieldsView, PlaceSave, RowsEditor, TPipe],
+  imports: [PlaceFieldsView, RowsEditor, TPipe],
   templateUrl: './place-payments.html',
   styleUrl: './place-section.css',
 })

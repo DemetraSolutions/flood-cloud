@@ -11,6 +11,7 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 import { PRICE_LIST, SLOT } from '../helpers/place-fixtures.ts';
 import { startPlacesWorld } from '../helpers/places.ts';
 import type { PlacesWorld } from '../helpers/places.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: PlacesWorld;
@@ -73,7 +74,7 @@ describe('PATCH /v1/groups/{groupId}/places/{placeId}', () => {
     assert.deepEqual(general['priceLists'], [{ id: PRICE_LIST, allYouCanEat: false, ayceCode1: '7', ayceCode2: null }]);
     assert.ok(general['chargeDocumentQt'] instanceof Int32 && general['totalRounding'] instanceof Double && general['unknownGeneral'] === 'keep');
     assert.notEqual(reply.headers.get('etag'), `"${version}"`);
-    assert.equal(reply.headers.get('etag'), `"${versionOf('places', after)}"`);
+    assert.equal(reply.headers.get('etag'), `"${versionOf('places', after, TEST_VERSION_KEY)}"`);
     assert.deepEqual([reply.body.data.name, reply.body.data.address.city, reply.body.data.license.status, reply.body.data.contactName], ['Bar Milano', 'Roma', 'disabled', null]);
     assert.ok(sameDocument(expectedCopy(after, world.group(0).groupId), (await world.copyOfPlace(P(100)))!));
     const group = (await ctx.databases.common().collection('groups').findOne({ _id: world.group(0).groupId }))!;
@@ -108,14 +109,18 @@ describe('PATCH /v1/groups/{groupId}/places/{placeId}', () => {
     await groupDb().collection('places').updateOne({ _id: P(100) }, { $set: { name: 'Bar Roma' } });
   });
 
-  it('is not made late by a write of the POS: devices[i].info and a table of a room do not change the version, and survive', async () => {
+  it('is not made late by a write of the POS to a device (the info and the status): they do not change the version, and survive; a write of the POS to the rooms does, and is a 412', async () => {
     const tag = await tagOf(P(100));
-    await groupDb().collection('places').updateOne({ _id: P(100) }, { $set: { 'devices.0.info.os': 'changed by the POS', 'rooms.0.tables.0.name': 'T1', updateDate: new Date() } });
+    await groupDb().collection('places').updateOne({ _id: P(100) }, { $set: { 'devices.0.info.os': 'changed by the POS', 'devices.0.status': { busy: true, userName: 'pos' }, updateDate: new Date() } });
     const reply = await call(psa(), 'PATCH', path(P(100)), { address: { city: 'Torino' } }, tag);
     assert.equal(reply.status, 200, JSON.stringify(reply.body));
     const after = await stored(P(100));
-    assert.deepEqual([((after['devices'] as Document[])[0]!['info'] as Document)['os'], ((after['rooms'] as Document[])[0]!['tables'] as Document[])[0]!['name'], ((after['roomsSettings'] as Document)['reservation'] as Document)['suspendedToday']], ['changed by the POS', 'T1', true]);
+    assert.deepEqual([((after['devices'] as Document[])[0]!['info'] as Document)['os'], ((after['devices'] as Document[])[0]!['status'] as Document)['busy'], ((after['roomsSettings'] as Document)['reservation'] as Document)['suspendedToday']], ['changed by the POS', true, true]);
     assert.equal(after['city'], 'Torino');
+    const stale = await tagOf(P(100));
+    await groupDb().collection('places').updateOne({ _id: P(100) }, { $set: { 'rooms.0.tables.0.name': 'T1', updateDate: new Date() } });
+    assert.equal(failure(await call(psa(), 'PATCH', path(P(100)), { address: { city: 'Milano' } }, stale)).status, 412);
+    await groupDb().collection('places').updateOne({ _id: P(100) }, { $set: { 'rooms.0.tables.0.name': '1', 'devices.0.status': { busy: false, userName: '' } } });
     // A write of the legacy to an owned path, by contrast, is a 412.
     const late = await tagOf(P(100));
     await groupDb().collection('places').updateOne({ _id: P(100) }, { $set: { 'general.priceLists': [] } });
@@ -128,8 +133,9 @@ describe('PATCH /v1/groups/{groupId}/places/{placeId}', () => {
       [{}, issues(['(body)', 'required'])],
       [{ groupId: hex(world.group(1).groupId) }, issues(['groupId', 'unknown'])],
       [{ trashed: true }, issues(['trashed', 'unknown'])],
-      [{ integrations: { dojo: { apiKey: 'x' } } }, issues(['integrations', 'unknown'])],
-      [{ devices: [] }, issues(['devices', 'unknown'])],
+      [{ integrations: { unknownIntegration: { apiKey: 'x' } } }, issues(['integrations.unknownIntegration', 'unknown'])],
+      [{ devices: [] }, issues(['devices', 'type'])],
+      [{ license: { sentry: true } }, issues(['license.sentry', 'unknown'])],
       [{ server: { ip: '1.1.1.1' } }, issues(['server', 'unknown'])],
       [{ license: { suspendedToday: true } }, issues(['license.suspendedToday', 'unknown'])],
       [{ $set: { name: 'x' } }, issues(['(key)', 'forbiddenKey'])],
@@ -140,7 +146,7 @@ describe('PATCH /v1/groups/{groupId}/places/{placeId}', () => {
   });
 
   it('answers 413 above the limit of the body', async () => {
-    assert.equal((await world.office.call('PATCH', world.placePath(0, `/${hex(P(100))}`), await world.as.tokenOf(psa()), { name: 'x'.repeat(300_000) }, await tagOf(P(100)))).status, 413);
+    assert.equal((await world.office.call('PATCH', world.placePath(0, `/${hex(P(100))}`), await world.as.tokenOf(psa()), { name: 'x'.repeat(1_200_000) }, await tagOf(P(100)))).status, 413);
   });
 
   it('keeps the perimeter: 404 outside it, for every write, and nothing is written', async () => {
@@ -253,7 +259,7 @@ describe('PATCH /v1/groups/{groupId}/places/{placeId}', () => {
     const reply = await put(psa(), P(104), 'opening-hours', { timezone: 'Europe/Rome', week: week1, special: {}, deliveryTime: { week: week(), special: {} } });
     assert.equal(failure(reply).status, 409);
     assert.equal(failure(reply).code, 'CONFLICT');
-    assert.equal(failure(await patch(psa(), P(104), { license: { sentry: true } })).status, 409);
+    assert.equal(failure(await patch(psa(), P(104), { dealerSettings: { sentry: true } })).status, 409);
     assert.ok(sameDocument(before, await stored(P(104))));
     // The general data can still be changed: the blocks that are not an object are not written.
     assert.equal((await patch(psa(), P(104), { name: 'Odd blocks' })).status, 200);
@@ -296,46 +302,49 @@ describe('PATCH /v1/groups/{groupId}/places/{placeId}', () => {
 });
 
 describe('PUT …/license', () => {
-  const LICENSE = { plan: 'advanced', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active', sentry: true };
+  const LICENSE = { plan: 'advanced', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active' };
 
   it('replaces the block: the PSA changes every key, and the stored forms are the legacy ones', async () => {
-    const reply = await put(psa(), P(100), 'license', { plan: 'enterprice', expirationDate: '2032-02-02', status: 'disabled', sentry: false });
+    const reply = await put(psa(), P(100), 'license', { plan: 'enterprice', expirationDate: '2032-02-02', status: 'disabled' });
     assert.equal(reply.status, 200, JSON.stringify(reply.body));
-    assert.deepEqual(reply.body.data.license, { plan: 'enterprice', expirationDate: '2032-02-02T00:00:00.000Z', status: 'disabled', sentry: false });
+    assert.deepEqual(reply.body.data.license, { plan: 'enterprice', expirationDate: '2032-02-02T00:00:00.000Z', status: 'disabled' });
     const document = await stored(P(100));
     assert.deepEqual([document['plan'], document['expirationDate'], document['status']], ['enterprice', new Date('2032-02-02T00:00:00.000Z'), false]);
-    // Inside `platform` only the Sentry switch is written: the historical key stays.
-    assert.deepEqual(document['platform'], { sentry: false, ip: false });
+    // The license does not touch `platform`: the Sentry switch is in the dealer settings.
+    assert.deepEqual(document['platform'], { sentry: true, ip: false });
     assert.equal((await put(psa(), P(100), 'license', LICENSE)).status, 200);
   });
 
   it('needs every key, and refuses what is not valid', async () => {
-    assert.deepEqual(failure(await put(psa(), P(100), 'license', {})), issues(['plan', 'required'], ['expirationDate', 'required'], ['status', 'required'], ['sentry', 'required']));
+    assert.deepEqual(failure(await put(psa(), P(100), 'license', {})), issues(['plan', 'required'], ['expirationDate', 'required'], ['status', 'required']));
     assert.deepEqual(failure(await put(psa(), P(100), 'license', { ...LICENSE, plan: 'professional' })), issues(['license.plan', 'incorrect']));
     assert.deepEqual(failure(await put(psa(), P(100), 'license', { ...LICENSE, plan: null })), issues(['license.plan', 'incorrect']));
     assert.deepEqual(failure(await put(psa(), P(100), 'license', { ...LICENSE, status: 'on' })), issues(['status', 'enum']));
     assert.deepEqual(failure(await put(psa(), P(100), 'license', LICENSE, {})), issues(['If-Match', 'required']));
   });
 
-  it('is the PSA’s for the plan and the Sentry switch, the PSA’s and the dealers’ for the end of the license and the state; a value that does not change is accepted from anybody who may write the place', async () => {
+  it('is the PSA’s for the plan, the PSA’s and the dealers’ for the end of the license and the state; a value that does not change is accepted from anybody who may write the place', async () => {
     assert.equal((await put(sa(), P(100), 'license', LICENSE)).status, 200, 'unchanged block from a group administrator');
     assert.equal((await put(ca(), P(100), 'license', LICENSE)).status, 200, 'unchanged block from a company administrator');
     assert.deepEqual(failure(await put(sa(), P(100), 'license', { ...LICENSE, plan: 'basic' })), notAllowed('license.plan'));
-    assert.deepEqual(failure(await put(sa(), P(100), 'license', { ...LICENSE, status: 'disabled', expirationDate: '2031-01-01', sentry: false })), notAllowed('license.status', 'license.expirationDate', 'license.sentry'));
+    assert.deepEqual(failure(await put(sa(), P(100), 'license', { ...LICENSE, status: 'disabled', expirationDate: '2031-01-01' })), notAllowed('license.status', 'license.expirationDate'));
     assert.deepEqual(failure(await put(ca(), P(100), 'license', { ...LICENSE, expirationDate: '2031-01-01' })), notAllowed('license.expirationDate'));
     assert.deepEqual(failure(await put(dealer(), P(100), 'license', { ...LICENSE, plan: 'basic' })), notAllowed('license.plan'));
-    assert.deepEqual(failure(await put(dealer(), P(100), 'license', { ...LICENSE, sentry: false })), notAllowed('license.sentry'));
+    // The Sentry switch is the PSA's, and the dealer settings are for the PSA and the dealers: nobody else may even send them.
+    assert.deepEqual(failure(await patch(dealer(), P(100), { dealerSettings: { sentry: false } })), notAllowed('dealerSettings.sentry'));
+    assert.deepEqual(failure(await patch(sa(), P(100), { dealerSettings: { serverIp: '10.9.9.9' } })), notAllowed('dealerSettings'));
+    assert.equal((await patch(dealer(), P(100), { dealerSettings: { sentry: true } })).status, 200);
     const renewed = await put(dealer(), P(100), 'license', { ...LICENSE, status: 'disabled', expirationDate: '2033-03-03' });
     assert.deepEqual(renewed.body.data.license, { ...LICENSE, status: 'disabled', expirationDate: '2033-03-03T00:00:00.000Z' });
     assert.equal((await put(psa(), P(100), 'license', LICENSE)).status, 200);
-    assert.equal((await put(pa(), world.group(0).ownPlaceId, 'license', { plan: 'basic', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active', sentry: false })).status, 403);
+    assert.equal((await put(pa(), world.group(0).ownPlaceId, 'license', { plan: 'basic', expirationDate: '2030-01-01T00:00:00.000Z', status: 'active' })).status, 403);
   });
 
   it('keeps a historical plan until a PSA changes it, and never writes the epoch for a license without end', async () => {
     assert.equal((await current(P(101))).license.plan, 'professional');
     assert.equal((await patch(sa(), P(101), { name: 'Still professional' })).body.data.license.plan, 'professional');
     assert.equal((await put(sa(), P(101), 'license', { ...LICENSE, plan: 'professional' })).status, 200);
-    assert.equal((await patch(psa(), P(101), { license: { plan: 'professional', sentry: false } })).status, 200);
+    assert.equal((await patch(psa(), P(101), { license: { plan: 'professional' } })).status, 200);
     assert.equal((await stored(P(101)))['plan'], 'professional');
     assert.equal((await put(psa(), P(101), 'license', { ...LICENSE, plan: 'basic', expirationDate: null })).status, 200);
     assert.deepEqual([(await stored(P(101)))['plan'], (await stored(P(101)))['expirationDate']], ['basic', null]);
@@ -417,7 +426,8 @@ describe('what the POS and the legacy own survives every write', () => {
     const start = await stored(P(100));
     const steps: Array<[string, () => Promise<{ status: number }>]> = [
       ['patch', () => patch(psa(), P(100), { name: 'S1', priceListId: null, ecommercePriceListId: PRICE_LIST, invoiceSeries: null, address: { postcode: '00100' } })],
-      ['license', () => put(psa(), P(100), 'license', { plan: 'basic', expirationDate: null, status: 'disabled', sentry: false })],
+      ['license', () => put(psa(), P(100), 'license', { plan: 'basic', expirationDate: null, status: 'disabled' })],
+      ['dealer settings', () => patch(psa(), P(100), { dealerSettings: { sentry: false } })],
       ['hours', () => put(psa(), P(100), 'opening-hours', { timezone: 'Europe/London', week: week(), special: {}, deliveryTime: { week: week(), special: {} } })],
       ['company', () => patch(sa(), P(100), { companyId: hex(fixtureId('company', 2)) })],
     ];

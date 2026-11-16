@@ -33,16 +33,43 @@ export function withValue(
   return block;
 }
 
-/** Presses save, checks the PUT (URL, `If-Match`, body) and answers with the saved place. */
-export async function savePut(
+/** The section of the place each old `PUT` path wrote (the unique save sends the blocks by section). */
+const SECTION_OF_PATH: Record<string, string> = {
+  license: 'license',
+  'opening-hours': 'openingHours',
+  'settings/cash': 'cashSettings',
+  'settings/printing': 'printing',
+  'settings/payments': 'payments',
+  'settings/tables': 'tables',
+  'settings/reservations': 'reservations',
+  'settings/delivery': 'delivery',
+  'settings/self-ordering': 'selfOrdering',
+  'settings/kiosk': 'kiosk',
+  'settings/appointments': 'appointments',
+  'settings/external-display': 'externalDisplay',
+  'settings/fidelity': 'fidelity',
+  'settings/tobacco': 'tobacco',
+  media: 'media',
+  integrations: 'integrations',
+  'settings/dealer': 'dealerSettings',
+  devices: 'devices',
+  'print-stations': 'printStations',
+  rooms: 'rooms',
+  storages: 'storages',
+};
+
+/**
+ * Presses the one save of the page, checks the `PATCH` (URL, `If-Match`, body) and answers with
+ * the saved place. `body` is the whole body of the request, by section.
+ */
+export async function savePatch(
   view: Rendered,
-  path: string,
   body: unknown,
   etag: string = ETAG,
 ): Promise<unknown> {
   await view.click('COMMON.SAVE');
-  const request = backend().expectOne(`${PLACE_URL}/${path}`);
-  expect(request.request.method).toBe('PUT');
+  const request = backend().expectOne(PLACE_URL);
+  expect(request.request.method).toBe('PATCH');
   expect(request.request.headers.get('If-Match')).toBe(etag);
   expect(request.request.body).toEqual(body);
   const sent = request.request.body;
@@ -51,17 +78,42 @@ export async function savePut(
   return sent;
 }
 
-/** Presses save and fails the PUT with a `422` carrying the given details. */
-export async function failPut(
+/**
+ * Presses save and checks that the block of the section of an old `PUT` path went in the `PATCH`
+ * (`path` is that path: `settings/payments`); `block` is what the section holds in the body.
+ */
+export async function savePut(
   view: Rendered,
   path: string,
+  block: unknown,
+  etag: string = ETAG,
+): Promise<unknown> {
+  const sent = (await savePatch(view, { [SECTION_OF_PATH[path]]: block }, etag)) as Record<
+    string,
+    unknown
+  >;
+  return sent[SECTION_OF_PATH[path]];
+}
+
+/** Presses save and fails the `PATCH` with a `422` carrying the given details. */
+export async function failSave(
+  view: Rendered,
   details: { field: string; issue: string }[],
 ): Promise<void> {
   await view.click('COMMON.SAVE');
   backend()
-    .expectOne(`${PLACE_URL}/${path}`)
+    .expectOne(PLACE_URL)
     .flush(errorBody('VALIDATION_ERROR', details), { status: 422, statusText: 'x' });
   await view.view();
+}
+
+/** As {@link failSave}; `path` is the old `PUT` path, which the unique save no longer has. */
+export async function failPut(
+  view: Rendered,
+  _path: string,
+  details: { field: string; issue: string }[],
+): Promise<void> {
+  await failSave(view, details);
 }
 
 /** The permissions of a user who can only read places. */

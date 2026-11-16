@@ -54,8 +54,8 @@ describe('companies repository (real MongoDB)', () => {
   });
 
   it('reads the currencies and the enabled price lists of a group through its catalogs, tolerating a broken container', async () => {
-    assert.deepEqual(await repository.groupLists(fixtureId('group', 1)), { currencies: new Set(['EUR', 'USD']), priceLists: new Set(['a']) });
-    assert.deepEqual(await repository.groupLists(fixtureId('group', 2)), { currencies: new Set(), priceLists: new Set() });
+    assert.deepEqual(await repository.groupLists(fixtureId('group', 1)), { currencies: new Set(['EUR', 'USD']), priceLists: new Set(['a']), taxes: new Set(['tax-001']), favorites: new Map() });
+    assert.deepEqual(await repository.groupLists(fixtureId('group', 2)), { currencies: new Set(), priceLists: new Set(), taxes: new Set(['tax-002']), favorites: new Map() });
     assert.equal(await repository.groupLists(fixtureId('group', 99)), null);
   });
 });

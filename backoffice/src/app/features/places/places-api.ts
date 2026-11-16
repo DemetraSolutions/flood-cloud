@@ -29,6 +29,12 @@ const BLOCK_PATHS: Readonly<Record<Exclude<PlaceSection, 'general'>, string>> = 
   fidelity: 'settings/fidelity',
   tobacco: 'settings/tobacco',
   media: 'media',
+  integrations: 'integrations',
+  dealerSettings: 'settings/dealer',
+  devices: 'devices',
+  printStations: 'print-stations',
+  rooms: 'rooms',
+  storages: 'storages',
 };
 
 /**

@@ -10,6 +10,7 @@ import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { startPlacesWorld } from '../helpers/places.ts';
 import type { PlacesWorld } from '../helpers/places.ts';
+import { TEST_VERSION_KEY } from '../helpers/version-key.ts';
 
 let ctx: TestDatabases;
 let world: PlacesWorld;
@@ -19,7 +20,7 @@ const hex = (id: ObjectId) => id.toHexString();
 const P = (n: number): ObjectId => fixtureId('place', n);
 const path = (id: ObjectId, rest = '') => world.placePath(0, `/${hex(id)}${rest}`);
 const common = () => ctx.databases.common();
-const SECRETS = ['fixture-integration-secret', 'fixture-device-secret', 'fixture-user', '10.0.0.1', 'connector.fixture'];
+const SECRETS = ['fixture-integration-secret', 'fixture-device-secret', 'fixture-user'];
 const copiesOf = (name: string) => ctx.databases.group(world.group(0).groupId, 'cluster0').collection('places').find({ name }).toArray();
 
 before(async () => {
@@ -47,7 +48,7 @@ describe('POST /v1/groups/{groupId}/places/{placeId}/duplicate', () => {
     assert.equal(reply.headers.get('location'), `/v1${world.placePath(0, `/${place.id}`)}`);
     const id = ObjectId.createFromHexString(place.id);
     const copy = (await world.storedPlace(0, id))!;
-    assert.equal(reply.headers.get('etag'), `"${versionOf('places', copy)}"`);
+    assert.equal(reply.headers.get('etag'), `"${versionOf('places', copy, TEST_VERSION_KEY)}"`);
     // Identical but for the five keys, by BSON bytes and in the same order of keys.
     assert.deepEqual(differences(source, copy, ['_id', 'name', 'insertDate', 'updateDate', 'trash']).sort(), ['_id', 'insertDate', 'name', 'updateDate']);
     assert.deepEqual([copy['name'], copy['trash']], ['Bar Roma (Copy)', false]);
@@ -61,11 +62,22 @@ describe('POST /v1/groups/{groupId}/places/{placeId}/duplicate', () => {
     assert.ok(sameDocument(expectedCopy(copy, world.group(0).groupId), (await world.copyOfPlace(id))!));
     // The source is untouched.
     assert.ok(sameDocument(source, (await world.storedPlace(0, P(100)))!));
-    // The credentials, the addresses of the store server and of the connector are never in the response, nor in the log, nor in the application log.
+    // The credentials are never in the response, nor in the log, nor in the application log; the addresses of the store server and of the connector, which the dealers see in the response, are in no log.
     const text = JSON.stringify([reply.body, world.office.activity.entries.slice(mark), world.office.logEvents]);
     for (const secret of SECRETS) {
       assert.ok(!text.includes(secret), secret);
     }
+    const logs = JSON.stringify([world.office.activity.entries.slice(mark), world.office.logEvents]);
+    for (const network of ['10.0.0.1', 'connector.fixture']) {
+      assert.ok(!logs.includes(network), network);
+    }
+    // The response kept for the idempotency of the request has no credential either.
+    const saved = JSON.stringify(await common().collection('idempotencyKeys').find({}).toArray());
+    assert.ok(saved.includes(place.id));
+    for (const secret of SECRETS) {
+      assert.ok(!saved.includes(secret), secret);
+    }
+    assert.deepEqual(place.dealerSettings, { sentry: true, serverIp: '10.0.0.1', connectorAddress: 'http://connector.fixture.example.test' });
     // groups.places lists the new place, the feed has its record, and the log names the source.
     const group = (await common().collection('groups').findOne({ _id: world.group(0).groupId }))!;
     assert.ok((group['places'] as Array<{ _id: ObjectId }>).some((entry) => entry._id.equals(id)));

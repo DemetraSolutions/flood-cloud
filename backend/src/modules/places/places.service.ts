@@ -13,6 +13,7 @@ import type { CompaniesPlacesWriter, CompanyOfPlace, WriteOutcome } from '../../
 import { MalformedDocumentError } from '../../shared/legacy-write/errors.ts';
 import type { NewPlaceFields } from '../../shared/legacy-write/fields.ts';
 import { WEEK_DAYS } from '../../shared/legacy-write/place-paths.ts';
+import { SETTING_FIELDS } from '../../shared/legacy-write/place-settings.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal, ScopeHolder } from '../../shared/security/scope/principal.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
@@ -25,6 +26,7 @@ import type { ReferencesRepository } from '../groups/catalogs/references.reposit
 import type { Logger } from '../../shared/logging/logger.ts';
 import type { MediaService } from '../media/media.service.ts';
 import type { StoreKeysService } from '../store-keys/store-keys.service.ts';
+import { applyListRules } from './place-lists.rules.ts';
 import { applySettingsRules } from './place-settings.rules.ts';
 import { PLACE_LEAVES, toPlace, toPlaceSummary } from './place.mapper.ts';
 import type { Place, PlaceCreation, PlacePatch, PlacePriceList, PlaceSummary } from './place.types.ts';
@@ -138,7 +140,7 @@ const CREATION_DEFAULTS: Readonly<Record<string, unknown>> = {
   'license.plan': 'basic',
   'license.expirationDate': null,
   'license.status': 'active',
-  'license.sentry': false,
+  'dealerSettings.sentry': false,
   'appointments.webWidgetStatus': false,
 };
 
@@ -148,21 +150,61 @@ const TIME_ZONES: ReadonlySet<string> = new Set([...Intl.supportedValuesOf('time
 /** A time of day as `<input type="time">` gives it: `HH:mm`. */
 const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
-/** The blocks of the representation, which the activity log names as a whole. */
-const BLOCKS = ['license', 'openingHours', 'cashSettings', 'payments', 'tables', 'reservations', 'delivery', 'selfOrdering', 'kiosk', 'appointments', 'externalDisplay', 'fidelity', 'tobacco', 'media'] as const;
+/** The blocks of the representation, which the activity log names as a whole (no value of them is ever in the log). */
+const BLOCKS = [
+  'license',
+  'openingHours',
+  'cashSettings',
+  'payments',
+  'tables',
+  'reservations',
+  'delivery',
+  'selfOrdering',
+  'kiosk',
+  'appointments',
+  'externalDisplay',
+  'fidelity',
+  'tobacco',
+  'media',
+  'devices',
+  'printStations',
+  'rooms',
+  'storages',
+  'integrations',
+  'dealerSettings',
+] as const;
+
+/** The switches of the integrations (and of the other fields of the settings) that are the dealers': a PSA or a dealer changes them. */
+const RESERVED_SETTINGS: readonly string[] = SETTING_FIELDS.filter((field) => field.reserved === true).map((field) => field.domain);
+
+/** The keys of the integrations that receive payments: a PSA or a dealer sets, changes or clears them (any other role is `notAllowed`, even for a clear). */
+const PAYMENT_SETTINGS: readonly string[] = SETTING_FIELDS.filter((field) => field.payment === true).map((field) => field.domain);
+
+/** Whether the caller is a PSA or a dealer (a store key is neither). */
+const isPrivileged = (caller: ScopeHolder): boolean => 'role' in caller && (caller.role === 'PSA' || caller.role === 'D');
+
+/** The place as the caller may see it: the dealer settings are for a PSA or a dealer only. */
+function shownTo(caller: ScopeHolder, place: Place): Place {
+  if (isPrivileged(caller)) {
+    return place;
+  }
+  const { dealerSettings: _hidden, ...visible } = place;
+  return visible;
+}
 
 /** An empty day of the week: what a creation has for every day. */
 const CLOSED_DAY = { active: false, values: [] };
 
-const NO_LISTS: GroupLists = { currencies: new Set(), priceLists: new Set() };
+const NO_LISTS: GroupLists = { currencies: new Set(), priceLists: new Set(), taxes: new Set(), favorites: new Map() };
 
 /** What each outcome of the write service that is not a success becomes: the code and the details of the error. */
-const REFUSALS: Readonly<Record<'notFound' | 'companyNotFound' | 'conflict' | 'notTrashed' | 'trashed', { readonly code: ErrorCode; readonly details?: readonly ErrorDetail[] }>> = {
+const REFUSALS: Readonly<Record<'notFound' | 'companyNotFound' | 'conflict' | 'notTrashed' | 'trashed' | 'busy', { readonly code: ErrorCode; readonly details?: readonly ErrorDetail[] }>> = {
   notFound: { code: 'NOT_FOUND' },
   companyNotFound: { code: 'VALIDATION_ERROR', details: [{ field: 'companyId', issue: 'incorrect' }] },
   conflict: { code: 'PRECONDITION_FAILED' },
   notTrashed: { code: 'CONFLICT' },
   trashed: { code: 'CONFLICT' },
+  busy: { code: 'CONFLICT', details: [{ field: 'devices.items', issue: 'busy' }] },
 };
 
 /** The name the activity log gives a changed key: the block for a key of a block, the path for a general one. */
@@ -208,10 +250,10 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
     return { ...found, place: toPlace(found.document, access.groupId) };
   };
 
-  /** The place as it is after a write. */
-  const reload = async (writer: Pick<CompaniesPlacesWriter, 'read'>, access: GroupAccess, placeId: ObjectId): Promise<PlaceResult> => {
+  /** The place as it is after a write, as the caller may see it. */
+  const reload = async (writer: Pick<CompaniesPlacesWriter, 'read'>, access: GroupAccess, placeId: ObjectId, caller: ScopeHolder): Promise<PlaceResult> => {
     const { place, version } = await load(writer, access, placeId);
-    return { place, version };
+    return { place: shownTo(caller, place), version };
   };
 
   /** Runs a write; a stored block that is not an object is a `409`, every other failure goes on to the central handler (a group on another cluster is a logged `500`). */
@@ -242,7 +284,14 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
    * @param current The place as it is, `null` for a creation.
    * @throws {AppError} `FORBIDDEN` for a field the role cannot change, `VALIDATION_ERROR` for the rules on the data.
    */
-  const prepare = async (principal: AuthPrincipal, access: GroupAccess, writer: CompaniesPlacesWriter, request: PlacePatch, current: Place | null): Promise<PlacePatch> => {
+  const prepare = async (
+    principal: AuthPrincipal,
+    access: GroupAccess,
+    writer: CompaniesPlacesWriter,
+    request: PlacePatch,
+    current: Place | null,
+    document: Document | null,
+  ): Promise<PlacePatch> => {
     const creation = current === null;
     const privileged = principal.role === 'PSA' || principal.role === 'D';
     const changes = (path: string): boolean => {
@@ -253,14 +302,19 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
     // The license: the end of the license and the state a PSA's or a dealer's, the Sentry switch a PSA's.
     const forbidden: string[] = [];
     if (!privileged) {
-      forbidden.push(...['license.status', 'license.expirationDate', 'appointments.webWidgetStatus'].filter(changes));
+      forbidden.push(...['license.status', 'license.expirationDate', 'appointments.webWidgetStatus', ...RESERVED_SETTINGS, ...PAYMENT_SETTINGS].filter(changes));
+      // The dealer settings (the address of the server of the store, the Connector, Sentry) are not shown to the other roles, which therefore never send them.
+      if (request.dealerSettings !== undefined) {
+        forbidden.push('dealerSettings');
+      }
     }
     // The plan is a PSA's; a dealer chooses it for a new place among the four plans but `desk-secondary`, which is the PSA's alone.
     if (principal.role !== 'PSA' && !(creation && principal.role === 'D' && request.license?.plan !== 'desk-secondary') && changes('license.plan')) {
       forbidden.push('license.plan');
     }
-    if (principal.role !== 'PSA' && changes('license.sentry')) {
-      forbidden.push('license.sentry');
+    // The Sentry switch is the PSA's: a dealer may not change it (the other roles are already refused the whole block).
+    if (principal.role === 'D' && changes('dealerSettings.sentry')) {
+      forbidden.push('dealerSettings.sentry');
     }
     if (forbidden.length > 0) {
       throw new AppError('FORBIDDEN', { details: forbidden.map((field) => ({ field, issue: 'notAllowed' })) });
@@ -369,10 +423,15 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
       }
     }
 
-    await applySettingsRules({ principal, access, writer, repository, references, images, newId, request: request as Record<string, unknown>, next, current, companyId: rejected ? (current?.companyId ?? null) : companyId, changes, issue, lists });
+    const rules = { principal, access, writer, repository, references, images, newId, request: request as Record<string, unknown>, next, current, companyId: rejected ? (current?.companyId ?? null) : companyId, changes, issue, lists };
+    await applySettingsRules(rules);
+    const conflict = await applyListRules({ ...rules, document });
 
     if (issues.length > 0) {
       throw new AppError('VALIDATION_ERROR', { details: issues });
+    }
+    if (conflict !== null) {
+      throw conflict;
     }
     return next as PlacePatch;
   };
@@ -450,7 +509,7 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
       // The server of the store stops with the place. A restored place gets no key back: it is activated again.
       await revokeKey(principal, access, placeId, 'placeTrashed', client);
     }
-    return reload(writer, access, placeId);
+    return reload(writer, access, placeId, principal);
   };
 
   return {
@@ -479,7 +538,7 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
       return { items: items.map(toPlaceSummary), page };
     },
 
-    get: (principal, access, placeId) => reload(readerFor(principal, access), access, placeId),
+    get: (principal, access, placeId) => reload(readerFor(principal, access), access, placeId, principal),
 
     invoiceSeries: async (principal, access, placeId) => {
       const writer = writerFor(principal, access);
@@ -490,12 +549,12 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
 
     create: async (principal, access, body, client) => {
       const writer = writerFor(principal, access);
-      const request = await prepare(principal, access, writer, body, null);
+      const request = await prepare(principal, access, writer, body, null, null);
       const outcome = await attempt(() => writer.createPlace(flat(withDeprecated(leafWrites(request, null, null, PLACE_LEAVES), request, null)) as unknown as NewPlaceFields));
       if (outcome.outcome !== 'written') {
         throw refused(outcome);
       }
-      const created = await reload(writer, access, outcome.id);
+      const created = await reload(writer, access, outcome.id, principal);
       await recordDataChange(activityLog, {
         ...context(principal, access, client, outcome.id),
         action: 'place.created',
@@ -512,10 +571,10 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
       const writer = writerFor(principal, access);
       const found = await load(writer, access, placeId);
       assertVersion(found, expected);
-      const request = await prepare(principal, access, writer, patch, found.place);
+      const request = await prepare(principal, access, writer, patch, found.place, found.document);
       const leafs = leafWrites(request, found.place, found.document, PLACE_LEAVES);
       if (leafs.length === 0) {
-        return { place: found.place, version: found.version };
+        return { place: shownTo(principal, found.place), version: found.version };
       }
       const writes = withDeprecated(leafs, request, found.place);
       const outcome = await attempt(() => writer.updatePlace(placeId, expected, flat(writes)));
@@ -531,7 +590,7 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
         ...context(principal, access, client, placeId),
         changes: changed.map((field) => ({ field, redacted: true as const })),
       });
-      return reload(writer, access, placeId);
+      return reload(writer, access, placeId, principal);
     },
 
     trash: (principal, access, placeId, expected, client) => changeState(principal, access, placeId, expected, client, 'trashed'),
@@ -569,7 +628,7 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
       if (outcome.outcome !== 'written') {
         throw refused(outcome);
       }
-      const created = await reload(writer, access, outcome.id);
+      const created = await reload(writer, access, outcome.id, principal);
       await recordDataChange(activityLog, {
         ...context(principal, access, client, outcome.id),
         action: 'place.duplicated',

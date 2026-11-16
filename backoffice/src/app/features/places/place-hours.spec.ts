@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { backend } from '../../../testing/api';
-import { PLACE_URL, fakePlace } from '../../../testing/places';
+import { GROUP, PLACE_URL, fakePlace } from '../../../testing/places';
 import {
   ETAG,
   drainSeries,
@@ -34,7 +34,7 @@ afterEach(() => {
 
 async function render(options: Parameters<typeof renderPlacePage>[0] = {}, again = false) {
   const view = await (again ? freshPlacePage : renderPlacePage)({
-    path: 'opening-hours',
+    path: 'hours',
     ...options,
   });
   const schedule = (nth: number) => view.root.querySelectorAll('fc-hours-schedule')[nth];
@@ -111,11 +111,18 @@ describe('PlaceHours', () => {
       expect(optionsOf(odd.control(TIMEZONE) as HTMLSelectElement)).toContain('Mars/Olympus');
     });
 
-    it('shows the delivery hours only to a group with the restaurant module', async () => {
-      const rooms = await render();
+    it('shows the delivery hours to a platform administrator whatever the features', async () => {
+      const none = await render({ features: [] });
+      expect(none.root.querySelectorAll('fc-hours-schedule')).toHaveLength(2);
+      expect(none.text()).toContain('PLACES.HOURS.DELIVERY');
+    });
+
+    it('shows the delivery hours to the other roles only with the restaurant module', async () => {
+      const profile = { role: 'SA' as const, groupId: GROUP };
+      const rooms = await render({ profile, features: ['rooms'] });
       expect(rooms.root.querySelectorAll('fc-hours-schedule')).toHaveLength(2);
       expect(rooms.text()).toContain('PLACES.HOURS.DELIVERY');
-      const none = await render({ features: [] }, true);
+      const none = await render({ profile, features: [] }, true);
       expect(none.root.querySelectorAll('fc-hours-schedule')).toHaveLength(1);
       expect(none.text()).not.toContain('PLACES.HOURS.DELIVERY');
     });
@@ -233,7 +240,7 @@ describe('PlaceHours', () => {
   });
 
   describe('saving', () => {
-    it('sends the whole block with a PUT', async () => {
+    it('sends the whole block in the unique PATCH', async () => {
       const { type, day, special, schedule, toggleIn, typeIn, press, click, toasts, view, button } =
         await render({ place: busyPlace() });
       await type(TIMEZONE, 'UTC');
@@ -246,8 +253,8 @@ describe('PlaceHours', () => {
       await typeIn(day(1, '3'), `${START} 1`, '11:00');
       await typeIn(day(1, '3'), `${END} 1`, '15:00');
       await click(SAVE);
-      const req = expectPlace('/opening-hours');
-      expect(req.request.method).toBe('PUT');
+      const req = expectPlace();
+      expect(req.request.method).toBe('PATCH');
       expect(req.request.headers.get('If-Match')).toBe(ETAG);
       const closed = { active: false, values: [] };
       const deliveryWeek = Object.fromEntries(
@@ -261,27 +268,29 @@ describe('PlaceHours', () => {
         ]),
       );
       expect(req.request.body).toEqual({
-        timezone: 'UTC',
-        week: {
-          '0': closed,
-          '1': { active: false, values: [{ start: '09:00', end: '18:00' }] },
-          '2': {
-            active: true,
-            values: [
-              { start: '08:00', end: '12:00' },
-              { start: '14:00', end: '19:30' },
-            ],
+        openingHours: {
+          timezone: 'UTC',
+          week: {
+            '0': closed,
+            '1': { active: false, values: [{ start: '09:00', end: '18:00' }] },
+            '2': {
+              active: true,
+              values: [
+                { start: '08:00', end: '12:00' },
+                { start: '14:00', end: '19:30' },
+              ],
+            },
+            '3': closed,
+            '4': closed,
+            '5': closed,
+            '6': closed,
           },
-          '3': closed,
-          '4': closed,
-          '5': closed,
-          '6': closed,
+          special: {
+            '2026-12-24': { closed: false, values: [{ start: '09:00', end: '13:00' }] },
+            '2026-12-31': { closed: true, values: [] },
+          },
+          deliveryTime: { week: deliveryWeek, special: {} },
         },
-        special: {
-          '2026-12-24': { closed: false, values: [{ start: '09:00', end: '13:00' }] },
-          '2026-12-31': { closed: true, values: [] },
-        },
-        deliveryTime: { week: deliveryWeek, special: {} },
       });
       flushPlace(
         req,
@@ -320,7 +329,7 @@ describe('PlaceHours', () => {
       const { day, typeIn, click, view, within, special } = await render();
       await typeIn(day(0, '1'), `${END} 1`, '19:00');
       await click(SAVE);
-      fail(expectPlace('/opening-hours'), 422, 'VALIDATION_ERROR', [
+      fail(expectPlace(), 422, 'VALIDATION_ERROR', [
         { field: 'openingHours.week.1.values.0.end', issue: 'invalid' },
         { field: 'openingHours.special.2026-12-25.closed', issue: 'invalid' },
       ]);

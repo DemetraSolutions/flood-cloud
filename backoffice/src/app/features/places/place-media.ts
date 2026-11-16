@@ -4,7 +4,6 @@ import { LogoSlot } from '../companies/logo-slot';
 import { snake } from './place-fields';
 import { LogoModel } from './place-model';
 import { PlaceFieldsView } from './place-fields-view';
-import { PlaceSave } from './place-save';
 import { PlaceState } from './place-state';
 import { MEDIA_SLOTS, MediaSlot } from './place.types';
 
@@ -15,7 +14,7 @@ import { MEDIA_SLOTS, MediaSlot } from './place.types';
  */
 @Component({
   selector: 'fc-place-media',
-  imports: [LogoSlot, PlaceFieldsView, PlaceSave, TPipe],
+  imports: [LogoSlot, PlaceFieldsView, TPipe],
   templateUrl: './place-media.html',
   styleUrl: './place-section.css',
 })

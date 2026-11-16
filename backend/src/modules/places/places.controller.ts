@@ -6,6 +6,7 @@ import { sendData } from '../../shared/http/envelope.ts';
 import { entityTag } from '../../shared/http/if-match.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
 import { SETTING_BLOCKS } from '../../shared/legacy-write/place-settings.ts';
+import { LIST_SEGMENTS } from './place-lists.schemas.ts';
 import type { PlaceCreation, PlacePatch } from './place.types.ts';
 import type { PlacesQuery } from './places.schemas.ts';
 import type { PlaceResult, PlacesService } from './places.service.ts';
@@ -16,7 +17,7 @@ export interface PlacesController {
   get: RequestHandler;
   create: RequestHandler;
   update: RequestHandler;
-  /** `PUT …/license`, `…/opening-hours`, `…/settings/*` and `…/media`: each replaces its block (by its domain name) through the same write as the modification. */
+  /** `PUT …/license`, `…/opening-hours`, `…/settings/*`, `…/media`, `…/integrations` and the lists (`…/devices`, `…/print-stations`, `…/rooms`, `…/storages`): each replaces its block (by its domain name) through the same write as the modification. */
   replace: Readonly<Record<string, RequestHandler>>;
   trash: RequestHandler;
   restore: RequestHandler;
@@ -69,7 +70,7 @@ export function createPlacesController(service: PlacesService): PlacesController
     update: async (req, res) => {
       sendPlace(res, await service.update(res.locals.auth!, res.locals.groupAccess!, placeIdOf(res), res.locals.ifMatch!, inputOf<PlacePatch>(res, 'body'), clientContextOf(req, res)));
     },
-    replace: Object.fromEntries(['license', 'openingHours', ...Object.keys(SETTING_BLOCKS)].map((name) => [name, block(name)])),
+    replace: Object.fromEntries(['license', 'openingHours', ...Object.keys(SETTING_BLOCKS), ...Object.keys(LIST_SEGMENTS)].map((name) => [name, block(name)])),
     trash: async (req, res) => {
       sendPlace(res, await service.trash(res.locals.auth!, res.locals.groupAccess!, placeIdOf(res), res.locals.ifMatch!, clientContextOf(req, res)));
     },

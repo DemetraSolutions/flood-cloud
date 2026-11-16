@@ -1,10 +1,25 @@
-import { fakePlace, LIST_1 } from '../../../testing/places';
+import {
+  CENTER,
+  DEVICE_1,
+  DEVICE_ID_1,
+  fakePlace,
+  LIST_1,
+  ROOM,
+  STATION,
+  STORAGE,
+} from '../../../testing/places';
 import {
   blockBody,
   createBody,
   dirtySections,
   isGeneralField,
   KIOSK_TEXTS,
+  newDevice,
+  newPrintStation,
+  newProductionCenter,
+  newRoom,
+  newStorage,
+  newTable,
   PlaceModel,
   patchBody,
   pickedLogo,
@@ -42,7 +57,6 @@ describe('toModel', () => {
       plan: 'basic',
       expirationDate: '',
       status: 'active',
-      sentry: false,
     });
     expect(model.openingHours.timezone).toBe('Europe/Rome');
     expect(model.openingHours.week['1']).toEqual({ active: false, values: [] });
@@ -74,7 +88,6 @@ describe('toModel', () => {
       plan: 'advanced',
       expirationDate: '2030-01-01',
       status: 'active',
-      sentry: false,
     });
     expect(model.openingHours.week['1']).toEqual({
       active: true,
@@ -142,7 +155,7 @@ describe('toModel', () => {
         name: 5,
         invoiceSeries: false,
         priceLists: [{ id: 'x', allYouCanEat: 'yes', ayceCode1: 3, ayceCode2: null }],
-        license: { plan: 7, expirationDate: null, status: 'disabled', sentry: 'true' },
+        license: { plan: 7, expirationDate: null, status: 'disabled' },
         openingHours: {
           timezone: 3,
           week: 'wrong',
@@ -202,7 +215,6 @@ describe('toModel', () => {
       plan: '',
       expirationDate: '',
       status: 'disabled',
-      sentry: false,
     });
     expect(model.openingHours.timezone).toBe('');
     expect(model.openingHours.week['3']).toEqual({ active: false, values: [] });
@@ -337,7 +349,6 @@ describe('blockBody', () => {
         plan: 'advanced',
         expirationDate: '2030-01-01T10:30:00.000Z',
         status: 'active',
-        sentry: false,
       });
     });
 
@@ -345,12 +356,10 @@ describe('blockBody', () => {
       const model = modelOf();
       model.license.expirationDate = '2031-02-03';
       model.license.status = 'disabled';
-      model.license.sentry = true;
       expect(blockBody(model, 'license', record)).toEqual({
         plan: 'advanced',
         expirationDate: '2031-02-03',
         status: 'disabled',
-        sentry: true,
       });
     });
 
@@ -568,6 +577,341 @@ describe('blockBody', () => {
       step: number | null;
     };
     expect(appointments.email['templateId']).toBeNull();
+  });
+});
+
+describe('new rows', () => {
+  it('builds the empty rows with the defaults of the old form', () => {
+    expect(newDevice()).toMatchObject({
+      id: '',
+      withoutId: false,
+      type: 'desk',
+      automaticCashUsername: { set: false, value: '', clear: false },
+      printStations: [],
+    });
+    expect(newPrintStation()).toMatchObject({ id: '', driver: 'EPSON-EPOS-PRINT', pulseNumber: '' });
+    expect(newProductionCenter()).toEqual({ id: '', withoutId: false, name: '', capacity: '' });
+    expect(newTable('T9', '4')).toMatchObject({
+      id: '',
+      name: 'T9',
+      seats: '4',
+      view: { w: 1, h: 1, x: null, y: null, shape: 'rect' },
+    });
+    expect(newTable().name).toBe('');
+    expect(newRoom()).toMatchObject({ id: '', view: { type: 'grid', status: false, h: 8, w: 8 } });
+    expect(newStorage()).toEqual({ id: '', name: '', cash: false, ecommerce: false });
+  });
+});
+
+describe('the lists of the place', () => {
+  it('reads devices, print stations, rooms and storages', () => {
+    const model = toModel(fakePlace());
+    expect(model.devices.editable).toBe(true);
+    expect(model.devices.items).toHaveLength(2);
+    expect(model.devices.items[0]).toMatchObject({
+      id: DEVICE_ID_1,
+      withoutId: false,
+      server: true,
+      name: 'Cassa 1',
+      automaticCashUsername: { set: true, value: '', clear: false },
+      automaticCashPassword: { set: false, value: '', clear: false },
+      printStations: [STATION.id],
+    });
+    expect(model.printStations.stations[0]).toMatchObject({
+      id: STATION.id,
+      pulseNumber: '1',
+      pulseNumberSecondary: '',
+    });
+    expect(model.printStations.productionCenters[0]).toEqual({
+      id: CENTER.id,
+      withoutId: false,
+      name: 'Forno',
+      capacity: '10',
+    });
+    expect(model.printStations.stationsEditable).toBe(true);
+    expect(model.printStations.productionCentersEditable).toBe(true);
+    expect(model.rooms.items[0]).toMatchObject({ name: 'Sala 1', service: '10', withoutId: false });
+    expect(model.rooms.items[0].tables[0]).toEqual({
+      id: 'tab0001',
+      withoutId: false,
+      name: 'T1',
+      seats: '4',
+      userId: '',
+      view: { w: 1, h: 1, x: 0, y: 0, shape: 'rect' },
+    });
+    expect(model.rooms.items[0].tables[1].view).toEqual({
+      w: 2,
+      h: 1,
+      x: null,
+      y: null,
+      shape: 'round',
+    });
+    expect(model.storages.items).toEqual([
+      { id: STORAGE.id, name: 'Deposito 1', cash: true, ecommerce: false },
+    ]);
+  });
+
+  it('is empty for a new place and reads the editable flags', () => {
+    const empty = toModel(null);
+    expect(empty.devices).toEqual({ items: [], editable: true });
+    expect(empty.printStations).toEqual({
+      stations: [],
+      productionCenters: [],
+      stationsEditable: true,
+      productionCentersEditable: true,
+    });
+    expect(empty.rooms).toEqual({ items: [], editable: true });
+    expect(empty.storages).toEqual({ items: [], editable: true });
+    const locked = toModel(
+      fakePlace({
+        devices: { items: [], editable: false },
+        printStations: {
+          stations: [],
+          productionCenters: [],
+          stationsEditable: false,
+          productionCentersEditable: false,
+        },
+        rooms: { items: [], editable: false },
+        storages: { items: [], editable: false },
+      }),
+    );
+    expect(locked.devices.editable).toBe(false);
+    expect(locked.printStations.stationsEditable).toBe(false);
+    expect(locked.printStations.productionCentersEditable).toBe(false);
+    expect(locked.rooms.editable).toBe(false);
+    expect(locked.storages.editable).toBe(false);
+  });
+
+  it('reads the rows without an id and the wrong types of an old record', () => {
+    const model = toModel(
+      messy({
+        devices: {
+          items: [
+            {
+              ...DEVICE_1,
+              withoutId: true,
+              server: 'x',
+              name: 4,
+              printStations: ['a', 3, null],
+              automaticCashUsernameSet: 'yes',
+            },
+          ],
+          editable: true,
+        },
+        printStations: {
+          stations: [{ id: 's', withoutId: true, name: 1, pulseNumber: 'x', summaryCategoriesIds: 'no' }],
+          productionCenters: [{ id: 'c', withoutId: true, capacity: 'x' }],
+          stationsEditable: true,
+          productionCentersEditable: true,
+        },
+        rooms: {
+          items: [
+            {
+              ...ROOM,
+              withoutId: true,
+              view: 'x',
+              tables: [{ id: 't', withoutId: true, view: { w: 'x', h: 3, x: 'y', y: 2, shape: 'oval' } }],
+            },
+            { ...ROOM, view: { type: 'other', status: 'x', h: 'x', w: 4 } },
+          ],
+          editable: true,
+        },
+        storages: { items: [{ id: 'g', name: 5, cash: 'y', ecommerce: 1 }], editable: true },
+      }),
+    );
+    expect(model.devices.items[0]).toMatchObject({
+      withoutId: true,
+      server: false,
+      name: '',
+      printStations: ['a'],
+      automaticCashUsername: { set: false },
+    });
+    expect(model.printStations.stations[0]).toMatchObject({
+      withoutId: true,
+      name: '',
+      pulseNumber: '',
+      summaryCategoriesIds: [],
+    });
+    expect(model.printStations.productionCenters[0]).toMatchObject({ withoutId: true, capacity: '' });
+    expect(model.rooms.items[0]).toMatchObject({
+      withoutId: true,
+      view: { type: '', status: false, h: 8, w: 8 },
+    });
+    expect(model.rooms.items[0].tables[0]).toMatchObject({
+      withoutId: true,
+      view: { w: 1, h: 3, x: null, y: 2, shape: 'rect' },
+    });
+    expect(model.rooms.items[1].view).toEqual({ type: 'grid', status: false, h: 8, w: 4 });
+    expect(model.storages.items[0]).toEqual({ id: 'g', name: '', cash: false, ecommerce: false });
+  });
+
+  it('writes the devices with the credentials only when typed or cleared', () => {
+    const model = modelOf();
+    const [desk, display] = model.devices.items;
+    desk.automaticCashUsername.value = 'user';
+    desk.automaticCashPassword.clear = true;
+    const created = newDevice();
+    created.name = 'Nuova';
+    model.devices.items.push(created);
+    const body = blockBody(model, 'devices', fakePlace()) as { items: Record<string, unknown>[] };
+    expect(body.items[0]).toMatchObject({
+      id: DEVICE_ID_1,
+      name: 'Cassa 1',
+      automaticCashUsername: 'user',
+      automaticCashPassword: null,
+      printStations: [STATION.id],
+    });
+    expect(body.items[1]).not.toHaveProperty('automaticCashUsername');
+    expect(body.items[1]).not.toHaveProperty('automaticCashPassword');
+    expect(body.items[1]['id']).toBe(display.id);
+    expect(body.items[2]).not.toHaveProperty('id');
+    expect(body.items[2]).not.toHaveProperty('automaticCashUsername');
+  });
+
+  it('writes the print stations and the production centers, omitting the locked lists', () => {
+    const model = modelOf();
+    model.printStations.stations.push({ ...newPrintStation(), name: 'Bar', pulseNumber: '2' });
+    model.printStations.productionCenters.push({ ...newProductionCenter(), name: 'Pizza', capacity: '3' });
+    const body = blockBody(model, 'printStations', fakePlace()) as {
+      stations: Record<string, unknown>[];
+      productionCenters: Record<string, unknown>[];
+    };
+    expect(body.stations[0]).toMatchObject({ id: STATION.id, pulseNumber: 1, pulseNumberSecondary: null });
+    expect(body.stations[1]).toMatchObject({ name: 'Bar', pulseNumber: 2 });
+    expect(body.stations[1]).not.toHaveProperty('id');
+    expect(body.productionCenters).toEqual([
+      { id: CENTER.id, name: 'Forno', capacity: 10 },
+      { name: 'Pizza', capacity: 3 },
+    ]);
+    model.printStations.stationsEditable = false;
+    expect(blockBody(model, 'printStations', fakePlace())).toHaveProperty('productionCenters');
+    expect(blockBody(model, 'printStations', fakePlace())).not.toHaveProperty('stations');
+    model.printStations.stationsEditable = true;
+    model.printStations.productionCentersEditable = false;
+    expect(blockBody(model, 'printStations', fakePlace())).toHaveProperty('stations');
+    expect(blockBody(model, 'printStations', fakePlace())).not.toHaveProperty('productionCenters');
+    model.printStations.stationsEditable = false;
+    expect(blockBody(model, 'printStations', fakePlace())).toEqual({});
+  });
+
+  it('writes the rooms with their tables and the storages', () => {
+    const model = modelOf();
+    const room = { ...newRoom(), name: 'Terrazza', service: '5' };
+    room.tables.push(newTable('A', ''));
+    model.rooms.items.push(room);
+    model.storages.items.push({ ...newStorage(), name: 'Nuovo', ecommerce: true });
+    const rooms = blockBody(model, 'rooms', fakePlace()) as { items: Record<string, any>[] };
+    expect(rooms.items[0]).toMatchObject({ id: ROOM.id, service: 10, listId: ROOM.listId });
+    expect(rooms.items[0]['tables'][0]).toEqual({
+      id: 'tab0001',
+      name: 'T1',
+      seats: 4,
+      userId: '',
+      view: { w: 1, h: 1, x: 0, y: 0, shape: 'rect' },
+    });
+    expect(rooms.items[1]).not.toHaveProperty('id');
+    expect(rooms.items[1]['tables'][0]).toEqual({
+      name: 'A',
+      seats: null,
+      userId: '',
+      view: { w: 1, h: 1, x: null, y: null, shape: 'rect' },
+    });
+    expect(rooms.items[1]['view']).toEqual({ type: 'grid', status: false, h: 8, w: 8 });
+    expect(blockBody(model, 'storages', fakePlace())).toEqual({
+      items: [
+        { id: STORAGE.id, name: 'Deposito 1', cash: true, ecommerce: false },
+        { name: 'Nuovo', cash: false, ecommerce: true },
+      ],
+    });
+  });
+});
+
+describe('integrations and dealer settings', () => {
+  const secretKeys = (model: PlaceModel): string[] => Object.keys(model.integrations.secrets);
+
+  it('reads the switches and settings, never a credential', () => {
+    const base = fakePlace();
+    const record = fakePlace({
+      integrations: {
+        ...base.integrations,
+        easyappear: { status: true, appTokenSet: true },
+        tsh: { status: false, testMode: true, idSet: false, secretSet: true, propertyId: 'P1' },
+        keenon: { status: false, storeId: 'S1' },
+      },
+    });
+    const model = toModel(record);
+    expect(model.integrations.f['easyappear.status']).toBe(true);
+    expect(model.integrations.f['tsh.propertyId']).toBe('P1');
+    expect(model.integrations.f['tsh.testMode']).toBe(true);
+    expect(Object.keys(model.integrations.f)).not.toContain('easyappear.appToken');
+    expect(model.integrations.secrets['easyappear.appToken']).toEqual({
+      set: true,
+      value: '',
+      clear: false,
+    });
+    expect(model.integrations.secrets['tsh.id'].set).toBe(false);
+    expect(model.integrations.secrets['tsh.secret'].set).toBe(true);
+    expect(secretKeys(model)).toContain('plateform.password');
+    expect(Object.values(model.integrations.secrets).every((secret) => secret.value === '')).toBe(true);
+  });
+
+  it('has no credential set for a new place', () => {
+    const model = toModel(null);
+    expect(Object.values(model.integrations.secrets).every((secret) => !secret.set)).toBe(true);
+    expect(model.dealerSettings.f).toEqual({ sentry: false, serverIp: '', connectorAddress: '' });
+  });
+
+  it('writes only the credentials that were typed or cleared, nested by key', () => {
+    const model = modelOf();
+    const body = blockBody(model, 'integrations', fakePlace()) as Record<string, any>;
+    expect(body['easyappear']).toEqual({ status: false });
+    expect(body['plateform']).toEqual({ status: false });
+    model.integrations.f['easyappear.status'] = true;
+    model.integrations.secrets['easyappear.appToken'].value = 'tok';
+    model.integrations.secrets['plateform.username'].clear = true;
+    model.integrations.secrets['plateform.password'].value = 'ignored';
+    model.integrations.secrets['plateform.password'].clear = true;
+    model.integrations.secrets['tsh.id'].value = 'id1';
+    model.integrations.secrets['tsh.secret'].value = 'sec1';
+    const changed = blockBody(model, 'integrations', fakePlace()) as Record<string, any>;
+    expect(changed['easyappear']).toEqual({ status: true, appToken: 'tok' });
+    expect(changed['plateform']).toEqual({ status: false, username: null, password: null });
+    expect(changed['tsh']).toMatchObject({ id: 'id1', secret: 'sec1', testMode: false });
+    expect(changed['yellgo']).toEqual({ status: false });
+  });
+
+  it('writes the dealer settings as scalars and keeps clean credentials out of the dirty set', () => {
+    const model = modelOf();
+    model.dealerSettings.f['sentry'] = true;
+    model.dealerSettings.f['serverIp'] = '10.0.0.1';
+    expect(blockBody(model, 'dealerSettings', fakePlace())).toEqual({
+      sentry: true,
+      serverIp: '10.0.0.1',
+      connectorAddress: '',
+    });
+    const baseline = modelOf();
+    expect(dirtySections(model, baseline)).toEqual(new Set(['dealerSettings']));
+    const typed = structuredClone(baseline);
+    typed.integrations.secrets['yellgo.apiKey'].value = 'k';
+    expect(dirtySections(typed, baseline)).toEqual(new Set(['integrations']));
+  });
+
+  it('replaces the saved sections of the lists and credentials with withSections', () => {
+    const model = modelOf();
+    model.integrations.secrets['yellgo.apiKey'].value = 'k';
+    model.rooms.items = [];
+    const saved = fakePlace();
+    const next = withSections(model, saved, ['integrations', 'rooms']);
+    expect(next.integrations.secrets['yellgo.apiKey'].value).toBe('');
+    expect(next.rooms.items).toHaveLength(1);
+    expect(model.rooms.items).toHaveLength(0);
+  });
+
+  it('nests a credential below the key of its switch', () => {
+    const model = modelOf();
+    model.integrations.secrets['easyappear.appToken'].value = 't';
+    const body = blockBody(model, 'integrations', fakePlace()) as Record<string, any>;
+    expect(body['easyappear'].appToken).toBe('t');
   });
 });
 

@@ -3,6 +3,7 @@ import type { Document } from 'mongodb';
 import { ECOMMERCE_FLAGS, E_INVOICING_KEYS, MEDIA_IMAGE_KEYS } from './company-paths.ts';
 import { InvalidWriteInputError } from './errors.ts';
 import { WEEK_DAYS } from './place-paths.ts';
+import { LIST_PATHS } from './place-lists.ts';
 import { SETTING_FIELDS, DEPRECATED_ROOMS_PATHS } from './place-settings.ts';
 
 /** Largest `settings.global.lastInvoiceNumber` (the largest Int32): the legacy writes it as an Int32. */
@@ -72,7 +73,7 @@ export interface PlaceFields {
 }
 
 /**
- * The other owned fields of a place, by their legacy dotted path: the enabled price lists (`general.priceLists`), the Sentry switch (`platform.sentry`) and the
+ * The other owned fields of a place, by their legacy dotted path: the enabled price lists (`general.priceLists`) and the
  * opening and delivery hours (`openingTime.weekGeneric`, `openingTime.daySpecial`, `delivery.time.weekGeneric`, `delivery.time.daySpecial`), each a whole value. Each is checked
  * by its own kind ({@link PLACE_FIELD_KINDS}): the values are exactly what is stored, never a whole block.
  */
@@ -123,6 +124,7 @@ type FieldKind =
   | 'suppliers'
   | 'logoOrNull'
   | 'priceLists'
+  | 'itemList'
   | 'weekHours'
   | 'specialDays'
   | 'setting';
@@ -180,13 +182,14 @@ export const PLACE_FIELD_KINDS: Readonly<Record<string, FieldKind>> = Object.fre
   status: 'boolean',
   expirationDate: 'dateOrNull',
   'general.priceLists': 'priceLists',
-  'platform.sentry': 'boolean',
   'openingTime.weekGeneric': 'weekHours',
   'openingTime.daySpecial': 'specialDays',
   'delivery.time.weekGeneric': 'weekHours',
   'delivery.time.daySpecial': 'specialDays',
   // The settings of step 7B: a value of the shape the schemas give (checked loosely here), the images as descriptors.
-  ...Object.fromEntries(SETTING_FIELDS.map((field) => [field.legacy, field.kind.t === 'logo' ? ('logoOrNull' as const) : ('setting' as const)])),
+  ...Object.fromEntries(SETTING_FIELDS.filter((field) => field.readOnly !== true).map((field) => [field.legacy, field.kind.t === 'logo' ? ('logoOrNull' as const) : ('setting' as const)])),
+  // The lists of items (step 7F): the fragments of the items, which the write lays over the stored ones inside the transaction.
+  ...Object.fromEntries(LIST_PATHS.map((path) => [path, 'itemList' as const])),
   ...Object.fromEntries(DEPRECATED_ROOMS_PATHS.map((path) => [path, 'setting' as const])),
 });
 
@@ -288,6 +291,8 @@ function isSettingValue(value: unknown, depth = 0): boolean {
 
 const CHECKS: Readonly<Record<FieldKind, (value: unknown) => boolean>> = {
   setting: (value) => isSettingValue(value),
+  // The fragments of a list: items that are objects with an id, of values a settings key can hold.
+  itemList: (value) => Array.isArray(value) && value.length <= MAX_SETTING_ITEMS && value.every((item) => isPlainObject(item) && isSettingValue(item)),
   name: (value) => typeof value === 'string' && value.trim() !== '',
   text: (value) => typeof value === 'string',
   textOrNull: (value) => value === null || typeof value === 'string',

@@ -1,11 +1,14 @@
-import { describe, it } from 'node:test';
+import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mongoEnv } from '../helpers/mongo.ts';
+import { dropMongoEnvDatabases, mongoEnv } from '../helpers/mongo.ts';
+
+// The servers started by these tests create databases under the mongoEnv prefixes: drop them at the end.
+after(dropMongoEnvDatabases);
 
 const SERVER = fileURLToPath(new URL('../../src/server.ts', import.meta.url));
 
