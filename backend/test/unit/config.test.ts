@@ -530,3 +530,13 @@ describe('the settings of the public API (step 9A)', () => {
     }
   });
 });
+
+describe('the rate limit of the countries (step 9-ter)', () => {
+  it('allows 30 writes a minute per user by default, reads the variable and refuses what is out of 1 to 100000', () => {
+    assert.equal(loadConfig(validEnv()).rateLimitCountriesAdminPerUser, 30);
+    assert.equal(loadConfig(validEnv({ RATE_LIMIT_COUNTRIES_ADMIN_PER_USER: '5' })).rateLimitCountriesAdminPerUser, 5);
+    for (const bad of ['0', '100001', 'many']) {
+      assert.throws(() => loadConfig(validEnv({ RATE_LIMIT_COUNTRIES_ADMIN_PER_USER: bad })), (error: unknown) => error instanceof ConfigError && error.issues.some((issue) => issue.variable === 'RATE_LIMIT_COUNTRIES_ADMIN_PER_USER'));
+    }
+  });
+});

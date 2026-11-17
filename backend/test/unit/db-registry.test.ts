@@ -32,7 +32,7 @@ describe('collection registry', () => {
         ? 'mirror'
         : ['activityEvents', 'apiKeys', 'apiUsage', 'dealers', 'idempotencyKeys', 'rateLimits', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials'].includes(name)
           ? 'new'
-          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || (['companies', 'email_templates', 'files', 'places', 'products_departments'].includes(name) && !isMirror)
+          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || name === 'countries' || (['companies', 'email_templates', 'files', 'places', 'products_departments'].includes(name) && !isMirror)
             ? 'legacy-write'
             : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
@@ -46,6 +46,8 @@ describe('collection registry', () => {
     }
     assert.deepEqual([...COLLECTIONS.common.tobaccos.ownedFields].sort(), ['barcodes', 'category', 'code', 'description', 'name', 'numPieces', 'price', 'priceKg', 'shortName', 'unitWeight']);
     assert.deepEqual(COLLECTIONS.common.tobaccos.indexes.map((index) => index.name), ['name_1', 'code_1']);
+    assert.deepEqual([...COLLECTIONS.common.countries.ownedFields].sort(), ['areas', 'code', 'insertDate', 'name', 'updateDate']);
+    assert.equal('indexes' in COLLECTIONS.common.countries, false, 'no unique index on the code until the count of duplicates in production is done');
     assert.deepEqual([...COLLECTIONS.group.email_templates.ownedFields].sort(), ['html', 'insertDate', 'name', 'text', 'updateDate']);
     assert.deepEqual([...COLLECTIONS.group.products_departments.ownedFields].sort(), ['code', 'description', 'groupId', 'insertDate', 'medias', 'name', 'placesAvailability', 'status', 'tax', 'trash', 'updateDate']);
     assert.deepEqual([...COLLECTIONS.common.users.ownedFields].sort(), [...USERS_OWNED_FIELDS].sort());

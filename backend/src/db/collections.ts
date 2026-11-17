@@ -279,6 +279,14 @@ export const RESERVE_WITH_GOOGLE_OWNED_FIELDS: readonly string[] = Object.freeze
 export const TOBACCOS_OWNED_FIELDS: readonly string[] = Object.freeze(['category', 'code', 'name', 'shortName', 'priceKg', 'price', 'unitWeight', 'numPieces', 'description', 'barcodes']);
 
 /**
+ * Fields of the legacy `countries` documents of the common database (the countries and, in `areas`, their provinces: the legacy POS downloads the whole list and looks a country up by `code`) this backend
+ * writes (`doc/Tasks.md` 9-ter): whole new documents inserted by `POST /v1/countries` in the legacy shape (`areas: []`, `insertDate`, `updateDate: null`), and `$set`/`$push`/`$pull` of `name`, `areas` and `updateDate`.
+ * The `code` of a country or of an area is never changed once written. Every other key of a country or of an area is the legacy's and is never touched. There is no unique index on `code` yet (the count in production has not been done):
+ * the writes enforce the uniqueness.
+ */
+export const COUNTRIES_OWNED_FIELDS: readonly string[] = Object.freeze(['code', 'name', 'areas', 'insertDate', 'updateDate']);
+
+/**
  * Ownership registry of every collection the backend touches (`doc/Tasks.md` 0.1 and 0.2).
  * A new collection must be registered here before any code can use it.
  */
@@ -294,7 +302,8 @@ export const COLLECTIONS = {
       ],
     },
     groups: { ownership: 'legacy-write', ownedFields: [...GROUPS_OWNED_FIELDS, GROUPS_PLACES_FIELD] },
-    countries: { ownership: 'legacy-read' },
+    // The countries and their provinces (step 9-ter): read by everybody, written by the PSA; no unique index until the count of duplicates in production is done.
+    countries: { ownership: 'legacy-write', ownedFields: COUNTRIES_OWNED_FIELDS },
     // The Reserve with Google feed of the places: only the write service of places touches it (restore: upsert; trash and delete: deleteOne).
     reserve_with_google: { ownership: 'legacy-write', ownedFields: RESERVE_WITH_GOOGLE_OWNED_FIELDS },
     // The keys of the idempotent creations (`Idempotency-Key`): unique per user, route and key; a finished response is kept 24 hours.

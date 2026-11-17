@@ -24,10 +24,22 @@ export class Countries {
   readonly list = computed(() => (this.resource.hasValue() ? this.resource.value().data : []));
   /** Whether the read failed. */
   readonly failed = computed(() => this.resource.error() !== undefined);
+  /** Whether the read is in progress. */
+  readonly loading = computed(() => this.resource.isLoading());
 
   /** Starts reading the countries (once). */
   need(): void {
     this.wanted.set(true);
+  }
+
+  /**
+   * Reads the countries again after a write (or a failed read): the selects of companies, places
+   * and the wizard see the change. Nothing happens while no page has asked for the countries.
+   */
+  invalidate(): void {
+    if (this.wanted()) {
+      this.resource.reload();
+    }
   }
 
   /**

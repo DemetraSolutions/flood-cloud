@@ -1,0 +1,55 @@
+<header class="page-header">
+  <h1>{{ 'COUNTRIES.TITLE' | t }}</h1>
+  <button fc-button (click)="openNew()">{{ 'COUNTRIES.NEW' | t }}</button>
+</header>
+<p class="hint">{{ 'COUNTRIES.HINT' | t }}</p>
+
+@if (failure(); as message) {
+  <p class="failure" role="alert">{{ message }}</p>
+}
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'COUNTRIES.SEARCH' | t"
+    [value]="search()"
+    (valueChange)="search.set($event)"
+  />
+</form>
+
+@if (failed()) {
+  <fc-error-state
+    [title]="'COUNTRIES.LOAD_ERROR' | t"
+    [message]="'ERRORS.GENERIC.MESSAGE' | t"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'COUNTRIES.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="loading()"
+    [emptyTitle]="'COUNTRIES.EMPTY' | t"
+    [emptyMessage]="'COUNTRIES.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="detail(row)">{{ row.name }}</a>
+    </ng-template>
+  </fc-data-table>
+}
+
+<fc-dialog
+  [heading]="'COUNTRIES.NEW_TITLE' | t"
+  [open]="creating()"
+  (openChange)="creating.set($event)"
+>
+  @if (creating()) {
+    <fc-country-editor
+      [error]="saveError()"
+      [busy]="busy()"
+      (save)="create($event)"
+      (cancelled)="creating.set(false)"
+    />
+  }
+</fc-dialog>

@@ -270,6 +270,20 @@ Il listino ufficiale ADM, **unico per la piattaforma**, che il legacy sostituisc
 
 Indici creati all'avvio (non univoci, la collection è del legacy): `name_1`, `code_1`. Le letture sono pagine con limite 100 e proiezione.
 
+## countries — paesi e province (database common, collection legacy condivisa)
+Passo 9-ter. Letta da tutti (select del backoffice, POS), scritta dal solo PSA. Il POS scarica l'intero elenco e cerca per `code`: la forma è quella del legacy.
+
+| Campo | Tipo | Note |
+|---|---|---|
+| `_id` | ObjectId | |
+| `code` | string | 2 lettere maiuscole, **mai modificabile**; univoco (vedi sotto) |
+| `name` | string | 1–100 caratteri (nei dati esistenti fino a 32) |
+| `areas` | array di `{ code, name }` | province; `code` 2 lettere maiuscole, mai modificabile, univoco nel paese; solo l'Italia ne ha (110 in development); un `areas` che non è un elenco (`null`, `'none'`) si legge come vuoto e al primo inserimento diventa un elenco |
+| `insertDate` | Date | alla creazione dal nuovo backend; i documenti di development non l'hanno |
+| `updateDate` | Date \| null | `null` alla creazione, poi la data dell'ultima scrittura |
+
+Campi posseduti (`COUNTRIES_OWNED_FIELDS`): `code`, `name`, `areas`, `insertDate`, `updateDate`; ogni altra chiave di un paese o di una provincia è del legacy e non si tocca mai. Scritture: inserimento di un documento intero (`areas: []`), `$set` di `name` e `updateDate`, `$push` / `$pull` / `$set` posizionale (`arrayFilters`) su `areas`, `deleteOne`. L'inserimento di una provincia è **un solo update atomico** condizionato dall'assenza di quel `code` tra le province: l'elenco non si legge e riscrive mai. **Indici:** nessuno. L'unicità del `code` di paese è garantita dalle scritture (controllo prima e dopo l'inserimento); l'indice univoco aspetta il conteggio dei duplicati in produzione, non ancora fatto (in development nessun duplicato su 240 paesi). Un paese o una provincia **in uso** (`countryCode`, e `countryAreaCode`, di una azienda o di un punto vendita nelle copie del common, cestinati compresi) non si elimina; i contatti dei gruppi non si controllano.
+
 ## Collection dei database di gruppo lette dal nuovo backend
 Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul cluster del gruppo:
 | Collection | Perché | Campi usati |

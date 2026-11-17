@@ -836,6 +836,10 @@ Decisioni dell'utente del 2026-11-17 (analisi in `backend/reports/settings-trash
   - perimetro applicato dal server (PSA tutti, D i propri gruppi);
   - oltre alle colonne del legacy (Numero, Data, Tipo, Cliente, Importo, Azienda): **Gruppo** (colonna e filtro), **codice e data dell'errore**, filtro per **dealer** (solo PSA) e **scarico CSV** come la Diagnostica.
 
+- [x] **P1** Gestione stati. *Modulo `countries`: `GET /v1/countries/{code}` con `ETag`; creazione, modifica del nome ed eliminazione di paesi e province, solo PSA con il permesso `countries:manage` (legato a `groups.w` del PSA come il listino Tabacchi, confermato dall'utente), `If-Match` su ogni scrittura, provincia aggiunta con un `$push` atomico; `409 taken` sui codici (confronto senza distinzione di maiuscole), `409 inUse` con i riferimenti di aziende e punti vendita delle copie del common (al massimo 20 per tipo), `503` se il controllo supera il tempo. `countries` diventa `legacy-write` con la forma del legacy; eventi `country.*` e `countryArea.*`. Pagina `/settings/countries` sotto Strumenti, cache dei paesi del backoffice invalidata dopo ogni scrittura. Indice univoco sui codici in attesa del conteggio in produzione (`countries-dups.ts`, eseguito dall'utente). Documentato in `doc/API.md`, `doc/Data-Model.md`, `doc/Technical-Guide.md` §11.23.*
+- [ ] **P2** Cestino.
+- [ ] **P3** Documenti in errore.
+
 ## 10. Aree successive (da dettagliare)
 Ogni area parte con l'analisi del `legacy_analyst` (skill `legacy-module-analysis`) e si dettaglia in task prima di iniziare. Il server di punto vendita è un'applicazione separata, fuori da questo progetto (D-22), e usa le API del backoffice (D-23).
 - **Accesso dell'app del server di punto vendita alle API `/v1`:** la credenziale è la chiave di negozio (D-24, passo 7C); restano da decidere, con i domini che apriranno le scritture del negozio, l'attribuzione dell'operatore e le route che il negozio può chiamare.

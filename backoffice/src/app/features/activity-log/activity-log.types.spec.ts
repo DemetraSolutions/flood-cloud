@@ -18,6 +18,10 @@ describe('activity log types', () => {
     for (const verb of ['created', 'updated', 'revoked']) {
       expect(ACTIVITY_ACTIONS).toContain(`apiKey.${verb}`);
     }
+    for (const verb of ['created', 'updated', 'deleted']) {
+      expect(ACTIVITY_ACTIONS).toContain(`country.${verb}`);
+      expect(ACTIVITY_ACTIONS).toContain(`countryArea.${verb}`);
+    }
   });
 
   it('builds dictionary keys from the action names', () => {
@@ -25,6 +29,7 @@ describe('activity log types', () => {
     expect(actionLabelKey('rateLimit.exceeded')).toBe('ACTIVITY.ACTION.RATE_LIMIT_EXCEEDED');
     expect(actionLabelKey('client.error')).toBe('ACTIVITY.ACTION.CLIENT_ERROR');
     expect(actionLabelKey('apiKey.revoked')).toBe('ACTIVITY.ACTION.API_KEY_REVOKED');
+    expect(actionLabelKey('countryArea.created')).toBe('ACTIVITY.ACTION.COUNTRY_AREA_CREATED');
   });
 
   it('has a label in the dictionary for every action', () => {

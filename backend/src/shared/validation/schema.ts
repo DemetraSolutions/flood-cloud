@@ -323,8 +323,8 @@ export function phone(): Schema<string, false> {
   });
 }
 
-/** C0 and C1 control characters and the bidirectional overrides and isolates, and invisible formatting characters (zero-width, marks, BOM, word joiner), which can disguise a name. */
-const HIDDEN_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200F\u061C\uFEFF\u2060-\u2064]/;
+/** C0 and C1 control characters, the line and paragraph separators (U+2028, U+2029) and the bidirectional overrides and isolates, and invisible formatting characters (zero-width, marks, BOM, word joiner), which can disguise a name. */
+export const HIDDEN_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u2028\u2029\u202A-\u202E\u2066-\u2069\u200B-\u200F\u061C\uFEFF\u2060-\u2064]/;
 
 /**
  * A person's name: trimmed, NFC, 1 to `max` units, without control characters (C0, C1) and without

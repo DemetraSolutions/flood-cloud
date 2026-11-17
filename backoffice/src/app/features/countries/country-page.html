@@ -1,0 +1,105 @@
+@if (failed()) {
+  <h1>{{ 'COUNTRIES.DETAIL_TITLE' | t }}</h1>
+  <fc-error-state
+    [title]="'COUNTRIES.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute">{{ 'COUNTRIES.BACK' | t }}</a>
+  </p>
+} @else if (country(); as current) {
+  <header class="page-header">
+    <h1>{{ current.name }}</h1>
+    <a [routerLink]="listRoute">{{ 'COUNTRIES.BACK' | t }}</a>
+  </header>
+
+  @if (notice(); as shown) {
+    <section class="notice" role="alert">
+      <p>{{ shown.message }}</p>
+      @if (shown.kind === 'stale') {
+        <button fc-button variant="secondary" (click)="reload()">
+          {{ 'COUNTRIES.RELOAD' | t }}
+        </button>
+      }
+    </section>
+  }
+
+  <dl class="summary">
+    <div>
+      <dt>{{ 'COUNTRIES.FIELD.CODE' | t }}</dt>
+      <dd>{{ current.code }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'COUNTRIES.FIELD.NAME' | t }}</dt>
+      <dd>{{ current.name }}</dd>
+    </div>
+  </dl>
+  <div class="actions">
+    <button fc-button variant="secondary" (click)="open({ kind: 'rename' })">
+      {{ 'COUNTRIES.RENAME' | t }}
+    </button>
+    <button fc-button variant="danger" (click)="askDelete({ kind: 'country' })">
+      {{ 'COUNTRIES.DELETE' | t }}
+    </button>
+  </div>
+
+  <header class="section-header">
+    <h2>{{ 'COUNTRIES.AREAS.TITLE' | t }}</h2>
+    <button fc-button (click)="open({ kind: 'new-area' })">{{ 'COUNTRIES.AREAS.NEW' | t }}</button>
+  </header>
+  <fc-data-table
+    [caption]="'COUNTRIES.AREAS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="areas()"
+    [rowKey]="rowKey"
+    [emptyTitle]="'COUNTRIES.AREAS.EMPTY' | t"
+    [emptyMessage]="'COUNTRIES.AREAS.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcRowActions let-row>
+      <button
+        fc-button
+        variant="ghost"
+        [attr.aria-label]="areaLabel('COUNTRIES.AREAS.RENAME_LABEL', row)"
+        (click)="open({ kind: 'rename-area', area: row })"
+      >
+        {{ 'COUNTRIES.AREAS.RENAME' | t }}
+      </button>
+      <button
+        fc-button
+        variant="ghost"
+        [attr.aria-label]="areaLabel('COUNTRIES.AREAS.DELETE_LABEL', row)"
+        (click)="askDelete({ kind: 'area', area: row })"
+      >
+        {{ 'COUNTRIES.AREAS.DELETE' | t }}
+      </button>
+    </ng-template>
+  </fc-data-table>
+} @else if (loading()) {
+  <h1>{{ 'COUNTRIES.DETAIL_TITLE' | t }}</h1>
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+}
+
+<fc-dialog [heading]="editorHeading()" [open]="editorOpen()" (closed)="close()">
+  @if (editorOpen()) {
+    <fc-country-editor
+      [item]="editorItem()"
+      [error]="saveError()"
+      [busy]="saving()"
+      (save)="save($event)"
+      (cancelled)="close()"
+    />
+  }
+</fc-dialog>
+
+<fc-confirm-dialog
+  [heading]="'COUNTRIES.DELETE_TITLE' | t"
+  [message]="deleteMessage()"
+  [confirmLabel]="'COUNTRIES.DELETE_ACTION' | t"
+  [danger]="true"
+  [busy]="deleteBusy()"
+  [open]="deleteOpen()"
+  (openChange)="deleteOpen.set($event)"
+  (confirmed)="confirmDelete()"
+/>

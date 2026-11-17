@@ -23,6 +23,7 @@ export const FIELD_ISSUES = [
   'default',
   'last',
   'referenced',
+  'inUse',
   'taken',
   'reused',
   'tooShort',

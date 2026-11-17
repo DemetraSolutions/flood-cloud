@@ -189,6 +189,25 @@ describe('visibleMenu', () => {
     });
   });
 
+  it('shows "Strumenti › Gestione stati" only to platform administrators with countries:manage', () => {
+    const children = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children('PSA', 'countries:manage')).toEqual(['countries']);
+    for (const role of ['D', 'SA', 'CA', 'PA', 'E', undefined] as const) {
+      expect(children(role, 'countries:manage')).toBeUndefined();
+    }
+    expect(
+      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'countries'),
+    ).toMatchObject({
+      route: '/settings/countries',
+      labelKey: 'MENU.COUNTRIES',
+      permission: 'countries:manage',
+      roles: ['PSA'],
+    });
+  });
+
   it('shows "Release" after the tools and only to platform administrators and dealers', () => {
     const idsOf = (role: Role | undefined) => ids(visibleMenu(MENU, allowAll, allowAll, role));
     expect(idsOf('PSA')).toContain('releases');

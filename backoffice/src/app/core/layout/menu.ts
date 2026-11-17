@@ -186,6 +186,14 @@ export const MENU: readonly MenuItem[] = [
         roles: ['PSA'],
       },
       {
+        id: 'countries',
+        labelKey: 'MENU.COUNTRIES',
+        icon: 'settings',
+        route: '/settings/countries',
+        permission: 'countries:manage',
+        roles: ['PSA'],
+      },
+      {
         id: 'email-templates',
         labelKey: 'MENU.EMAIL_TEMPLATES',
         icon: 'mail',

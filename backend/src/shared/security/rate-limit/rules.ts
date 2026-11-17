@@ -48,6 +48,8 @@ export interface RateLimitRules {
   readonly storeKeyAdminPerUser: RateLimitRule;
   /** Creations, changes and revocations of public API keys per authenticated user. */
   readonly apiKeyAdminPerUser: RateLimitRule;
+  /** Creations, changes and deletions of countries and provinces per authenticated user per minute (the PSA only). */
+  readonly countriesAdminPerUser: RateLimitRule;
 }
 
 /** Length of an hourly window. */
@@ -106,5 +108,6 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),
     storeKeyAdminPerUser: Object.freeze({ bucket: 'storeKeyAdmin:user', limit: config.rateLimitStoreKeyAdminPerUser, key: perUser }),
     apiKeyAdminPerUser: Object.freeze({ bucket: 'apiKeyAdmin:user', limit: config.rateLimitApiKeyAdminPerUser, key: perUser }),
+    countriesAdminPerUser: Object.freeze({ bucket: 'countriesAdmin:user', limit: config.rateLimitCountriesAdminPerUser, key: perUser }),
   });
 }

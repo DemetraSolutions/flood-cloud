@@ -1,7 +1,9 @@
-import { ObjectId } from 'mongodb';
-import type { Document, Filter, Sort } from 'mongodb';
+import { MongoServerError, ObjectId } from 'mongodb';
+import type { Collection, Document, Filter, Sort } from 'mongodb';
 import type { Databases } from '../../../db/databases.ts';
+import { AppError } from '../../http/errors.ts';
 import { LIST_MAX_TIME_MS, MAX_LIMIT } from '../../http/list.ts';
+import { codeVariants } from '../../validation/code-variants.ts';
 import { assertVerifiedGroupAccess } from './group-access.ts';
 import { assertCountedGroups, countByGroupPipeline, countsByGroup } from './group-counts.ts';
 import type { TrashCount } from './group-counts.ts';
@@ -420,4 +422,57 @@ export async function findPlacesUsingTemplate(principal: ScopeHolder, access: Gr
     .collection('places')
     .find({ $and: [groupCondition(access.groupId), { $or: TEMPLATE_REFERENCE_PATHS.map((path) => ({ [path]: { $in: named } })) }] }, { projection: { _id: 1, name: 1, companyId: 1 }, limit, sort: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS })
     .toArray();
+}
+
+/** The ids of the companies or places of the copies that use a country or a province (trashed ones included), at most the limit of the read: a client cannot tell exactly the limit from more. */
+export interface CountryUsageOfKind {
+  /** Ids of the documents, by id. */
+  readonly ids: ObjectId[];
+}
+
+/** The companies and the places of every group that use a country, or a province of it. */
+export interface CountryUsage {
+  readonly companies: CountryUsageOfKind;
+  readonly places: CountryUsageOfKind;
+}
+
+/** The format of a country code and of an area code, the only values {@link readCountryUsage} accepts. */
+const COUNTRY_CODE_FORMAT = /^[A-Z]{2}$/;
+
+/** MongoDB's `MaxTimeMSExpired` error code. */
+const MAX_TIME_EXPIRED = 50;
+
+/**
+ * Finds the companies and the places, of any group and trashed ones included, that name a country (`countryCode`) or a province of it (`countryAreaCode`) in the copies of the common database: the deletion
+ * of a country or of a province is refused while one does (step 9-ter). It is the only read of the copies that looks across all the groups by a country, and it returns nothing but ids. The fields are
+ * fixed here and the codes are the only things the caller supplies (checked as two uppercase letters, so no operator can be passed through them); they are matched in their four spellings (`IT`, `it`, `It`, `iT`),
+ * because the legacy may have stored them in another case. The read is bounded by `limit` and by a time limit: nothing is counted without a bound.
+ *
+ * @param databases Database accessor.
+ * @param countryCode The country code, two uppercase letters.
+ * @param areaCode The province code, two uppercase letters, or `null` to look at the whole country.
+ * @param limit How many ids of each kind to return at most, a positive integer.
+ * @returns For each kind, the ids (at most `limit`, by id).
+ * @throws {Error} If a code is not two uppercase letters or the limit is not a positive integer.
+ * @throws {AppError} `SERVICE_UNAVAILABLE` when a read exceeds its time limit: the answer is unknown, so the caller must not go on as if nothing used the country.
+ */
+export async function readCountryUsage(databases: Databases, countryCode: string, areaCode: string | null, limit: number): Promise<CountryUsage> {
+  if (!COUNTRY_CODE_FORMAT.test(countryCode) || (areaCode !== null && !COUNTRY_CODE_FORMAT.test(areaCode))) {
+    throw new Error('A read of the copies by country needs codes of two uppercase letters');
+  }
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error('A read of the copies by country needs a positive limit');
+  }
+  const filter: Filter<Document> = areaCode === null ? { countryCode: { $in: codeVariants(countryCode) } } : { countryCode: { $in: codeVariants(countryCode) }, countryAreaCode: { $in: codeVariants(areaCode) } };
+  const read = async (collection: Collection<Document>): Promise<CountryUsageOfKind> => {
+    const documents = await collection.find(filter, { projection: { _id: 1 }, limit, sort: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS }).toArray();
+    return { ids: documents.map((document) => document['_id'] as ObjectId) };
+  };
+  try {
+    // Literal names: the collection registry check requires every collection name to be a string literal.
+    const [companies, places] = await Promise.all([read(databases.common().collection('companies')), read(databases.common().collection('places'))]);
+    return { companies, places };
+  } catch (error) {
+    throw error instanceof MongoServerError && error.code === MAX_TIME_EXPIRED ? new AppError('SERVICE_UNAVAILABLE') : error;
+  }
 }

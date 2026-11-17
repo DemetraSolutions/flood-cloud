@@ -179,15 +179,30 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.ok(!/places: new Set\(\[[^\]]*(?:appointment|roomsSettings)/.test(mirror));
     });
 
-    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups the three fixed reads of the diagnostics and the fixed read of the places that use a template', async () => {
+    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups the three fixed reads of the diagnostics and the fixed read of the places that use a template and the fixed read of the companies and places that use a country', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
-      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'findPlacesUsingTemplate']);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'findPlacesUsingTemplate', 'readCountryUsage']);
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
       // The diagnostics (T1) add two more, each running a pipeline made by `mirror-devices.ts` (the whole of what leaves the copies: an allowlist of the fields of a device).
       assert.equal([...text.matchAll(/deviceRowsPipeline\(|deviceCountPipeline\(/g)].length, 2);
       assert.equal([...text.matchAll(/\.aggregate\(/g)].length, 4);
+    });
+
+    it('imports the read of the companies and places that use a country only in the countries repository, which passes it nothing but codes', async () => {
+      const importers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path !== MIRROR && /import\s*(?:type\s*)?\{[^}]*\breadCountryUsage\b[^}]*\}\s*from\s*'[^']*group-mirror\.ts'/.test(await readFile(file, 'utf8'))) {
+          importers.push(path);
+        }
+      }
+      assert.deepEqual(importers, ['modules/countries/countries.repository.ts']);
+      // The read takes the two codes only after checking that each is two uppercase letters, and returns ids and counts: no document leaves the copies.
+      const mirror = await readFile(join(SRC, MIRROR), 'utf8');
+      assert.match(mirror, /COUNTRY_CODE_FORMAT\.test\(countryCode\)/);
+      assert.match(mirror, /projection: \{ _id: 1 \}/);
     });
 
     it('lets only the write service write companies and places, in a transaction, from a verified group access', async () => {

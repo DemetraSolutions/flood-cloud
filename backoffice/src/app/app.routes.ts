@@ -571,6 +571,20 @@ export const routes: Routes = [
               import('./features/tobaccos/tobaccos-page').then((m) => m.TobaccosPage),
           },
           {
+            path: 'settings/countries',
+            canMatch: [role('PSA'), permission('countries:manage')],
+            title: 'COUNTRIES.TITLE',
+            loadComponent: () =>
+              import('./features/countries/countries-page').then((m) => m.CountriesPage),
+          },
+          {
+            path: 'settings/countries/:countryCode',
+            canMatch: [role('PSA'), permission('countries:manage')],
+            title: 'COUNTRIES.DETAIL_TITLE',
+            loadComponent: () =>
+              import('./features/countries/country-page').then((m) => m.CountryPage),
+          },
+          {
             path: 'releases',
             canMatch: [role('PSA', 'D')],
             title: 'RELEASES.TITLE',

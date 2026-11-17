@@ -1,0 +1,30 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="countryForm.code"
+    autocapitalize="characters"
+    autocomplete="off"
+    [format]="upperCase"
+    [label]="'COUNTRIES.FIELD.CODE' | t"
+    [hint]="'COUNTRIES.FIELD.CODE_HINT' | t"
+    [error]="message(countryForm.code, 'code')"
+    (blurred)="countryForm.code().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="countryForm.name"
+    autocomplete="off"
+    [label]="'COUNTRIES.FIELD.NAME' | t"
+    [error]="message(countryForm.name, 'name')"
+    (blurred)="countryForm.name().markAsTouched()"
+  />
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

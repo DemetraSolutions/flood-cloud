@@ -173,6 +173,8 @@ describe('routes', () => {
       ['/groups/list', { ...psa(['groups:read']), role: 'D' as const }, '⟦GROUPS.TITLE⟧'],
       ['/activity-log', sa(['activityLog:read', 'profile:read']), '⟦ACTIVITY.TITLE⟧'],
       ['/tools/tobaccos', psa(['tobaccos:read']), '⟦TOBACCOS.TITLE⟧'],
+      ['/settings/countries', psa(['countries:manage']), '⟦COUNTRIES.TITLE⟧'],
+      ['/settings/countries/IT', psa(['countries:manage']), '⟦COUNTRIES.DETAIL_TITLE⟧'],
     ])('lazy-loads %s', async (url, profile, expected) => {
       expect(await go(url, profile)).toBe(expected);
     });
@@ -301,6 +303,9 @@ describe('routes', () => {
       ['/tools/tobaccos', psa([])],
       ['/tools/tobaccos', { ...psa(['tobaccos:read']), role: 'D' as const }],
       ['/tools/tobaccos', sa(['tobaccos:read'])],
+      ['/settings/countries', psa([])],
+      ['/settings/countries', { ...psa(['countries:manage']), role: 'D' as const }],
+      ['/settings/countries/IT', sa(['countries:manage'])],
       ['/users', psa([])],
       ['/platform/users', { ...psa([]) }],
       ['/activity-log', sa()],

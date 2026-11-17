@@ -57,6 +57,7 @@ export const PERMISSIONS = Object.freeze({
   API_KEYS_MANAGE: 'apiKeys:manage',
   TOBACCOS_READ: 'tobaccos:read',
   TOBACCOS_IMPORT: 'tobaccos:import',
+  COUNTRIES_MANAGE: 'countries:manage',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

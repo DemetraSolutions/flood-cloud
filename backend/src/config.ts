@@ -114,6 +114,8 @@ export interface Config {
   readonly rateLimitStoreKeyAdminPerUser: number;
   /** Creations, changes and revocations of public API keys per minute allowed to a user (`RATE_LIMIT_API_KEY_ADMIN_PER_USER`). */
   readonly rateLimitApiKeyAdminPerUser: number;
+  /** Creations, changes and deletions of countries and provinces per minute allowed to a user (`RATE_LIMIT_COUNTRIES_ADMIN_PER_USER`). */
+  readonly rateLimitCountriesAdminPerUser: number;
   /** Requests per minute a public API key gets when its group sets no default of its own (`PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE`). */
   readonly publicApiDefaultRateLimitPerMinute: number;
   /** Requests per UTC day a public API key gets when its group sets no default of its own (`PUBLIC_API_DEFAULT_DAILY_QUOTA`). */
@@ -667,6 +669,7 @@ export function loadConfig(env: Env): Config {
   const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
   const rateLimitApiKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_API_KEY_ADMIN_PER_USER', 20, 1, 100000);
+  const rateLimitCountriesAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_COUNTRIES_ADMIN_PER_USER', 30, 1, 100000);
   const publicApiDefaultRateLimitPerMinute = readInteger(env, issues, 'PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE', 60, PUBLIC_API_MIN_LIMIT, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE);
   const publicApiDefaultDailyQuota = readInteger(env, issues, 'PUBLIC_API_DEFAULT_DAILY_QUOTA', 10_000, PUBLIC_API_MIN_LIMIT, PUBLIC_API_MAX_DAILY_QUOTA);
   const publicApiDefaultGroupRateLimitPerMinute = readInteger(env, issues, 'PUBLIC_API_DEFAULT_GROUP_RATE_LIMIT_PER_MINUTE', 120, PUBLIC_API_MIN_LIMIT, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE);
@@ -746,6 +749,7 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp === undefined ||
     rateLimitStoreKeyAdminPerUser === undefined ||
     rateLimitApiKeyAdminPerUser === undefined ||
+    rateLimitCountriesAdminPerUser === undefined ||
     publicApiDefaultRateLimitPerMinute === undefined ||
     publicApiDefaultDailyQuota === undefined ||
     publicApiDefaultGroupRateLimitPerMinute === undefined ||
@@ -797,6 +801,7 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp,
     rateLimitStoreKeyAdminPerUser,
     rateLimitApiKeyAdminPerUser,
+    rateLimitCountriesAdminPerUser,
     publicApiDefaultRateLimitPerMinute,
     publicApiDefaultDailyQuota,
     publicApiDefaultGroupRateLimitPerMinute,

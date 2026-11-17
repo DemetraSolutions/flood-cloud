@@ -55,7 +55,8 @@
     "DIAGNOSTICS": "Diagnostica",
     "RELEASES": "Release",
     "EMAIL_TEMPLATES": "Template e-mail",
-    "TOBACCOS": "Listino Tabacchi"
+    "TOBACCOS": "Listino Tabacchi",
+    "COUNTRIES": "Gestione stati"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -238,7 +239,8 @@
       "IMMUTABLE": "Questo valore non si può modificare.",
       "DEFAULT": "Elemento standard: non si può modificare né eliminare.",
       "LAST": "Non si può eliminare l’ultimo elemento.",
-      "REFERENCED": "Elemento usato da altri elementi."
+      "REFERENCED": "Elemento usato da altri elementi.",
+      "IN_USE": "Elemento in uso: non si può eliminare."
     }
   },
   "GROUP_SELECTOR": {
@@ -767,7 +769,13 @@
       "PLACE_DELETED": "Punto vendita eliminato",
       "API_KEY_CREATED": "Chiave API creata",
       "API_KEY_UPDATED": "Chiave API modificata",
-      "API_KEY_REVOKED": "Chiave API revocata"
+      "API_KEY_REVOKED": "Chiave API revocata",
+      "COUNTRY_CREATED": "Paese creato",
+      "COUNTRY_UPDATED": "Paese modificato",
+      "COUNTRY_DELETED": "Paese eliminato",
+      "COUNTRY_AREA_CREATED": "Provincia creata",
+      "COUNTRY_AREA_UPDATED": "Provincia modificata",
+      "COUNTRY_AREA_DELETED": "Provincia eliminata"
     }
   },
   "PUBLIC_API": {
@@ -3221,6 +3229,62 @@
         "RATE_LIMITED_WAIT": "Troppe importazioni: riprova tra {seconds} secondi.",
         "UNAVAILABLE": "Il server è occupato con un’altra importazione: riprova tra poco."
       }
+    }
+  },
+  "COUNTRIES": {
+    "TITLE": "Gestione stati",
+    "DETAIL_TITLE": "Stato",
+    "HINT": "Paesi e province che le anagrafiche di aziende e punti vendita (e il punto cassa) offrono. I codici non si modificano dopo la creazione: si cambia solo il nome.",
+    "NEW": "Nuovo paese",
+    "NEW_TITLE": "Nuovo paese",
+    "SEARCH": "Cerca per codice o nome",
+    "LOAD_ERROR": "Impossibile caricare i paesi",
+    "EMPTY": "Nessun paese",
+    "EMPTY_MESSAGE": "Non ci sono paesi che corrispondono alla ricerca.",
+    "BACK": "Torna ai paesi",
+    "CREATED": "Paese {name} creato.",
+    "SAVED": "Modifica salvata.",
+    "DELETED": "Paese {name} eliminato.",
+    "RELOAD": "Ricarica",
+    "STALE": "Il paese è stato modificato da un altro utente: ricarica e riprova.",
+    "COLUMN": {
+      "CODE": "Codice",
+      "NAME": "Nome",
+      "AREAS": "Province"
+    },
+    "FIELD": {
+      "CODE": "Codice",
+      "CODE_HINT": "Due lettere maiuscole (A-Z). Non si potrà modificare.",
+      "NAME": "Nome"
+    },
+    "RENAME": "Modifica nome",
+    "RENAME_TITLE": "Modifica il nome del paese",
+    "DELETE": "Elimina paese",
+    "DELETE_TITLE": "Elimina paese",
+    "DELETE_ACTION": "Elimina",
+    "DELETE_CONFIRM": "Eliminare il paese «{name}» con tutte le sue province?",
+    "IN_USE": {
+      "COMPANY": "{count} azienda",
+      "COMPANIES": "{count} aziende",
+      "PLACE": "{count} punto vendita",
+      "PLACES": "{count} punti vendita",
+      "COUNTRY": "Il paese non si può eliminare finché è usato da aziende o punti vendita: {users}.",
+      "AREA": "La provincia non si può eliminare finché è usata da aziende o punti vendita: {users}."
+    },
+    "AREAS": {
+      "TITLE": "Province",
+      "NEW": "Nuova provincia",
+      "NEW_TITLE": "Nuova provincia",
+      "EMPTY": "Nessuna provincia",
+      "EMPTY_MESSAGE": "Questo paese non ha province.",
+      "CREATED": "Provincia creata.",
+      "DELETED": "Provincia {name} eliminata.",
+      "RENAME": "Modifica",
+      "RENAME_LABEL": "Modifica il nome della provincia {name}",
+      "RENAME_TITLE": "Modifica il nome della provincia",
+      "DELETE": "Elimina",
+      "DELETE_LABEL": "Elimina la provincia {name}",
+      "DELETE_CONFIRM": "Eliminare la provincia «{name}»?"
     }
   },
   "EMAIL_TEMPLATES": {

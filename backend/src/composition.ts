@@ -42,6 +42,10 @@ import { createDiagnosticsController } from './modules/diagnostics/diagnostics.c
 import { createDiagnosticsRepository } from './modules/diagnostics/diagnostics.repository.ts';
 import { createDiagnosticsRoutes } from './modules/diagnostics/diagnostics.routes.ts';
 import { createDiagnosticsService } from './modules/diagnostics/diagnostics.service.ts';
+import { createCountriesController } from './modules/countries/countries.controller.ts';
+import { createCountriesRepository } from './modules/countries/countries.repository.ts';
+import { createCountriesRoutes } from './modules/countries/countries.routes.ts';
+import { createCountriesService } from './modules/countries/countries.service.ts';
 import { createTobaccosController } from './modules/tobaccos/tobaccos.controller.ts';
 import { createTobaccosRepository } from './modules/tobaccos/tobaccos.repository.ts';
 import { createTobaccosRoutes } from './modules/tobaccos/tobaccos.routes.ts';
@@ -155,7 +159,7 @@ export interface BackofficeDeps {
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the companies, the places, the store keys of the points of sale, the media (images), the groups, the activity log monitor, the company lookup on Cerved and the browser error reports. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the countries and their provinces, the companies, the places, the store keys of the points of sale, the media (images), the groups, the activity log monitor, the company lookup on Cerved and the browser error reports. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -283,6 +287,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
   const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
+  const countries = createCountriesController(createCountriesService({ repository: createCountriesRepository(databases, logger), activityLog, versionKey, now }));
   const tobaccos = createTobaccosController(createTobaccosService({ repository: createTobaccosRepository(databases), activityLog, now }));
   const vatLookups = createVatLookupsController(
     createVatLookupsService({ cerved: createCervedClient({ apiKey: config.cervedApiKey, baseUrl: config.cervedBaseUrl, ...deps.cervedHttp }), activityLog, logger }),
@@ -298,6 +303,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createDiagnosticsRoutes(diagnostics, rules),
       ...createEmailTemplatesRoutes(emailTemplates, idempotency),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
+      ...createCountriesRoutes(countries, rules),
       ...createVatLookupsRoutes(vatLookups, rules),
       ...createClientErrorsRoutes(clientErrors, rules),
     ],

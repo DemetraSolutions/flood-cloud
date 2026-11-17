@@ -49,4 +49,29 @@ describe('Countries', () => {
     expect(countries.failed()).toBe(true);
     expect(countries.list()).toEqual([]);
   });
+
+  it('does nothing when invalidated before the first read', async () => {
+    const countries = setup();
+    countries.invalidate();
+    TestBed.tick();
+    await settle();
+    expect(countries.list()).toEqual([]);
+  });
+
+  it('reads the countries again when invalidated, and tells while reading', async () => {
+    const countries = setup();
+    countries.need();
+    TestBed.tick();
+    expect(countries.loading()).toBe(true);
+    backend().expectOne(`${API}/v1/countries`).flush(BODY);
+    await settle();
+    expect(countries.loading()).toBe(false);
+    countries.invalidate();
+    TestBed.tick();
+    backend()
+      .expectOne(`${API}/v1/countries`)
+      .flush({ ...BODY, data: [BODY.data[1]] });
+    await settle();
+    expect(countries.list().map((c) => c.code)).toEqual(['FR']);
+  });
 });

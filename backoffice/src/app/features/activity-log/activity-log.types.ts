@@ -32,6 +32,12 @@ const SECURITY_ACTIONS = [
   'apiKey.created',
   'apiKey.updated',
   'apiKey.revoked',
+  'country.created',
+  'country.updated',
+  'country.deleted',
+  'countryArea.created',
+  'countryArea.updated',
+  'countryArea.deleted',
 ];
 const DATA_RESOURCES = ['user', 'group', 'company', 'place'];
 const DATA_VERBS = ['created', 'updated', 'trashed', 'restored', 'deleted'];
