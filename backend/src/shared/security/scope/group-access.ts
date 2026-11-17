@@ -11,7 +11,7 @@ import type { PermissionDecisionHook } from '../rbac/require-permission.ts';
 import type { GroupsRepository } from './groups.repository.ts';
 import type { AuthPrincipal, ScopeHolder } from './principal.ts';
 
-/** A group the caller was verified to reach. Only {@link requireGroupAccess} creates one. */
+/** A group the caller was verified to reach. Only {@link requireGroupAccess} and {@link requireGroupAccesses} create one. */
 export interface GroupAccess {
   readonly groupId: ObjectId;
   /** Cluster that holds the group's operational database, resolved from `groups.dataCluster`. */
@@ -24,7 +24,7 @@ export interface GroupAccess {
 
 const GROUP_ID_PATTERN = /^[0-9a-f]{24}$/;
 
-/** Every access issued by {@link requireGroupAccess}; {@link groupDatabaseFor} accepts nothing else. */
+/** Every access issued by {@link requireGroupAccess} and {@link requireGroupAccesses}; {@link groupDatabaseFor} accepts nothing else. */
 const issued = new WeakSet<GroupAccess>();
 
 /** The outcome of the perimeter check: who may reach which group, before the cluster is known. */
@@ -93,6 +93,29 @@ export interface GroupAccessDeps {
 }
 
 /**
+ * Verifies a raw group id against the principal's scope and against `common.groups`, and issues the access to it: the one step both {@link requireGroupAccess} (the group of the
+ * path) and {@link requireGroupAccesses} (the groups of a body) go through, so a group is never reached by a rule of its own. Not exported: an access is issued only by those two middleware.
+ *
+ * @param groups Group lookup.
+ * @param principal The caller.
+ * @param rawGroupId The id as the client sent it (any string).
+ * @returns The access, or `null` when the id is malformed, outside the perimeter, missing, or the group is suspended or trashed and the caller is not a PSA.
+ */
+async function resolveGroupAccess(groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'>, principal: ScopeHolder, rawGroupId: string): Promise<GroupAccess | null> {
+  const perimeter = checkPerimeter(principal, rawGroupId);
+  if (perimeter === null) {
+    return null;
+  }
+  const found = await groups.findAccess(perimeter.groupId);
+  if (found === null || (found.availability === 'unavailable' && principal.scope.kind !== 'platform')) {
+    return null;
+  }
+  // The cluster is resolved only now: a suspended or trashed group is already a uniform 404 for non-PSA,
+  // whatever its (possibly broken) dataCluster says.
+  return issueGroupAccess(perimeter, groups.resolveCluster(found.group), featuresOf(found.group.settings));
+}
+
+/**
  * Middleware for routes with a `:groupId` path parameter (the route builder mounts it for routes
  * declaring `group: true`). It verifies the group against the principal's scope and against
  * `common.groups`: a group that does not exist is `404` for everybody; a suspended or trashed
@@ -113,17 +136,44 @@ export function requireGroupAccess(
     if (principal === undefined) {
       throw new AppError('UNAUTHENTICATED');
     }
-    const perimeter = checkPerimeter(principal, req.params['groupId'] as string);
-    if (perimeter === null) {
+    const access = await resolveGroupAccess(groups, principal, req.params['groupId'] as string);
+    if (access === null) {
       throw new AppError('NOT_FOUND');
     }
-    const found = await groups.findAccess(perimeter.groupId);
-    if (found === null || (found.availability === 'unavailable' && principal.scope.kind !== 'platform')) {
-      throw new AppError('NOT_FOUND');
+    res.locals.groupAccess = access;
+    next();
+  };
+}
+
+/**
+ * Middleware of a platform route that acts on several groups named in the body (the bulk restore of the groups from the trash): every id is verified like the group of a path
+ * (perimeter, existence, state: a suspended or trashed group is reachable by a PSA only), and the accesses go in `res.locals.groupAccesses` by hexadecimal id, `null` for a group the
+ * caller cannot reach (which the service reports as not found, never telling it from one that does not exist). It must run after the body is validated and after the permission check
+ * of the route. Every access it issues to a PSA or a dealer is reported to the audit, like the one of a `:groupId` route (the permission is already granted).
+ *
+ * @param groups Group lookup.
+ * @param idsOf Reads the validated ids of the request (at most a hundred: one lookup each).
+ * @param onCrossGroupAccess Audit callback, called for every access issued to a PSA or a dealer.
+ * @returns The handler: `401 UNAUTHENTICATED` without a caller.
+ */
+export function requireGroupAccesses(groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'>, idsOf: (res: Response) => readonly ObjectId[], onCrossGroupAccess: CrossGroupAccessHandler): RequestHandler {
+  return async (req, res, next) => {
+    const principal = res.locals.auth;
+    if (principal === undefined) {
+      throw new AppError('UNAUTHENTICATED');
     }
-    // The cluster is resolved only now: a suspended or trashed group is already a uniform 404 for non-PSA,
-    // whatever its (possibly broken) dataCluster says.
-    res.locals.groupAccess = issueGroupAccess(perimeter, groups.resolveCluster(found.group), featuresOf(found.group.settings));
+    const accesses = new Map<string, GroupAccess | null>();
+    for (const id of idsOf(res)) {
+      const hex = id.toHexString();
+      if (!accesses.has(hex)) {
+        const access = await resolveGroupAccess(groups, principal, hex);
+        accesses.set(hex, access);
+        if (access?.crossGroup === true) {
+          await onCrossGroupAccess({ principal, groupId: access.groupId, req, granted: true });
+        }
+      }
+    }
+    res.locals.groupAccesses = accesses;
     next();
   };
 }
@@ -144,11 +194,11 @@ export function reportCrossGroupAccess(onCrossGroupAccess: CrossGroupAccessHandl
 }
 
 /**
- * Checks that an access was issued by {@link requireGroupAccess} and belongs to the principal.
+ * Checks that an access was issued by {@link requireGroupAccess} or {@link requireGroupAccesses} and belongs to the principal.
  *
  * @param principal The authenticated caller.
  * @param access A group access.
- * @throws {Error} If the access was not issued by {@link requireGroupAccess} or does not belong to the principal.
+ * @throws {Error} If the access was not issued by {@link requireGroupAccess} or {@link requireGroupAccesses} or does not belong to the principal.
  */
 export function assertVerifiedGroupAccess(principal: ScopeHolder, access: GroupAccess): void {
   if (!issued.has(access) || checkPerimeter(principal, access.groupId.toHexString()) === null) {
@@ -158,14 +208,14 @@ export function assertVerifiedGroupAccess(principal: ScopeHolder, access: GroupA
 
 /**
  * Opens the database of a group. The only inputs are a principal and an access issued by
- * {@link requireGroupAccess}; the access is checked again against the
+ * {@link requireGroupAccess} or {@link requireGroupAccesses}; the access is checked again against the
  * principal, and the database is opened on the cluster the access carries.
  *
  * @param principal The authenticated caller.
  * @param access A verified group access.
  * @param databases Database accessor.
  * @returns The group's database.
- * @throws {Error} If the access was not issued by {@link requireGroupAccess} or does not belong to the principal.
+ * @throws {Error} If the access was not issued by {@link requireGroupAccess} or {@link requireGroupAccesses} or does not belong to the principal.
  * @throws {UnknownClusterError} If the access's cluster is not configured.
  */
 export function groupDatabaseFor(principal: ScopeHolder, access: GroupAccess, databases: Databases): Db {

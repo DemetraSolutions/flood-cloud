@@ -90,6 +90,16 @@ describe('database access cannot be bypassed outside src/db', () => {
     assert.ok(own.includes('issueGroupAccess(') && !own.includes('export function issueGroupAccess') && !own.includes('export function resolveGroupAccess'));
   });
 
+  it('uses the bulk group access only on the routes of the trash', async () => {
+    for (const file of await filesUnder(SRC)) {
+      const path = relative(SRC, file).split('\\').join('/');
+      if (path !== 'shared/security/scope/group-access.ts' && path !== 'modules/trash/trash.routes.ts') {
+        assert.ok(!(await readFile(file, 'utf8')).includes('requireGroupAccesses'), `${path} must not use requireGroupAccesses`);
+      }
+    }
+    assert.ok((await readFile(join(SRC, 'modules/trash/trash.routes.ts'), 'utf8')).includes('requireGroupAccesses('));
+  });
+
   it('opens a group database only from the verified group access and the tools (always with an explicit cluster)', async () => {
     const callers: string[] = [];
     for (const file of await filesUnder(SRC)) {

@@ -93,6 +93,7 @@ export const PLACE_LEAVES: readonly Leaf[] = Object.freeze([
   { domain: 'invoiceSeries', legacy: 'invoicePS', codec: invoiceSeries },
   { domain: 'priceLists', legacy: 'general.priceLists', codec: priceLists },
   { domain: 'trashed', legacy: 'trash', codec: flag, readOnly: true },
+  { domain: 'trashedAt', legacy: 'trashDate', codec: instant, readOnly: true },
   { domain: 'createdAt', legacy: 'insertDate', codec: instant, readOnly: true },
   { domain: 'updatedAt', legacy: 'updateDate', codec: instant, readOnly: true },
   { domain: 'license.plan', legacy: 'plan', codec: text },
@@ -125,7 +126,7 @@ export function toPlace(document: Document, groupId: ObjectId): Place {
 }
 
 /** The fields the list reads from the copies, the only ones ever loaded for it. */
-export const PLACE_SUMMARY_PROJECTION = Object.freeze({ name: 1, trash: 1, companyId: 1, plan: 1, status: 1, city: 1, countryAreaCode: 1, countryCode: 1, expirationDate: 1 } as const);
+export const PLACE_SUMMARY_PROJECTION = Object.freeze({ name: 1, trash: 1, trashDate: 1, companyId: 1, plan: 1, status: 1, city: 1, countryAreaCode: 1, countryCode: 1, expirationDate: 1 } as const);
 
 /**
  * Maps a document of the copies (read with the list projection) to a compact list item. A value that is missing or has the wrong type is `null` (the name `''`, the status
@@ -139,6 +140,7 @@ export function toPlaceSummary(document: Document): PlaceSummary {
     name: stringOrNull(document['name']) ?? '',
     companyId: idOrNull(document['companyId']),
     trashed: document['trash'] === true,
+    trashedAt: instant.read(document['trashDate']) as string | null,
     plan: stringOrNull(document['plan']),
     status: document['status'] === true ? 'active' : 'disabled',
     city: stringOrNull(document['city']),

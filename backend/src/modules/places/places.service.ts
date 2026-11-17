@@ -17,6 +17,8 @@ import { SETTING_FIELDS } from '../../shared/legacy-write/place-settings.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal, ScopeHolder } from '../../shared/security/scope/principal.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
+import { settleItem } from '../../shared/trash/trash.ts';
+import type { TrashItemOutcome, VersionCheck } from '../../shared/trash/trash.ts';
 import { addressProblem } from '../companies/address.ts';
 import { leafWrites, setValueAt, valueAt } from '../companies/company.mapper.ts';
 import { isValidCalendarDate } from '../companies/validators.ts';
@@ -107,6 +109,28 @@ export interface PlacesService {
    * @throws {AppError} `NOT_FOUND`, `PRECONDITION_FAILED`, `CONFLICT` when it is not in the trash, or when a user of the group still has it in his scope (`users` `referenced`).
    */
   remove(principal: AuthPrincipal, access: GroupAccess, placeId: ObjectId, expected: string, client: ClientContext): Promise<void>;
+  /**
+   * Takes a place out of the trash for a bulk operation: exactly {@link PlacesService.restore}, with the version read just now instead of an `If-Match` (the write still checks it
+   * inside its transaction, so a place changed in between is skipped). A refusal is returned as the issue, never thrown.
+   *
+   * @returns `{ done: true }`, or the issue: `notFound` or `notTrashed`.
+   */
+  restoreFromTrash(principal: AuthPrincipal, access: GroupAccess, placeId: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  /**
+   * Deletes a place that is in the trash for a bulk operation: exactly {@link PlacesService.remove}, with the version read just now. A refusal is returned as the issue.
+   *
+   * @returns `{ done: true }`, or the issue: `notFound`, `notTrashed` or `referenced` (a user of the group still has the place in his scope).
+   */
+  deleteFromTrash(principal: AuthPrincipal, access: GroupAccess, placeId: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  /**
+   * The ids of the places in the trash that the caller reaches, in `_id` order, at most `limit`.
+   *
+   * @param limit Most ids returned.
+   * @param after Only the ids greater than this one, `null` for the first call.
+   */
+  trashedIds(principal: AuthPrincipal, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
+  /** How many places in the trash the caller reaches. */
+  countTrashed(principal: AuthPrincipal, access: GroupAccess): Promise<number>;
   /**
    * Duplicates a place, a PSA or a dealer only: everything is replicated (every key, the devices, the rooms, the storages with the same ids, the integrations with their credentials, which
    * are copied on the server and never returned), with a new id, new dates, `trash: false` and the name `<name> (Copy)`. The key of the store of step 7C is not copied: it is created again.
@@ -479,23 +503,27 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
     }
   };
 
-  /** A change of state (`trash`, `restore`): the place must be in the opposite state, then the write service moves it. */
+  /**
+   * A change of state (`trash`, `restore`): the place must be in the opposite state, then the write service moves it. `check` is the `If-Match` of the request, or `bulk` (an item of a bulk operation, which has no version),
+   * which takes the version just read; the write checks it again inside its transaction.
+   */
   const changeState = async (
     principal: AuthPrincipal,
     access: GroupAccess,
     placeId: ObjectId,
-    expected: string,
+    check: VersionCheck,
     client: ClientContext,
     to: 'trashed' | 'restored',
   ): Promise<PlaceResult> => {
     const writer = writerFor(principal, access);
     const found = await load(writer, access, placeId);
-    assertVersion(found, expected);
+    const version = check.kind === 'ifMatch' ? check.version : found.version;
+    assertVersion(found, version);
     const trashing = to === 'trashed';
     if (found.place.trashed === trashing) {
       throw new AppError('CONFLICT');
     }
-    const outcome = await (trashing ? writer.trash('places', placeId, expected) : writer.restore('places', placeId, expected));
+    const outcome = await (trashing ? writer.trash('places', placeId, version) : writer.restore('places', placeId, version));
     if (outcome.outcome !== 'written') {
       throw refused(outcome);
     }
@@ -510,6 +538,26 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
       await revokeKey(principal, access, placeId, 'placeTrashed', client);
     }
     return reload(writer, access, placeId, principal);
+  };
+
+  /** The deletion of a place from the trash; `check` as in {@link changeState}. */
+  const deleteTrashed = async (principal: AuthPrincipal, access: GroupAccess, placeId: ObjectId, check: VersionCheck, client: ClientContext): Promise<void> => {
+    const writer = writerFor(principal, access);
+    const found = await load(writer, access, placeId);
+    const version = check.kind === 'ifMatch' ? check.version : found.version;
+    assertVersion(found, version);
+    if (!found.place.trashed) {
+      throw new AppError('CONFLICT');
+    }
+    if (await repository.hasUsers(access.groupId, placeId)) {
+      throw new AppError('CONFLICT', { details: [{ field: 'users', issue: 'referenced' }] });
+    }
+    const outcome = await writer.deleteTrashed('places', placeId, version);
+    if (outcome.outcome !== 'deleted') {
+      throw refused(outcome);
+    }
+    await recordDataChange(activityLog, { ...context(principal, access, client, placeId), action: 'place.deleted', before: undefined, after: undefined });
+    await revokeKey(principal, access, placeId, 'placeDeleted', client);
   };
 
   return {
@@ -593,27 +641,19 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
       return reload(writer, access, placeId, principal);
     },
 
-    trash: (principal, access, placeId, expected, client) => changeState(principal, access, placeId, expected, client, 'trashed'),
+    trash: (principal, access, placeId, expected, client) => changeState(principal, access, placeId, { kind: 'ifMatch', version: expected }, client, 'trashed'),
 
-    restore: (principal, access, placeId, expected, client) => changeState(principal, access, placeId, expected, client, 'restored'),
+    restore: (principal, access, placeId, expected, client) => changeState(principal, access, placeId, { kind: 'ifMatch', version: expected }, client, 'restored'),
 
-    remove: async (principal, access, placeId, expected, client) => {
-      const writer = writerFor(principal, access);
-      const found = await load(writer, access, placeId);
-      assertVersion(found, expected);
-      if (!found.place.trashed) {
-        throw new AppError('CONFLICT');
-      }
-      if (await repository.hasUsers(access.groupId, placeId)) {
-        throw new AppError('CONFLICT', { details: [{ field: 'users', issue: 'referenced' }] });
-      }
-      const outcome = await writer.deleteTrashed('places', placeId, expected);
-      if (outcome.outcome !== 'deleted') {
-        throw refused(outcome);
-      }
-      await recordDataChange(activityLog, { ...context(principal, access, client, placeId), action: 'place.deleted', before: undefined, after: undefined });
-      await revokeKey(principal, access, placeId, 'placeDeleted', client);
-    },
+    remove: (principal, access, placeId, expected, client) => deleteTrashed(principal, access, placeId, { kind: 'ifMatch', version: expected }, client),
+
+    restoreFromTrash: (principal, access, placeId, client) => settleItem(() => changeState(principal, access, placeId, { kind: 'bulk' }, client, 'restored')),
+
+    deleteFromTrash: (principal, access, placeId, client) => settleItem(() => deleteTrashed(principal, access, placeId, { kind: 'bulk' }, client)),
+
+    trashedIds: (principal, access, limit, after) => repository.trashedIds(principal, access, limit, after),
+
+    countTrashed: (principal, access) => repository.countTrashed(principal, access),
 
     duplicate: async (principal, access, placeId, client) => {
       if (principal.role !== 'PSA' && principal.role !== 'D') {

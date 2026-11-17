@@ -1,0 +1,121 @@
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'TRASH.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+</form>
+
+@if (items.error()) {
+  <fc-error-state
+    [title]="'TRASH.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="items.reload()"
+  />
+} @else {
+  <div class="bulk">
+    @if (rows().length > 0) {
+      <fc-checkbox
+        [label]="'TRASH.SELECT_ALL' | t"
+        [checked]="allSelected()"
+        (checkedChange)="toggleAll($event)"
+      />
+    }
+    @if (selectedRows().length > 0) {
+      <span role="status">{{ 'TRASH.SELECTED' | t: { count: selectedRows().length } }}</span>
+      @if (canRestore()) {
+        <button fc-button variant="secondary" [disabled]="busy()" (click)="restore()">
+          {{ 'TRASH.RESTORE' | t }}
+        </button>
+      }
+      @if (canDelete()) {
+        <button fc-button variant="danger" [disabled]="busy()" (click)="deleteOpen.set(true)">
+          {{ 'TRASH.DELETE.ACTION' | t }}
+        </button>
+      }
+    }
+    @if (canEmpty()) {
+      <button
+        fc-button
+        class="empty"
+        variant="danger"
+        [disabled]="busy() || rows().length === 0"
+        (click)="emptyOpen.set(true)"
+      >
+        {{ 'TRASH.EMPTY.ACTION' | t }}
+      </button>
+    }
+  </div>
+
+  <fc-data-table
+    [caption]="'TRASH.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="nameColumn()"
+    [loading]="items.isLoading()"
+    [emptyTitle]="'TRASH.EMPTY_TITLE' | t"
+    [emptyMessage]="'TRASH.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="select" let-row>
+      <input
+        type="checkbox"
+        [checked]="isSelected(row)"
+        [attr.aria-label]="selectLabel(row)"
+        (change)="toggleRow(row, $any($event.target).checked)"
+      />
+    </ng-template>
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="detailRoute(row)">{{ label(row) }}</a>
+    </ng-template>
+    <ng-template fcCell="username" let-row>
+      <a [routerLink]="detailRoute(row)">{{ label(row) }}</a>
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="items.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+@if (canDelete()) {
+  <fc-confirm-dialog
+    [heading]="'TRASH.DELETE.TITLE' | t"
+    [message]="deleteMessage()"
+    [confirmLabel]="'TRASH.DELETE.ACTION' | t"
+    [danger]="true"
+    [busy]="busy()"
+    [open]="deleteOpen()"
+    (openChange)="deleteOpen.set($event)"
+    (confirmed)="remove()"
+  />
+}
+
+@if (canEmpty()) {
+  <fc-trash-empty-dialog
+    [groupId]="groupId()"
+    [kind]="groupKind()"
+    [count]="knownCount()"
+    [open]="emptyOpen()"
+    (openChange)="emptyOpen.set($event)"
+    (finished)="onEmptied($event)"
+  />
+}
+
+@if (summary(); as result) {
+  <fc-trash-summary-dialog
+    [kind]="kind()"
+    [summary]="result"
+    [names]="names()"
+    [open]="summaryOpen()"
+    (openChange)="summaryOpen.set($event)"
+  />
+}

@@ -63,6 +63,7 @@ describe('fromLegacy: a regular document', () => {
       placeIds: [],
       status: 'active',
       trashed: false,
+      trashedAt: null,
       language: 'it',
       hiddenInStats: false,
       description: 'Fixture user 005',
@@ -351,12 +352,21 @@ describe('toLegacyUpdate', () => {
         'settings.hiddenInStats': true,
         status: false,
         trash: true,
+        trashDate: NOW,
         role: 'PA',
         groupId: group,
         dealerId: dealer,
         updateDate: NOW,
       },
     });
+    // The date of the trash goes with the flag: set when the user is trashed, removed when he is restored (a restore sets `trash: false` and unsets `trashDate`).
+    assert.deepEqual(toLegacyUpdate({ trashed: false }, NOW), { $set: { trash: false, updateDate: NOW }, $unset: { trashDate: '' } });
+    assert.equal(read(doc(1, { trash: true, trashDate: NOW })).user.trashedAt?.toISOString(), NOW.toISOString());
+    for (const junk of [undefined, null, 'yesterday', 5]) {
+      assert.equal(read(doc(1, { trash: true, trashDate: junk })).user.trashedAt, null);
+    }
+    assert.equal(toResponse(read(doc(1, { trash: true, trashDate: NOW })).user).trashedAt, NOW.toISOString());
+    assert.equal(toResponse(read(doc(1, { trash: true })).user).trashedAt, null);
     assert.equal(toLegacyUpdate({ status: 'active' }, NOW).$set['status'], true);
     assert.deepEqual(toLegacyUpdate({ groupId: null, dealerId: null }, NOW).$set, { groupId: null, dealerId: null, updateDate: NOW });
   });
@@ -442,6 +452,7 @@ describe('toLegacyUpdate', () => {
       phone: null,
       status: 'disabled',
       trashed: true,
+      trashedAt: NOW,
       language: 'en',
       hiddenInStats: true,
       placeIds: [place2.toHexString(), place.toHexString()],
@@ -466,7 +477,7 @@ describe('toResponse', () => {
     const response = toResponse(user);
     assert.deepEqual(Object.keys(response).sort(), [
       'avatar', 'companyIds', 'createdAt', 'dealerId', 'description', 'email', 'firstName', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'serviceIds',
-      'shiftTime', 'status', 'trashed', 'updatedAt', 'username',
+      'shiftTime', 'status', 'trashed', 'trashedAt', 'updatedAt', 'username',
     ]);
     // Read for a list, the picture is not loaded and not shown.
     assert.equal('avatar' in toResponse(fromLegacy(doc(3) as LegacyUserDocument, { summary: true }).user), false);

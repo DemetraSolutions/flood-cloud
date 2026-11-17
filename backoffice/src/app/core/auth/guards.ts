@@ -61,6 +61,19 @@ export function permission(required: string): CanMatchFn {
 }
 
 /**
+ * Requires at least one of the given permissions (pages that serve several areas, each with its
+ * own permission). Without any the user lands on `/forbidden`; the server still decides.
+ *
+ * @param required Permissions in the form `resource:action`, any of which is enough.
+ */
+export function anyPermission(...required: string[]): CanMatchFn {
+  return () =>
+    required.some((one) => inject(SessionService).can(one))
+      ? true
+      : inject(Router).createUrlTree(['/forbidden']);
+}
+
+/**
  * Requires one of the given roles (for areas that only make sense to them, e.g. platform
  * users). Others land on `/forbidden`; the server still decides on every call.
  *

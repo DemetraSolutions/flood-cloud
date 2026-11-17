@@ -1,6 +1,7 @@
 import { CanMatchFn, Routes } from '@angular/router';
 import {
   anonymousOnly,
+  anyPermission,
   authenticated,
   feature,
   groupLanding,
@@ -256,6 +257,20 @@ const emailTemplateRoutes: Routes = [
     title: 'EMAIL_TEMPLATES.FORM.EDIT_TITLE',
     loadComponent: () =>
       import('./features/email-templates/email-template-page').then((m) => m.EmailTemplatePage),
+  },
+];
+
+/**
+ * Trash of a group (`groups/:groupId/trash`): one page with a tab per kind of item. It needs the
+ * read permission of at least one of companies, places and users; the page shows only the tabs the
+ * user may read, and the server checks the group against the perimeter of the user.
+ */
+const trashRoutes: Routes = [
+  {
+    path: 'groups/:groupId/trash',
+    canMatch: [anyPermission('companies:read', 'places:read', 'users:read')],
+    title: 'TRASH.TITLE',
+    loadComponent: () => import('./features/trash/trash-page').then((m) => m.TrashPage),
   },
 ];
 
@@ -528,6 +543,7 @@ export const routes: Routes = [
           ...groupCatalogRoutes,
           ...companyRoutes,
           ...placeRoutes,
+          ...trashRoutes,
           ...emailTemplateRoutes,
           // The one list of users: `/users` (cross-group, PSA and dealers, while no group is
           // chosen) or the list of a group; both load the same page.

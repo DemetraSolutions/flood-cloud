@@ -72,7 +72,7 @@ describe('GET /v1/me', () => {
     }
     const profile = await profileOf(response);
     assert.deepEqual(Object.keys(profile).sort(), [
-      'avatar', 'canManagePermissions', 'companyIds', 'createdAt', 'dealer', 'dealerId', 'description', 'email', 'firstName', 'group', 'groupFeatures', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'scope', 'serviceIds', 'shiftTime', 'status', 'trashed', 'updatedAt', 'username',
+      'avatar', 'canManagePermissions', 'companyIds', 'createdAt', 'dealer', 'dealerId', 'description', 'email', 'firstName', 'group', 'groupFeatures', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'scope', 'serviceIds', 'shiftTime', 'status', 'trashed', 'trashedAt', 'updatedAt', 'username',
     ]);
     assert.equal(profile['id'], id.toHexString());
     assert.equal(profile['username'], name);

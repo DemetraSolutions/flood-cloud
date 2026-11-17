@@ -1,0 +1,27 @@
+<fc-dialog [heading]="'TRASH.SUMMARY.TITLE' | t" [open]="open()" (openChange)="open.set($event)">
+  @let result = summary();
+  @if (nothingDone()) {
+    <p>{{ 'TRASH.SUMMARY.NOTHING' | t }}</p>
+  }
+  @if (result.restored > 0) {
+    <p>{{ 'TRASH.SUMMARY.RESTORED' | t: { count: result.restored } }}</p>
+  }
+  @if (result.deleted > 0) {
+    <p>{{ 'TRASH.SUMMARY.DELETED' | t: { count: result.deleted } }}</p>
+  }
+  @if (skippedCount() > 0) {
+    <p>{{ 'TRASH.SUMMARY.SKIPPED' | t: { count: skippedCount() } }}</p>
+    <ul class="reasons">
+      @for (group of groups(); track group.issue) {
+        <li>
+          <strong>{{ group.reason }}</strong>
+          {{ 'TRASH.SUMMARY.COUNT' | t: { count: group.count } }}
+          @if (group.names !== '') {
+            <span class="names">{{ group.names }}</span>
+          }
+        </li>
+      }
+    </ul>
+  }
+  <button fcDialogActions fc-button (click)="open.set(false)">{{ 'COMMON.CLOSE' | t }}</button>
+</fc-dialog>

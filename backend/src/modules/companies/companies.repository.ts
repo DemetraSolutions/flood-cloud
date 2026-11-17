@@ -42,6 +42,23 @@ export interface CompaniesRepository {
    */
   list(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
   /**
+   * The ids of the companies of a verified group that are in the trash, inside the caller's perimeter, in `_id` order (a stable order, so a bulk operation that repeats finds the
+   * next ones), at most `limit`.
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   * @param limit Most ids returned (a positive integer).
+   * @param after Only the ids greater than this one (the cursor of a repeated call), `null` for the first call.
+   */
+  trashedIds(principal: AuthPrincipal, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
+  /**
+   * How many companies of a verified group are in the trash, inside the caller's perimeter.
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   */
+  countTrashed(principal: AuthPrincipal, access: GroupAccess): Promise<number>;
+  /**
    * A country of `common.countries` by its code.
    *
    * @param code ISO 3166-1 alpha-2 code.
@@ -87,6 +104,11 @@ export function createCompaniesRepository(databases: Databases, catalogs: Pick<C
         ),
         params,
       ),
+
+    trashedIds: async (principal, access, limit, after) =>
+      (await groupMirror(principal, access, databases, 'companies').find(withScope(companiesScopeFilter(principal.scope), { trash: true, ...(after === null ? {} : { _id: { $gt: after } }) }), { projection: { _id: 1 }, sort: { _id: 1 }, limit })).map((document) => document['_id'] as ObjectId),
+
+    countTrashed: (principal, access) => groupMirror(principal, access, databases, 'companies').countDocuments(withScope(companiesScopeFilter(principal.scope), { trash: true })),
 
     findCountry: async (code) => {
       const country = await databases.common().collection('countries').findOne({ code }, { projection: { code: 1, areas: 1 }, maxTimeMS: LIST_MAX_TIME_MS });

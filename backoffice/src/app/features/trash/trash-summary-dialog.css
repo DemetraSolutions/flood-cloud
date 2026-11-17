@@ -1,0 +1,9 @@
+.reasons {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+}
+
+.names {
+  display: block;
+  color: var(--color-text-muted);
+}

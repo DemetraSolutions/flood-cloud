@@ -458,7 +458,7 @@ Le richieste di creazione e modifica accettano `permissions` come `{ "modules": 
 ### DELETE /v1/groups/{groupId}/users/{userId}
 - **Autenticazione e permesso:** Bearer backoffice, `users:delete`
 - **Risposta:** `204` senza body; elimina definitivamente l'utente, le sue credenziali e le sue sessioni
-- **Errori:** comuni; `403 FORBIDDEN` (inclusi i permessi del bersaglio non posseduti), `404`, `409 CONFLICT` (l'utente **non è nel cestino**)
+- **Errori:** comuni; `403 FORBIDDEN` (inclusi i permessi del bersaglio non posseduti), `404`, `409 CONFLICT` (l'utente **non è nel cestino**; il ripristino è atomico sullo stato: se un'altra richiesta lo ha già ripristinato risponde `409` e l'evento è uno solo)
 
 ### GET /v1/users
 - **Autenticazione e permesso:** Bearer backoffice, `users:read`
@@ -479,7 +479,7 @@ Le richieste di creazione e modifica accettano `permissions` come `{ "modules": 
 
 ### GET /v1/users/{userId}, PATCH /v1/users/{userId}, PUT /v1/users/{userId}/password, POST /v1/users/{userId}/trash, POST /v1/users/{userId}/restore, DELETE /v1/users/{userId}
 - **Autenticazione e permesso:** Bearer backoffice, rispettivamente `users:read`, `users:update`, `users:update`, `users:trash`, `users:trash`, `users:delete`; solo **PSA**, su utenti `PSA` e `D`
-- **Body, risposte ed errori:** come le route corrispondenti del gruppo (PATCH senza `companyIds` / `placeIds` / `serviceIds`, con `role` limitato a `PSA` e `D`). In più: `DELETE` di un `D` che ha ancora gruppi (anche nel cestino) dà `409 CONFLICT`, altrimenti elimina anche la sua anagrafica dealer; un `PATCH` che porta il ruolo **da o verso `D`** dà `422` con `details: [{ "field": "role", "issue": "immutable" }]` (il ruolo `D` non si cambia). Un utente di gruppo chiesto su questo percorso è `404 NOT_FOUND`.
+- **Body, risposte ed errori:** come le route corrispondenti del gruppo (PATCH senza `companyIds` / `placeIds` / `serviceIds`, con `role` limitato a `PSA` e `D`). In più: `DELETE` di un `D` che ha ancora gruppi (anche nel cestino) dà `409 CONFLICT` con `details: [{ "field": "groups", "issue": "referenced" }]`, altrimenti elimina anche la sua anagrafica dealer; un `PATCH` che porta il ruolo **da o verso `D`** dà `422` con `details: [{ "field": "role", "issue": "immutable" }]` (il ruolo `D` non si cambia). Un utente di gruppo chiesto su questo percorso è `404 NOT_FOUND`.
 
 ### GET /v1/usernames/{username}/availability
 - **Autenticazione e permesso:** Bearer backoffice, `users:create`
@@ -1665,3 +1665,32 @@ Realizzata nel passo 9A (`doc/Security-Model.md` §6–7; la versione per gli in
   ```
   `rate` è una percentuale; `vatNature` è un codice di natura IVA (`N1`…`N6.9`) o `null`.
 
+
+
+## Cestino (passo 9-ter/2)
+
+Azioni sulla pagina "Cestino". **Non hanno `If-Match`**: le selezioni vengono da elenchi senza versioni; ogni elemento passa dalla **stessa logica** della route singola (perimetro, anti-escalation, controlli `409`, effetti e eventi) e la scrittura controlla atomicamente lo stato, quindi un elemento ripristinato nel frattempo non è mai eliminato. Un elemento che fallisce non ferma gli altri. Gli elenchi (`GET …/companies|places|users` con `trashed=true`, `GET /v1/groups?trashed=true`) hanno in ogni elemento `trashedAt` (ISO 8601, `null` se il legacy ha cestinato l'elemento o la data manca; solo informativa, anche in aziende, punti vendita, utenti e gruppi singoli).
+
+**Risposta comune (`200`):** `{ "data": { "results": [ { "id": "…", "outcome": "restored" | "deleted" | "skipped", "issue"?: "notFound" | "notTrashed" | "referenced" | "taken" | "forbidden" } ] } }`. I risultati seguono l'ordine della richiesta (id duplicati tolti); `issue` c'è solo se `skipped`. Un id fuori perimetro o di un altro gruppo è `notFound` (mai rivelare l'esistenza). `notTrashed`: non è nel cestino, è già stato ripristinato o è cambiato nel frattempo (anche un `409` o `412` della route singola per lo stesso motivo). Qualunque altro conflitto (per esempio un documento con un blocco malformato) **non** è un esito dell'elemento: la chiamata risponde con l'errore (`409`/`500`) e l'evento riepilogativo ha esito `failure` con i conteggi fino a quel punto. `referenced`: azienda con punti vendita, punto vendita con utenti, dealer con gruppi; `taken`: la P.IVA di un'azienda da ripristinare è ora di un'altra azienda; `forbidden`: utente che il chiamante vede ma non gestisce.
+
+### POST /v1/groups/{groupId}/trash/{kind}/restore
+- **`kind`:** `companies`, `places` o `users` (altro: `422` su `kind`).
+- **Autenticazione e permesso:** Bearer backoffice, `companies:trash`, `places:trash` o `users:trash` secondo `kind` (`403` altrimenti, prima della validazione del corpo); gruppo verificato (`404` se fuori perimetro)
+- **Body:** `{ "ids": [ … ] }`: da 1 a 100 ObjectId esadecimali, nessuna altra chiave
+- **Risposta:** `200`, risposta comune con `outcome: "restored"`. Evento per chiamata `trash.bulkRestored`.
+- **Errori:** comuni; `403`; `404`; `422` (corpo o `kind`); `429` (una chiamata, una richiesta)
+
+### POST /v1/groups/{groupId}/trash/{kind}/delete
+- Come sopra, permesso `companies:delete`, `places:delete` o `users:delete`; elimina definitivamente dal cestino, con gli effetti dell'eliminazione singola. `outcome: "deleted"`. Evento per chiamata `trash.bulkDeleted`.
+
+### POST /v1/groups/{groupId}/trash/{kind}/empty
+- **Autenticazione e permesso:** Bearer backoffice, **solo PSA**: `trash:empty` (il PSA ha sempre tutti i permessi di eliminazione)
+- **Body:** facoltativo: assente, `{}` oppure `{ "after": "<id esadecimale di 24 caratteri>" }`; altre chiavi: `422` `unknown`, `after` malformato: `422` `format`
+- **Risposta:** `200` con `{ data: { results, remaining, next } }`: elimina al massimo **200** elementi in cestino del genere nel gruppo con `_id` maggiore di `after` (se dato), in ordine di `_id`. `remaining` è quanti ne restano in cestino dopo la chiamata (tutti, a prescindere da `after`); `next` è l'`_id` dell'ultimo elemento elaborato quando la chiamata ne ha elaborati 200 (può essercene altri oltre), altrimenti `null`. Il cliente ripete la chiamata con `after = next` finché `next !== null`: gli elementi che non si possono eliminare sono superati, non riesaminati. Evento per chiamata `trash.emptied`.
+- **Errori:** comuni; `403`; `404`; `422`; `429`
+
+### POST /v1/trash/groups/restore
+- **Autenticazione e permesso:** Bearer backoffice, `groups:trash`; solo **PSA**
+- **Body:** `{ "ids": [ … ] }` (1–100). Non esistono eliminazione né svuotamento dei gruppi.
+- **Risposta:** `200`, risposta comune con `outcome: "restored"`; un gruppo inesistente è `notFound`, uno non in cestino `notTrashed`. Evento per chiamata `trash.bulkRestored` (senza gruppo) e per gruppo `group.restored`.
+- **Errori:** comuni; `403`; `422`; `429`

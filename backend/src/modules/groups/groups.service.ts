@@ -7,6 +7,8 @@ import { AppError } from '../../shared/http/errors.ts';
 import type { Logger } from '../../shared/logging/logger.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { settleItem } from '../../shared/trash/trash.ts';
+import type { TrashItemOutcome } from '../../shared/trash/trash.ts';
 import { auditSessionsRevoked } from '../sessions/session-audit.ts';
 import type { SessionsRepository } from '../sessions/sessions.repository.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
@@ -67,6 +69,13 @@ export interface GroupsService {
    * @throws {AppError} `NOT_FOUND`; `CONFLICT` when the group is not in the trash.
    */
   restore(principal: AuthPrincipal, access: GroupAccess, client: ClientContext): Promise<GroupResponse>;
+  /**
+   * Takes a group out of the trash for a bulk operation: exactly {@link GroupsService.restore}, with its refusal returned as the issue instead of thrown. Groups are never deleted, so
+   * there is no counterpart for the deletion.
+   *
+   * @returns `{ done: true }`, or the issue: `notFound` or `notTrashed`.
+   */
+  restoreFromTrash(principal: AuthPrincipal, access: GroupAccess, client: ClientContext): Promise<TrashItemOutcome>;
 }
 
 /** Collaborators of {@link createGroupsService}. */
@@ -209,7 +218,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     }
   };
 
-  return {
+  const service: GroupsService = {
     get: (principal, access) => respond(principal, access.groupId),
 
     update: async (principal, access, patch, client) => {
@@ -261,5 +270,8 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       await changeState(principal, access, client, { changes: { trashed: false }, applies: (group) => group.trashed, action: 'group.restored', data: { action: 'group.restored', trashed: false }, revocation: 'groupTrashed', revokes: false });
       return respond(principal, access.groupId);
     },
+
+    restoreFromTrash: (principal, access, client) => settleItem(() => service.restore(principal, access, client)),
   };
+  return service;
 }

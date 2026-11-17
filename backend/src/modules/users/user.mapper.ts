@@ -215,6 +215,7 @@ export function fromLegacy(document: LegacyUserDocument, options: { readonly sum
     placeIds: scope.placeIds.map((id) => id.toHexString()),
     status: status === true ? 'active' : 'disabled',
     trashed: trash === true,
+    trashedAt: readDate(raw['trashDate']),
     language: nonEmptyString(settings['language']) ?? DEFAULT_LANGUAGE,
     hiddenInStats: typeof hiddenInStats === 'boolean' ? hiddenInStats : leftoverHidden === true,
     description: readDescription(raw['description'], anomalies),
@@ -294,6 +295,12 @@ export function toLegacyUpdate(changes: UserChanges, now: Date = new Date()): Le
   }
   if (changes.trashed !== undefined) {
     set['trash'] = changes.trashed;
+    // The informational date of the trash goes with the flag, in the same update.
+    if (changes.trashed) {
+      set['trashDate'] = now;
+    } else {
+      unset['trashDate'] = '';
+    }
   }
   if (changes.language !== undefined) {
     set['settings.language'] = changes.language;
@@ -421,6 +428,7 @@ export function toResponse(user: User): UserResponse {
     placeIds: [...user.placeIds],
     status: user.status,
     trashed: user.trashed,
+    trashedAt: user.trashedAt === null ? null : user.trashedAt.toISOString(),
     language: user.language,
     hiddenInStats: user.hiddenInStats,
     description: user.description,

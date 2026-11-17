@@ -115,6 +115,10 @@ import { createGroupDirectoryRepository } from './modules/users/group-directory.
 import { createGroupOptionsReader } from './modules/users/group-options.ts';
 import { createUsersController } from './modules/users/users.controller.ts';
 import { createUsersRoutes } from './modules/users/users.routes.ts';
+import { createCrossGroupAuditor } from './shared/activity-log/cross-group-audit.ts';
+import { createTrashController } from './modules/trash/trash.controller.ts';
+import { createTrashRoutes } from './modules/trash/trash.routes.ts';
+import { createTrashService } from './modules/trash/trash.service.ts';
 import { createUsersService } from './modules/users/users.service.ts';
 import { createVatLookupsController } from './modules/vat-lookups/vat-lookups.controller.ts';
 import { createVatLookupsRoutes } from './modules/vat-lookups/vat-lookups.routes.ts';
@@ -209,9 +213,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const usersController = createUsersController(usersService);
   const dealersController = createDealersController(createDealersService({ dealers, users, usersService, activityLog, now }));
   const managedGroups = createManagedGroupsRepository(databases, publicApiLimitsOf(config));
-  const groupsController = createGroupsController(
-    createGroupsService({ groups: managedGroups, users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now }),
-  );
+  const groupsService = createGroupsService({ groups: managedGroups, users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now });
+  const groupsController = createGroupsController(groupsService);
   const groupServices = createGroupServicesController(createGroupServicesService({ services, users }));
   const catalogsService = createCatalogsService({
     catalogs: catalogsRepository,
@@ -234,15 +237,14 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       (await companiesRepository.list(principal, access, { _id: companyId, trash: { $ne: true } }, { limit: 1, sort: 'name', q: null, cursor: null })).items.length === 1,
   });
   const media = createMediaController(mediaService);
-  const companies = createCompaniesController(
-    createCompaniesService({
-      repository: companiesRepository,
-      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
-      images: mediaService,
-      activityLog,
-      newId: () => randomBytes(12).toString('hex'),
-    }),
-  );
+  const companiesService = createCompaniesService({
+    repository: companiesRepository,
+    writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
+    images: mediaService,
+    activityLog,
+    newId: () => randomBytes(12).toString('hex'),
+  });
+  const companies = createCompaniesController(companiesService);
   const idempotency = createIdempotencyStore(databases, idempotencyBodyKey(versionKey), now);
   const onboarding = createOnboardingController(
     createOnboardingService({
@@ -271,18 +273,21 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   });
   const authenticateStore = createAuthenticateStore({ repository: storeKeysRepository, state: storeKeysState, activityLog, rateLimiter, logger, apiRule: rules.apiPerStore, now });
   const storeKeys = createStoreKeysController(storeKeysService, now);
-  const places = createPlacesController(
-    createPlacesService({
-      repository: createPlacesRepository(databases, companiesRepository),
-      writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
-      readerFor: (principal, access) => companiesPlacesReader(principal, access, databases, { versionKey }),
-      logger,
-      activityLog,
-      references: createReferencesRepository(databases),
-      images: mediaService,
-      storeKeys: storeKeysService,
-      newId: () => newPaymentTypeId(now),
-    }),
+  const placesService = createPlacesService({
+    repository: createPlacesRepository(databases, companiesRepository),
+    writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
+    readerFor: (principal, access) => companiesPlacesReader(principal, access, databases, { versionKey }),
+    logger,
+    activityLog,
+    references: createReferencesRepository(databases),
+    images: mediaService,
+    storeKeys: storeKeysService,
+    newId: () => newPaymentTypeId(now),
+  });
+  const places = createPlacesController(placesService);
+  // The trash page: bulk operations that call the single-item operations of the domains above.
+  const trash = createTrashController(
+    createTrashService({ companies: companiesService, places: placesService, users: usersService, groups: groupsService, activityLog }),
   );
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
@@ -304,6 +309,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createEmailTemplatesRoutes(emailTemplates, idempotency),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createCountriesRoutes(countries, rules),
+      ...createTrashRoutes(trash, rules, groups, createCrossGroupAuditor({ activityLog, now })),
       ...createVatLookupsRoutes(vatLookups, rules),
       ...createClientErrorsRoutes(clientErrors, rules),
     ],

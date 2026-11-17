@@ -53,6 +53,7 @@ export const GROUP_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
   dealerId: 1,
   status: 1,
   trash: 1,
+  trashDate: 1,
   demo: 1,
   publicApi: 1,
   dataCluster: 1,
@@ -283,6 +284,7 @@ export function fromLegacy(document: LegacyGroupDocument, publicApiDefaults: Pub
     dealerId: readReference(document.dealerId, 'dealerId', anomalies),
     status: status === true ? 'active' : 'suspended',
     trashed: readFlag(document.trash, 'trash', anomalies),
+    trashedAt: readDate(document.trashDate),
     demo: readFlag(document.demo, 'demo', anomalies),
     features,
     languages: readLanguages(settings['languages'], anomalies),
@@ -323,6 +325,10 @@ export function toLegacyUpdate(changes: GroupChanges, now: Date): LegacyGroupUpd
   }
   if (changes.trashed !== undefined) {
     set['trash'] = changes.trashed;
+    // The informational date of the trash goes with the flag, in the same update.
+    if (changes.trashed) {
+      set['trashDate'] = now;
+    }
   }
   for (const [feature, on] of Object.entries(changes.features ?? {})) {
     if (!isFeature(feature)) {
@@ -370,7 +376,7 @@ export function toLegacyUpdate(changes: GroupChanges, now: Date): LegacyGroupUpd
     });
   }
   set['updateDate'] = now;
-  return { $set: set };
+  return changes.trashed === false ? { $set: set, $unset: { trashDate: '' } } : { $set: set };
 }
 
 /**
@@ -390,6 +396,7 @@ export function toResponse(group: Group, includeCluster: boolean, includePublicA
     dealerId: group.dealerId,
     status: group.status,
     trashed: group.trashed,
+    trashedAt: group.trashedAt === null ? null : group.trashedAt.toISOString(),
     demo: group.demo,
     features: { ...group.features },
     languages: [...group.languages],

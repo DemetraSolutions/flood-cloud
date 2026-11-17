@@ -50,7 +50,9 @@ describe('POST …/trash and …/restore', () => {
     assert.equal(reply.body.data.trashed, true);
     assert.equal(reply.body.data.address.city, 'Milano', 'the legacy nulling of the address is not replicated');
     const after = (await world.storedPlace(0, P(100)))!;
-    assert.deepEqual(differences(before, after, ['trash', 'updateDate']).filter((key) => key !== 'updateDate'), ['trash']);
+    assert.deepEqual(differences(before, after, ['trash', 'trashDate', 'updateDate']).filter((key) => key !== 'updateDate').sort(), ['trash', 'trashDate']);
+    assert.ok(after['trashDate'] instanceof Date);
+    assert.equal(reply.body.data.trashedAt, (after['trashDate'] as Date).toISOString());
     assert.equal(after['trash'], true);
     assert.ok(sameDocument(expectedCopy(after, world.group(0).groupId), (await world.copyOfPlace(P(100)))!));
     assert.equal(await feedOf(P(100)), null);

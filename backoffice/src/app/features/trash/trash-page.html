@@ -1,0 +1,29 @@
+<header class="page-header">
+  <h1>{{ 'TRASH.TITLE' | t }}</h1>
+</header>
+<p class="hint">{{ 'TRASH.HINT' | t }}</p>
+
+<fc-tab-list
+  idPrefix="trash"
+  [label]="'TRASH.TABS' | t"
+  [tabs]="tabs()"
+  [active]="active()"
+  (activeChange)="select($event)"
+/>
+
+@for (kind of [active()]; track kind) {
+  <div
+    role="tabpanel"
+    tabindex="0"
+    [id]="'trash-panel-' + kind"
+    [attr.aria-labelledby]="'trash-tab-' + kind"
+  >
+    <fc-trash-tab
+      [kind]="kind"
+      [groupId]="groupId()"
+      [q]="q()"
+      [limit]="limit()"
+      [cursor]="cursor()"
+    />
+  </div>
+}

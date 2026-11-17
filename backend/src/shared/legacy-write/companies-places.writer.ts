@@ -171,7 +171,7 @@ export interface CompaniesPlacesWriter {
    */
   duplicatePlace(id: ObjectId): Promise<WriteOutcome>;
   /**
-   * Moves a company or a place to the trash (`trash: true`). A place also leaves the Reserve with Google feed and `groups.places[]` is recalculated.
+   * Moves a company or a place to the trash (`trash: true`, with `trashDate` set to the time of the write). A place also leaves the Reserve with Google feed and `groups.places[]` is recalculated.
    * Nothing is cascaded: the places of a trashed company keep their reference.
    *
    * @param kind `companies` or `places`.
@@ -182,7 +182,7 @@ export interface CompaniesPlacesWriter {
    */
   trash(kind: EntityKind, id: ObjectId, expectedVersion: string): Promise<WriteOutcome>;
   /**
-   * Takes a company or a place out of the trash (`trash: false`). A place goes back to the Reserve with Google feed only if its integration
+   * Takes a company or a place out of the trash (`trash: false`, `trashDate` removed). A place goes back to the Reserve with Google feed only if its integration
    * is active and complete under the rule of the legacy; `groups.places[]` is recalculated.
    *
    * @param kind `companies` or `places`.
@@ -466,7 +466,15 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
     (await original('companies').findOne({ _id: companyId, trash: { $ne: true } }, { projection: { _id: 1 }, session })) !== null;
 
   /** The shared body of update, trash and restore: gate, `$set`, copy and, for places, the side effects. */
-  const change = (kind: EntityKind, id: ObjectId, expected: string, set: Document, effect: (session: ClientSession) => Promise<void>, uses?: ObjectId): Promise<WriteOutcome> =>
+  const change = (
+    kind: EntityKind,
+    id: ObjectId,
+    expected: string,
+    set: Document,
+    effect: (session: ClientSession) => Promise<void>,
+    uses?: ObjectId,
+    trashing?: boolean,
+  ): Promise<WriteOutcome> =>
     run(async (session) => {
       const passed = await gate(kind, checkObjectId(id, 'id'), expected, session);
       if ('stop' in passed) {
@@ -481,7 +489,13 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
       if (written === null) {
         return BUSY;
       }
-      await original(kind).updateOne({ _id: id }, { $set: { ...written, ...completion, updateDate: clock() } }, { session });
+      const now = clock();
+      // The informational date of the trash is written with the flag, in the same update, and removed with it when the item comes back.
+      await original(kind).updateOne(
+        { _id: id },
+        { $set: { ...written, ...completion, ...(trashing === true ? { trashDate: now } : {}), updateDate: now }, ...(trashing === false ? { $unset: { trashDate: '' } } : {}) },
+        { session },
+      );
       const outcome = await mirror(kind, id, session);
       await effect(session);
       return outcome;
@@ -609,7 +623,7 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
     },
 
     trash: (kind, id, expected) =>
-      change(kind, id, expected, { trash: true }, kind === 'places' ? (session) => placeEffects(session, () => leaveFeed(id, session)) : none),
+      change(kind, id, expected, { trash: true }, kind === 'places' ? (session) => placeEffects(session, () => leaveFeed(id, session)) : none, undefined, true),
 
     restore: (kind, id, expected) =>
       kind === 'companies'
@@ -622,10 +636,10 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
             if (typeof passed.current['code'] === 'string' && (await vatNumberTaken(passed.current['code'], id, session))) {
               return VAT_TAKEN;
             }
-            await original(kind).updateOne({ _id: id }, { $set: { trash: false, updateDate: clock() } }, { session });
+            await original(kind).updateOne({ _id: id }, { $set: { trash: false, updateDate: clock() }, $unset: { trashDate: '' } }, { session });
             return mirror(kind, id, session);
           })
-        : change(kind, id, expected, { trash: false }, (session) => placeEffects(session, () => rejoinFeed(id, session))),
+        : change(kind, id, expected, { trash: false }, (session) => placeEffects(session, () => rejoinFeed(id, session)), undefined, false),
 
     deleteTrashed: (kind, id, expected) =>
       run(async (session) => {

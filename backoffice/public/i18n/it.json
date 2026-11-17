@@ -51,6 +51,7 @@
     "COMPANIES": "Aziende",
     "PLACES": "Punti vendita",
     "TOOLS": "Strumenti",
+    "TRASH": "Cestino",
     "NEW_CUSTOMER": "Nuovo cliente",
     "DIAGNOSTICS": "Diagnostica",
     "RELEASES": "Release",
@@ -3461,6 +3462,77 @@
     "ERROR": {
       "DEALER_NOT_FOUND": "Il dealer scelto non esiste o non è più attivo.",
       "RATE_LIMITED_WAIT": "Troppe creazioni: riprova tra {seconds} secondi."
+    }
+  },
+  "TRASH": {
+    "TITLE": "Cestino",
+    "HINT": "Gli elementi eliminati restano qui finché non li ripristini o li elimini definitivamente: non c'è nessuna eliminazione automatica.",
+    "TABS": "Tipi di elemento nel cestino",
+    "KIND": {
+      "COMPANIES": "Aziende",
+      "PLACES": "Punti vendita",
+      "USERS": "Utenti",
+      "GROUPS": "Gruppi"
+    },
+    "SEARCH": "Cerca nel cestino",
+    "LOAD_ERROR": "Impossibile caricare il cestino",
+    "EMPTY_TITLE": "Nessun elemento nel cestino",
+    "EMPTY_MESSAGE": "Quando metti un elemento nel cestino lo trovi qui.",
+    "COLUMN": {
+      "SELECT": "Seleziona",
+      "NAME": "Nome",
+      "VAT_NUMBER": "P.IVA",
+      "CITY": "Città",
+      "PROVINCE": "Provincia",
+      "COUNTRY": "Paese",
+      "COMPANY": "Azienda",
+      "ROLE": "Ruolo",
+      "USERNAME": "Username",
+      "FULL_NAME": "Nome e cognome",
+      "EMAIL": "E-mail",
+      "ID": "ID",
+      "DEALER": "Dealer",
+      "TRASHED_AT": "Nel cestino dal"
+    },
+    "SELECT_ALL": "Seleziona tutti gli elementi della pagina",
+    "SELECT_ROW": "Seleziona {name}",
+    "SELECTED": "{count} selezionati",
+    "RESTORE": "Ripristina",
+    "DELETE": {
+      "ACTION": "Elimina definitivamente",
+      "TITLE": "Eliminare definitivamente?",
+      "MESSAGE": "Eliminare definitivamente {count} elementi? L'operazione è irreversibile: gli elementi non si potranno più ripristinare."
+    },
+    "EMPTY": {
+      "ACTION": "Svuota cestino",
+      "TITLE": "Svuota cestino: {kind}",
+      "MESSAGE_COUNT": "Verranno eliminati definitivamente {count} elementi del cestino ({kind}) di questo gruppo. Quelli che non si possono eliminare restano nel cestino.",
+      "MESSAGE_ALL": "Verranno eliminati definitivamente tutti gli elementi del cestino ({kind}) di questo gruppo, anche quelli delle pagine successive. Quelli che non si possono eliminare restano nel cestino.",
+      "UNDERSTOOD": "Ho capito che l'operazione è irreversibile",
+      "START": "Elimina tutto",
+      "STOP": "Interrompi",
+      "STARTING": "Eliminazione in corso…",
+      "PROGRESS": "Eliminati {deleted}, ancora nel cestino {remaining}.",
+      "STOPPING": "Interruzione dopo l'operazione in corso…"
+    },
+    "SUMMARY": {
+      "TITLE": "Esito dell'operazione",
+      "NOTHING": "Nessun elemento da elaborare.",
+      "RESTORED": "Ripristinati: {count}.",
+      "DELETED": "Eliminati: {count}.",
+      "SKIPPED": "Non elaborati: {count}. Restano dove sono per questi motivi:",
+      "COUNT": "({count})",
+      "MORE": "e altri {count}"
+    },
+    "ISSUE": {
+      "REFERENCED_COMPANIES": "L'azienda ha ancora punti vendita",
+      "REFERENCED_PLACES": "Il punto vendita ha ancora utenti",
+      "REFERENCED_USERS": "L'elemento è ancora in uso",
+      "REFERENCED_GROUPS": "L'elemento è ancora in uso",
+      "TAKEN": "La partita IVA è già usata da un'altra azienda",
+      "FORBIDDEN": "Non hai il permesso di agire su questo elemento",
+      "NOT_TRASHED": "L'elemento non è più nel cestino",
+      "NOT_FOUND": "L'elemento non esiste più o non è accessibile"
     }
   }
 }

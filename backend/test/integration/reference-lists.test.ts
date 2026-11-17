@@ -67,7 +67,7 @@ describe('GET /v1/groups', () => {
     assert.deepEqual(reply.body.page, { limit: 200, next: null });
     const byId = new Map(reply.body.data.map((item: { id: string }) => [item.id, item]));
     for (const g of office.cluster.groups) {
-      assert.deepEqual(Object.keys(byId.get(hex(g.groupId)) as object).sort(), ['counts', 'dealerId', 'demo', 'id', 'name', 'status', 'trashed']);
+      assert.deepEqual(Object.keys(byId.get(hex(g.groupId)) as object).sort(), ['counts', 'dealerId', 'demo', 'id', 'name', 'status', 'trashed', 'trashedAt']);
     }
     assert.ok(!byId.has(hex(fixtureId('group', 101))), 'trashed groups are hidden by default');
     assert.equal((byId.get(hex(fixtureId('group', 100))) as { status: string }).status, 'suspended');
@@ -187,7 +187,7 @@ describe('GET /v1/groups/{groupId}/companies (the compact fields the reference s
     const reply = await as.call(group(0).sa, 'GET', gpath(0, 'companies'));
     assert.equal(reply.status, 200);
     assert.deepEqual(names(reply), ['', 'Reg.Ex (b+', 'company-001', 'company-002']);
-    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['city', 'country', 'id', 'name', 'province', 'status', 'trashed', 'vatNumber']);
+    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['city', 'country', 'id', 'name', 'province', 'status', 'trashed', 'trashedAt', 'vatNumber']);
     const text = JSON.stringify(reply.body);
     for (const secret of ['fattura_elettronica', 'fixture-secret', 'fixture-user', 'Via Fixture', 'banks']) {
       assert.ok(!text.includes(secret), secret);
@@ -243,7 +243,7 @@ describe('GET /v1/groups/{groupId}/places', () => {
         ['place-002', hex(fixtureId('company', 2))],
       ],
     );
-    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['city', 'companyId', 'country', 'expirationDate', 'id', 'name', 'plan', 'province', 'status', 'trashed']);
+    assert.deepEqual(Object.keys(reply.body.data[0]).sort(), ['city', 'companyId', 'country', 'expirationDate', 'id', 'name', 'plan', 'province', 'status', 'trashed', 'trashedAt']);
     const text = JSON.stringify(reply.body);
     for (const secret of ['integration', 'fixture-integration-secret', '10.0.0.1', 'apiKey', 'storages', 'devices']) {
       assert.ok(!text.includes(secret), secret);

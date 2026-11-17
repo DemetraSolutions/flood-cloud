@@ -23,14 +23,14 @@ const MIRROR_COLLECTIONS: readonly string[] = ['companies', 'places'];
 /**
  * The fields of each copy collection an application read may name, return or compute from: the one central allowlist.
  * The copies hold the credentials of the integrations of the places and the bank data of the companies, so nothing else is ever readable:
- * the companies expose, besides the compact reference (`name`, `trash`), the fields of the list of companies (`code`, `city`, `countryAreaCode`, `countryCode`, `status`);
- * the places the compact reference (`name`, `trash`, `companyId`) and the fields of the list of places (`plan`, `status`, `city`, `countryAreaCode`, `countryCode`, `expirationDate`).
+ * the companies expose, besides the compact reference (`name`, `trash`, `trashDate`), the fields of the list of companies (`code`, `city`, `countryAreaCode`, `countryCode`, `status`);
+ * the places the compact reference (`name`, `trash`, `trashDate`, `companyId`) and the fields of the list of places (`plan`, `status`, `city`, `countryAreaCode`, `countryCode`, `expirationDate`).
  * The public API (step 9A) adds the registry data it shows, and nothing else: of a company the fiscal code and the contact data (`code2`, `address`, `postcode`, `email`, `telephone`), of a place the contact data and the time zone
  * (`address`, `postcode`, `email`, `telephone`, `timezone`). No bank, invoicing, credential or setting field is ever in this list.
  */
 export const MIRROR_FIELDS: Readonly<Record<MirrorCollection, ReadonlySet<string>>> = Object.freeze({
-  companies: new Set(['_id', 'name', 'trash', 'code', 'city', 'countryAreaCode', 'countryCode', 'status', 'code2', 'address', 'postcode', 'email', 'telephone']),
-  places: new Set(['_id', 'name', 'trash', 'companyId', 'plan', 'status', 'city', 'countryAreaCode', 'countryCode', 'expirationDate', 'address', 'postcode', 'email', 'telephone', 'timezone']),
+  companies: new Set(['_id', 'name', 'trash', 'trashDate', 'code', 'city', 'countryAreaCode', 'countryCode', 'status', 'code2', 'address', 'postcode', 'email', 'telephone']),
+  places: new Set(['_id', 'name', 'trash', 'trashDate', 'companyId', 'plan', 'status', 'city', 'countryAreaCode', 'countryCode', 'expirationDate', 'address', 'postcode', 'email', 'telephone', 'timezone']),
 });
 
 /** Prefix of the computed keys a pipeline may add (`__sortKey`); they are never stored fields. */

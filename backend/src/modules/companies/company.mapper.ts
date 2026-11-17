@@ -205,6 +205,7 @@ export const LEAVES: readonly Leaf[] = Object.freeze([
   { domain: 'phone', legacy: 'telephone', codec: optionalText },
   { domain: 'status', legacy: 'status', codec: status },
   { domain: 'trashed', legacy: 'trash', codec: flag, readOnly: true },
+  { domain: 'trashedAt', legacy: 'trashDate', codec: instant, readOnly: true },
   { domain: 'expirationDate', legacy: 'expirationDate', codec: instant },
   { domain: 'createdAt', legacy: 'insertDate', codec: instant, readOnly: true },
   { domain: 'updatedAt', legacy: 'updateDate', codec: instant, readOnly: true },
@@ -344,8 +345,9 @@ export function toCompanySummary(document: Document): CompanySummary {
     country: stringOrNull(document['countryCode']),
     status: document['status'] === true ? 'active' : 'disabled',
     trashed: document['trash'] === true,
+    trashedAt: instant.read(document['trashDate']) as string | null,
   };
 }
 
 /** The fields the list reads from the copies, the only ones ever loaded for it. */
-export const COMPANY_SUMMARY_PROJECTION = Object.freeze({ name: 1, trash: 1, code: 1, city: 1, countryAreaCode: 1, countryCode: 1, status: 1 } as const);
+export const COMPANY_SUMMARY_PROJECTION = Object.freeze({ name: 1, trash: 1, trashDate: 1, code: 1, city: 1, countryAreaCode: 1, countryCode: 1, status: 1 } as const);

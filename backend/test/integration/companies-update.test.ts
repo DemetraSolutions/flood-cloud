@@ -135,7 +135,7 @@ describe('PATCH /v1/groups/{groupId}/companies/{companyId}', () => {
   it('writes nothing, and keeps the version, for a request that sends the current values back', async () => {
     const { id, etag, body } = await fresh();
     const before = (await world.stored(0, id))!;
-    const { id: _id, groupId: _group, trashed: _trashed, createdAt: _created, updatedAt: _updated, ...writable } = body;
+    const { id: _id, groupId: _group, trashed: _trashed, trashedAt: _trashedAt, createdAt: _created, updatedAt: _updated, ...writable } = body;
     const reply = await patch(psa(), id, etag, writable);
     assert.equal(reply.status, 200);
     assert.equal(etagOf(reply), etag);
@@ -188,7 +188,7 @@ describe('PATCH /v1/groups/{groupId}/companies/{companyId}', () => {
     const now = etagOf(changed);
     assert.deepEqual(failure(await patch(ca(), C1, now, { status: 'disabled', expirationDate: '2040-01-01', eInvoicing: { hub: 'aruba', transmitter: { country: 'DE', code: 'x' } } })), notAllowed('status', 'expirationDate', 'eInvoicing.hub', 'eInvoicing.transmitter.country', 'eInvoicing.transmitter.code'));
     // Sending the current values of the restricted fields back is accepted, so the whole object can be saved.
-    const { id: _a, groupId: _b, trashed: _c, createdAt: _d, updatedAt: _e, ...writable } = changed.body.data;
+    const { id: _a, groupId: _b, trashed: _c, trashedAt: _f, createdAt: _d, updatedAt: _e, ...writable } = changed.body.data;
     const saved = await patch(ca(), C1, now, { ...writable, name: 'CA again' });
     assert.equal(saved.status, 200, JSON.stringify(saved.body));
     assert.equal(saved.body.data.name, 'CA again');

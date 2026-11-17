@@ -714,7 +714,7 @@ describe('permanent deletion: dealers with groups, and the race with a restore',
     const groupId = fixtureId('group', 77);
     await ctx.databases.common().collection('groups').insertOne({ _id: groupId, name: 'dealer-group', dealerId: dealer, status: true, trash: true });
     await as.call(office.cluster.psa, 'POST', `/users/${hex(dealer)}/trash`);
-    assert.deepEqual(failure(await as.call(office.cluster.psa, 'DELETE', `/users/${hex(dealer)}`)), { status: 409, code: 'CONFLICT', details: undefined });
+    assert.deepEqual(failure(await as.call(office.cluster.psa, 'DELETE', `/users/${hex(dealer)}`)), { status: 409, code: 'CONFLICT', details: [{ field: 'groups', issue: 'referenced' }] });
     assert.equal(await users().countDocuments({ _id: dealer }), 1);
     await ctx.databases.common().collection('groups').deleteOne({ _id: groupId });
     assert.equal((await as.call(office.cluster.psa, 'DELETE', `/users/${hex(dealer)}`)).status, 204);

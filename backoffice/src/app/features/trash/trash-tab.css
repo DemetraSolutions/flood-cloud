@@ -1,0 +1,24 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  align-items: end;
+  gap: var(--space-3);
+  margin-block-end: var(--space-3);
+}
+
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-end: var(--space-2);
+}
+
+.empty {
+  margin-inline-start: auto;
+}

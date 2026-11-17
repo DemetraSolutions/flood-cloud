@@ -78,6 +78,7 @@ describe('visibleMenu', () => {
       'products',
       'promotions',
       'tools',
+      'trash',
       'activity-log',
     ]);
   });
@@ -96,6 +97,18 @@ describe('visibleMenu', () => {
     expect(MENU.find((item) => item.id === 'companies')).toMatchObject({
       groupPath: 'companies',
       labelKey: 'MENU.COMPANIES',
+    });
+  });
+
+  it('shows the trash with the read permission of any of companies, places and users', () => {
+    const only = (permission: string) => ids(visibleMenu(MENU, (p) => p === permission, allowAll));
+    expect(only('companies:read')).toContain('trash');
+    expect(only('places:read')).toContain('trash');
+    expect(only('users:read')).toContain('trash');
+    expect(only('products:read')).not.toContain('trash');
+    expect(MENU.find((item) => item.id === 'trash')).toMatchObject({
+      groupPath: 'trash',
+      labelKey: 'MENU.TRASH',
     });
   });
 

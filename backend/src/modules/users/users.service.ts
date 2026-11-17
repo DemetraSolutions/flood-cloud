@@ -21,6 +21,8 @@ import { assertGroupCreationAccess } from '../../shared/security/scope/group-acc
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { usersScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
+import { settleItem } from '../../shared/trash/trash.ts';
+import type { TrashItemOutcome } from '../../shared/trash/trash.ts';
 import { auditSessionsRevoked } from '../sessions/session-audit.ts';
 import type { SessionsRepository } from '../sessions/sessions.repository.ts';
 import type { ServicesRepository } from '../group-services/services.repository.ts';
@@ -173,6 +175,27 @@ export interface UsersService {
    * @throws {AppError} `NOT_FOUND`, `FORBIDDEN`, `CONFLICT` when he is not in the trash.
    */
   remove(principal: AuthPrincipal, area: UserArea, userId: ObjectId, client: ClientContext): Promise<void>;
+  /**
+   * Takes a user out of the trash for a bulk operation: exactly {@link UsersService.restore}, with its refusals returned as the issue instead of thrown.
+   *
+   * @returns `{ done: true }`, or the issue: `notFound`, `forbidden` (a user the caller does not manage) or `notTrashed`.
+   */
+  restoreFromTrash(principal: AuthPrincipal, area: UserArea, userId: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  /**
+   * Deletes a user that is in the trash for a bulk operation: exactly {@link UsersService.remove}, with its refusals returned as the issue instead of thrown.
+   *
+   * @returns `{ done: true }`, or the issue: `notFound`, `forbidden`, `notTrashed` or `referenced` (a dealer that still has groups).
+   */
+  deleteFromTrash(principal: AuthPrincipal, area: UserArea, userId: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  /**
+   * The ids of the users in the trash of a group that the caller reaches (the users he sees, which he may not manage all), in `_id` order, at most `limit`.
+   *
+   * @param limit Most ids returned.
+   * @param after Only the ids greater than this one, `null` for the first call.
+   */
+  trashedIds(principal: AuthPrincipal, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
+  /** How many users in the trash of the group the caller reaches. */
+  countTrashed(principal: AuthPrincipal, access: GroupAccess): Promise<number>;
   /**
    * Tells whether a username is free (D-15).
    *
@@ -433,9 +456,15 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
     return issues;
   };
 
-  return {
+  /** The users of a group the caller sees (the scope of the list of the group). */
+  const groupScope = (principal: AuthPrincipal, access: GroupAccess): Filter<Document> => withScope(usersScopeFilter(principal), { groupId: access.groupId, role: { $in: GROUP_ROLE_FILTER } });
+
+  /** The users of the group in the trash that the caller sees. */
+  const groupTrashScope = (principal: AuthPrincipal, access: GroupAccess): Filter<Document> => withScope(groupScope(principal, access), { trash: true });
+
+  const service: UsersService = {
     listGroup: (principal, access, query) =>
-      listing(withScope(usersScopeFilter(principal), { groupId: access.groupId, role: { $in: GROUP_ROLE_FILTER } }), requestFilter(query), query),
+      listing(groupScope(principal, access), requestFilter(query), query),
 
     listAll: (principal, query) => {
       const { kind } = principal.scope;
@@ -809,7 +838,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         after: { trashed: true },
       });
       await reportRevoked(principal, area, client, 'userTrashed', revoked);
-      return toResponse({ ...target.user, trashed: true, updatedAt: now });
+      return toResponse({ ...target.user, trashed: true, trashedAt: now, updatedAt: now });
     },
 
     restore: async (principal, area, userId, client) => {
@@ -818,7 +847,10 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         throw new AppError('CONFLICT');
       }
       const now = date();
-      await users.updateOwned(userId, toLegacyUpdate({ trashed: false }, now));
+      // The check and the write are one operation: a user restored (or deleted) since he was read is a conflict, and only the request that restores him records the event.
+      if (!(await users.updateOwned(userId, toLegacyUpdate({ trashed: false }, now), undefined, { trash: true }))) {
+        throw new AppError('CONFLICT');
+      }
       await recordDataChange(activityLog, {
         ...context(principal, area, client),
         resource: { type: 'user', id: userId.toHexString() },
@@ -826,7 +858,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         before: { trashed: true },
         after: { trashed: false },
       });
-      return toResponse({ ...target.user, trashed: false, updatedAt: now });
+      return toResponse({ ...target.user, trashed: false, trashedAt: null, updatedAt: now });
     },
 
     remove: async (principal, area, userId, client) => {
@@ -836,7 +868,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       }
       // A dealer that still has groups (also trashed ones) would leave them pointing at nobody.
       if (target.user.role === 'D' && (await directory.isDealerOfAnyGroup(userId))) {
-        throw new AppError('CONFLICT');
+        throw new AppError('CONFLICT', { details: [{ field: 'groups', issue: 'referenced' }] });
       }
       const dealerRemoved = await transaction(async (session) => {
         // Check and delete are one write: a user restored in the meantime is not deleted.
@@ -867,6 +899,15 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       }
     },
 
+    restoreFromTrash: (principal, area, userId, client) => settleItem(() => service.restore(principal, area, userId, client)),
+
+    deleteFromTrash: (principal, area, userId, client) => settleItem(() => service.remove(principal, area, userId, client)),
+
+    trashedIds: (principal, access, limit, after) => users.findTrashedIds(after === null ? groupTrashScope(principal, access) : withScope(groupTrashScope(principal, access), { _id: { $gt: after } }), limit),
+
+    countTrashed: (principal, access) => users.countTrashed(groupTrashScope(principal, access)),
+
     isUsernameAvailable: async (username) => !(await users.isUsernameTaken(username)),
   };
+  return service;
 }

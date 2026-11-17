@@ -30,6 +30,8 @@ declare global {
       ifMatch?: string;
       /** Verified group of the path, set by `requireGroupAccess`. */
       groupAccess?: GroupAccess;
+      /** Verified groups named in the body of a bulk platform route, by hexadecimal id (`null` for a group the caller cannot reach), set by the middleware of the bulk restore of groups. */
+      groupAccesses?: ReadonlyMap<string, GroupAccess | null>;
     }
   }
 }

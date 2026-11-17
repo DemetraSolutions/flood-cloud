@@ -51,6 +51,7 @@ const USER_PROJECTION: Projection = Object.freeze({
   servicesId: 1,
   status: 1,
   trash: 1,
+  trashDate: 1,
   'settings.language': 1,
   'settings.hiddenInStats': 1,
   'permissions.status': 1,
@@ -166,6 +167,20 @@ export interface UsersRepository {
    */
   list(scopeFilter: Filter<Document>, filter: Filter<Document>, params: ListParams): Promise<UserPage>;
   /**
+   * The ids of the users that match a filter, in `_id` order (a stable order, so a bulk operation that repeats finds the next ones), at most `limit`. The filter carries the scope
+   * (`usersScopeFilter`) and the trash condition: callers build it with `withScope`.
+   *
+   * @param filter Scope-limited filter.
+   * @param limit Most ids returned (a positive integer).
+   */
+  findTrashedIds(filter: Filter<Document>, limit: number): Promise<ObjectId[]>;
+  /**
+   * How many users match a filter (scope-limited, as for {@link UsersRepository.findTrashedIds}).
+   *
+   * @param filter Scope-limited filter.
+   */
+  countTrashed(filter: Filter<Document>): Promise<number>;
+  /**
    * Inserts a new user document built by `toLegacyDocument`.
    *
    * @param document The document, with `_id`.
@@ -215,10 +230,11 @@ export interface UsersRepository {
    * @param id Id of the user.
    * @param update `$set`/`$unset` update.
    * @param session Transaction the write belongs to, if any.
-   * @returns `false` when the user does not exist.
+   * @param onlyIf When `{ trash: true }`, the update applies only to a user that is in the trash at the moment of the write (the check and the write are one operation: a lost race is `false`).
+   * @returns `false` when the user does not exist, or is not in the state `onlyIf` asks for.
    * @throws {Error} If the update contains a field outside the owned fields or an operator other than `$set` and `$unset`.
    */
-  updateOwned(id: ObjectId, update: LegacyUserUpdate, session?: ClientSession): Promise<boolean>;
+  updateOwned(id: ObjectId, update: LegacyUserUpdate, session?: ClientSession, onlyIf?: { readonly trash: true }): Promise<boolean>;
   /**
    * Empties the legacy `tokens[]` so that the legacy platform disconnects the user at once (D-11).
    *
@@ -339,6 +355,11 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       return { users: items.map((document) => fromLegacy(document as LegacyUserDocument, { summary: true })), page };
     },
 
+    findTrashedIds: async (filter, limit) =>
+      (await users().find(filter, { projection: { _id: 1 }, sort: { _id: 1 }, limit, maxTimeMS: LIST_MAX_TIME_MS }).toArray()).map((document) => document._id),
+
+    countTrashed: (filter) => users().countDocuments(filter, { maxTimeMS: LIST_MAX_TIME_MS }),
+
     insert: async (document, session) => {
       const foreign = leafPaths(document).filter((path) => path !== '_id' && !isOwnedPath(owned, path));
       if (foreign.length > 0) {
@@ -383,7 +404,7 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       return candidates.some((candidate) => normalizedMatch(candidate, normalized));
     },
 
-    updateOwned: async (id, update, session) => {
+    updateOwned: async (id, update, session, onlyIf) => {
       const operators = Object.keys(update).filter((key) => key !== '$set' && key !== '$unset');
       if (operators.length > 0) {
         throw new Error('Refusing an update with operators other than $set and $unset');
@@ -395,7 +416,7 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       }
       await repairParents(id, fields, session);
       const result = await users().updateOne(
-        { _id: id },
+        { _id: id, ...(onlyIf === undefined ? {} : { trash: onlyIf.trash }) },
         { $set: { ...update.$set }, ...(update.$unset === undefined ? {} : { $unset: { ...update.$unset } }) },
         session === undefined ? {} : { session },
       );

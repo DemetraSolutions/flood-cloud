@@ -49,6 +49,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   placeIds: [],
   status: 'active',
   trashed: false,
+  trashedAt: null,
   language: 'it',
   hiddenInStats: false,
   description: null,

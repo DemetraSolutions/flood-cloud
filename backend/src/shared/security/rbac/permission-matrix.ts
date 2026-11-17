@@ -26,10 +26,10 @@ export interface CoreModule {
 
 /** Core modules of the legacy matrix and what they map to. Other modules are kept as data only. */
 export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze({
-  // The dealer registry (`dealers:*`), the tobacco price list (`tobaccos:*`) and the management of the countries (`countries:manage`) ride on the `groups` module: only the PSA's ceiling contains those permissions, so for the other roles they never become effective.
+  // The dealer registry (`dealers:*`), the tobacco price list (`tobaccos:*`) the management of the countries (`countries:manage`) and the emptying of the trash (`trash:empty`) ride on the `groups` module: only the PSA's ceiling contains those permissions, so for the other roles they never become effective.
   groups: {
     read: [P.GROUPS_READ, P.DEALERS_READ, P.TOBACCOS_READ],
-    write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, P.DEALERS_CREATE, P.DEALERS_UPDATE, P.TOBACCOS_IMPORT, P.COUNTRIES_MANAGE],
+    write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, P.DEALERS_CREATE, P.DEALERS_UPDATE, P.TOBACCOS_IMPORT, P.COUNTRIES_MANAGE, P.TRASH_EMPTY],
   },
   users: { read: [P.USERS_READ], write: [P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH, P.USERS_DELETE] },
   companies: { read: [P.COMPANIES_READ], write: [P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH, P.COMPANIES_DELETE] },

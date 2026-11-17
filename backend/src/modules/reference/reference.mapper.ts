@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
+import { trashedAtOf } from '../../shared/trash/trash.ts';
 import type { TrashCount } from '../../shared/security/scope/group-counts.ts';
 
 /** What a group holds, by kind: the elements in use and the ones in the trash (read from the common database). */
@@ -15,6 +16,8 @@ export interface GroupReference {
   readonly name: string;
   readonly status: 'active' | 'suspended';
   readonly trashed: boolean;
+  /** When the group went to the trash (ISO 8601); `null` when unknown or absent (informational only). */
+  readonly trashedAt: string | null;
   /** Id of the dealer's `D` user, `null` when the group has none (or the stored value is not an id). */
   readonly dealerId: string | null;
   readonly demo: boolean;
@@ -26,7 +29,7 @@ export interface GroupReference {
 const nameOf = (document: Document): string => (typeof document['name'] === 'string' ? document['name'] : '');
 
 /** Projection of the group list: the only stored fields ever read. */
-export const GROUP_PROJECTION = Object.freeze({ name: 1, status: 1, trash: 1, dealerId: 1, demo: 1 } as const);
+export const GROUP_PROJECTION = Object.freeze({ name: 1, status: 1, trash: 1, trashDate: 1, dealerId: 1, demo: 1 } as const);
 
 /**
  * Maps a stored group to its reference representation, field by field (allowlist): `status` is
@@ -41,6 +44,7 @@ export function toGroupReference(document: Document, counts: GroupCounts): Group
     name: nameOf(document),
     status: document['status'] === true ? 'active' : 'suspended',
     trashed: document['trash'] === true,
+    trashedAt: trashedAtOf(document['trashDate']),
     dealerId: document['dealerId'] instanceof ObjectId ? document['dealerId'].toHexString() : null,
     demo: document['demo'] === true,
     counts,

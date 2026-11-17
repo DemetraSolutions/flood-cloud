@@ -19,7 +19,7 @@ export interface ManagedGroupsRepository {
    */
   findById(id: ObjectId): Promise<MappedGroup | null>;
   /**
-   * Applies an update built by `toLegacyUpdate`. The update is refused if it touches a field the backend does not own, and it is not
+   * Applies an update built by `toLegacyUpdate` (`$set`, and `$unset` for the date of the trash when a group is restored). The update is refused if it touches a field the backend does not own, and it is not
    * applied when a container it writes into (`settings`, `settings.stats`, `settings.integrations`, a provider) holds something that is
    * not an object, which would make the database fail: the group is left as it is.
    *
@@ -62,11 +62,11 @@ export function createManagedGroupsRepository(databases: Databases, publicApiDef
     },
 
     updateOwned: async (id, update) => {
-      const operators = Object.keys(update).filter((key) => key !== '$set');
+      const operators = Object.keys(update).filter((key) => key !== '$set' && key !== '$unset');
       if (operators.length > 0) {
         throw new Error('Refusing an update with operators other than $set');
       }
-      const fields = Object.keys(update.$set);
+      const fields = [...Object.keys(update.$set), ...Object.keys(update.$unset ?? {})];
       const foreign = fields.filter((field) => !owned.has(field));
       if (foreign.length > 0) {
         throw new Error(`Refusing to write fields the backend does not own: ${foreign.join(', ')}`);
@@ -74,7 +74,7 @@ export function createManagedGroupsRepository(databases: Databases, publicApiDef
       const intact: Filter<Document>[] = containersOf(fields).map((path) => ({ $or: [{ [path]: { $exists: false } }, { [path]: { $type: 'object' } }] }));
       const result = await groups().updateOne(
         { _id: id, ...(intact.length === 0 ? {} : { $and: intact }) },
-        { $set: { ...update.$set } },
+        { $set: { ...update.$set }, ...(update.$unset === undefined ? {} : { $unset: { ...update.$unset } }) },
       );
       if (result.matchedCount === 1) {
         return 'updated';

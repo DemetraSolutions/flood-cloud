@@ -70,7 +70,9 @@ export function differences(before: Document, after: Document, changed: readonly
     }
   }
   const unexpected = different.filter((key) => !changed.includes(key));
-  if (unexpected.length > 0 || JSON.stringify(Object.keys(before)) !== JSON.stringify(Object.keys(after))) {
+  // `trashDate` comes and goes with the trash flag: it is a change like any other, but it does not make the order of the other keys differ.
+  const order = (document: Document): string => JSON.stringify(Object.keys(document).filter((key) => key !== 'trashDate'));
+  if (unexpected.length > 0 || order(before) !== order(after)) {
     throw new Error(`Unexpected changes: ${unexpected.join(', ')} (keys ${Object.keys(before).join()} -> ${Object.keys(after).join()})`);
   }
   return different;

@@ -47,6 +47,7 @@ describe('GET /v1/groups/{groupId}/places', () => {
       name: 'Zeta Bar',
       companyId: hex(C(1)),
       trashed: false,
+      trashedAt: null,
       plan: 'advanced',
       status: 'active',
       city: 'Milano',
@@ -54,7 +55,7 @@ describe('GET /v1/groups/{groupId}/places', () => {
       country: 'IT',
       expirationDate: '2031-01-01T00:00:00.000Z',
     });
-    assert.deepEqual(reply.body.data[0], { id: hex(P(105)), name: '', companyId: hex(C(1)), trashed: false, plan: null, status: 'disabled', city: null, province: null, country: null, expirationDate: null });
+    assert.deepEqual(reply.body.data[0], { id: hex(P(105)), name: '', companyId: hex(C(1)), trashed: false, trashedAt: null, plan: null, status: 'disabled', city: null, province: null, country: null, expirationDate: null });
     assert.deepEqual(reply.body.page, { limit: 50, next: null });
     const text = JSON.stringify(reply.body);
     for (const secret of ['integrations', 'fixture-integration-secret', 'fixture-device-secret', '10.0.0.1', 'connector', 'devices', 'rooms', 'storages', 'general', 'openingTime']) {
@@ -149,7 +150,7 @@ describe('GET /v1/groups/{groupId}/places/{placeId}', () => {
     const document = (await world.storedPlace(0, P(100)))!;
     assert.equal(reply.headers.get('etag'), `"${versionOf('places', document, TEST_VERSION_KEY)}"`);
     const place = reply.body.data;
-    assert.deepEqual(Object.keys(place), ['id', 'groupId', 'name', 'companyId', 'address', 'contactName', 'email', 'phone', 'priceListId', 'ecommercePriceListId', 'invoiceSeries', 'priceLists', 'trashed', 'createdAt', 'updatedAt', 'license', 'openingHours', 'cashSettings', 'printing', 'payments', 'tables', 'reservations', 'delivery', 'selfOrdering', 'kiosk', 'appointments', 'externalDisplay', 'fidelity', 'tobacco', 'media', 'integrations', 'devices', 'printStations', 'rooms', 'storages']);
+    assert.deepEqual(Object.keys(place), ['id', 'groupId', 'name', 'companyId', 'address', 'contactName', 'email', 'phone', 'priceListId', 'ecommercePriceListId', 'invoiceSeries', 'priceLists', 'trashed', 'trashedAt', 'createdAt', 'updatedAt', 'license', 'openingHours', 'cashSettings', 'printing', 'payments', 'tables', 'reservations', 'delivery', 'selfOrdering', 'kiosk', 'appointments', 'externalDisplay', 'fidelity', 'tobacco', 'media', 'integrations', 'devices', 'printStations', 'rooms', 'storages']);
     assert.deepEqual([place.id, place.groupId, place.name, place.companyId, place.priceListId, place.ecommercePriceListId, place.invoiceSeries, place.trashed], [hex(P(100)), hex(world.group(0).groupId), 'Zeta Bar', hex(C(1)), PRICE_LIST, null, 'FE', false]);
     assert.deepEqual(place.address, { street: 'Via Roma 1', postcode: '20100', city: 'Milano', province: 'MI', country: 'IT' });
     assert.deepEqual([place.contactName, place.email, place.phone], ['Mario Rossi', 'bar@example.test', '+39 02 1234567']);

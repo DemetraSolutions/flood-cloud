@@ -55,6 +55,8 @@ function serviceOf(writer: CompaniesPlacesWriter, overrides: Partial<CompaniesRe
   const activity = memoryActivityLog();
   const repository: CompaniesRepository = {
     list: async () => ({ items: [], page: { limit: 50, next: null } }),
+    trashedIds: async () => [],
+    countTrashed: async () => 0,
     findCountry: async () => ({ code: 'DE', areas: null }),
     isDealer: async () => true,
     listDealers: async () => [],

@@ -50,6 +50,8 @@ export interface RateLimitRules {
   readonly apiKeyAdminPerUser: RateLimitRule;
   /** Creations, changes and deletions of countries and provinces per authenticated user per minute (the PSA only). */
   readonly countriesAdminPerUser: RateLimitRule;
+  /** Bulk restores, deletions and emptying of the trash per authenticated user per minute: one call is one request, whatever the number of items. */
+  readonly trashAdminPerUser: RateLimitRule;
 }
 
 /** Length of an hourly window. */
@@ -109,5 +111,6 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     storeKeyAdminPerUser: Object.freeze({ bucket: 'storeKeyAdmin:user', limit: config.rateLimitStoreKeyAdminPerUser, key: perUser }),
     apiKeyAdminPerUser: Object.freeze({ bucket: 'apiKeyAdmin:user', limit: config.rateLimitApiKeyAdminPerUser, key: perUser }),
     countriesAdminPerUser: Object.freeze({ bucket: 'countriesAdmin:user', limit: config.rateLimitCountriesAdminPerUser, key: perUser }),
+    trashAdminPerUser: Object.freeze({ bucket: 'trashAdmin:user', limit: config.rateLimitTrashAdminPerUser, key: perUser }),
   });
 }

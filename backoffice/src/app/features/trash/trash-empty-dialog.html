@@ -1,0 +1,34 @@
+<fc-dialog
+  [heading]="'TRASH.EMPTY.TITLE' | t: { kind: kindLabel() }"
+  [open]="open()"
+  (openChange)="open.set($event)"
+  (closed)="onClosed()"
+>
+  @if (running()) {
+    <p role="status">{{ progressText() }}</p>
+    @if (stopping()) {
+      <p>{{ 'TRASH.EMPTY.STOPPING' | t }}</p>
+    }
+  } @else {
+    <p>{{ message() }}</p>
+    <fc-checkbox
+      [label]="'TRASH.EMPTY.UNDERSTOOD' | t"
+      [checked]="understood()"
+      (checkedChange)="understood.set($event)"
+    />
+  }
+  <ng-container ngProjectAs="[fcDialogActions]">
+    @if (running()) {
+      <button fc-button variant="secondary" [disabled]="stopping()" (click)="stop()">
+        {{ 'TRASH.EMPTY.STOP' | t }}
+      </button>
+    } @else {
+      <button fc-button variant="secondary" (click)="open.set(false)">
+        {{ 'COMMON.CANCEL' | t }}
+      </button>
+      <button fc-button variant="danger" [disabled]="!understood()" (click)="start()">
+        {{ 'TRASH.EMPTY.START' | t }}
+      </button>
+    }
+  </ng-container>
+</fc-dialog>

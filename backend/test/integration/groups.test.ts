@@ -56,7 +56,7 @@ describe('GET /v1/groups/{groupId}', () => {
     const reply = await as.call(office.cluster.psa, 'GET', path(0));
     assert.equal(reply.status, 200);
     const data = reply.body.data;
-    assert.deepEqual(Object.keys(data).sort(), ['createdAt', 'currencies', 'dataCluster', 'dealerId', 'demo', 'description', 'features', 'fidelityCardRules', 'id', 'integrations', 'languages', 'measureUnits', 'name', 'priceLists', 'publicApi', 'status', 'statsSettings', 'taxes', 'trashed', 'updatedAt', 'warehouseRules'].sort());
+    assert.deepEqual(Object.keys(data).sort(), ['createdAt', 'currencies', 'dataCluster', 'dealerId', 'demo', 'description', 'features', 'fidelityCardRules', 'id', 'integrations', 'languages', 'measureUnits', 'name', 'priceLists', 'publicApi', 'status', 'statsSettings', 'taxes', 'trashed', 'trashedAt', 'updatedAt', 'warehouseRules'].sort());
     assert.deepEqual([data.id, data.name, data.dealerId, data.status, data.trashed, data.demo, data.dataCluster], [hex(g(0).groupId), 'group-001', hex(g(0).dealerId), 'active', false, false, null]);
     assert.deepEqual([data.features.cash, data.features.warehouse, data.features.rooms], [true, true, false]);
     assert.deepEqual(data.languages, ['it', 'en']);
@@ -504,7 +504,8 @@ describe('the groups service on its own', () => {
     assert.ok(warning !== undefined);
     assert.ok(!JSON.stringify(warning).includes('plain-key'));
     await assert.rejects(repository.updateOwned(g(0).groupId, { $set: { apiKey: 'x' } }), /do not own|does not own/);
-    await assert.rejects(repository.updateOwned(g(0).groupId, { $set: { name: 'x' }, $unset: { name: '' } } as never), /operators other than \$set/);
+    await assert.rejects(repository.updateOwned(g(0).groupId, { $set: { name: 'x' }, $inc: { name: 1 } } as never), /operators other than \$set/);
+    await assert.rejects(repository.updateOwned(g(0).groupId, { $set: { name: 'x' }, $unset: { apiKey: '' } } as never), /do not own|does not own/);
     assert.equal(await repository.updateOwned(new ObjectId(), { $set: { name: 'x' } }), 'notFound');
     assert.equal(await repository.findById(new ObjectId()), null);
     assert.equal((await stored(0))['apiKey'], 'plain-key-001');

@@ -23,6 +23,22 @@ export interface PlacesRepository extends Pick<CompaniesRepository, 'findCountry
    */
   list(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
   /**
+   * The ids of the places of a verified group that are in the trash, inside the caller's perimeter, in `_id` order, at most `limit`.
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   * @param limit Most ids returned (a positive integer).
+   * @param after Only the ids greater than this one (the cursor of a repeated call), `null` for the first call.
+   */
+  trashedIds(principal: AuthPrincipal, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
+  /**
+   * How many places of a verified group are in the trash, inside the caller's perimeter.
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   */
+  countTrashed(principal: AuthPrincipal, access: GroupAccess): Promise<number>;
+  /**
    * Whether a user of the group has the place in his scope (`placeId` or `placesId`), whatever the state of the user: the reference that stops the deletion of a place.
    *
    * @param groupId Id of the group (from a verified access).
@@ -72,6 +88,11 @@ export function createPlacesRepository(databases: Databases, companies: Pick<Com
         ),
         params,
       ),
+
+    trashedIds: async (principal, access, limit, after) =>
+      (await groupMirror(principal, access, databases, 'places').find(withScope(placesScopeFilter(principal.scope), { trash: true, ...(after === null ? {} : { _id: { $gt: after } }) }), { projection: { _id: 1 }, sort: { _id: 1 }, limit })).map((document) => document['_id'] as ObjectId),
+
+    countTrashed: (principal, access) => groupMirror(principal, access, databases, 'places').countDocuments(withScope(placesScopeFilter(principal.scope), { trash: true })),
 
     hasUsers: async (groupId, placeId) =>
       (await databases.common().collection('users').findOne({ groupId, $or: [{ placeId }, { placesId: placeId }] }, { projection: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS })) !== null,

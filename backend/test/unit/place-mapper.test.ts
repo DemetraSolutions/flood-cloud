@@ -111,13 +111,14 @@ describe('place mapper: the list item', () => {
     const _id = fixtureId('place', 1);
     assert.deepEqual(
       toPlaceSummary({ _id, name: 'P', companyId: COMPANY, trash: false, plan: 'basic', status: true, city: 'Milano', countryAreaCode: 'MI', countryCode: 'IT', expirationDate: new Date('2030-01-01T00:00:00.000Z'), integrations: {} }),
-      { id: _id.toHexString(), name: 'P', companyId: COMPANY.toHexString(), trashed: false, plan: 'basic', status: 'active', city: 'Milano', province: 'MI', country: 'IT', expirationDate: '2030-01-01T00:00:00.000Z' },
+      { id: _id.toHexString(), name: 'P', companyId: COMPANY.toHexString(), trashed: false, trashedAt: null, plan: 'basic', status: 'active', city: 'Milano', province: 'MI', country: 'IT', expirationDate: '2030-01-01T00:00:00.000Z' },
     );
     assert.deepEqual(toPlaceSummary({ _id, name: 5, companyId: 'abc', trash: 'yes', plan: 7, status: 'true', city: 3, countryAreaCode: null, countryCode: undefined, expirationDate: 'soon' }), {
       id: _id.toHexString(),
       name: '',
       companyId: null,
       trashed: false,
+      trashedAt: null,
       plan: null,
       status: 'disabled',
       city: null,
@@ -126,7 +127,12 @@ describe('place mapper: the list item', () => {
       expirationDate: null,
     });
     assert.equal(toPlaceSummary({ _id, trash: true }).trashed, true);
-    assert.deepEqual(Object.keys(PLACE_SUMMARY_PROJECTION).sort(), ['city', 'companyId', 'countryAreaCode', 'countryCode', 'expirationDate', 'name', 'plan', 'status', 'trash']);
+    // The date of the trash: a valid date is an ISO string; anything else (absent, a string, an invalid date) is none.
+    assert.equal(toPlaceSummary({ _id, trash: true, trashDate: new Date('2026-11-17T09:30:00.000Z') }).trashedAt, '2026-11-17T09:30:00.000Z');
+    for (const junk of [undefined, null, '2026-11-17', 17, new Date('nope')]) {
+      assert.equal(toPlaceSummary({ _id, trash: true, trashDate: junk }).trashedAt, null);
+    }
+    assert.deepEqual(Object.keys(PLACE_SUMMARY_PROJECTION).sort(), ['city', 'companyId', 'countryAreaCode', 'countryCode', 'expirationDate', 'name', 'plan', 'status', 'trash', 'trashDate']);
   });
 });
 
@@ -134,11 +140,11 @@ describe('place mapper: the table of keys', () => {
   it('has a leaf for every stored path the backend owns, and only for those', () => {
     const owned = PLACES_OWNED_FIELDS.filter((field) => field !== 'updateDate' && !DEPRECATED_ROOMS_PATHS.includes(field as never));
     const writable = PLACE_LEAVES.filter((leaf) => leaf.readOnly !== true).map((leaf) => leaf.legacy);
-    assert.deepEqual([...writable].sort(), owned.filter((field) => field !== 'trash').sort());
+    assert.deepEqual([...writable].sort(), owned.filter((field) => field !== 'trash' && field !== 'trashDate').sort());
     // The read-only keys: the state and the dates, the flag of every credential (at the path of the credential) and the list of categories the provider gave.
     assert.deepEqual(
       PLACE_LEAVES.filter((leaf) => leaf.readOnly === true).map((leaf) => leaf.legacy),
-      ['trash', 'insertDate', 'updateDate', ...SETTING_FIELDS.filter((field) => field.readOnly === true).map((field) => field.legacy), 'devices', 'printStations', 'productionCenter', 'rooms', 'storages'],
+      ['trash', 'trashDate', 'insertDate', 'updateDate', ...SETTING_FIELDS.filter((field) => field.readOnly === true).map((field) => field.legacy), 'devices', 'printStations', 'productionCenter', 'rooms', 'storages'],
     );
     // The flags of the lists (whether they can be written) are read only and never written.
     const flags = PLACE_LEAVES.filter((leaf) => leaf.domain.endsWith('ditable') || leaf.domain.endsWith('Editable'));

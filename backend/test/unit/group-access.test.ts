@@ -8,7 +8,7 @@ import { UnknownClusterError } from '../../src/db/databases.ts';
 import { featuresOf } from '../../src/modules/groups/features.ts';
 import { errorHandler } from '../../src/shared/http/error-handler.ts';
 import { requirePermission } from '../../src/shared/security/rbac/require-permission.ts';
-import { groupDatabaseFor, reportCrossGroupAccess, requireGroupAccess } from '../../src/shared/security/scope/group-access.ts';
+import { groupDatabaseFor, reportCrossGroupAccess, requireGroupAccess, requireGroupAccesses } from '../../src/shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import type { GroupAvailability } from '../../src/shared/security/scope/groups.repository.ts';
 import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts';
@@ -258,5 +258,12 @@ describe('requireGroupAccess and reportCrossGroupAccess', () => {
       failAudit = mode;
       assert.deepEqual(await get(hex(g1)), { status: 500, body: { code: 'INTERNAL_ERROR', groupId: undefined } });
     }
+  });
+});
+
+describe('requireGroupAccesses', () => {
+  it('refuses a request without a caller', async () => {
+    const handler = requireGroupAccesses({ findAccess: async () => null, resolveCluster: () => 'cluster0' }, () => [], () => undefined);
+    await assert.rejects(async () => handler({} as never, { locals: {} } as never, () => undefined), { code: 'UNAUTHENTICATED' });
   });
 });

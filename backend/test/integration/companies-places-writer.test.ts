@@ -255,8 +255,9 @@ describe('companies and places writer: trash, restore, delete', () => {
     const version = (await writerOn().currentVersion('places', P(1)))!;
     written(await writerOn().trash('places', P(1), version));
     const after = must(await original('places', P(1)));
-    differences(before, after, ['trash', 'updateDate']);
+    differences(before, after, ['trash', 'trashDate', 'updateDate']);
     assert.equal(after['trash'], true);
+    assert.deepEqual(after['trashDate'], after['updateDate'], 'the date of the trash is the time of the write');
     await assertMirrored('places', P(1));
     assert.equal(await feed(G1, P(1)), null);
     assert.equal((await feed(G2, P(1)))?.['name'], 'other group');
@@ -270,8 +271,9 @@ describe('companies and places writer: trash, restore, delete', () => {
     const before = must(await original('places', P(1)));
     written(await writerOn().restore('places', P(1), version));
     const after = must(await original('places', P(1)));
-    differences(before, after, ['trash', 'updateDate']);
+    differences(before, after, ['trash', 'trashDate', 'updateDate']);
     assert.equal(after['trash'], false);
+    assert.equal(Object.hasOwn(after, 'trashDate'), false, 'the date of the trash is removed on restore');
     await assertMirrored('places', P(1));
     await assertGroupPlaces();
     assert.deepEqual(await feed(G1, P(1)), {
@@ -326,13 +328,17 @@ describe('companies and places writer: trash, restore, delete', () => {
     const before = must(await original('companies', C(1)));
     let version = (await writerOn().currentVersion('companies', C(1)))!;
     written(await writerOn().trash('companies', C(1), version));
-    differences(before, must(await original('companies', C(1))), ['trash', 'updateDate']);
+    differences(before, must(await original('companies', C(1))), ['trash', 'trashDate', 'updateDate']);
     assert.equal((await original('companies', C(1)))!['trash'], true);
+    assert.ok((await original('companies', C(1)))!['trashDate'] instanceof Date);
     await assertMirrored('companies', C(1));
+    assert.ok((await copyOf('companies', C(1)))!['trashDate'] instanceof Date, 'the copy has the date too');
     version = (await writerOn().currentVersion('companies', C(1)))!;
     written(await writerOn().restore('companies', C(1), version));
     assert.equal((await original('companies', C(1)))!['trash'], false);
+    assert.equal(Object.hasOwn((await original('companies', C(1)))!, 'trashDate'), false);
     await assertMirrored('companies', C(1));
+    assert.equal(Object.hasOwn((await copyOf('companies', C(1)))!, 'trashDate'), false, 'the date is removed from the copy too');
     version = (await writerOn().currentVersion('companies', C(2)))!;
     assert.deepEqual(await writerOn().deleteTrashed('companies', C(2), version), { outcome: 'deleted', id: C(2) });
     assert.equal(await original('companies', C(2)), null);
@@ -361,8 +367,8 @@ describe('companies and places writer: what the legacy and the POS own survives 
     const start = must(await original('places', P(1)));
     const steps: Array<[string, (version: string) => Promise<WriteOutcome>, string[]]> = [
       ['update', (v) => writerOn().updatePlace(P(1), v, { name: 'A', address: 'Via Nuova', status: false }), ['name', 'address', 'status', 'updateDate']],
-      ['trash', (v) => writerOn().trash('places', P(1), v), ['trash', 'updateDate']],
-      ['restore', (v) => writerOn().restore('places', P(1), v), ['trash', 'updateDate']],
+      ['trash', (v) => writerOn().trash('places', P(1), v), ['trash', 'trashDate', 'updateDate']],
+      ['restore', (v) => writerOn().restore('places', P(1), v), ['trash', 'trashDate', 'updateDate']],
       ['move', (v) => writerOn().updatePlace(P(1), v, { companyId: C(1), listId: 'list-1', ecommerceListId: null, invoicePS: true }), ['companyId', 'listId', 'ecommerceListId', 'invoicePS', 'updateDate']],
     ];
     for (const [step, run, changed] of steps) {

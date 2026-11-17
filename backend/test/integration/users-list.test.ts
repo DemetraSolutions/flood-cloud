@@ -114,7 +114,7 @@ describe('GET /v1/groups/{groupId}/users: the common case', () => {
     assert.deepEqual(body.page, { limit: 50, next: null });
     assert.deepEqual(body.data.map((user) => [user.username, user['role']]), [['user-003', 'SA'], ['user-004', 'CA'], ['user-005', 'PA'], ['user-006', 'E']]);
     assert.deepEqual(Object.keys(body.data[0]!).sort(), [
-      'canManagePermissions', 'companyIds', 'createdAt', 'dealerId', 'description', 'email', 'firstName', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'serviceIds', 'shiftTime', 'status', 'trashed', 'updatedAt', 'username',
+      'canManagePermissions', 'companyIds', 'createdAt', 'dealerId', 'description', 'email', 'firstName', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'serviceIds', 'shiftTime', 'status', 'trashed', 'trashedAt', 'updatedAt', 'username',
     ].filter((key) => key !== 'canManagePermissions'));
     const text = JSON.stringify(body);
     for (const secret of ['"pin"', '1234', 'token-003', 'tokens', 'scrypt$', '"password"', '"avatar"', 'discounts', 'productsStatus']) {

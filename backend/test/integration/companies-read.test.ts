@@ -50,8 +50,9 @@ describe('GET /v1/groups/{groupId}/companies', () => {
       country: 'IT',
       status: 'active',
       trashed: false,
+      trashedAt: null,
     });
-    assert.deepEqual(reply.body.data[0], { id: hex(C(103)), name: '', vatNumber: null, city: null, province: null, country: null, status: 'disabled', trashed: false });
+    assert.deepEqual(reply.body.data[0], { id: hex(C(103)), name: '', vatNumber: null, city: null, province: null, country: null, status: 'disabled', trashed: false, trashedAt: null });
     assert.deepEqual(reply.body.page, { limit: 50, next: null });
     const text = JSON.stringify(reply.body);
     for (const secret of ['fattura_elettronica', IBAN, 'banks', 'Via Roma', 'info@acme', 'pec@acme']) {

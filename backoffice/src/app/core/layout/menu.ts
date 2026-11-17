@@ -14,6 +14,8 @@ export interface MenuItem {
   readonly route: string;
   /** Permission required to see the entry (checked against the session, see `visibleMenu`). */
   readonly permission?: string;
+  /** Permissions of which the user must hold at least one to see the entry (alternative to `permission`). */
+  readonly anyPermission?: readonly string[];
   /** Roles that see the entry (any role when omitted). */
   readonly roles?: readonly Role[];
   /**
@@ -212,6 +214,14 @@ export const MENU: readonly MenuItem[] = [
     roles: ['PSA', 'D'],
   },
   {
+    id: 'trash',
+    labelKey: 'MENU.TRASH',
+    icon: 'trash',
+    route: '/groups',
+    groupPath: 'trash',
+    anyPermission: ['companies:read', 'places:read', 'users:read'],
+  },
+  {
     id: 'activity-log',
     labelKey: 'MENU.ACTIVITY_LOG',
     icon: 'log',
@@ -246,6 +256,7 @@ export function visibleMenu(
   for (const item of items) {
     const allowed =
       (item.permission === undefined || can(item.permission)) &&
+      (item.anyPermission === undefined || item.anyPermission.some(can)) &&
       (item.roles === undefined || (role !== undefined && item.roles.includes(role))) &&
       (item.feature === undefined || hasFeature(item.feature));
     if (!allowed) {

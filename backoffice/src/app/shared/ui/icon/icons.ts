@@ -34,6 +34,7 @@ export const ICONS = {
   release: 'M12 4v10M8 10l4 4 4-4M5 19h14',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
   mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
+  trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20c0-3.3 3.6-6 8-6s8 2.7 8 6',
 } as const;
 

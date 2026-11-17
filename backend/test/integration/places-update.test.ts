@@ -87,7 +87,7 @@ describe('PATCH /v1/groups/{groupId}/places/{placeId}', () => {
     const before = await stored(P(100));
     const mark = world.office.activity.entries.length;
     const read = await call(psa(), 'GET', path(P(100)));
-    const { id: _id, groupId: _groupId, trashed: _trashed, createdAt: _createdAt, updatedAt: _updatedAt, ...writable } = read.body.data;
+    const { id: _id, groupId: _groupId, trashed: _trashed, trashedAt: _trashedAt, createdAt: _createdAt, updatedAt: _updatedAt, ...writable } = read.body.data;
     const reply = await call(psa(), 'PATCH', path(P(100)), writable, { 'if-match': read.headers.get('etag')! });
     assert.equal(reply.status, 200, JSON.stringify(reply.body));
     assert.equal(reply.headers.get('etag'), read.headers.get('etag'));

@@ -20,7 +20,7 @@ const invalid = (field: string | null) => (error: unknown) => error instanceof I
 
 describe('legacy write: registry and allowlists', () => {
   it('derives the updatable fields of both collections from the owned fields of the registry', () => {
-    const updatable = (owned: readonly string[]): string[] => owned.filter((field) => field !== 'trash' && field !== 'updateDate').sort();
+    const updatable = (owned: readonly string[]): string[] => owned.filter((field) => field !== 'trash' && field !== 'trashDate' && field !== 'updateDate').sort();
     assert.deepEqual(Object.keys(COMPANY_FIELD_KINDS).sort(), updatable(COMPANIES_OWNED_FIELDS));
     assert.deepEqual(Object.keys(PLACE_FIELD_KINDS).sort(), updatable(PLACES_OWNED_FIELDS));
     assert.equal(COLLECTIONS.group.companies.ownership, 'legacy-write');
@@ -43,7 +43,7 @@ describe('legacy write: registry and allowlists', () => {
     for (const field of ['plan', 'status', 'expirationDate', 'platform.sentry', 'general.priceLists', 'openingTime.weekGeneric', 'openingTime.daySpecial', 'delivery.time.weekGeneric', 'delivery.time.daySpecial', 'timezone', 'invoicePS', 'listId', 'ecommerceListId', 'companyId', 'integrations.floodPay.stripe.privateKey', 'integrations.reserveWithGoogle.geo.address.country', 'integrations.tsh.categoriesMap']) {
       assert.ok(PLACES_OWNED_FIELDS.includes(field), field);
     }
-    assert.equal(PLACES_OWNED_FIELDS.length, 17 + 1 + 5 + SETTING_LEGACY_PATHS.length + LIST_PATHS.length + 1);
+    assert.equal(PLACES_OWNED_FIELDS.length, 17 + 1 + 5 + SETTING_LEGACY_PATHS.length + LIST_PATHS.length + 2);
     // The blocks are owned key by key, never as a whole: the keys the legacy or a later release adds to them survive.
     for (const field of ['settings', 'settings.global', 'settings.api', 'settings.ecommerce', 'fattura_elettronica', 'medias', 'medias.images', 'groupId', '_id', 'insertDate']) {
       assert.ok(!COMPANIES_OWNED_FIELDS.includes(field), field);

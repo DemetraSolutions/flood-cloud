@@ -163,6 +163,8 @@ export interface Company {
   readonly phone: string | null;
   readonly status: 'active' | 'disabled';
   readonly trashed: boolean;
+  /** When the company went to the trash (ISO 8601); `null` when it is not there or the legacy trashed it (informational only). */
+  readonly trashedAt: string | null;
   /** ISO 8601 instant, `null` for none. */
   readonly expirationDate: string | null;
   readonly createdAt: string | null;
@@ -185,6 +187,8 @@ export interface CompanySummary {
   readonly country: string | null;
   readonly status: 'active' | 'disabled';
   readonly trashed: boolean;
+  /** When the company went to the trash (ISO 8601), `null` when unknown. */
+  readonly trashedAt: string | null;
 }
 
 /** A bank account in a request: the id is the one the company already has, or absent for a new account; empty codes are `null`. */
@@ -222,7 +226,7 @@ export interface CompanyMediaInput {
 }
 
 /** What a request can write of a company: everything of {@link Company} but the read-only fields, with the lists and the media in their request form. */
-export type CompanyWritable = Omit<Company, 'id' | 'groupId' | 'trashed' | 'createdAt' | 'updatedAt' | 'bankAccounts' | 'mealVoucherIssuers' | 'media'> & {
+export type CompanyWritable = Omit<Company, 'id' | 'groupId' | 'trashed' | 'trashedAt' | 'createdAt' | 'updatedAt' | 'bankAccounts' | 'mealVoucherIssuers' | 'media'> & {
   readonly bankAccounts: readonly BankAccountInput[];
   readonly mealVoucherIssuers: readonly MealVoucherIssuerInput[];
   readonly media: CompanyMediaInput;

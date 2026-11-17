@@ -15,6 +15,8 @@ import type { NewCompanyFields } from '../../shared/legacy-write/fields.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
+import { settleItem } from '../../shared/trash/trash.ts';
+import type { TrashItemOutcome, VersionCheck } from '../../shared/trash/trash.ts';
 import { parseIds } from '../group-lookup/lookup.schemas.ts';
 import type { MediaService } from '../media/media.service.ts';
 import { addressProblem } from './address.ts';
@@ -103,6 +105,28 @@ export interface CompaniesService {
    * @throws {AppError} `NOT_FOUND`, `PRECONDITION_FAILED`, `CONFLICT` when it is not in the trash, or when a place of the group (trashed ones included) still refers to it (`places` `referenced`).
    */
   remove(principal: AuthPrincipal, access: GroupAccess, companyId: ObjectId, expected: string, client: ClientContext): Promise<void>;
+  /**
+   * Takes a company out of the trash for a bulk operation: exactly {@link CompaniesService.restore}, with the version read just now instead of an `If-Match` (the write still
+   * checks it inside its transaction, so a company changed in between is skipped). A refusal is returned as the issue, never thrown.
+   *
+   * @returns `{ done: true }`, or the issue: `notFound`, `notTrashed`, `taken` (its VAT number is now another company's).
+   */
+  restoreFromTrash(principal: AuthPrincipal, access: GroupAccess, companyId: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  /**
+   * Deletes a company that is in the trash for a bulk operation: exactly {@link CompaniesService.remove}, with the version read just now. A refusal is returned as the issue.
+   *
+   * @returns `{ done: true }`, or the issue: `notFound`, `notTrashed`, `referenced` (a place of the group still refers to it).
+   */
+  deleteFromTrash(principal: AuthPrincipal, access: GroupAccess, companyId: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  /**
+   * The ids of the companies in the trash that the caller reaches, in `_id` order, at most `limit`.
+   *
+   * @param limit Most ids returned.
+   * @param after Only the ids greater than this one, `null` for the first call.
+   */
+  trashedIds(principal: AuthPrincipal, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
+  /** How many companies in the trash the caller reaches. */
+  countTrashed(principal: AuthPrincipal, access: GroupAccess): Promise<number>;
 }
 
 /** Collaborators of {@link createCompaniesService}. */
@@ -341,23 +365,27 @@ export function createCompaniesService(deps: CompaniesServiceDeps): CompaniesSer
   /** The flat map of the stored paths and values the write service takes. */
   const flat = (writes: ReturnType<typeof leafWrites>): Record<string, unknown> => Object.fromEntries(writes.map((write) => [write.legacy, write.value]));
 
-  /** A change of state (`trash`, `restore`): the company must be in the opposite state, then the write service moves it. */
+  /**
+   * A change of state (`trash`, `restore`): the company must be in the opposite state, then the write service moves it. `check` is the `If-Match` of the request, or `bulk` (an item of a bulk operation, which has no version),
+   * which takes the version just read; the write checks it again inside its transaction.
+   */
   const changeState = async (
     principal: AuthPrincipal,
     access: GroupAccess,
     companyId: ObjectId,
-    expected: string,
+    check: VersionCheck,
     client: ClientContext,
     to: 'trashed' | 'restored',
   ): Promise<CompanyResult> => {
     const writer = writerFor(principal, access);
     const found = await load(writer, principal, access, companyId);
-    assertVersion(found, expected);
+    const version = check.kind === 'ifMatch' ? check.version : found.version;
+    assertVersion(found, version);
     const trashing = to === 'trashed';
     if (found.company.trashed === trashing) {
       throw new AppError('CONFLICT');
     }
-    const outcome = await (trashing ? writer.trash('companies', companyId, expected) : writer.restore('companies', companyId, expected));
+    const outcome = await (trashing ? writer.trash('companies', companyId, version) : writer.restore('companies', companyId, version));
     if (outcome.outcome !== 'written') {
       throw refused(outcome);
     }
@@ -368,6 +396,20 @@ export function createCompaniesService(deps: CompaniesServiceDeps): CompaniesSer
       after: { trashed: trashing },
     });
     return reload(writer, access, companyId);
+  };
+
+  /** The deletion of a company from the trash; `check` as in {@link changeState}. */
+  const deleteTrashed = async (principal: AuthPrincipal, access: GroupAccess, companyId: ObjectId, check: VersionCheck, client: ClientContext): Promise<void> => {
+    if (!companyInScope(principal.scope, companyId)) {
+      throw notFound();
+    }
+    const writer = writerFor(principal, access);
+    const version = check.kind === 'ifMatch' ? check.version : (await load(writer, principal, access, companyId)).version;
+    const outcome = await writer.deleteTrashed('companies', companyId, version);
+    if (outcome.outcome !== 'deleted') {
+      throw refused(outcome);
+    }
+    await recordDataChange(activityLog, { ...context(principal, access, client, companyId), action: 'company.deleted', before: undefined, after: undefined });
   };
 
   return {
@@ -449,19 +491,18 @@ export function createCompaniesService(deps: CompaniesServiceDeps): CompaniesSer
       return reload(writer, access, companyId);
     },
 
-    trash: (principal, access, companyId, expected, client) => changeState(principal, access, companyId, expected, client, 'trashed'),
+    trash: (principal, access, companyId, expected, client) => changeState(principal, access, companyId, { kind: 'ifMatch', version: expected }, client, 'trashed'),
 
-    restore: (principal, access, companyId, expected, client) => changeState(principal, access, companyId, expected, client, 'restored'),
+    restore: (principal, access, companyId, expected, client) => changeState(principal, access, companyId, { kind: 'ifMatch', version: expected }, client, 'restored'),
 
-    remove: async (principal, access, companyId, expected, client) => {
-      if (!companyInScope(principal.scope, companyId)) {
-        throw notFound();
-      }
-      const outcome = await writerFor(principal, access).deleteTrashed('companies', companyId, expected);
-      if (outcome.outcome !== 'deleted') {
-        throw refused(outcome);
-      }
-      await recordDataChange(activityLog, { ...context(principal, access, client, companyId), action: 'company.deleted', before: undefined, after: undefined });
-    },
+    remove: (principal, access, companyId, expected, client) => deleteTrashed(principal, access, companyId, { kind: 'ifMatch', version: expected }, client),
+
+    restoreFromTrash: (principal, access, companyId, client) => settleItem(() => changeState(principal, access, companyId, { kind: 'bulk' }, client, 'restored')),
+
+    deleteFromTrash: (principal, access, companyId, client) => settleItem(() => deleteTrashed(principal, access, companyId, { kind: 'bulk' }, client)),
+
+    trashedIds: (principal, access, limit, after) => repository.trashedIds(principal, access, limit, after),
+
+    countTrashed: (principal, access) => repository.countTrashed(principal, access),
   };
 }

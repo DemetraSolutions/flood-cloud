@@ -77,6 +77,8 @@ export interface Group {
   readonly dealerId: string | null;
   readonly status: GroupStatus;
   readonly trashed: boolean;
+  /** When the group went to the trash; `null` when it is not there, or the legacy trashed it (informational only). */
+  readonly trashedAt: Date | null;
   readonly demo: boolean;
   readonly features: FeatureFlags;
   /** ISO 639-1 codes. */
@@ -99,6 +101,8 @@ export interface GroupResponse extends GroupCatalogs {
   readonly dealerId: string | null;
   readonly status: GroupStatus;
   readonly trashed: boolean;
+  /** When the group went to the trash (ISO 8601), `null` when unknown. */
+  readonly trashedAt: string | null;
   readonly demo: boolean;
   readonly features: FeatureFlags;
   readonly languages: readonly string[];
@@ -141,6 +145,7 @@ export type LegacyGroupDocument = {
   readonly dealerId?: unknown;
   readonly status?: unknown;
   readonly trash?: unknown;
+  readonly trashDate?: unknown;
   readonly demo?: unknown;
   readonly settings?: unknown;
   readonly publicApi?: unknown;
@@ -179,4 +184,6 @@ export interface GroupChanges {
 /** An update of a legacy group document: `$set` of owned fields only. */
 export interface LegacyGroupUpdate {
   readonly $set: Readonly<Record<string, unknown>>;
+  /** Owned fields to remove (`trashDate` when the group is restored). */
+  readonly $unset?: Readonly<Record<string, ''>>;
 }

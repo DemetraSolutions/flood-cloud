@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signIn } from '../../../testing/session';
 import {
   anonymousOnly,
+  anyPermission,
   authenticated,
   feature,
   groupLanding,
@@ -102,6 +103,18 @@ describe('permission', () => {
 
   it('sends an anonymous visitor to /forbidden', () => {
     expect(serialized(run(permission('users:read')))).toBe('/forbidden');
+  });
+});
+
+describe('anyPermission', () => {
+  it('lets a user with one of the permissions through', () => {
+    signIn({ permissions: ['places:read'] });
+    expect(run(anyPermission('companies:read', 'places:read'))).toBe(true);
+  });
+
+  it('sends a user with none of them to /forbidden', () => {
+    signIn({ permissions: ['profile:read'] });
+    expect(serialized(run(anyPermission('companies:read', 'places:read')))).toBe('/forbidden');
   });
 });
 

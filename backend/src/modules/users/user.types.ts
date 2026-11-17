@@ -45,6 +45,8 @@ export interface User {
   readonly status: UserStatus;
   /** Whether the user is in the trash. */
   readonly trashed: boolean;
+  /** When the user went to the trash; `null` when he is not there, or the legacy trashed him (informational only). */
+  readonly trashedAt: Date | null;
   readonly language: string;
   /** `settings.hiddenInStats`; when that is missing, the leftover `permissions.hiddenInStats`. */
   readonly hiddenInStats: boolean;
@@ -133,6 +135,8 @@ export type LegacyUserDocument = {
   readonly shiftTime?: Readonly<Record<string, unknown>> | number | null;
   readonly status?: boolean;
   readonly trash?: boolean;
+  /** When the user went to the trash (informational); absent on a user the legacy trashed. */
+  readonly trashDate?: Date;
   /** Legacy sessions; never mapped. */
   readonly tokens?: readonly LegacyToken[] | null;
   /** Data URL of the picture. */
@@ -267,6 +271,8 @@ export interface UserResponse {
   readonly placeIds: readonly string[];
   readonly status: UserStatus;
   readonly trashed: boolean;
+  /** When the user went to the trash (ISO 8601), `null` when unknown. */
+  readonly trashedAt: string | null;
   readonly language: string;
   readonly hiddenInStats: boolean;
   readonly description: string | null;

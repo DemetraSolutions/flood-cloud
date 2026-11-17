@@ -52,7 +52,8 @@ describe('POST …/trash and …/restore', () => {
     assert.notEqual(etagOf(trashed), etag);
     const after = (await world.stored(0, id))!;
     assert.equal(after['trash'], true);
-    assert.ok(sameDocument({ ...before, trash: true, updateDate: after['updateDate'] }, after));
+    assert.ok(sameDocument({ ...before, trash: true, updateDate: after['updateDate'], trashDate: after['updateDate'] }, after));
+    assert.equal(trashed.body.data.trashedAt, (after['updateDate'] as Date).toISOString());
     assert.ok(sameDocument(expectedCopy(after, world.group(0).groupId), (await world.copyOf(id))!));
     // The place keeps its reference to the trashed company.
     assert.deepEqual((await ctx.databases.group(world.group(0).groupId, 'cluster0').collection('places').findOne({ _id: place }))!['companyId'], id);
@@ -67,6 +68,8 @@ describe('POST …/trash and …/restore', () => {
     assert.equal(restored.status, 200);
     assert.equal(restored.body.data.trashed, false);
     assert.deepEqual(failure(await call(sa(), 'POST', sub(id, '/restore'), undefined, { 'if-match': etagOf(restored) })), conflict());
+    assert.equal(restored.body.data.trashedAt, null);
+    assert.equal(Object.hasOwn((await world.stored(0, id))!, 'trashDate'), false);
     assert.ok(sameDocument(expectedCopy((await world.stored(0, id))!, world.group(0).groupId), (await world.copyOf(id))!));
     const events = world.office.activity.entries.slice(mark).filter((entry) => entry.action.startsWith('company.'));
     assert.deepEqual(events.map((entry) => [entry.action, entry.resource!.id, entry.groupId, entry.changes!.map((change) => [change.field, change.before, change.after])]), [

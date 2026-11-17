@@ -289,6 +289,8 @@ export interface Place extends PlaceGeneral, PlaceSettings, PlaceLists {
   readonly id: string;
   readonly groupId: string;
   readonly trashed: boolean;
+  /** When the place went to the trash (ISO 8601); `null` when it is not there or the legacy trashed it (informational only). */
+  readonly trashedAt: string | null;
   readonly createdAt: string | null;
   readonly updatedAt: string | null;
   readonly license: PlaceLicense;
@@ -301,6 +303,8 @@ export interface PlaceSummary {
   readonly name: string;
   readonly companyId: string | null;
   readonly trashed: boolean;
+  /** When the place went to the trash (ISO 8601), `null` when unknown. */
+  readonly trashedAt: string | null;
   /** The plan as stored, `null` when the document has none. */
   readonly plan: string | null;
   readonly status: 'active' | 'disabled';
@@ -312,7 +316,7 @@ export interface PlaceSummary {
 }
 
 /** What a request can write of a place: everything of {@link Place} but the read-only fields, with the address as a whole object. */
-export type PlaceWritable = Omit<Place, 'id' | 'groupId' | 'trashed' | 'createdAt' | 'updatedAt'>;
+export type PlaceWritable = Omit<Place, 'id' | 'groupId' | 'trashed' | 'trashedAt' | 'createdAt' | 'updatedAt'>;
 
 /** The body of a modification: any subset of the fields and of the blocks, each block any subset of its fields (the lists and the hours of a week are replaced whole). */
 export type PlacePatch = DeepPartial<PlaceWritable>;

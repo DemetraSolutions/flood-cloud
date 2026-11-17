@@ -88,6 +88,8 @@ function serviceOf(writer: CompaniesPlacesWriter, overrides: Partial<PlacesRepos
   const activity = memoryActivityLog();
   const repository: PlacesRepository = {
     list: async () => ({ items: [], page: { limit: 50, next: null } }),
+    trashedIds: async () => [],
+    countTrashed: async () => 0,
     hasUsers: async () => false,
     missingTemplates: async () => new Set<number>(),
     missingUsers: async () => new Set<number>(),

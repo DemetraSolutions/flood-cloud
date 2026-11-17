@@ -161,15 +161,22 @@ describe('company mapper: reading', () => {
       country: 'IT',
       status: 'active',
       trashed: false,
+      trashedAt: null,
     });
-    assert.deepEqual(toCompanySummary({ _id, name: 5, code: 6, status: 'true', trash: true }), { id: _id.toHexString(), name: '', vatNumber: null, city: null, province: null, country: null, status: 'disabled', trashed: true });
+    assert.deepEqual(toCompanySummary({ _id, name: 5, code: 6, status: 'true', trash: true }), { id: _id.toHexString(), name: '', vatNumber: null, city: null, province: null, country: null, status: 'disabled', trashed: true, trashedAt: null });
+    // The date of the trash: a valid date is an ISO string; anything else (absent, a string, an invalid date) is none.
+    const at = new Date('2026-11-17T09:30:00.000Z');
+    assert.equal(toCompanySummary({ _id, trash: true, trashDate: at }).trashedAt, '2026-11-17T09:30:00.000Z');
+    for (const junk of [undefined, null, '2026-11-17', 17, new Date('nope'), {}]) {
+      assert.equal(toCompanySummary({ _id, trash: true, trashDate: junk }).trashedAt, null);
+    }
   });
 });
 
 describe('company mapper: the table of keys', () => {
   it('has a stored path for every owned key the backend writes, and no other', () => {
     const writable = LEAVES.filter((leaf) => leaf.readOnly !== true).map((leaf) => leaf.legacy);
-    const owned = COMPANIES_OWNED_FIELDS.filter((field) => !['trash', 'updateDate'].includes(field));
+    const owned = COMPANIES_OWNED_FIELDS.filter((field) => !['trash', 'trashDate', 'updateDate'].includes(field));
     assert.deepEqual([...writable].sort(), [...owned].sort());
     assert.equal(writable.length, new Set(writable).size);
     assert.ok(COMPANY_WHOLE_KEYS.every((key) => writable.includes(key)) && COMPANY_BLOCK_PATHS.every((path) => writable.includes(path)));
