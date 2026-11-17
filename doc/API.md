@@ -1346,6 +1346,29 @@ Il listino nazionale dei tabacchi (il file ufficiale ADM), **unico per tutta la 
     - **righe non valide**: un dettaglio per problema, al massimo 50, con `field` `rows[<riga del foglio>].<campo>` (`category`, `code`, `name`, `shortName`, `priceKg`, `price`, `unitWeight`, `numPieces`, `description`, oppure `barcodes[<n>].barcode` / `barcodes[<n>].quantity`, con `n` da 0) e `issue` tra `required`, `type`, `minimum`, `maximum`, `maxLength`, `pattern`, `format`, `taken` (codice già presente nel file). La riga 1 è l'intestazione. Il listino resta com'era.
   - `400 BAD_REQUEST`: corpo multipart non valido. `409 CONFLICT`: chiave già usata con un altro file o richiesta ancora in corso. `429 RATE_LIMITED`. `503 SERVICE_UNAVAILABLE`: troppe importazioni in coda.
 
+## Ricerca di un'azienda per P.IVA (`/v1`, passo 8.1.5)
+
+Compila il wizard "Nuovo cliente" con i dati che Cerved ha di un'azienda italiana. Una sola route, **solo per chi crea clienti**: permesso `groups:create` (in pratica **PSA e D**); SA, CA e PA ricevono `403 FORBIDDEN`, la chiave di negozio `403` (la route non è aperta al negozio) e non esiste su `/public/v1`. **Non è una route di gruppo.** Errori comuni: `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN`, `403 PASSWORD_CHANGE_REQUIRED`.
+
+### GET /v1/vat-lookups/{vatNumber}
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `groups:create`. **Rate limit** dedicato per utente: `RATE_LIMIT_CERVED_LOOKUP_PER_USER`, **10 al minuto** di default e un tetto giornaliero `RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY`, **200 al giorno** (finestra di 24 ore) di default: superato uno dei due, `429 RATE_LIMITED` con `Retry-After`, prima di chiamare il provider; si aggiungono a quello generale: ogni ricerca sono due chiamate a pagamento al provider. Il conteggio vale anche per le richieste con una P.IVA non valida.
+- **Parametro:** `vatNumber`, una P.IVA italiana: **11 cifre con la cifra di controllo giusta**. Si accetta con gli spazi ai lati e con il prefisso `IT` (in qualunque combinazione di maiuscole e minuscole); la risposta riporta sempre le sole 11 cifre.
+- **Cosa fa.** Controlla la P.IVA (senza chiamare nessuno), cerca il soggetto su Cerved e prende **solo** quello la cui `partita_iva` è **esattamente** quella richiesta (mai il primo della lista); poi legge il profilo per la PEC. **Nessuna cache**: ogni ricerca è una chiamata nuova. Timeout di 8 secondi per ogni chiamata, nessuna ripetizione.
+- **Risposta:** `200`
+  ```json
+  { "data": { "vatNumber": "12345678903", "name": "ROSSI SRL", "fiscalCode": "12345678903",
+              "address": { "street": "VIA ROMA 1", "postcode": "20100", "city": "MILANO", "province": "MI", "country": "IT" },
+              "pec": "rossi@pec.example" } }
+  ```
+  Ogni testo è tagliato agli spazi; un dato che Cerved non dà è `null`. `province` è la sigla di due lettere (maiuscola), `null` se Cerved dà altro. `country` è sempre `IT`. **Non ci sono** il codice destinatario (Cerved non lo fornisce), il codice ATECO né la forma giuridica. Se la lettura del profilo fallisce (errore, timeout, risposta illeggibile) la risposta è comunque `200` con `pec: null`.
+- **Errori:**
+  - `422 VALIDATION_ERROR`: `details: [{ "field": "vatNumber", "issue": "format" | "checksum" }]`: `format` se non sono 11 cifre (dopo l'eventuale `IT`: una P.IVA estera è `format`), `checksum` se la cifra di controllo non torna. Il provider non è chiamato.
+  - `404 NOT_FOUND`: Cerved non ha nessun soggetto con **quella** P.IVA (anche se ne restituisce altri).
+  - `429 RATE_LIMITED`: troppe ricerche al minuto o nel giorno (`Retry-After` in secondi).
+  - `503 SERVICE_UNAVAILABLE`: `CERVED_API_KEY` non è configurata (la route resta montata), oppure Cerved ha risposto con un errore, una risposta che non è quella attesa o troppo grande (oltre 1 MB), non ha risposto in 8 secondi o non è raggiungibile. Il corpo e il messaggio del provider non sono mai riportati.
+- **Registro attività:** ogni ricerca registra `vatLookup.performed` (categoria `data`; `resource` `{ type: "vatLookup", id: <P.IVA> }`; metadati `{ outcome: "found" | "notFound" | "unavailable" }`; esito `success` per `found` e `notFound`, `failure` per `unavailable`). Le richieste rifiutate prima della ricerca (`401`, `403`, `422`, `429`) non la registrano. Nessun dato dell'azienda, nessuna chiave. La P.IVA non compare mai nei log applicativi: nel log degli accessi il percorso è `/v1/vat-lookups/:vatNumber` (anche con un target di richiesta in forma assoluta o con segmenti `.`; un target illeggibile è registrato come `/:unparseable`).
+
 ## Registro attività ed errori (`/v1`)
 
 ### GET /v1/activity-log

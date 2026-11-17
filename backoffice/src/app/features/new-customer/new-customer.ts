@@ -17,6 +17,7 @@ import {
   maxLength,
   pattern,
   ReadonlyFieldTree,
+  readonly,
   required,
   submit,
   TreeValidationResult,
@@ -39,6 +40,7 @@ import {
 import { Button } from '../../shared/ui/button/button';
 import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { FormError } from '../../shared/ui/form-error/form-error';
+import { ConfirmDialog } from '../../shared/ui/confirm-dialog/confirm-dialog';
 import { Select } from '../../shared/ui/select/select';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { ToastService } from '../../shared/ui/toast/toast.service';
@@ -68,6 +70,10 @@ import {
   TAX_PRESETS,
   TaxRate,
   vatIssue,
+  VatFillField,
+  VatFillPlan,
+  VatLookup,
+  planVatFill,
 } from './new-customer.types';
 
 const PHONE_PATTERN = /^[0-9 +\-()]*$/;
@@ -81,6 +87,23 @@ interface Created {
   readonly ids: NewCustomerResult;
   readonly username: string;
   readonly password: string;
+}
+
+/** Dictionary key of the label of each field the VAT lookup fills. */
+const VAT_FIELD_LABELS: Record<VatFillField, string> = {
+  companyName: 'NEW_CUSTOMER.FIELD.COMPANY_NAME',
+  fiscalCode: 'NEW_CUSTOMER.FIELD.FISCAL_CODE',
+  street: 'NEW_CUSTOMER.FIELD.STREET',
+  postcode: 'NEW_CUSTOMER.FIELD.POSTCODE',
+  city: 'NEW_CUSTOMER.FIELD.CITY',
+  province: 'NEW_CUSTOMER.FIELD.PROVINCE',
+  pec: 'NEW_CUSTOMER.FIELD.PEC',
+};
+
+/** What the VAT lookup shows under the field: a confirmation or a failure. */
+interface LookupNotice {
+  readonly kind: 'done' | 'error';
+  readonly text: string;
 }
 
 /** `{ issue }` for a validator, nothing when the value is fine. */
@@ -104,6 +127,7 @@ function issueOf(kind: string | undefined): { kind: string } | undefined {
   imports: [
     Button,
     Checkbox,
+    ConfirmDialog,
     FormError,
     FormField,
     PasswordGenerator,
@@ -176,6 +200,8 @@ export class NewCustomer {
     required(path.companyName);
     maxLength(path.companyName, 150);
     required(path.vatNumber);
+    // The VAT number cannot change while its lookup is in flight (the answer would not match it).
+    readonly(path.vatNumber, () => this.lookupBusy());
     validate(path.vatNumber, ({ value }) => issueOf(vatIssue(this.model().country, value())));
     validate(path.fiscalCode, ({ value }) =>
       issueOf(fiscalCodeIssue(this.model().country, value())),
@@ -241,6 +267,24 @@ export class NewCustomer {
     required(path.plan);
     required(path.expirationDate);
   });
+
+  // --- VAT lookup (Cerved): an explicit action of the operator.
+  protected readonly lookupBusy = signal(false);
+  protected readonly lookupNotice = signal<LookupNotice | null>(null);
+  /** The answer waiting for the operator to confirm the overwrite. */
+  private readonly pendingFill = signal<VatFillPlan | null>(null);
+  protected readonly confirmOpen = signal(false);
+  protected readonly confirmMessage = computed(() => {
+    const plan = this.pendingFill();
+    const labels = Object.keys(plan?.overwrite ?? {}).map((field) =>
+      this.i18n.t(VAT_FIELD_LABELS[field as VatFillField]),
+    );
+    return this.i18n.t('NEW_CUSTOMER.LOOKUP.CONFIRM_MESSAGE', { fields: labels.join(', ') });
+  });
+  /** Only for Italy and when the VAT field holds 11 digits. */
+  protected readonly canLookup = computed(
+    () => this.model().country === 'IT' && /^\d{11}$/.test(this.model().vatNumber.trim()),
+  );
 
   protected readonly submitting = computed(() => this.customerForm().submitting());
 
@@ -345,6 +389,98 @@ export class NewCustomer {
     if (!this.usernameEdited && username !== '') {
       this.customerForm.username().value.set(username);
     }
+  }
+
+  // --- VAT lookup.
+
+  /** Asks the backend for the company with the VAT number and fills the form with the answer. */
+  protected async lookupVat(): Promise<void> {
+    this.lookupBusy.set(true);
+    this.lookupNotice.set(null);
+    try {
+      const found = await this.api.lookupVat(this.model().vatNumber.trim());
+      this.applyLookup(found);
+    } catch (error) {
+      this.lookupNotice.set({ kind: 'error', text: this.lookupFailure(error) });
+    } finally {
+      this.lookupBusy.set(false);
+    }
+  }
+
+  /** The operator confirmed: every field of the answer is written, also the ones that differ. */
+  protected confirmFill(): void {
+    const plan = this.pendingFill()!;
+    this.fill({ ...plan.empty, ...plan.overwrite });
+    this.closeConfirm();
+  }
+
+  /** The dialog was closed without confirming: only the empty fields are filled. */
+  protected cancelFill(): void {
+    const plan = this.pendingFill();
+    if (plan !== null) {
+      this.fill(plan.empty);
+      this.closeConfirm();
+    }
+  }
+
+  private applyLookup(found: VatLookup): void {
+    if (found.vatNumber !== this.model().vatNumber.trim()) {
+      this.lookupNotice.set({ kind: 'done', text: this.i18n.t('NEW_CUSTOMER.LOOKUP.STALE') });
+      return;
+    }
+    const provinces = this.countries.areas('IT').map((area) => area.code);
+    const plan = planVatFill(this.model(), found, provinces);
+    if (Object.keys(plan.overwrite).length === 0) {
+      this.fill(plan.empty);
+    } else {
+      this.pendingFill.set(plan);
+      this.confirmOpen.set(true);
+    }
+  }
+
+  private closeConfirm(): void {
+    this.confirmOpen.set(false);
+    this.pendingFill.set(null);
+  }
+
+  private fill(values: Readonly<Partial<Record<VatFillField, string>>>): void {
+    this.model.update((model) => ({ ...model, ...values, country: 'IT' }));
+    this.lookupNotice.set({ kind: 'done', text: this.i18n.t('NEW_CUSTOMER.LOOKUP.DONE') });
+  }
+
+  private lookupFailure(error: unknown): string {
+    if (error instanceof ApiError) {
+      const key: Record<number, string> = {
+        404: 'NEW_CUSTOMER.LOOKUP.NOT_FOUND',
+        422: 'NEW_CUSTOMER.LOOKUP.INVALID',
+        503: 'NEW_CUSTOMER.LOOKUP.UNAVAILABLE',
+      };
+      if (key[error.status] !== undefined) {
+        return this.i18n.t(key[error.status]);
+      }
+      if (error.status === 429) {
+        return this.rateLimited(error.retryAfterSeconds);
+      }
+    }
+    return failureMessage(this.i18n, error);
+  }
+
+  /** The wait of a `429` in the largest sensible unit: the daily cap can ask for hours. */
+  private rateLimited(seconds: number | null): string {
+    if (seconds === null) {
+      return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED');
+    }
+    if (seconds < 120) {
+      return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT', { seconds });
+    }
+    if (seconds < 7200) {
+      return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT_MINUTES', {
+        minutes: Math.ceil(seconds / 60),
+      });
+    }
+    return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT_HOURS', {
+      hours: Math.ceil(seconds / 3600),
+    });
   }
 
   // --- Submission.

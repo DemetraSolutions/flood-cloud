@@ -115,6 +115,14 @@ export interface Config {
   readonly rateLimitDiagnosticsExportPerUser: number;
   /** Imports of the tobacco price list per hour allowed to a user (`RATE_LIMIT_TOBACCOS_IMPORT_PER_USER`). */
   readonly rateLimitTobaccosImportPerUser: number;
+  /** Company lookups on Cerved per minute allowed to a user (`RATE_LIMIT_CERVED_LOOKUP_PER_USER`): each is two paid calls to the provider. */
+  readonly rateLimitCervedLookupPerUser: number;
+  /** Company lookups on Cerved per day allowed to a user (`RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY`). */
+  readonly rateLimitCervedLookupPerUserDaily: number;
+  /** Key of the Cerved API (`CERVED_API_KEY`), a secret; `null` when not configured: the VAT lookup then answers `503`. */
+  readonly cervedApiKey: Secret | null;
+  /** Base URL of the Cerved API (`CERVED_BASE_URL`): an `https` origin (`http` only for `localhost` and `127.0.0.1`), without trailing slash. */
+  readonly cervedBaseUrl: string;
   /** Files host written in the `filesHost` of the groups the onboarding creates (`GROUP_FILES_HOST`, an `https` URL without trailing slash), `''` when unset. */
   readonly groupFilesHost: string;
   /** Minutes an activation code of a store key stays valid (`STORE_ACTIVATION_CODE_TTL_MINUTES`). */
@@ -301,6 +309,50 @@ function readFilesHost(env: Env, issues: ConfigIssue[]): string | undefined {
     }
   }
   issues.push({ variable: 'GROUP_FILES_HOST', reason: 'must be an https URL without credentials, query or fragment' });
+  return undefined;
+}
+
+/** Base URL of the Cerved API when `CERVED_BASE_URL` is not set. */
+export const DEFAULT_CERVED_BASE_URL = 'https://api.cerved.com';
+
+/** A usable Cerved key: at least 16 printable ASCII characters, no space (it travels in an HTTP header). */
+const CERVED_KEY = /^[\x21-\x7e]{16,512}$/;
+
+/**
+ * Reads `CERVED_API_KEY`: optional, and when present at least 16 printable characters without spaces. The value is never echoed.
+ *
+ * @returns The secret, `null` when unset, or `undefined` after recording an issue.
+ */
+function readCervedKey(env: Env, issues: ConfigIssue[]): Secret | null | undefined {
+  const raw = optionalVariable(env, 'CERVED_API_KEY');
+  if (raw === undefined) {
+    return null;
+  }
+  if (!CERVED_KEY.test(raw)) {
+    issues.push({ variable: 'CERVED_API_KEY', reason: 'must be at least 16 printable characters without spaces' });
+    return undefined;
+  }
+  return new Secret(raw);
+}
+
+/**
+ * Reads `CERVED_BASE_URL`: an `https` URL without credentials, query or fragment (`http` only for `localhost` and `127.0.0.1` when `APP_ENV=development`, for the tests).
+ *
+ * @returns The URL without the trailing slashes, the default when unset, or `undefined` after recording an issue.
+ */
+function readCervedBaseUrl(env: Env, issues: ConfigIssue[], appEnv: AppEnv | undefined): string | undefined {
+  const raw = optionalVariable(env, 'CERVED_BASE_URL');
+  if (raw === undefined) {
+    return DEFAULT_CERVED_BASE_URL;
+  }
+  if (URL.canParse(raw)) {
+    const url = new URL(raw);
+    const secure = url.protocol === 'https:' || (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname) && appEnv === 'development');
+    if (secure && url.username === '' && url.password === '' && url.search === '' && url.hash === '') {
+      return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+    }
+  }
+  issues.push({ variable: 'CERVED_BASE_URL', reason: 'must be an https URL without credentials, query or fragment (http only for localhost and 127.0.0.1 when APP_ENV=development)' });
   return undefined;
 }
 
@@ -601,6 +653,10 @@ export function loadConfig(env: Env): Config {
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
   const rateLimitDiagnosticsExportPerUser = readInteger(env, issues, 'RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', 5, 1, 100000);
   const rateLimitTobaccosImportPerUser = readInteger(env, issues, 'RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', 5, 1, 100000);
+  const rateLimitCervedLookupPerUser = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER', 10, 1, 100000);
+  const rateLimitCervedLookupPerUserDaily = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY', 200, 1, 1_000_000);
+  const cervedApiKey = readCervedKey(env, issues);
+  const cervedBaseUrl = readCervedBaseUrl(env, issues, appEnv);
   const storeActivationCodeTtlMinutes = readInteger(env, issues, 'STORE_ACTIVATION_CODE_TTL_MINUTES', 1440, 5, 10080);
   const groupFilesHost = readFilesHost(env, issues);
   const media = readMedia(env, issues);
@@ -669,6 +725,10 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreKeyAdminPerUser === undefined ||
     rateLimitDiagnosticsExportPerUser === undefined ||
     rateLimitTobaccosImportPerUser === undefined ||
+    rateLimitCervedLookupPerUser === undefined ||
+    rateLimitCervedLookupPerUserDaily === undefined ||
+    cervedApiKey === undefined ||
+    cervedBaseUrl === undefined ||
     storeActivationCodeTtlMinutes === undefined ||
     groupFilesHost === undefined ||
     media === undefined ||
@@ -709,6 +769,10 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreKeyAdminPerUser,
     rateLimitDiagnosticsExportPerUser,
     rateLimitTobaccosImportPerUser,
+    rateLimitCervedLookupPerUser,
+    rateLimitCervedLookupPerUserDaily,
+    cervedApiKey,
+    cervedBaseUrl,
     storeActivationCodeTtlMinutes,
     groupFilesHost,
     media,

@@ -9,6 +9,7 @@ import {
   fiscalCodeIssue,
   initialModel,
   planFeatures,
+  planVatFill,
   postcodeIssue,
   presetFeatures,
   recipientCodeIssue,
@@ -275,5 +276,49 @@ describe('buildBody', () => {
       undefined,
     );
     expect(noProvince.place.address).toEqual({ street: 'a', postcode: 'b', city: 'c' });
+  });
+});
+
+describe('planVatFill', () => {
+  const found = {
+    vatNumber: '00743110157',
+    name: 'Azienda Spa',
+    fiscalCode: null,
+    address: {
+      street: 'Via 1',
+      postcode: '20100',
+      city: 'Milano',
+      province: 'mi',
+      country: 'IT' as const,
+    },
+    pec: ' a@pec.it ',
+  };
+
+  it('fills the empty fields with trimmed values and upper-case provinces', () => {
+    expect(planVatFill(initialModel(new Date()), found, ['MI'])).toEqual({
+      empty: {
+        companyName: 'Azienda Spa',
+        street: 'Via 1',
+        postcode: '20100',
+        city: 'Milano',
+        province: 'MI',
+        pec: 'a@pec.it',
+      },
+      overwrite: {},
+    });
+  });
+
+  it('separates the fields that hold another value and ignores equal ones', () => {
+    const model = {
+      ...initialModel(new Date()),
+      companyName: 'ALTRA',
+      city: 'milano',
+      street: ' ',
+    };
+    const plan = planVatFill(model, found, []);
+    expect(plan.overwrite).toEqual({ companyName: 'Azienda Spa' });
+    expect(plan.empty).toMatchObject({ street: 'Via 1' });
+    expect(plan.empty).not.toHaveProperty('province');
+    expect(plan.empty).not.toHaveProperty('city');
   });
 });

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Document, ObjectId } from 'mongodb';
 import { createBackofficeModules } from '../../src/composition.ts';
+import type { CervedHttpOptions } from '../../src/integrations/cerved/index.ts';
 import type { MediaStorage } from '../../src/integrations/gcs/index.ts';
 import { ensureIndexes } from '../../src/db/indexes.ts';
 import { legacyPasswordHash } from '../../src/shared/security/legacy-password.ts';
@@ -75,6 +76,8 @@ export interface BackofficeOptions {
   readonly extraRoutes?: readonly RouteDefinition[];
   /** The media storage; none (the upload answers 503) by default. */
   readonly mediaStorage?: MediaStorage | null;
+  /** The `fetch`, timeout and size limit of the calls to Cerved (its base URL and key are set through `env`). */
+  readonly cervedHttp?: CervedHttpOptions;
 }
 
 /** Thresholds high enough for tests that are not about rate limits. */
@@ -108,7 +111,7 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
   const config = testConfig(env);
   const logs = memoryLogger();
   const rateLimiter = options.rateLimiter ?? memoryRateLimiter();
-  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, rateLimiter, mediaStorage: options.mediaStorage ?? null });
+  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, rateLimiter, mediaStorage: options.mediaStorage ?? null, ...(options.cervedHttp === undefined ? {} : { cervedHttp: options.cervedHttp }) });
   const app = await startApp(
     {
       config,

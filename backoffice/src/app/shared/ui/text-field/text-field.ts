@@ -68,6 +68,8 @@ export class TextField {
   readonly required = input(false, { transform: booleanAttribute });
   /** Disables the field. */
   readonly disabled = input(false, { transform: booleanAttribute });
+  /** Makes the field read-only (the value is shown and submitted but cannot be edited). */
+  readonly readonly = input(false, { transform: booleanAttribute });
   /** Emitted when the field loses focus (to start showing errors). */
   readonly blurred = output<void>();
 

@@ -32,6 +32,10 @@ export interface RateLimitRules {
   readonly diagnosticsExportPerUser: RateLimitRule;
   /** Imports of the tobacco price list per authenticated user per hour: each parses a workbook of up to 10 MB and replaces the whole collection. */
   readonly tobaccosImportPerUser: RateLimitRule;
+  /** Company lookups on Cerved per authenticated user: each is two paid calls to the provider. */
+  readonly cervedLookupPerUser: RateLimitRule;
+  /** Company lookups on Cerved per authenticated user per day (a cap on the cost, next to the per-minute rule). */
+  readonly cervedLookupPerUserDaily: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
   readonly apiPerUser: RateLimitRule;
   /** Every `/v1` request per store key (the route builder applies it to every route a store key may call, and to no other: the per-user rule would let a store through with no limit, its key being the user's). */
@@ -90,6 +94,8 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     }),
     diagnosticsExportPerUser: Object.freeze({ bucket: 'diagnostics-export:user', limit: config.rateLimitDiagnosticsExportPerUser, key: perUser }),
     tobaccosImportPerUser: Object.freeze({ bucket: 'tobaccos-import:user', limit: config.rateLimitTobaccosImportPerUser, windowSeconds: HOUR_SECONDS, key: perUser }),
+    cervedLookupPerUser: Object.freeze({ bucket: 'cerved-lookup:user', limit: config.rateLimitCervedLookupPerUser, key: perUser }),
+    cervedLookupPerUserDaily: Object.freeze({ bucket: 'cerved-lookup-day:user', limit: config.rateLimitCervedLookupPerUserDaily, windowSeconds: DAY_SECONDS, key: perUser }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
     apiPerStore: Object.freeze({ bucket: 'api:store', limit: config.rateLimitApiPerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),

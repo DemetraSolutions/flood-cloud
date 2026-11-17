@@ -3242,6 +3242,21 @@
       "PASSWORD_NOTE": "La password si mostra solo ora: consegnala al cliente, che dovrà cambiarla al primo accesso.",
       "ANOTHER": "Crea un altro cliente"
     },
+    "LOOKUP": {
+      "BUTTON": "Cerca P.IVA",
+      "DONE": "Dati dell'azienda compilati dal registro delle imprese.",
+      "NOT_FOUND": "Nessuna azienda trovata con questa P.IVA",
+      "INVALID": "P.IVA non valida",
+      "RATE_LIMITED": "Troppe ricerche: riprova tra poco.",
+      "RATE_LIMITED_WAIT": "Troppe ricerche: riprova tra {seconds} secondi.",
+      "RATE_LIMITED_WAIT_MINUTES": "Troppe ricerche: riprova tra circa {minutes} minuti.",
+      "RATE_LIMITED_WAIT_HOURS": "Limite di ricerche raggiunto: riprova tra circa {hours} ore.",
+      "STALE": "La P.IVA è cambiata durante la ricerca: il risultato è stato scartato, cerca di nuovo.",
+      "UNAVAILABLE": "Servizio Cerved non disponibile, compila a mano",
+      "CONFIRM_TITLE": "Sostituire i dati inseriti?",
+      "CONFIRM_MESSAGE": "La ricerca ha trovato valori diversi per: {fields}. Sostituire quelli già compilati?",
+      "CONFIRM_ACTION": "Sostituisci"
+    },
     "ERROR": {
       "DEALER_NOT_FOUND": "Il dealer scelto non esiste o non è più attivo.",
       "RATE_LIMITED_WAIT": "Troppe creazioni: riprova tra {seconds} secondi."

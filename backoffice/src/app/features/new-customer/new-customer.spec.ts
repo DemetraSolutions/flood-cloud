@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { API, backend, errorBody, provideApiTesting, settle } from '../../../testing/api';
+import { emulateNativeDialog } from '../../../testing/dialog';
 import { fakeDealer } from '../../../testing/dealers';
 import { errorOf, findControl } from '../../../testing/forms';
 import { signIn } from '../../../testing/session';
@@ -156,6 +157,10 @@ async function render({
       .map((t) => t.message);
   const ctx = {
     root,
+    page: harness.routeDebugElement!.componentInstance as {
+      cancelFill(): void;
+      model: { update(change: (m: { vatNumber: string }) => { vatNumber: string }): void };
+    },
     view,
     control,
     has,
@@ -868,6 +873,260 @@ describe('NewCustomer: submission', () => {
       const retry = await send(ctx);
       expect(message(ctx)).toBe('');
       retry.flush({ data: IDS }, { status: 201, statusText: 'Created' });
+      await ctx.view();
+    });
+  });
+});
+
+describe('NewCustomer: VAT lookup', () => {
+  const LOOKUP = `${API}/v1/vat-lookups/00743110157`;
+  const FOUND = {
+    vatNumber: '00743110157',
+    name: 'Azienda Trovata Spa',
+    fiscalCode: '00743110157',
+    address: {
+      street: 'Via Dante 2',
+      postcode: '10100',
+      city: 'Torino',
+      province: 'TO',
+      country: 'IT',
+    },
+    pec: 'azienda@pec.example.it',
+  };
+  const lookupButton = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (b) => b.textContent?.trim() === 'NEW_CUSTOMER.LOOKUP.BUTTON',
+    )!;
+  const dialogButton = (root: HTMLElement, text: string) =>
+    [...root.querySelectorAll<HTMLButtonElement>('dialog[open] button')].find(
+      (b) => b.textContent?.trim() === text,
+    )!;
+  const notice = (root: HTMLElement) => root.querySelector<HTMLElement>('.lookup-notice')!;
+
+  /** Types the VAT number and presses the button. */
+  async function search(ctx: Ctx, vat = '00743110157') {
+    await ctx.type(L.vat, vat);
+    lookupButton(ctx.root).click();
+    await ctx.view();
+  }
+
+  it('is enabled only for Italy and with 11 digits in the VAT field', async () => {
+    const ctx = await render();
+    expect(lookupButton(ctx.root).disabled).toBe(true);
+    await ctx.type(L.vat, '1234567890');
+    expect(lookupButton(ctx.root).disabled).toBe(true);
+    await ctx.type(L.vat, ' 00743110157 ');
+    expect(lookupButton(ctx.root).disabled).toBe(false);
+    await ctx.type(L.country, 'DE');
+    expect(lookupButton(ctx.root).disabled).toBe(true);
+  });
+
+  it('fills the empty fields, keeps the recipient code and shows the busy state meanwhile', async () => {
+    const ctx = await render();
+    await ctx.type(L.sdi, 'ABC1234');
+    await search(ctx);
+    expect(lookupButton(ctx.root).getAttribute('aria-busy')).toBe('true');
+    expect(lookupButton(ctx.root).disabled).toBe(true);
+    const request = backend().expectOne(LOOKUP);
+    expect(request.request.method).toBe('GET');
+    request.flush({ data: FOUND });
+    await ctx.view();
+    expect(lookupButton(ctx.root).getAttribute('aria-busy')).toBeNull();
+    expect(ctx.control(L.company).value).toBe('Azienda Trovata Spa');
+    expect(ctx.control(L.cf).value).toBe('00743110157');
+    expect(ctx.control(L.street).value).toBe('Via Dante 2');
+    expect(ctx.control(L.postcode).value).toBe('10100');
+    expect(ctx.control(L.city).value).toBe('Torino');
+    expect(ctx.control(L.province).value).toBe('TO');
+    expect(ctx.control(L.country).value).toBe('IT');
+    expect(ctx.control(L.pec).value).toBe('azienda@pec.example.it');
+    expect(ctx.control(L.sdi).value).toBe('ABC1234');
+    expect(notice(ctx.root).getAttribute('role')).toBe('status');
+    expect(notice(ctx.root).textContent).toContain('NEW_CUSTOMER.LOOKUP.DONE');
+    expect(ctx.root.querySelector('dialog[open]')).toBeNull();
+  });
+
+  it('leaves empty what the lookup does not give, and a province the select does not offer', async () => {
+    const ctx = await render();
+    await search(ctx);
+    backend()
+      .expectOne(LOOKUP)
+      .flush({
+        data: {
+          ...FOUND,
+          name: ' ',
+          fiscalCode: null,
+          pec: null,
+          address: { ...FOUND.address, province: 'ZZ' },
+        },
+      });
+    await ctx.view();
+    expect(ctx.control(L.company).value).toBe('');
+    expect(ctx.control(L.cf).value).toBe('');
+    expect(ctx.control(L.pec).value).toBe('');
+    expect(ctx.control(L.province).value).toBe('');
+    expect(ctx.control(L.city).value).toBe('Torino');
+  });
+
+  it('fills a province without code as empty', async () => {
+    const ctx = await render();
+    await search(ctx);
+    backend()
+      .expectOne(LOOKUP)
+      .flush({ data: { ...FOUND, address: { ...FOUND.address, province: null } } });
+    await ctx.view();
+    expect(ctx.control(L.province).value).toBe('');
+  });
+
+  it('does not ask when the filled fields already hold the same value (ignoring case)', async () => {
+    const ctx = await render();
+    await ctx.type(L.company, 'azienda trovata spa');
+    await ctx.type(L.city, 'Torino');
+    await search(ctx);
+    backend().expectOne(LOOKUP).flush({ data: FOUND });
+    await ctx.view();
+    expect(ctx.root.querySelector('dialog[open]')).toBeNull();
+    expect(ctx.control(L.company).value).toBe('azienda trovata spa');
+    expect(ctx.control(L.street).value).toBe('Via Dante 2');
+  });
+
+  describe('fields that would change', () => {
+    beforeEach(emulateNativeDialog);
+    async function ask() {
+      const ctx = await render();
+      await ctx.type(L.company, 'Nome Scritto');
+      await ctx.type(L.city, 'Milano');
+      await search(ctx);
+      backend().expectOne(LOOKUP).flush({ data: FOUND });
+      await ctx.view();
+      return ctx;
+    }
+
+    it('lists them in a confirm dialog and writes nothing before the answer', async () => {
+      const ctx = await ask();
+      const dialog = ctx.root.querySelector('dialog[open]')!;
+      expect(dialog.textContent).toContain(
+        'NEW_CUSTOMER.LOOKUP.CONFIRM_MESSAGE {"fields":"NEW_CUSTOMER.FIELD.COMPANY_NAME, NEW_CUSTOMER.FIELD.CITY"}',
+      );
+      expect(ctx.control(L.company).value).toBe('Nome Scritto');
+      expect(ctx.control(L.street).value).toBe('');
+    });
+
+    it('overwrites everything on confirm', async () => {
+      const ctx = await ask();
+      dialogButton(ctx.root, 'NEW_CUSTOMER.LOOKUP.CONFIRM_ACTION').click();
+      await ctx.view();
+      expect(ctx.root.querySelector('dialog[open]')).toBeNull();
+      expect(ctx.control(L.company).value).toBe('Azienda Trovata Spa');
+      expect(ctx.control(L.city).value).toBe('Torino');
+      expect(ctx.control(L.street).value).toBe('Via Dante 2');
+      expect(notice(ctx.root).textContent).toContain('NEW_CUSTOMER.LOOKUP.DONE');
+    });
+
+    it('fills only the empty fields on cancel', async () => {
+      const ctx = await ask();
+      dialogButton(ctx.root, 'COMMON.CANCEL').click();
+      await ctx.view();
+      expect(ctx.root.querySelector('dialog[open]')).toBeNull();
+      expect(ctx.control(L.company).value).toBe('Nome Scritto');
+      expect(ctx.control(L.city).value).toBe('Milano');
+      expect(ctx.control(L.street).value).toBe('Via Dante 2');
+      expect(ctx.control(L.pec).value).toBe('azienda@pec.example.it');
+    });
+
+    it('ignores a close that arrives when nothing is pending', async () => {
+      const ctx = await ask();
+      dialogButton(ctx.root, 'NEW_CUSTOMER.LOOKUP.CONFIRM_ACTION').click();
+      await ctx.view();
+      ctx.page.cancelFill();
+      expect(ctx.control(L.company).value).toBe('Azienda Trovata Spa');
+    });
+  });
+
+  it('locks the VAT field while the request is in flight and unlocks it after', async () => {
+    const ctx = await render();
+    await search(ctx);
+    expect((ctx.control(L.vat) as HTMLInputElement).readOnly).toBe(true);
+    backend().expectOne(LOOKUP).flush({ data: FOUND });
+    await ctx.view();
+    expect((ctx.control(L.vat) as HTMLInputElement).readOnly).toBe(false);
+  });
+
+  it('discards an answer for a VAT number that is no longer the one in the form', async () => {
+    const ctx = await render();
+    await search(ctx);
+    ctx.page.model.update((m) => ({ ...m, vatNumber: '00000000000' }));
+    backend().expectOne(LOOKUP).flush({ data: FOUND });
+    await ctx.view();
+    expect(ctx.control(L.company).value).toBe('');
+    expect(notice(ctx.root).getAttribute('role')).toBe('status');
+    expect(notice(ctx.root).textContent).toContain('NEW_CUSTOMER.LOOKUP.STALE');
+  });
+
+  describe('errors', () => {
+    async function fail(code: string, headers?: Record<string, string>) {
+      const ctx = await render();
+      await search(ctx);
+      backend()
+        .expectOne(LOOKUP)
+        .flush(errorBody(code), {
+          status: {
+            NOT_FOUND: 404,
+            VALIDATION_ERROR: 422,
+            RATE_LIMITED: 429,
+            SERVICE_UNAVAILABLE: 503,
+            INTERNAL_ERROR: 500,
+          }[code]!,
+          statusText: code,
+          headers,
+        });
+      await ctx.view();
+      return ctx;
+    }
+
+    it.each([
+      ['NOT_FOUND', 'NEW_CUSTOMER.LOOKUP.NOT_FOUND'],
+      ['VALIDATION_ERROR', 'NEW_CUSTOMER.LOOKUP.INVALID'],
+      ['SERVICE_UNAVAILABLE', 'NEW_CUSTOMER.LOOKUP.UNAVAILABLE'],
+      ['RATE_LIMITED', 'NEW_CUSTOMER.LOOKUP.RATE_LIMITED'],
+      ['INTERNAL_ERROR', 'ERRORS.API.INTERNAL_ERROR'],
+    ])('shows the message of %s as an alert and leaves the form alone', async (code, text) => {
+      const ctx = await fail(code);
+      expect(notice(ctx.root).getAttribute('role')).toBe('alert');
+      expect(notice(ctx.root).textContent).toContain(text);
+      expect(lookupButton(ctx.root).disabled).toBe(false);
+      expect(ctx.control(L.company).value).toBe('');
+    });
+
+    it('tells how many seconds to wait after a 429 with Retry-After', async () => {
+      const ctx = await fail('RATE_LIMITED', { 'Retry-After': '42' });
+      expect(notice(ctx.root).textContent).toContain(
+        'NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT {"seconds":42}',
+      );
+    });
+
+    it('shows the generic message for an unexpected failure', async () => {
+      const ctx = await render();
+      vi.spyOn(NewCustomerApi.prototype, 'lookupVat').mockRejectedValue(new Error('boom'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      await search(ctx);
+      expect(notice(ctx.root).textContent).toContain('ERRORS.GENERIC.MESSAGE');
+    });
+
+    it.each([
+      ['601', 'RATE_LIMITED_WAIT_MINUTES {"minutes":11}'],
+      ['36000', 'RATE_LIMITED_WAIT_HOURS {"hours":10}'],
+    ])('says a long Retry-After of %s seconds in minutes or hours', async (seconds, text) => {
+      const ctx = await fail('RATE_LIMITED', { 'Retry-After': seconds });
+      expect(notice(ctx.root).textContent).toContain(text);
+    });
+
+    it('clears the previous message when the next search starts', async () => {
+      const ctx = await fail('NOT_FOUND');
+      lookupButton(ctx.root).click();
+      await ctx.view();
+      expect(notice(ctx.root).textContent?.trim()).toBe('');
+      backend().expectOne(LOOKUP).flush({ data: FOUND });
       await ctx.view();
     });
   });

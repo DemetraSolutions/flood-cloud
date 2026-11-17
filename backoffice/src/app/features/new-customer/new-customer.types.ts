@@ -369,3 +369,75 @@ export function eInvoicingIssue(model: NewCustomerModel): string | undefined {
     ? 'required'
     : undefined;
 }
+
+/** The subject the VAT lookup (`GET /v1/vat-lookups/{vatNumber}`) found; a missing text is `null`. */
+export interface VatLookup {
+  readonly vatNumber: string;
+  readonly name: string | null;
+  readonly fiscalCode: string | null;
+  readonly address: {
+    readonly street: string | null;
+    readonly postcode: string | null;
+    readonly city: string | null;
+    /** Two-letter province code. */
+    readonly province: string | null;
+    readonly country: 'IT';
+  };
+  readonly pec: string | null;
+}
+
+/** Company fields the VAT lookup can fill. The recipient code is never one of them. */
+export type VatFillField =
+  'companyName' | 'fiscalCode' | 'street' | 'postcode' | 'city' | 'province' | 'pec';
+
+/** Which fields the lookup fills and which already hold a different value. */
+export interface VatFillPlan {
+  /** Fields that are empty and get a value. */
+  readonly empty: Readonly<Partial<Record<VatFillField, string>>>;
+  /** Fields that hold a different value: they change only when the user confirms. */
+  readonly overwrite: Readonly<Partial<Record<VatFillField, string>>>;
+}
+
+/**
+ * Compares the form with the lookup. A value the lookup does not give is left alone; a value
+ * equal to the current one (ignoring case) is not a change; a province the select does not offer
+ * is left empty.
+ *
+ * @param model The form.
+ * @param found What the lookup returned.
+ * @param provinces The province codes the select offers for Italy.
+ * @returns The fields to fill and the fields that would be overwritten.
+ */
+export function planVatFill(
+  model: NewCustomerModel,
+  found: VatLookup,
+  provinces: readonly string[],
+): VatFillPlan {
+  const candidates: Record<VatFillField, string | null> = {
+    companyName: found.name,
+    fiscalCode: found.fiscalCode,
+    street: found.address.street,
+    postcode: found.address.postcode,
+    city: found.address.city,
+    province:
+      found.address.province !== null && provinces.includes(found.address.province.toUpperCase())
+        ? found.address.province.toUpperCase()
+        : null,
+    pec: found.pec,
+  };
+  const empty: Partial<Record<VatFillField, string>> = {};
+  const overwrite: Partial<Record<VatFillField, string>> = {};
+  for (const field of Object.keys(candidates) as VatFillField[]) {
+    const value = candidates[field]?.trim();
+    if (value === undefined || value === '') {
+      continue;
+    }
+    const current = model[field].trim();
+    if (current === '') {
+      empty[field] = value;
+    } else if (current.toLowerCase() !== value.toLowerCase()) {
+      overwrite[field] = value;
+    }
+  }
+  return { empty, overwrite };
+}

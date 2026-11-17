@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { RequestHandler } from 'express';
 import type { Config } from './config.ts';
+import { createCervedClient } from './integrations/cerved/index.ts';
+import type { CervedHttpOptions } from './integrations/cerved/index.ts';
 import type { MediaStorage } from './integrations/gcs/index.ts';
 import type { Databases } from './db/databases.ts';
 import type { ActivityLog } from './shared/activity-log/activity-log.ts';
@@ -98,6 +100,9 @@ import { createGroupOptionsReader } from './modules/users/group-options.ts';
 import { createUsersController } from './modules/users/users.controller.ts';
 import { createUsersRoutes } from './modules/users/users.routes.ts';
 import { createUsersService } from './modules/users/users.service.ts';
+import { createVatLookupsController } from './modules/vat-lookups/vat-lookups.controller.ts';
+import { createVatLookupsRoutes } from './modules/vat-lookups/vat-lookups.routes.ts';
+import { createVatLookupsService } from './modules/vat-lookups/vat-lookups.service.ts';
 import { createUsersRepository } from './modules/users/users.repository.ts';
 
 /** Everything the application needs from the backoffice modules, wired over real repositories. */
@@ -122,13 +127,15 @@ export interface BackofficeDeps {
   readonly rateLimiter: RateLimiter;
   /** The media storage built at start-up (`createMediaStorage`); `null` or absent when it is disabled (the upload answers `503`). */
   readonly mediaStorage?: MediaStorage | null;
+  /** The `fetch`, the timeout and the size limit of the calls to Cerved; only a test sets them (the base URL and the key come from the configuration). */
+  readonly cervedHttp?: CervedHttpOptions;
   /** Clock in epoch milliseconds; defaults to `Date.now`. */
   readonly now?: () => number;
 }
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the companies, the places, the store keys of the points of sale, the media (images), the groups, the activity log monitor and the browser error reports. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the companies, the places, the store keys of the points of sale, the media (images), the groups, the activity log monitor, the company lookup on Cerved and the browser error reports. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -256,6 +263,9 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
   const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
   const tobaccos = createTobaccosController(createTobaccosService({ repository: createTobaccosRepository(databases), activityLog, now }));
+  const vatLookups = createVatLookupsController(
+    createVatLookupsService({ cerved: createCervedClient({ apiKey: config.cervedApiKey, baseUrl: config.cervedBaseUrl, ...deps.cervedHttp }), activityLog, logger }),
+  );
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
     routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
@@ -266,6 +276,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createDiagnosticsRoutes(diagnostics, rules),
       ...createEmailTemplatesRoutes(emailTemplates, idempotency),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
+      ...createVatLookupsRoutes(vatLookups, rules),
       ...createClientErrorsRoutes(clientErrors, rules),
     ],
     authenticate,

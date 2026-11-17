@@ -13,10 +13,10 @@ import { testConfig } from '../helpers/app.ts';
 const rules = createRateLimitRules(testConfig());
 
 describe('createRateLimitRules', () => {
-  it('builds the seventeen rules from the thresholds', () => {
+  it('builds the nineteen rules from the thresholds', () => {
     assert.deepEqual(
       Object.values(rules).map(({ bucket, limit }) => [bucket, limit]),
-      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['media-upload:user', 30], ['media-upload-day:user', 300], ['media-upload-day:group', 2000], ['diagnostics-export:user', 5], ['tobaccos-import:user', 5], ['api:user', 300], ['api:store', 600], ['storeActivation:ip', 10], ['storeKeyAdmin:user', 20]],
+      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['media-upload:user', 30], ['media-upload-day:user', 300], ['media-upload-day:group', 2000], ['diagnostics-export:user', 5], ['tobaccos-import:user', 5], ['cerved-lookup:user', 10], ['cerved-lookup-day:user', 200], ['api:user', 300], ['api:store', 600], ['storeActivation:ip', 10], ['storeKeyAdmin:user', 20]],
     );
     const custom = createRateLimitRules(testConfig({ RATE_LIMIT_LOGIN_PER_USERNAME: '7', RATE_LIMIT_API_PER_USER: '9', RATE_LIMIT_MEDIA_UPLOAD_PER_USER: '4', RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY: '8', RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY: '9' }));
     assert.deepEqual([custom.loginPerUsername.limit, custom.apiPerUser.limit, custom.mediaUploadPerUser.limit], [7, 9, 4]);
@@ -43,6 +43,10 @@ describe('createRateLimitRules', () => {
     assert.equal(rules.tobaccosImportPerUser.key({} as never, user), '0123456789abcdef01234567');
     assert.equal(rules.tobaccosImportPerUser.limit, 5);
     assert.equal(rules.tobaccosImportPerUser.windowSeconds, 3600);
+    assert.equal(rules.cervedLookupPerUser.key({} as never, user), '0123456789abcdef01234567');
+    assert.equal(rules.cervedLookupPerUser.key({} as never, { locals: {} } as never), null);
+    assert.deepEqual([rules.cervedLookupPerUserDaily.key({} as never, user), rules.cervedLookupPerUserDaily.windowSeconds], ['0123456789abcdef01234567', 86400]);
+    assert.deepEqual([rules.cervedLookupPerUser.bucket, rules.cervedLookupPerUser.limit, rules.cervedLookupPerUser.windowSeconds], ['cerved-lookup:user', 10, undefined]);
   });
 
   it('keys by normalized username, IP and user id', () => {
