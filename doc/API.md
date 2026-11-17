@@ -887,6 +887,91 @@ La credenziale con cui il **server di punto vendita** (app separata, D-22) chiam
   ```
 - **Errori:** `401`; `403 STORE_DISABLED`; `403 FORBIDDEN` (non è una chiave di negozio); `429`
 
+## Chiavi delle API pubbliche (`/v1`)
+
+Le chiavi con cui un'integrazione di un gruppo chiama `/public/v1` (passo 9A; `doc/Security-Model.md` §6–7). Si gestiscono solo da **PSA e D** nei gruppi del loro perimetro (`apiKeys:read`, `apiKeys:manage`, nel tetto dei due ruoli): SA, CA e PA ricevono `403`, come la chiave di negozio e come ogni richiesta senza credenziali (`401`); un D fuori dai propri gruppi `404`. Sono route di gruppo (`group: true`). Più chiavi per gruppo (al massimo **50 attive**), ognuna con permessi, restrizioni, scadenza e limiti propri; una chiave revocata resta nell'elenco per lo storico (non c'è cancellazione). Le chiavi **non funzionano** finché il gruppo non ha acceso `publicApi.enabled` (solo il PSA, `PATCH /v1/groups/{groupId}`).
+
+Rappresentazione di una chiave (mai l'hash né il segreto):
+```json
+{
+  "id": "6650c0a1b2c3d4e5f6a7b8c9",
+  "name": "Webshop",
+  "prefix": "fc_pk_AbCdEf",
+  "permissions": ["places:read", "companies:read"],
+  "restrictions": { "companyIds": ["665f1c2e9b1d4a0012ab3411"], "placeIds": null },
+  "rateLimitPerMinute": 60,
+  "dailyQuota": 10000,
+  "expiresAt": "2027-11-17T00:00:00.000Z",
+  "status": "active",
+  "createdAt": "2026-11-17T10:00:00.000Z",
+  "createdBy": { "id": "665f1c2e9b1d4a0012ab34d1", "role": "D" },
+  "lastUsedAt": "2026-11-17T12:31:00.000Z",
+  "revokedAt": null,
+  "revokedBy": null
+}
+```
+`permissions` sono del catalogo **pubblico** (`places:read`, `companies:read`, `catalog:read`), non del backoffice. `restrictions.companyIds` e `restrictions.placeIds` sono elenchi di id (1–100) o `null` per nessuna restrizione di quel tipo; con entrambe vale l'intersezione. `status` è `active` o `revoked`; `lastUsedAt` è aggiornato al più una volta al minuto.
+
+### GET /v1/groups/{groupId}/api-keys
+- **Autenticazione e permesso:** Bearer backoffice, `apiKeys:read` (PSA e D)
+- **Query:** `limit` (1–200, default 50), `cursor` (opaco), `status` (`active` | `revoked`); ordine fisso, dalla più recente; nessun'altra proprietà (`422`)
+- **Risposta:** `200` `{ "data": [chiave…], "page": { "limit": 50, "next": null } }`
+- **Errori:** comuni; `403`; `404`; `422`
+
+### POST /v1/groups/{groupId}/api-keys
+- **Autenticazione e permesso:** Bearer backoffice, `apiKeys:manage` (PSA e D); 20 scritture di chiavi al minuto per utente
+- **Body** (massimo 16 KB, nessun'altra proprietà):
+  | Campo | Tipo | Obbligatorio | Vincoli |
+  |---|---|---|---|
+  | `name` | stringa | sì | 1–100 caratteri, senza caratteri di controllo |
+  | `permissions` | array | sì | almeno uno, senza ripetizioni, del catalogo pubblico |
+  | `restrictions` | oggetto | no | `{ "companyIds"?: id[] \| null, "placeIds"?: id[] \| null }`, 1–100 id ciascuno, tutti di aziende e punti vendita **del gruppo** e fuori dal cestino, ognuno una volta sola |
+  | `expiresAt` | data ISO o `null` | no | nel futuro e al più 3 anni da ora |
+  | `rateLimitPerMinute` | intero | no | 1–6000; **solo il PSA** |
+  | `dailyQuota` | intero | no | 1–10 000 000; **solo il PSA** |
+  ```json
+  { "name": "Webshop", "permissions": ["places:read", "companies:read"], "restrictions": { "companyIds": ["665f1c2e9b1d4a0012ab3411"] }, "expiresAt": "2027-11-17T00:00:00.000Z" }
+  ```
+  Senza limiti nel body la chiave **eredita** quelli del gruppo (`publicApi.defaultRateLimitPerMinute` e `defaultDailyQuota`, o i default della piattaforma: 60 al minuto e 10 000 al giorno). Un D che invia un limite riceve `403` con `details: [{ "field": "rateLimitPerMinute", "issue": "notAllowed" }]` e non si crea nulla.
+- **Header particolari:** nessuna `Idempotency-Key` (un nuovo invio dovrebbe conservare il segreto: ogni richiesta crea una chiave nuova); risposta `Location: /v1/groups/{groupId}/api-keys/{keyId}`, `Cache-Control: no-store`, **mai compressa**
+- **Risposta:** `201` con la chiave **più `secret`**, mostrato **una sola volta**: il server conserva solo il suo hash e non può rimostrarlo. Se si perde, si crea una chiave nuova e si revoca la vecchia.
+  ```json
+  { "data": { "id": "6650c0a1b2c3d4e5f6a7b8c9", "name": "Webshop", "prefix": "fc_pk_AbCdEf", "…": "…", "secret": "fc_pk_AbCdEf…" } }
+  ```
+  Registra `apiKey.created` (nome e i sei caratteri dopo `fc_pk_`, `keyHint`, mai il segreto).
+- **Errori:** comuni; `400`, `413`, `415`; `403` (limite inviato da un D); `404`; `409 CONFLICT` (il gruppo ha già 50 chiavi attive: non revocate e non scadute; il tetto è un conteggio prima dell'inserimento, quindi due creazioni simultanee possono superarlo di una); `422` per campo (anche `expiresAt` con `minimum` se non è nel futuro e `maximum` oltre i 3 anni; `restrictions.companyIds.<n>` o `restrictions.placeIds.<n>` con `incorrect` per un'azienda o un punto vendita che il gruppo non ha, che è nel cestino o che è ripetuto); `429`
+
+### GET /v1/groups/{groupId}/api-keys/{keyId}
+- **Autenticazione e permesso:** Bearer backoffice, `apiKeys:read`
+- **Risposta:** `200` con la chiave
+- **Errori:** comuni; `403`; `404` (una chiave che il gruppo non ha); `422` (`keyId`)
+
+### PATCH /v1/groups/{groupId}/api-keys/{keyId}
+- **Autenticazione e permesso:** Bearer backoffice, `apiKeys:manage`; 20 scritture di chiavi al minuto per utente
+- **Body** (JSON Merge Patch, massimo 16 KB, almeno un campo): `name`, `permissions`, `restrictions`, `expiresAt` (`null` toglie la scadenza), `rateLimitPerMinute` e `dailyQuota` (**solo il PSA**, altrimenti `403` come alla creazione, anche se il valore è lo stesso), con i vincoli della creazione. `restrictions` cambia solo gli elenchi nominati (`{ "placeIds": null }` toglie la restrizione sui punti vendita e lascia le aziende); le altre proprietà (`hash`, `prefix`, `status`, `groupId`, `secret`…) sono `422 unknown`. Una richiesta che non cambia nessun valore non scrive e non registra nulla.
+- **Risposta:** `200` con la chiave aggiornata; registra `apiKey.updated` con il nome, `keyHint` e i nomi dei campi cambiati. Una modifica ha effetto alla richiesta successiva della chiave.
+- **Errori:** comuni; `400`, `413`, `415`; `403`; `404`; `409 CONFLICT` (la chiave è revocata **o scaduta**: una chiave scaduta non si riattiva spostandone la scadenza, se ne crea una nuova); `422`; `429`
+
+### POST /v1/groups/{groupId}/api-keys/{keyId}/revoke
+- **Autenticazione e permesso:** Bearer backoffice, `apiKeys:manage`; nessun body (o `{}`); 20 scritture di chiavi al minuto per utente
+- **Comportamento:** revoca la chiave (`revokedAt`, `revokedBy`): la richiesta successiva della chiave è `401`. **Idempotente**: su una chiave già revocata risponde `200` con lo stato com'è e non registra altro. Registra `apiKey.revoked` una volta sola.
+- **Risposta:** `200` con la chiave (`status: "revoked"`)
+- **Errori:** comuni; `403`; `404`; `422`; `429`
+
+### GET /v1/groups/{groupId}/api-keys/{keyId}/usage
+- **Autenticazione e permesso:** Bearer backoffice, `apiKeys:read`
+- **Query:** `from` e `to` (`YYYY-MM-DD`, giorni UTC, entrambi inclusi, date reali); senza `to` vale oggi, senza `from` i 30 giorni che finiscono in `to`; l'intervallo è al più di **92 giorni** e `from` non è dopo `to`
+- **Risposta:** `200`; le righe sono per giorno e route, in ordine di giorno e route; il conteggio si scrive a blocchi (ogni 30 secondi), quindi può essere in ritardo di qualche secondo
+  ```json
+  { "data": {
+    "keyId": "6650c0a1b2c3d4e5f6a7b8c9", "from": "2026-10-19", "to": "2026-11-17",
+    "totals": { "calls": 18, "errors4xx": 2, "errors5xx": 1, "rateLimited": 1, "aborted": 0 },
+    "rows": [{ "day": "2026-11-17", "route": "GET /public/v1/places", "calls": 10, "errors4xx": 2, "errors5xx": 0, "rateLimited": 1, "aborted": 0 }]
+  } }
+  ```
+  `calls` conta ogni richiesta di una chiave valida (anche quelle rifiutate); `errors4xx` le risposte `4xx` diverse da `429`; `rateLimited` i `429` (limite al minuto o quota, della chiave o del gruppo); `aborted` le richieste che il client ha interrotto prima della fine della risposta (contate anche in `calls`, qualunque fosse lo stato); `route` è il pattern, mai il percorso concreto. Le richieste con una chiave sconosciuta o rifiutata non si contano.
+- **Errori:** comuni; `403`; `404`; `422` (`from`/`to` con `format` per una data che non esiste o `pattern`; `from` con `incorrect` se è dopo `to` e `maximum` oltre i 92 giorni)
+
 ## Media (`/v1`)
 
 Le immagini di un gruppo (`files` del database del gruppo, oggetti nel bucket di Google Cloud Storage nel formato `<groupId>/media/image/<xs|s|m|l|xl>/<basename>` del legacy). Route di gruppo (`group: true`), permesso **`companies:update`** (l'elenco dei permessi ammessi crescerà con le altre entità che hanno immagini): PSA, D e SA nel proprio perimetro, il CA, mai il PA. **Proprietario.** Ogni immagine caricata ha un proprietario: `companyId` (l'azienda a cui appartiene, oppure `null` per un'immagine di tutto il gruppo) e, nel documento, `createdBy` (l'utente che l'ha caricata). Il **CA** carica, elenca e legge **solo le immagini delle proprie aziende** (un'immagine senza `companyId`, come ogni immagine del legacy, non è sua: `404` in lettura, assente dall'elenco); PSA, D e SA vedono tutte le immagini del gruppo. Qualsiasi ruolo può filtrare l'elenco con `companyId`. In questo passo le immagini non si modificano, né si mettono nel cestino, né si eliminano.
@@ -951,6 +1036,7 @@ Rappresentazione del gruppo:
     "qodeup": { "enabled": false, "apiKeySet": false },
     "statmanager": { "enabled": false, "apiKeySet": false }
   },
+  "publicApi": { "enabled": false, "defaultRateLimitPerMinute": 60, "defaultDailyQuota": 10000, "groupRateLimitPerMinute": 120, "groupDailyQuota": 20000 },
   "priceLists": [{ "id": "Zk3vQ0aT9bX2mN7pLw4HcA", "name": "Listino base", "enabled": true, "isDefault": true }],
   "taxes": [{ "id": "n1P8xQwR2cV5tYb7KdLm0g", "rate": 22, "department": 1, "description": null, "vatNature": null }],
   "currencies": [{ "code": "EUR", "symbol": "€" }],
@@ -962,7 +1048,7 @@ Rappresentazione del gruppo:
   "updatedAt": "2026-11-06T08:30:00.000Z"
 }
 ```
-`features` ha sempre le 15 feature del catalogo, `false` se nel documento mancano o non sono booleane. `description` e le date possono essere `null`. `languages` sono codici ISO 639-1. `statsSettings.timeSlots` ha ore intere (`from` da `00:00` a `23:00`, `to` da `01:00` a `24:00`). `integrations` ha sempre i sette provider (`easyappear`, `yellgo`, `leggimenu`, `plateform`, `cooperto`, `qodeup`, `statmanager`): `apiKeySet` dice solo se una chiave è impostata, **la chiave non è mai restituita**. `dataCluster` (l'id del cluster con i dati del gruppo, `null` per il cluster di default) è presente **solo per il PSA**. I sei cataloghi della scheda gruppo (`priceLists` … `fidelityCardRules`) sono nel dettaglio; fidelity, preferiti e promozioni si leggono dalle loro route (sezione "Cataloghi del gruppo"). Non sono mai esposti `apiKey`, host dei dati e dei file, `type`, `plan`, scadenza, elenco dei punti vendita del sistema precedente.
+`features` ha sempre le 15 feature del catalogo, `false` se nel documento mancano o non sono booleane. `description` e le date possono essere `null`. `languages` sono codici ISO 639-1. `statsSettings.timeSlots` ha ore intere (`from` da `00:00` a `23:00`, `to` da `01:00` a `24:00`). `integrations` ha sempre i sette provider (`easyappear`, `yellgo`, `leggimenu`, `plateform`, `cooperto`, `qodeup`, `statmanager`): `apiKeySet` dice solo se una chiave è impostata, **la chiave non è mai restituita**. `dataCluster` (l'id del cluster con i dati del gruppo, `null` per il cluster di default) è presente **solo per il PSA**. `publicApi` (le API pubbliche del gruppo, passo 9A: `enabled` è l'interruttore, spento se assente; i due limiti sono quelli che le nuove chiavi del gruppo ereditano, e valgono i default della piattaforma se il gruppo non ne ha) è presente **solo per PSA e D**: il SA non lo vede. I sei cataloghi della scheda gruppo (`priceLists` … `fidelityCardRules`) sono nel dettaglio; fidelity, preferiti e promozioni si leggono dalle loro route (sezione "Cataloghi del gruppo"). Non sono mai esposti `apiKey`, host dei dati e dei file, `type`, `plan`, scadenza, elenco dei punti vendita del sistema precedente.
 
 ### GET /v1/groups/{groupId}
 - **Superficie:** backoffice
@@ -981,6 +1067,7 @@ Rappresentazione del gruppo:
   | `name`, `description`, `languages`, `statsSettings` | sì | sì | sì |
   | `features`, `integrations` | sì | sì | no |
   | `demo` | sì | no | no |
+  | `publicApi` | sì | solo a parità di valori | no |
   Lo stato (sospensione) e il cestino non si modificano da qui: hanno le loro azioni, riservate al PSA.
 - **Body** (JSON Merge Patch, massimo 16 KB, almeno un campo, nessun'altra proprietà):
   | Campo | Tipo | Vincoli |
@@ -994,6 +1081,7 @@ Rappresentazione del gruppo:
   | `features` | oggetto | parziale: solo le feature inviate cambiano (le 15 del catalogo, booleani) |
   | `integrations` | oggetto | parziale per provider: `{ "<provider>": { "enabled": bool, "apiKey": string o null } }`; `apiKey` è la chiave del provider (16–256 caratteri ASCII stampabili, senza spazi), **solo impostabile**: non è mai restituita né registrata, `null` la rimuove |
   | `demo` | booleano | |
+  | `publicApi` | oggetto | parziale, **solo il PSA** cambia un valore: `{ "enabled": bool, "defaultRateLimitPerMinute": intero 1–6000, "defaultDailyQuota": intero 1–10 000 000, "groupRateLimitPerMinute": intero 1–6000, "groupDailyQuota": intero 1–10 000 000 }`, ognuno facoltativo (i due `group…` sono il tetto di tutte le chiavi del gruppo insieme, default 120 al minuto e 20 000 al giorno), nessun'altra proprietà. Un D che invia un valore **diverso** dall'attuale riceve `403` con `details: [{ "field": "publicApi.enabled", "issue": "notAllowed" }]` (uno per campo cambiato) e non si scrive nulla; con gli stessi valori la richiesta è accettata. Il SA non può inviare `publicApi` (`403`, `publicApi` `notAllowed`). |
   ```json
   { "description": null, "features": { "services": true }, "integrations": { "yellgo": { "enabled": true, "apiKey": "<chiave del provider>" } } }
   ```
@@ -1502,4 +1590,66 @@ Rappresentazione di un dealer:
 - **Errori:** comuni; `404 NOT_FOUND`; `409 CONFLICT` (`vatNumber`/`taken`); `422` (anche `(body)`/`required` per body vuoto)
 
 ## Superficie pubblica — `/public/v1`
-Nessun endpoint realizzato.
+
+Realizzata nel passo 9A (`doc/Security-Model.md` §6–7; la versione per gli integratori esterni è `doc/Public-API.md`). Le chiavi si gestiscono da `/v1` (sezione "Chiavi delle API pubbliche"). Regole comuni:
+- **Autenticazione:** solo l'header `X-Api-Key: fc_pk_…` (mai query, cookie o `Authorization`). **Ogni** rifiuto è lo stesso `401 UNAUTHENTICATED` (`{ "error": { "code": "UNAUTHENTICATED", "message": "Authentication required" } }`): chiave assente, malformata, sconosciuta, revocata, scaduta, o gruppo con le API spente, sospeso, nel cestino o eliminato. Un token del backoffice o una chiave di negozio non autenticano qui; la chiave pubblica non autentica su `/v1`. Le autenticazioni fallite contano in un limite per IP **proprio della superficie pubblica** (300 al minuto di default, `429` oltre), separato da quello di `/v1`.
+- **Nessun header CORS**, nemmeno nelle risposte al preflight (`OPTIONS` risponde `405` o `404` come ogni altro metodo non previsto): solo da server a server.
+- **Permessi:** ogni route dichiara un permesso del catalogo pubblico (`places:read`, `companies:read`, `catalog:read`) o nessuno (`GET /me`); senza il permesso `403 FORBIDDEN`. Ogni lettura è filtrata dal gruppo della chiave e dalle sue restrizioni: ciò che è fuori, o non esiste, o è nel cestino, è lo stesso `404 NOT_FOUND`.
+- **Limiti:** quattro conteggi atomici, nell'ordine: minuto della chiave (default 60), minuto del gruppo (tetto di tutte le chiavi insieme, default 120), giorno UTC della chiave (default 10 000), giorno UTC del gruppo (default 20 000). `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` descrivono il più stretto dei due limiti al minuto; oltre uno dei due `429 RATE_LIMITED` con `Retry-After` e gli header del limite superato. Oltre una quota giornaliera `429 QUOTA_EXCEEDED` con `Retry-After` fino a mezzanotte UTC e **senza** header `RateLimit-*` (descrivono solo il minuto). Una richiesta rifiutata da un limite al minuto non consuma alcuna quota giornaliera; una chiave che ha già esaurito la propria quota giornaliera (verificata con una lettura prima dei contatori del gruppo) è rifiutata subito e incrementa solo il proprio contatore, quindi non toglie capacità al minuto del gruppo alle altre chiavi; una rifiutata dal tetto giornaliero del gruppo ha già usato un'unità della quota della propria chiave (i contatori sono incrementi separati, mai annullati). Il primo eccesso di una finestra è registrato (`rateLimit.exceeded`, attore `apiKey` con l'id della chiave, `bucket` `public:key`, `public:group`, `public:quota` o `public:group-quota`).
+- **Liste:** `limit` 1–100 (default 50) e `cursor`; ordine per nome. Nessun filtro, ordinamento o ricerca (`422` per ogni altro parametro, anche sulle route di dettaglio e su `/me`).
+- **Errori comuni:** `401`, `403`, `404`, `405`, `422`, `429`; `500` senza dettagli.
+
+### GET /public/v1/me
+- **Superficie:** pubblica; **permesso:** nessuno (ogni chiave valida)
+- **Risposta:** `200`
+  ```json
+  { "data": {
+    "key": { "id": "6650c0a1b2c3d4e5f6a7b8c9", "name": "Webshop", "prefix": "fc_pk_AbCdEf", "permissions": ["places:read", "companies:read"], "restrictions": { "companyIds": null, "placeIds": null }, "expiresAt": null },
+    "group": { "id": "665f1c2e9b1d4a0012ab34a1", "name": "Gruppo Esempio" },
+    "limits": { "rateLimitPerMinute": 60, "dailyQuota": 10000, "group": { "rateLimitPerMinute": 120, "dailyQuota": 20000 } },
+    "usageToday": { "calls": 42 }
+  } }
+  ```
+  `limits.group` è il tetto di tutte le chiavi del gruppo insieme. `usageToday.calls` sono le richieste contate oggi (giorno UTC) contro la quota, **questa compresa** (lette dal contatore della quota: esatte anche con più istanze del server).
+
+### GET /public/v1/places
+- **Permesso:** `places:read`; **query:** `limit`, `cursor`
+- **Risposta:** `200` con i punti vendita del gruppo non nel cestino e dentro le restrizioni della chiave, per nome
+  ```json
+  { "data": [{
+    "id": "665f1c2e9b1d4a0012ab3421", "name": "Bar Roma", "companyId": "665f1c2e9b1d4a0012ab3411",
+    "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" },
+    "phone": "+39 02 1234567", "email": "bar@example.com", "status": "active", "timezone": "Europe/Rome"
+  }], "page": { "limit": 50, "next": null } }
+  ```
+  Proiezione **esplicita** (`public.mapper.ts`): mai credenziali, impostazioni del rivenditore, dati di rete, chiavi o dispositivi. Un campo mancante è `null`. Camere e tavoli non sono esposti in questo passo.
+- **Errori:** comuni; `403`; `422`; `429`
+
+### GET /public/v1/places/{placeId}
+- **Permesso:** `places:read`
+- **Risposta:** `200` con un punto vendita (stessa forma)
+- **Errori:** comuni; `403`; `404` (non esiste, è nel cestino, è di un altro gruppo o fuori dalle restrizioni: la stessa risposta); `422` (`placeId`)
+
+### GET /public/v1/companies e GET /public/v1/companies/{companyId}
+- **Permesso:** `companies:read`; stesse regole dei punti vendita (query, paginazione, `404`)
+- **Risposta:** `200` con le aziende del gruppo non nel cestino. Una chiave ristretta ai punti vendita vede le aziende di quei punti vendita; una ristretta alle aziende solo quelle (con entrambe, l'intersezione)
+  ```json
+  { "data": [{
+    "id": "665f1c2e9b1d4a0012ab3411", "name": "Acme S.r.l.", "vatNumber": "01114601006", "fiscalCode": "01114601006",
+    "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "province": "MI", "country": "IT" },
+    "email": "info@acme.example", "phone": "+39 02 1234567"
+  }], "page": { "limit": 50, "next": null } }
+  ```
+  Mai banche, IBAN, impostazioni o dati di fatturazione.
+
+### GET /public/v1/price-lists e GET /public/v1/taxes
+- **Permesso:** `catalog:read`; nessun parametro
+- **Risposta:** `200` con **tutte** le voci del gruppo (al più 50 listini e 30 aliquote), senza `page`; non sono ristrette dalle restrizioni della chiave (sono del gruppo)
+  ```json
+  { "data": [{ "id": "Zk3vQ0aT9bX2mN7pLw4HcA", "name": "Listino base", "enabled": true, "isDefault": true }] }
+  ```
+  ```json
+  { "data": [{ "id": "n1P8xQwR2cV5tYb7KdLm0g", "rate": 22, "department": 1, "description": null, "vatNature": null }] }
+  ```
+  `rate` è una percentuale; `vatNature` è un codice di natura IVA (`N1`…`N6.9`) o `null`.
+

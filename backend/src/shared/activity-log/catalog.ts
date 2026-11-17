@@ -13,8 +13,8 @@ export const ACTIVITY_OUTCOMES = Object.freeze(['success', 'failure', 'denied'] 
 /** The outcome of an activity: it happened, it failed, it was refused. */
 export type ActivityOutcome = (typeof ACTIVITY_OUTCOMES)[number];
 
-/** Kinds of actor: a backoffice user, an anonymous caller, the system itself and the server of a point of sale (identified by the id of its store key). */
-export const ACTOR_KINDS = Object.freeze(['user', 'anonymous', 'system', 'store'] as const);
+/** Kinds of actor: a backoffice user, an anonymous caller, the system itself and the server of a point of sale (identified by the id of its store key) and an integration with a public API key (identified by the id of the key). */
+export const ACTOR_KINDS = Object.freeze(['user', 'anonymous', 'system', 'store', 'apiKey'] as const);
 
 /** The kind of the party that performed an activity. */
 export type ActorKind = (typeof ACTOR_KINDS)[number];
@@ -44,6 +44,9 @@ export const SECURITY_ACTIONS = Object.freeze([
   'store.activationFailed',
   'store.keyRevoked',
   'store.revokedKeyPresented',
+  'apiKey.created',
+  'apiKey.updated',
+  'apiKey.revoked',
 ] as const);
 
 /** Resources whose writes are logged. */
@@ -118,6 +121,10 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
   'store.activationFailed': ['reason'],
   'store.keyRevoked': ['reason', 'keyHint'],
   'store.revokedKeyPresented': [],
+  // A public API key is recorded by its name and the characters of its prefix after `fc_pk_` (`keyHint`: the log redacts any text that starts like a key), never the key; an update lists the names of the fields it changed.
+  'apiKey.created': ['name', 'keyHint'],
+  'apiKey.updated': ['name', 'keyHint', 'fields'],
+  'apiKey.revoked': ['name', 'keyHint'],
 };
 
 const DATA_METADATA: readonly string[] = ['changesTotal', 'changesTruncated'];

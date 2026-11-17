@@ -28,7 +28,7 @@ function loggablePath(target: string): string {
 /**
  * Creates the access log middleware: exactly one `info` line per request with
  * request id, method, path (query string stripped, the VAT number of a Cerved lookup replaced by its route parameter), status, duration and client
- * ip. A request whose connection closed before the response finished is logged
+ * ip, and the id of the public API key that made it (`keyId`; never the key, which no log ever holds). A request whose connection closed before the response finished is logged
  * once with `aborted: true`. A valid client `X-Request-Id` appears as
  * `clientRequestId`. Bodies, query strings and headers are never logged.
  * Successful health probes are skipped to keep the log readable.
@@ -57,6 +57,7 @@ export function accessLog(logger: Logger): RequestHandler {
         status: res.statusCode,
         durationMs: Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6),
         ip: req.ip,
+        ...(res.locals.apiKey === undefined ? {} : { keyId: res.locals.apiKey.keyId.toHexString() }),
         ...(aborted ? { aborted: true } : {}),
       });
     };

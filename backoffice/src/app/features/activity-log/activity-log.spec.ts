@@ -37,6 +37,15 @@ const THREE = fakeEntry({
   error: { name: 'TypeError', message: 'x is undefined', stack: 'TypeError: x\n  at a' },
   changes: [{ field: 'status', before: 'a', after: 'b' }],
 });
+const KEY_ENTRY = fakeEntry({
+  id: '665f1c2e9b1d4a0012ab3505',
+  category: 'security',
+  action: 'apiKey.created',
+  outcome: 'success',
+  actor: { kind: 'apiKey', id: '6650c0a1b2c3d4e5f6a7b8c9', role: null, username: null },
+  resource: { type: 'apiKey', id: '6650c0a1b2c3d4e5f6a7b8c9' },
+  metadata: { name: 'Webshop', keyHint: 'AbCdEf' },
+});
 const FOUR = fakeEntry({
   id: '665f1c2e9b1d4a0012ab3504',
   category: 'data',
@@ -161,6 +170,20 @@ describe('ActivityLogPage', () => {
         'ACTIVITY.ACTOR.SYSTEM',
       ]);
       expect(root.querySelector('fc-status-badge[data-tone=danger]')).not.toBeNull();
+    });
+
+    it('names an API key as actor and labels its events', async () => {
+      const { flush, cells, root } = await render();
+      await flush([KEY_ENTRY]);
+      expect(cells(0).slice(2, 5)).toEqual([
+        'ACTIVITY.ACTION.API_KEY_CREATED',
+        'ACTIVITY.OUTCOME.SUCCESS',
+        'ACTIVITY.ACTOR.API_KEY {"id":"…a7b8c9"}',
+      ]);
+      // An actor that is not a user cannot be used as a filter.
+      expect(
+        root.querySelector('tbody button[aria-label^="ACTIVITY.FILTER_ACTOR_LABEL"]'),
+      ).toBeNull();
     });
 
     it('shows an unnamed user without id as empty', async () => {

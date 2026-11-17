@@ -1,3 +1,4 @@
+import type { I18nService } from '../../core/i18n/i18n.service';
 import { Role } from '../../core/session/session.types';
 
 /** Categories of the activity log. */
@@ -28,6 +29,9 @@ const SECURITY_ACTIONS = [
   'group.trashed',
   'group.restored',
   'rateLimit.exceeded',
+  'apiKey.created',
+  'apiKey.updated',
+  'apiKey.revoked',
 ];
 const DATA_RESOURCES = ['user', 'group', 'company', 'place'];
 const DATA_VERBS = ['created', 'updated', 'trashed', 'restored', 'deleted'];
@@ -50,12 +54,23 @@ export function actionLabelKey(action: string): string {
     .toUpperCase()}`;
 }
 
-/** Who performed an activity. */
+/**
+ * Who performed an activity: a backoffice user, an anonymous caller, the system, the server of a
+ * store (`store`, by its store key) or an integration with a public API key (`apiKey`, by the id
+ * of the key).
+ */
 export interface ActivityActor {
-  readonly kind: 'user' | 'anonymous' | 'system';
+  readonly kind: 'user' | 'anonymous' | 'system' | 'store' | 'apiKey';
   readonly id: string | null;
   readonly role: Role | null;
   readonly username: string | null;
+}
+
+/** Label of an actor that is not a user: "Sistema", "Anonimo", "Negozio", "Chiave API …abc123". */
+export function otherActorLabel(i18n: Pick<I18nService, 't'>, actor: ActivityActor): string {
+  return actor.kind === 'apiKey'
+    ? i18n.t('ACTIVITY.ACTOR.API_KEY', { id: actor.id === null ? '' : abbreviateId(actor.id) })
+    : i18n.t(`ACTIVITY.ACTOR.${actor.kind.toUpperCase()}`);
 }
 
 /** One changed field of a data write; secret fields carry no values. */

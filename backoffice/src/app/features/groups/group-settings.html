@@ -71,7 +71,7 @@
 
   <nav class="sections" [attr.aria-label]="'GROUP_SETTINGS.SECTIONS' | t">
     <ul>
-      @for (section of sections; track section.path) {
+      @for (section of sections(); track section.path) {
         <li>
           <a
             [routerLink]="section.path === '' ? '.' : section.path"

@@ -1,4 +1,5 @@
-import { array, boolean, enumOf, nullable, object, optional, personName, string } from '../../shared/validation/schema.ts';
+import { PUBLIC_API_MAX_DAILY_QUOTA, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE, PUBLIC_API_MIN_LIMIT } from '../../shared/security/public-api-limits.ts';
+import { array, boolean, enumOf, integer, nullable, object, optional, personName, string } from '../../shared/validation/schema.ts';
 import type { Infer, Schema } from '../../shared/validation/schema.ts';
 import { FEATURES } from './features.ts';
 import type { Feature } from './features.ts';
@@ -43,6 +44,15 @@ export const patchGroupBody = object({
   features: optional(object(featuresShape)),
   integrations: optional(object(integrationsShape)),
   demo: optional(boolean()),
+  publicApi: optional(
+    object({
+      enabled: optional(boolean()),
+      defaultRateLimitPerMinute: optional(integer({ min: PUBLIC_API_MIN_LIMIT, max: PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE })),
+      defaultDailyQuota: optional(integer({ min: PUBLIC_API_MIN_LIMIT, max: PUBLIC_API_MAX_DAILY_QUOTA })),
+      groupRateLimitPerMinute: optional(integer({ min: PUBLIC_API_MIN_LIMIT, max: PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE })),
+      groupDailyQuota: optional(integer({ min: PUBLIC_API_MIN_LIMIT, max: PUBLIC_API_MAX_DAILY_QUOTA })),
+    }),
+  ),
 });
 
 /** Validated body of the modification of a group. */

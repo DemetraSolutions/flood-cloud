@@ -32,6 +32,7 @@ import {
   ActivityCategory,
   ActivityEntry,
   ActivityOutcome,
+  otherActorLabel,
 } from './activity-log.types';
 
 /** Page sizes offered by the list. */
@@ -295,7 +296,7 @@ export class ActivityLogPage {
         (id === null ? (role === null ? '' : this.i18n.t(`ROLE.${role}`)) : abbreviateId(id))
       );
     }
-    return this.i18n.t(`ACTIVITY.ACTOR.${kind.toUpperCase()}`);
+    return otherActorLabel(this.i18n, row.actor);
   }
 
   protected canFilterActor(row: ActivityEntry): boolean {

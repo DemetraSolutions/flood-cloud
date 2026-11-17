@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { connect } from 'node:net';
 import { gunzipSync } from 'node:zlib';
+import type { RequestHandler } from 'express';
+import { ObjectId } from 'mongodb';
 import { sendData, sendPage } from '../../src/shared/http/envelope.ts';
 import { AppError } from '../../src/shared/http/errors.ts';
 import { defineRoute } from '../../src/shared/http/routes.ts';
@@ -13,6 +15,17 @@ import type { TestServer } from '../helpers/app.ts';
 
 const auth = { kind: 'anonymous', reason: 'test route' } as const;
 const ORIGIN = 'https://backoffice.example.com';
+
+/** The public surface accepts API key routes only; its authentication here is a stand-in that accepts every request. */
+const keyAuth = { kind: 'apiKey', permission: null } as const;
+const publicRoutes = [
+  defineRoute({ method: 'GET', path: '/items', auth: keyAuth, rateLimit: testIpLimit, handler: (_req, res) => sendData(res, [1]) }),
+  defineRoute({ method: 'GET', path: '/page', auth: keyAuth, rateLimit: testIpLimit, handler: (_req, res) => sendPage(res, [1, 2], { limit: 2, next: 'abc' }) }),
+];
+const acceptEveryKey: RequestHandler = (_req, res, next) => {
+  res.locals.apiKey = { keyId: new ObjectId(), permissions: new Set(['places:read']) } as never;
+  next();
+};
 
 const testRoutes = [
   defineRoute({ method: 'GET', path: '/items', auth, rateLimit: testIpLimit, handler: (_req, res) => sendData(res, [1]) }),
@@ -61,7 +74,7 @@ describe('HTTP pipeline', () => {
   let t: TestServer;
   before(async () => {
     t = await startApp(
-      { routes: { v1: testRoutes, public: testRoutes } },
+      { routes: { v1: testRoutes, public: publicRoutes }, authenticate: { public: acceptEveryKey } },
       { CORS_ALLOWED_ORIGINS: ORIGIN, TRUST_PROXY: '1' },
     );
   });
@@ -456,7 +469,7 @@ describe('app construction', () => {
   });
 
   it('accepts only public routes', async () => {
-    const t = await startApp({ routes: { public: testRoutes } });
+    const t = await startApp({ routes: { public: publicRoutes }, authenticate: { public: acceptEveryKey } });
     try {
       assert.equal((await fetch(`${t.baseUrl}/public/v1/items`)).status, 200);
       assert.equal((await fetch(`${t.baseUrl}/v1/items`)).status, 404);

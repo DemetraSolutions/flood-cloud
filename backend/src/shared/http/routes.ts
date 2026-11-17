@@ -3,11 +3,14 @@ import type { RequestHandler, Router } from 'express';
 import { isFeature } from '../../modules/groups/features.ts';
 import type { Feature } from '../../modules/groups/features.ts';
 import { isPermission } from '../security/rbac/permissions.ts';
+import { isPublicPermission } from '../security/rbac/public-permissions.ts';
+import type { PublicPermission } from '../security/rbac/public-permissions.ts';
 import type { Permission } from '../security/rbac/permissions.ts';
 import { STORE_PROFILE } from '../security/rbac/policy.ts';
 import { requirePermission } from '../security/rbac/require-permission.ts';
 import { guardAuthentication, rateLimit } from '../security/rate-limit/rate-limit.ts';
 import type { RateLimitMount, RateLimitRule } from '../security/rate-limit/rate-limit.ts';
+import { requireApiKeyPermission } from '../security/scope/api-key-guards.ts';
 import { reportCrossGroupAccess, requireGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { requireFeature } from '../security/scope/require-feature.ts';
@@ -68,8 +71,18 @@ export interface StoreAuth {
   readonly kind: 'store';
 }
 
+/**
+ * A route of the public surface (`/public/v1`), reserved to an integration authenticated with a public API key (`X-Api-Key`). The only kind that surface accepts, and one the
+ * backoffice surface never accepts: a user token or a store key never authenticates here, and an API key never authenticates there.
+ */
+export interface ApiKeyAuth {
+  readonly kind: 'apiKey';
+  /** Permission of the public catalog the key must hold, or `null` for a route every valid key may call (`GET /me`): it is always declared, never left out. */
+  readonly permission: PublicPermission | null;
+}
+
 /** Authentication requirement of a route. */
-export type RouteAuth = AnonymousAuth | UserAuth | StoreAuth;
+export type RouteAuth = AnonymousAuth | UserAuth | StoreAuth | ApiKeyAuth;
 
 /** Declarative description of a route. */
 export interface RouteDefinition {
@@ -172,6 +185,24 @@ function storeOnlyProblems(label: string, route: RouteDefinition, auth: AuthFiel
   return problems;
 }
 
+/** The problems of a route of the public surface (`kind: 'apiKey'`): a permission of the public catalog or an explicit `null`, and what the chain needs. */
+function apiKeyProblems(label: string, auth: AuthFields, options: MountOptions): string[] {
+  const problems: string[] = [];
+  if (auth.permission !== null && !isPublicPermission(auth.permission)) {
+    problems.push(`${label}: an API key route declares a permission of the public catalog, or null`);
+  }
+  if (['anyPermission', 'group', 'feature', 'allowWithPendingPasswordChange', 'store'].some((name) => (auth as Record<string, unknown>)[name] !== undefined)) {
+    problems.push(`${label}: an API key route declares nothing but its kind and its permission`);
+  }
+  if (options.authenticate === undefined) {
+    problems.push(`${label}: API key route needs an authenticate middleware`);
+  }
+  if (options.rateLimit === undefined) {
+    problems.push(`${label}: API key route needs the rateLimit dependencies`);
+  }
+  return problems;
+}
+
 /**
  * Checks every route and returns a human-readable list of problems.
  *
@@ -236,6 +267,8 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
       }
     } else if (auth.kind === 'store') {
       problems.push(...storeOnlyProblems(label, route, auth, options));
+    } else if (auth.kind === 'apiKey') {
+      problems.push(...apiKeyProblems(label, auth, options));
     } else {
       problems.push(`${label}: unknown auth kind`);
     }
@@ -245,7 +278,7 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     if (auth?.kind === 'anonymous' && auth.store !== undefined) {
       problems.push(`${label}: only user routes can be opened to a store key`);
     }
-    if ((auth?.kind === 'anonymous' || auth?.kind === 'user' || auth?.kind === 'store') && !allowed.includes(auth.kind)) {
+    if ((auth?.kind === 'anonymous' || auth?.kind === 'user' || auth?.kind === 'store' || auth?.kind === 'apiKey') && !allowed.includes(auth.kind)) {
       problems.push(`${label}: auth kind "${auth.kind}" is not allowed on this surface`);
     }
     const extra: unknown = route.middleware;
@@ -375,6 +408,8 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * A caller that authenticated with a store key (`res.locals.store`, never `res.locals.auth`) is refused with `403` by every `user` route that does not declare `store: true`, right after `authenticate`;
  * on a route that does, it follows its own chain (the group check on the store principal, the place of the key, the store profile, the feature), and a user follows the chain above.
  * A route with `auth: { kind: 'store' }` runs `authenticate`, refuses whoever is not a store and applies the declared rules before the body. The per-key rate limit is the store authentication's own.
+ * A route with `auth: { kind: 'apiKey', permission }` (the public surface) runs `authenticate` (guarded by the per-IP limit on failed authentications), refuses a key that lacks the permission (`403`), then applies the
+ * declared rules before the body; the per-key rate limit and the daily quota are the API key authentication's own.
  *
  * @param router Target router.
  * @param routes Route declarations.
@@ -382,7 +417,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
  * empty reason, unknown permission, both or an empty `anyPermission`, unknown feature or a feature without `group: true`, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
  * malformed rate limit rules, malformed `middleware`, `multipart` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
- * auth kind not allowed on the surface, a `store` declaration that is not `true`, on an anonymous route, with `anyPermission`, outside `STORE_PROFILE`, without `group: true` and a `:placeId`, with a pending password change or on a surface that does not accept store keys, a store route with anything but its kind or with a path parameter, disallowed method,
+ * auth kind not allowed on the surface, an `apiKey` route with a permission outside the public catalog or without `authenticate` and the rate limit dependencies, a `store` declaration that is not `true`, on an anonymous route, with `anyPermission`, outside `STORE_PROFILE`, without `group: true` and a `:placeId`, with a pending password change or on a surface that does not accept store keys, a store route with anything but its kind or with a path parameter, disallowed method,
  * bad path, duplicate method and path).
  */
 export function mountRoutes(router: Router, routes: readonly RouteDefinition[], options: MountOptions = {}): void {
@@ -442,6 +477,9 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
       }
     } else if (route.auth.kind === 'store') {
       middleware.push(guardAuthentication(authenticate!, rateLimitOptions!), requireStore, ...beforeBody);
+    } else if (route.auth.kind === 'apiKey') {
+      // The per-key rate limit and the daily quota are the authentication's own (the limits are the key's, not a constant of the rule).
+      middleware.push(guardAuthentication(authenticate!, { ...rateLimitOptions!, authFailureRule: rateLimitOptions!.apiKeyAuthFailureRule }), requireApiKeyPermission(route.auth.permission), ...beforeBody);
     } else {
       middleware.push(...beforeBody);
     }

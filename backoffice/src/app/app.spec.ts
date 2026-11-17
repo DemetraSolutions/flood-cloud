@@ -224,6 +224,32 @@ describe('routes', () => {
       expect(active?.textContent?.trim()).toBe(`⟦GROUP_SETTINGS.SECTION.${key}⟧`);
     });
 
+    it('lazy-loads the public API section for whoever has apiKeys:read', async () => {
+      setup();
+      sessionStorage.clear();
+      signIn({
+        role: 'D',
+        groupId: null,
+        permissions: ['groups:read', 'apiKeys:read', 'profile:read'],
+      });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/groups/${GROUP}/settings/public-api`);
+      TestBed.inject(HttpTestingController)
+        .expectOne((r) => r.url.endsWith(`/v1/groups/${GROUP}`))
+        .flush({ data: fakeGroup({ id: GROUP }) });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.detectChanges();
+      const root = harness.routeNativeElement as HTMLElement;
+      expect(root.querySelector('main nav a.active')?.textContent?.trim()).toBe(
+        '⟦GROUP_SETTINGS.SECTION.PUBLIC_API⟧',
+      );
+      expect(root.querySelector('fc-group-public-api')).not.toBeNull();
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
     it.each([
       ['fidelity/card-types', 'fidelity:read', 'CARD_TYPES'],
       ['fidelity/points-collections', 'fidelity:read', 'POINTS_COLLECTIONS'],
@@ -281,6 +307,7 @@ describe('routes', () => {
       ['/groups/list', psa([])],
       ['/groups/list', sa(['groups:read'])],
       [`/groups/${GROUP}/settings`, sa([])],
+      [`/groups/${GROUP}/settings/public-api`, sa(['groups:read'])],
     ])('protects %s', async (url, profile) => {
       await go(url, profile);
       expect(location()).toBe('/forbidden');

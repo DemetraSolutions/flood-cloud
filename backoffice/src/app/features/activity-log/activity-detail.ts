@@ -9,6 +9,7 @@ import {
   ActivityChange,
   ActivityEntry,
   formatChangeValue,
+  otherActorLabel,
 } from './activity-log.types';
 
 /**
@@ -42,7 +43,7 @@ export class ActivityDetail {
     if (kind === 'user') {
       return username ?? id ?? (role === null ? '' : this.i18n.t(`ROLE.${role}`));
     }
-    return this.i18n.t(`ACTIVITY.ACTOR.${kind.toUpperCase()}`);
+    return otherActorLabel(this.i18n, this.entry().actor);
   });
   protected readonly changes = computed(() => this.entry().changes ?? []);
   protected readonly metadata = computed(() => Object.entries(this.entry().metadata ?? {}));

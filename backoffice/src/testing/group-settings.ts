@@ -122,6 +122,7 @@ export function fakeSettingsState(group: Group | null = null) {
     canUpdate: signal(true),
     canManage: signal(true),
     canDemo: signal(true),
+    canPublicApi: signal(true),
     apply: vi.fn(),
     reload: vi.fn(),
     adopt: vi.fn(),

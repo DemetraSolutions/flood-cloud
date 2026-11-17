@@ -2,7 +2,8 @@ import type { Collection, Document, Filter, ObjectId } from 'mongodb';
 import { GROUPS_OWNED_FIELDS } from '../../db/collections.ts';
 import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
-import { API_KEY_SET_PROJECTION, GROUP_PROJECTION, fromLegacy } from './group.mapper.ts';
+import type { PublicApiLimits } from '../../shared/security/public-api-limits.ts';
+import { API_KEY_SET_PROJECTION, BUILT_IN_PUBLIC_API_LIMITS, GROUP_PROJECTION, fromLegacy } from './group.mapper.ts';
 import type { LegacyGroupDocument, LegacyGroupUpdate, MappedGroup } from './group.types.ts';
 
 /** The result of {@link ManagedGroupsRepository.updateOwned}. */
@@ -46,8 +47,9 @@ function containersOf(paths: readonly string[]): string[] {
  * Builds the groups repository over `common.groups`. The only code that knows the legacy document shape of a group.
  *
  * @param databases Database accessor.
+ * @param publicApiDefaults The platform defaults of the limits of a public API key, which a group without limits of its own shows.
  */
-export function createManagedGroupsRepository(databases: Databases): ManagedGroupsRepository {
+export function createManagedGroupsRepository(databases: Databases, publicApiDefaults: PublicApiLimits = BUILT_IN_PUBLIC_API_LIMITS): ManagedGroupsRepository {
   const groups = (): Collection<Document> => databases.common().collection('groups');
   const owned = new Set(GROUPS_OWNED_FIELDS);
   return {
@@ -56,7 +58,7 @@ export function createManagedGroupsRepository(databases: Databases): ManagedGrou
       const [document] = await groups()
         .aggregate([{ $match: { _id: id } }, { $project: { ...GROUP_PROJECTION, ...API_KEY_SET_PROJECTION } }], { maxTimeMS: LIST_MAX_TIME_MS })
         .toArray();
-      return document === undefined ? null : fromLegacy(document as LegacyGroupDocument);
+      return document === undefined ? null : fromLegacy(document as LegacyGroupDocument, publicApiDefaults);
     },
 
     updateOwned: async (id, update) => {

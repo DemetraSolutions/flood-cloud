@@ -34,7 +34,7 @@ export interface AppDeps {
   readonly routes?: {
     /** Backoffice surface, mounted on `/v1` with CORS. */
     readonly v1?: readonly RouteDefinition[];
-    /** Public surface, mounted on `/public/v1` without CORS. */
+    /** Public surface, mounted on `/public/v1` without CORS: `apiKey` routes only. */
     readonly public?: readonly RouteDefinition[];
   };
   /**
@@ -49,6 +49,8 @@ export interface AppDeps {
      * when absent a store key is refused like any unknown credential, and such a route cannot start (deny by default).
      */
     readonly store?: RequestHandler;
+    /** Public API keys (`X-Api-Key`) on `/public/v1`. A surface that declares `apiKey` routes without one cannot start (deny by default). */
+    readonly public?: RequestHandler;
   };
   /** Group lookup for the `/v1` routes declaring `group: true`; PSA and D accesses are audited by the app itself. */
   readonly groupAccess?: { readonly groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'> };
@@ -79,6 +81,7 @@ export function createApp(deps: AppDeps): Express {
     limiter: deps.rateLimiter,
     apiRule: rules.apiPerUser,
     authFailureRule: rules.unauthenticatedPerIp,
+    apiKeyAuthFailureRule: rules.unauthenticatedPublicPerIp,
     onExceeded: createRateLimitAudit(activityLog),
   };
   const app = express();
@@ -112,7 +115,12 @@ export function createApp(deps: AppDeps): Express {
   app.use('/v1', cors(config.corsAllowedOrigins), v1);
 
   const publicApi = express.Router();
-  mountRoutes(publicApi, deps.routes?.public ?? [], { rateLimit: rateLimitMount });
+  // Only API key routes: no anonymous route, no user, no store (the route builder refuses them at startup).
+  mountRoutes(publicApi, deps.routes?.public ?? [], {
+    allowedAuth: ['apiKey'],
+    ...(deps.authenticate?.public === undefined ? {} : { authenticate: deps.authenticate.public }),
+    rateLimit: rateLimitMount,
+  });
   app.use('/public/v1', publicApi);
 
   app.use(() => {

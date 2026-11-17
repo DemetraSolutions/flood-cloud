@@ -20,6 +20,9 @@ const PLACES = [P.PLACES_READ, P.PLACES_UPDATE, P.PLACES_TRASH, P.PLACES_DELETE]
 /** The key of the server of a point of sale (`doc/Security-Model.md` section 5): see and manage it, only the PSA and the dealers (D-24). The store itself never holds them. */
 const STORE_KEYS = [P.STORE_KEYS_READ, P.STORE_KEYS_MANAGE] as const;
 
+/** The public API keys of a group (`doc/Security-Model.md` section 6): see them and manage them (create, change, revoke), only the PSA and the dealers. The limits of a key are the PSA's alone, which the service decides. */
+const API_KEYS = [P.API_KEYS_READ, P.API_KEYS_MANAGE] as const;
+
 /** The national tobacco price list of the platform (`doc/Tasks.md` 9-bis, step T3): read it and replace it with the official file, only the PSA. */
 const TOBACCOS = [P.TOBACCOS_READ, P.TOBACCOS_IMPORT] as const;
 
@@ -35,8 +38,8 @@ export const STORE_PROFILE: ReadOnlySet<Permission> = frozenSet<Permission>([P.P
  * immutable.
  */
 export const ROLE_CEILING: Readonly<Record<Role, ReadOnlySet<Permission>>> = Object.freeze({
-  PSA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
-  D: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  PSA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  D: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   SA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   CA: frozenSet<Permission>([P.COMPANIES_READ, P.COMPANIES_UPDATE, P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   PA: frozenSet<Permission>([P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),

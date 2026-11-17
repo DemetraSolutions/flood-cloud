@@ -542,7 +542,8 @@ describe('PlaceRooms: tables', () => {
     expect(byLabel(form, t('ADD_TABLE_TO')).disabled).toBe(false);
     await press(view, byLabel(form, t('ADD_TABLE_TO')));
     expect((within(addTables(card(view, 'Sala 2')), t('TABLE_NAME')) as HTMLInputElement).disabled).toBe(true);
-  });
+    // Renders ~1000 tables in jsdom: about 5 s on a loaded machine, so it gets more than the default 5 s.
+  }, 20_000);
 
   it('edits a table and saves it', async () => {
     const view = await renderPlace({ path: 'rooms', permissions: WITH_USERS });

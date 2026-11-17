@@ -10,6 +10,8 @@ import { priceLists } from './catalogs/price-lists.ts';
 import { taxes } from './catalogs/taxes.ts';
 import { warehouseRules } from './catalogs/warehouse-rules.ts';
 import { DETAIL_CATALOG_PATHS } from './catalogs/registry.ts';
+import { PUBLIC_API_MAX_DAILY_QUOTA, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE, PUBLIC_API_MIN_LIMIT } from '../../shared/security/public-api-limits.ts';
+import type { PublicApiLimits } from '../../shared/security/public-api-limits.ts';
 import { isLanguageCode } from './languages.ts';
 import { PROVIDERS } from './group.types.ts';
 import type {
@@ -24,6 +26,7 @@ import type {
   LegacyGroupUpdate,
   MappedGroup,
   Provider,
+  PublicApiSettings,
   StatsSettings,
   StatsTimeSlot,
 } from './group.types.ts';
@@ -51,6 +54,7 @@ export const GROUP_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
   status: 1,
   trash: 1,
   demo: 1,
+  publicApi: 1,
   dataCluster: 1,
   insertDate: 1,
   updateDate: 1,
@@ -176,6 +180,32 @@ function readIntegrations(raw: unknown, keysSet: unknown, anomalies: GroupAnomal
   return flags;
 }
 
+/** The platform defaults of the limits of a key, used where nothing else says (the tests and the tools; the application passes the ones of the configuration). */
+export const BUILT_IN_PUBLIC_API_LIMITS: PublicApiLimits = Object.freeze({ rateLimitPerMinute: 60, dailyQuota: 10_000, groupRateLimitPerMinute: 120, groupDailyQuota: 20_000 });
+
+/** A stored limit of the public API: an integer inside its bounds, else the default (and an anomaly when something else is there). */
+function readLimit(raw: unknown, field: string, max: number, fallback: number, anomalies: GroupAnomaly[]): number {
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= PUBLIC_API_MIN_LIMIT && raw <= max) {
+    return raw;
+  }
+  if (raw !== undefined && raw !== null) {
+    anomalies.push({ kind: 'invalidValue', field });
+  }
+  return fallback;
+}
+
+/** The public API of a group (top-level `publicApi`): off unless `enabled` is exactly `true`, with the limits stored or, where there are none, the platform defaults. */
+function readPublicApi(raw: unknown, defaults: PublicApiLimits, anomalies: GroupAnomaly[]): PublicApiSettings {
+  const stored = readContainer(raw, 'publicApi', anomalies);
+  return {
+    enabled: readFlag(stored['enabled'], 'publicApi.enabled', anomalies),
+    defaultRateLimitPerMinute: readLimit(stored['defaultRateLimitPerMinute'], 'publicApi.defaultRateLimitPerMinute', PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE, defaults.rateLimitPerMinute, anomalies),
+    defaultDailyQuota: readLimit(stored['defaultDailyQuota'], 'publicApi.defaultDailyQuota', PUBLIC_API_MAX_DAILY_QUOTA, defaults.dailyQuota, anomalies),
+    groupRateLimitPerMinute: readLimit(stored['groupRateLimitPerMinute'], 'publicApi.groupRateLimitPerMinute', PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE, defaults.groupRateLimitPerMinute, anomalies),
+    groupDailyQuota: readLimit(stored['groupDailyQuota'], 'publicApi.groupDailyQuota', PUBLIC_API_MAX_DAILY_QUOTA, defaults.groupDailyQuota, anomalies),
+  };
+}
+
 function readReference(raw: unknown, field: string, anomalies: GroupAnomaly[]): string | null {
   if (raw instanceof ObjectId) {
     return raw.toHexString();
@@ -231,10 +261,13 @@ function readCatalogs(document: LegacyGroupDocument, anomalies: GroupAnomaly[]):
  * - The catalogs of the group form (price lists, taxes, currencies, measure units, warehouse rules, loyalty rules) are read tolerantly by their own mappers.
  * - `apiKey`, `databaseHost`, `filesHost`, `type`, `plan`, `expirationDate`, `places` and the data of later domains are never mapped.
  *
+ * - The public API (`publicApi`, a top-level field of its own) is off unless `enabled` is exactly `true`; a limit that is missing or not an integer inside its bounds is the platform default.
+ *
  * @param document The stored document (projected with {@link GROUP_PROJECTION}).
+ * @param publicApiDefaults The platform defaults of the limits of a key (`PUBLIC_API_DEFAULT_*`).
  * @returns The group and the anomalies found.
  */
-export function fromLegacy(document: LegacyGroupDocument): MappedGroup {
+export function fromLegacy(document: LegacyGroupDocument, publicApiDefaults: PublicApiLimits = BUILT_IN_PUBLIC_API_LIMITS): MappedGroup {
   const anomalies: GroupAnomaly[] = [];
   const status = document.status;
   if (typeof status !== 'boolean') {
@@ -255,6 +288,7 @@ export function fromLegacy(document: LegacyGroupDocument): MappedGroup {
     languages: readLanguages(settings['languages'], anomalies),
     statsSettings: readStats(settings['stats'], anomalies),
     integrations: readIntegrations(settings['integrations'], document.apiKeySet, anomalies),
+    publicApi: readPublicApi(document.publicApi, publicApiDefaults, anomalies),
     catalogs: readCatalogs(document, anomalies),
     dataCluster: readText(document.dataCluster, 'dataCluster', anomalies),
     createdAt: readDate(document.insertDate),
@@ -310,6 +344,10 @@ export function toLegacyUpdate(changes: GroupChanges, now: Date): LegacyGroupUpd
       set[`settings.integrations.${provider}.apiKey`] = state.apiKey;
     }
   }
+  for (const [leaf, value] of Object.entries(changes.publicApi ?? {})) {
+    // The leaves are the ones of the registry (`publicApi.enabled`, ...): the repository refuses any other.
+    set[`publicApi.${leaf}`] = value;
+  }
   if (changes.languages !== undefined) {
     if (!changes.languages.every(isLanguageCode)) {
       throw new Error('Refusing to write a language that is not an ISO 639-1 code');
@@ -342,8 +380,9 @@ export function toLegacyUpdate(changes: GroupChanges, now: Date): LegacyGroupUpd
  *
  * @param group The group.
  * @param includeCluster Whether to show `dataCluster` (a PSA only).
+ * @param includePublicApi Whether to show the public API settings (a PSA and a dealer only).
  */
-export function toResponse(group: Group, includeCluster: boolean): GroupResponse {
+export function toResponse(group: Group, includeCluster: boolean, includePublicApi = false): GroupResponse {
   return {
     id: group.id,
     name: group.name,
@@ -366,6 +405,7 @@ export function toResponse(group: Group, includeCluster: boolean): GroupResponse
     measureUnits: [...group.catalogs.measureUnits],
     warehouseRules: [...group.catalogs.warehouseRules],
     fidelityCardRules: [...group.catalogs.fidelityCardRules],
+    ...(includePublicApi ? { publicApi: { ...group.publicApi } } : {}),
     ...(includeCluster ? { dataCluster: group.dataCluster } : {}),
     createdAt: group.createdAt === null ? null : group.createdAt.toISOString(),
     updatedAt: group.updatedAt === null ? null : group.updatedAt.toISOString(),
@@ -391,6 +431,7 @@ export function changeSnapshot(group: Group, keysChanged: readonly Provider[] = 
     statsSettings: toResponse(group, false).statsSettings,
     enabledIntegrations: Object.fromEntries(PROVIDERS.map((provider) => [provider, group.integrations[provider].enabled])),
     // Named so that the redaction of keys (`apikey`) does not hide it: only whether a key is set, never the key.
+    publicApi: { ...group.publicApi },
     integrationKeysConfigured: Object.fromEntries(PROVIDERS.map((provider) => [provider, group.integrations[provider].apiKeySet])),
     ...(keysChanged.length === 0 ? {} : { integrationKeysChanged: Object.fromEntries(keysChanged.map((provider) => [provider, true])) }),
   };

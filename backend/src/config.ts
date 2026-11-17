@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { PUBLIC_API_MAX_DAILY_QUOTA, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE, PUBLIC_API_MIN_LIMIT } from './shared/security/public-api-limits.ts';
 import { Secret } from './shared/security/secret.ts';
 
 /** Execution environments accepted for `APP_ENV`. */
@@ -111,6 +112,20 @@ export interface Config {
   readonly rateLimitStoreActivationPerIp: number;
   /** Activation code creations, cancellations and key revocations per minute allowed to a user (`RATE_LIMIT_STORE_KEY_ADMIN_PER_USER`). */
   readonly rateLimitStoreKeyAdminPerUser: number;
+  /** Creations, changes and revocations of public API keys per minute allowed to a user (`RATE_LIMIT_API_KEY_ADMIN_PER_USER`). */
+  readonly rateLimitApiKeyAdminPerUser: number;
+  /** Requests per minute a public API key gets when its group sets no default of its own (`PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE`). */
+  readonly publicApiDefaultRateLimitPerMinute: number;
+  /** Requests per UTC day a public API key gets when its group sets no default of its own (`PUBLIC_API_DEFAULT_DAILY_QUOTA`). */
+  readonly publicApiDefaultDailyQuota: number;
+  /** Requests per minute allowed to all the public API keys of a group together, when the group sets no cap of its own (`PUBLIC_API_DEFAULT_GROUP_RATE_LIMIT_PER_MINUTE`). */
+  readonly publicApiDefaultGroupRateLimitPerMinute: number;
+  /** Requests per UTC day allowed to all the public API keys of a group together, when the group sets no cap of its own (`PUBLIC_API_DEFAULT_GROUP_DAILY_QUOTA`). */
+  readonly publicApiDefaultGroupDailyQuota: number;
+  /** Failed authentications per minute allowed to a client IP on `/public/v1` (`RATE_LIMIT_UNAUTHENTICATED_PUBLIC_PER_IP`), counted apart from the ones of `/v1`. */
+  readonly rateLimitUnauthenticatedPublicPerIp: number;
+  /** Seconds between two writes of the usage counters of the public API (`PUBLIC_API_USAGE_FLUSH_SECONDS`). */
+  readonly publicApiUsageFlushSeconds: number;
   /** CSV exports of the diagnostics per minute allowed to a user (`RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER`). */
   readonly rateLimitDiagnosticsExportPerUser: number;
   /** Imports of the tobacco price list per hour allowed to a user (`RATE_LIMIT_TOBACCOS_IMPORT_PER_USER`). */
@@ -651,6 +666,13 @@ export function loadConfig(env: Env): Config {
   const rateLimitApiPerStore = readInteger(env, issues, 'RATE_LIMIT_API_PER_STORE', 600, 1, 1_000_000);
   const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
+  const rateLimitApiKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_API_KEY_ADMIN_PER_USER', 20, 1, 100000);
+  const publicApiDefaultRateLimitPerMinute = readInteger(env, issues, 'PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE', 60, PUBLIC_API_MIN_LIMIT, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE);
+  const publicApiDefaultDailyQuota = readInteger(env, issues, 'PUBLIC_API_DEFAULT_DAILY_QUOTA', 10_000, PUBLIC_API_MIN_LIMIT, PUBLIC_API_MAX_DAILY_QUOTA);
+  const publicApiDefaultGroupRateLimitPerMinute = readInteger(env, issues, 'PUBLIC_API_DEFAULT_GROUP_RATE_LIMIT_PER_MINUTE', 120, PUBLIC_API_MIN_LIMIT, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE);
+  const publicApiDefaultGroupDailyQuota = readInteger(env, issues, 'PUBLIC_API_DEFAULT_GROUP_DAILY_QUOTA', 20_000, PUBLIC_API_MIN_LIMIT, PUBLIC_API_MAX_DAILY_QUOTA);
+  const rateLimitUnauthenticatedPublicPerIp = readInteger(env, issues, 'RATE_LIMIT_UNAUTHENTICATED_PUBLIC_PER_IP', 300, 1, 100000);
+  const publicApiUsageFlushSeconds = readInteger(env, issues, 'PUBLIC_API_USAGE_FLUSH_SECONDS', 30, 1, 3600);
   const rateLimitDiagnosticsExportPerUser = readInteger(env, issues, 'RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', 5, 1, 100000);
   const rateLimitTobaccosImportPerUser = readInteger(env, issues, 'RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', 5, 1, 100000);
   const rateLimitCervedLookupPerUser = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER', 10, 1, 100000);
@@ -723,6 +745,13 @@ export function loadConfig(env: Env): Config {
     rateLimitApiPerStore === undefined ||
     rateLimitStoreActivationPerIp === undefined ||
     rateLimitStoreKeyAdminPerUser === undefined ||
+    rateLimitApiKeyAdminPerUser === undefined ||
+    publicApiDefaultRateLimitPerMinute === undefined ||
+    publicApiDefaultDailyQuota === undefined ||
+    publicApiDefaultGroupRateLimitPerMinute === undefined ||
+    publicApiDefaultGroupDailyQuota === undefined ||
+    rateLimitUnauthenticatedPublicPerIp === undefined ||
+    publicApiUsageFlushSeconds === undefined ||
     rateLimitDiagnosticsExportPerUser === undefined ||
     rateLimitTobaccosImportPerUser === undefined ||
     rateLimitCervedLookupPerUser === undefined ||
@@ -767,6 +796,13 @@ export function loadConfig(env: Env): Config {
     rateLimitApiPerStore,
     rateLimitStoreActivationPerIp,
     rateLimitStoreKeyAdminPerUser,
+    rateLimitApiKeyAdminPerUser,
+    publicApiDefaultRateLimitPerMinute,
+    publicApiDefaultDailyQuota,
+    publicApiDefaultGroupRateLimitPerMinute,
+    publicApiDefaultGroupDailyQuota,
+    rateLimitUnauthenticatedPublicPerIp,
+    publicApiUsageFlushSeconds,
     rateLimitDiagnosticsExportPerUser,
     rateLimitTobaccosImportPerUser,
     rateLimitCervedLookupPerUser,

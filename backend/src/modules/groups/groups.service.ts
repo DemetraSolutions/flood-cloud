@@ -38,7 +38,7 @@ export interface GroupsService {
    * @param patch Validated body.
    * @param client Request context.
    * @throws {AppError} `VALIDATION_ERROR` for an empty body; `FORBIDDEN` (with a `notAllowed` detail per field) for a field the role may not send;
-   * `NOT_FOUND`; `CONFLICT` when the stored document cannot take the change (a `settings` container that is not an object).
+   * `NOT_FOUND`; `CONFLICT` when the stored document cannot take the change (a `settings` or `publicApi` container that is not an object). A dealer who changes a value of `publicApi` (the PSA's alone) gets `FORBIDDEN` with a `publicApi.<name>` `notAllowed` detail.
    */
   update(principal: AuthPrincipal, access: GroupAccess, patch: PatchGroupBody, client: ClientContext): Promise<GroupResponse>;
   /**
@@ -82,6 +82,9 @@ export interface GroupsServiceDeps {
   readonly now: () => number;
 }
 
+/** Who sees, in the detail of a group, the settings of its public API: the PSA and the dealers (the group administrator does not manage the keys). */
+const seesPublicApi = (principal: AuthPrincipal): boolean => principal.role === 'PSA' || principal.role === 'D';
+
 type StateAction = 'group.suspended' | 'group.reactivated' | 'group.trashed' | 'group.restored';
 
 /**
@@ -114,7 +117,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     }
   };
 
-  const respond = async (principal: AuthPrincipal, id: ObjectId): Promise<GroupResponse> => toResponse(await load(id), principal.role === 'PSA');
+  const respond = async (principal: AuthPrincipal, id: ObjectId): Promise<GroupResponse> => toResponse(await load(id), principal.role === 'PSA', seesPublicApi(principal));
 
   /**
    * Ends the sessions of every user of the group and, when asked, empties their legacy tokens (D-11), a batch per transaction;
@@ -219,8 +222,12 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       }
       const before = await load(access.groupId);
       const changes = changesOf(before, patch);
+      // Reserved field: the switch and the limits of the public API are the PSA's. A dealer may send the values the group already has, never a different one.
+      if (principal.role !== 'PSA' && changes.publicApi !== undefined) {
+        throw new AppError('FORBIDDEN', { details: Object.keys(changes.publicApi).map((name) => ({ field: `publicApi.${name}`, issue: 'notAllowed' })) });
+      }
       if (Object.keys(changes).length === 0) {
-        return toResponse(before, principal.role === 'PSA');
+        return toResponse(before, principal.role === 'PSA', seesPublicApi(principal));
       }
       await write(access.groupId, changes, date());
       const after = await load(access.groupId);
@@ -234,7 +241,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         requestId: client.requestId,
         ...(client.ip === null ? {} : { ip: client.ip }),
       });
-      return toResponse(after, principal.role === 'PSA');
+      return toResponse(after, principal.role === 'PSA', seesPublicApi(principal));
     },
 
     suspend: async (principal, access, client) => {

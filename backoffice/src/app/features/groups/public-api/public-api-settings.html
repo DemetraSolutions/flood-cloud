@@ -1,0 +1,76 @@
+@if (state.group()) {
+  @if (!enabled()) {
+    <div class="banner" role="status">
+      <fc-icon name="alert" />
+      <p>{{ 'PUBLIC_API.SETTINGS.OFF_NOTICE' | t }}</p>
+    </div>
+  }
+  @if (!state.canPublicApi()) {
+    <p class="note">{{ 'PUBLIC_API.SETTINGS.READ_ONLY' | t }}</p>
+  }
+  <form novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (conflict()) {
+        <div class="actions">
+          <button fc-button variant="secondary" (click)="reload()">
+            {{ 'GROUP_SETTINGS.RELOAD' | t }}
+          </button>
+        </div>
+      }
+    }
+    <fieldset>
+      <legend>{{ 'PUBLIC_API.SETTINGS.LEGEND' | t }}</legend>
+      <fc-checkbox
+        [formField]="settingsForm.enabled"
+        [label]="'PUBLIC_API.SETTINGS.ENABLED' | t"
+        [hint]="'PUBLIC_API.SETTINGS.ENABLED_HINT' | t"
+        [error]="error(settingsForm.enabled)"
+        (blurred)="settingsForm.enabled().markAsTouched()"
+      />
+    </fieldset>
+    <fieldset>
+      <legend>{{ 'PUBLIC_API.SETTINGS.DEFAULTS' | t }}</legend>
+      <p class="note">{{ 'PUBLIC_API.SETTINGS.DEFAULTS_HINT' | t }}</p>
+      <fc-text-field
+        [formField]="settingsForm.defaultRateLimitPerMinute"
+        type="number"
+        [label]="'PUBLIC_API.SETTINGS.DEFAULT_PER_MINUTE' | t"
+        [error]="error(settingsForm.defaultRateLimitPerMinute)"
+        (blurred)="settingsForm.defaultRateLimitPerMinute().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="settingsForm.defaultDailyQuota"
+        type="number"
+        [label]="'PUBLIC_API.SETTINGS.DEFAULT_PER_DAY' | t"
+        [error]="error(settingsForm.defaultDailyQuota)"
+        (blurred)="settingsForm.defaultDailyQuota().markAsTouched()"
+      />
+    </fieldset>
+    <fieldset>
+      <legend>{{ 'PUBLIC_API.SETTINGS.CAP' | t }}</legend>
+      <p class="note">{{ 'PUBLIC_API.SETTINGS.CAP_HINT' | t }}</p>
+      <fc-text-field
+        [formField]="settingsForm.groupRateLimitPerMinute"
+        type="number"
+        [label]="'PUBLIC_API.SETTINGS.CAP_PER_MINUTE' | t"
+        [error]="error(settingsForm.groupRateLimitPerMinute)"
+        (blurred)="settingsForm.groupRateLimitPerMinute().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="settingsForm.groupDailyQuota"
+        type="number"
+        [label]="'PUBLIC_API.SETTINGS.CAP_PER_DAY' | t"
+        [error]="error(settingsForm.groupDailyQuota)"
+        (blurred)="settingsForm.groupDailyQuota().markAsTouched()"
+      />
+    </fieldset>
+    @if (state.canPublicApi()) {
+      <div class="actions">
+        <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
+          {{ 'COMMON.SAVE' | t }}
+        </button>
+      </div>
+    }
+  </form>
+}

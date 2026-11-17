@@ -1,4 +1,5 @@
 import { FeatureFlags, FeatureName } from '../../core/groups/feature-catalog';
+import type { PublicApiSettings } from './public-api/api-key.types';
 
 /** Status of a group: a suspended group is refused to everyone but the platform administrators. */
 export type GroupStatus = 'active' | 'suspended';
@@ -49,6 +50,8 @@ export interface Group {
   readonly languages: readonly string[];
   readonly statsSettings: StatsSettings;
   readonly integrations: Readonly<Record<IntegrationProvider, Integration>>;
+  /** Public API settings: sent only to platform administrators and dealers. */
+  readonly publicApi?: PublicApiSettings;
   readonly createdAt: string | null;
   readonly updatedAt: string | null;
 }
@@ -92,6 +95,8 @@ export interface GroupPatch {
     Record<IntegrationProvider, { enabled?: boolean; apiKey?: string | null }>
   >;
   demo?: boolean;
+  /** Public API settings: only the platform administrator may change a value. */
+  publicApi?: Partial<PublicApiSettings>;
 }
 
 /** The "general" part of a group as the form edits it (text fields are `''` when empty). */

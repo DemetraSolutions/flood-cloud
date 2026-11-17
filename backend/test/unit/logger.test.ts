@@ -198,6 +198,20 @@ describe('logger', () => {
   });
 });
 
+describe('the public API keys in the logs', () => {
+  const KEY = `fc_pk_${'Zz9-_'.repeat(8)}Abc`; // gitleaks:allow (fake test value)
+
+  it('hides the X-Api-Key header, in any case, and any value that carries a public key, whatever the field is called', () => {
+    const { logger, lines } = memoryLogger();
+    logger.info('request', { headers: { 'X-Api-Key': KEY, 'x-api-key': KEY, 'X-API-KEY': KEY, accept: 'application/json' }, note: `called with ${KEY}`, apiKey: KEY, other: [KEY], nested: { deeper: { value: KEY } } });
+    logger.error('failed', { error: new Error(`the key ${KEY} was refused`) });
+    const text = lines.join('\n');
+    assert.ok(!text.includes(KEY) && !text.includes('Zz9-_'), text);
+    assert.ok(text.includes('application/json'));
+    assert.equal(isSecretKey('X-Api-Key'), true);
+  });
+});
+
 describe('key classification', () => {
   it('splits secrets from personal data; stdout redacts both', () => {
     for (const key of ['password', 'Pin', 'x-api-key', 'set-cookie', 'mongodbUri', 'smtpPassword', 'accessToken', 'privateKey']) {

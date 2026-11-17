@@ -6,6 +6,10 @@ import { GROUP_SECTIONS } from '../../features/groups/group-settings';
 import { PROMOTION_SECTIONS } from '../../features/groups/catalogs/promotion-model';
 import { INTEGRATION_PROVIDERS } from '../../features/groups/group.types';
 import {
+  permissionTextKey,
+  PUBLIC_PERMISSIONS,
+} from '../../features/groups/public-api/api-key.types';
+import {
   AUTOMATIC_CASH,
   AUTOMATIC_CASH_DEVICES,
   POS_BOOLEAN_OPTIONS,
@@ -110,7 +114,7 @@ describe('dictionaries', () => {
     }
     for (const section of GROUP_SECTIONS) {
       expected.push(`GROUP_SETTINGS.SECTION.${section.key}`);
-      if (section.path.match(/-|^taxes|^currencies/) !== null) {
+      if (section.path !== 'public-api' && section.path.match(/-|^taxes|^currencies/) !== null) {
         for (const part of [
           'TITLE',
           'HINT',
@@ -132,6 +136,21 @@ describe('dictionaries', () => {
     }
     for (const key of ['CARDTYPES', 'POINTSCOLLECTIONS', 'OTHER']) {
       expected.push(`CATALOG.REFERENCED.${key}`);
+    }
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the texts of the public API keys, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    const expected: string[] = [];
+    for (const permission of PUBLIC_PERMISSIONS) {
+      expected.push(permissionTextKey(permission, 'LABEL'), permissionTextKey(permission, 'HINT'));
+    }
+    for (const status of ['ACTIVE', 'REVOKED', 'EXPIRED']) {
+      expected.push(`PUBLIC_API.STATUS.${status}`);
+    }
+    for (const kind of ['SYSTEM', 'ANONYMOUS', 'USER', 'STORE', 'API_KEY']) {
+      expected.push(`ACTIVITY.ACTOR.${kind}`);
     }
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });

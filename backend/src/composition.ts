@@ -9,6 +9,7 @@ import type { ActivityLog } from './shared/activity-log/activity-log.ts';
 import type { RouteDefinition } from './shared/http/routes.ts';
 import type { Logger } from './shared/logging/logger.ts';
 import type { RateLimiter } from './shared/security/rate-limit/rate-limiter.ts';
+import type { PublicApiLimits } from './shared/security/public-api-limits.ts';
 import { createRateLimitRules } from './shared/security/rate-limit/rules.ts';
 import { createCompanyPlacesRepository } from './shared/security/scope/company-places.repository.ts';
 import { createDealerGroupsRepository } from './shared/security/scope/dealer-groups.repository.ts';
@@ -18,6 +19,17 @@ import { createActivityLogController } from './modules/activity-log/activity-log
 import { createActivityLogRepository } from './modules/activity-log/activity-log.repository.ts';
 import { createActivityLogRoutes } from './modules/activity-log/activity-log.routes.ts';
 import { createActivityLogService } from './modules/activity-log/activity-log.service.ts';
+import { createApiKeysController } from './modules/api-keys/api-keys.controller.ts';
+import { createApiKeysRepository } from './modules/api-keys/api-keys.repository.ts';
+import { createApiKeysRoutes } from './modules/api-keys/api-keys.routes.ts';
+import { createApiKeysService } from './modules/api-keys/api-keys.service.ts';
+import { createAuthenticateApiKey } from './modules/api-keys/authenticate-api-key.ts';
+import { createUsageMeter } from './modules/api-keys/usage-meter.ts';
+import type { UsageMeter } from './modules/api-keys/usage-meter.ts';
+import { createPublicController } from './modules/public-api/public.controller.ts';
+import { createPublicRepository } from './modules/public-api/public.repository.ts';
+import { createPublicRoutes } from './modules/public-api/public.routes.ts';
+import { createPublicService } from './modules/public-api/public.service.ts';
 import { createAuthController } from './modules/auth/auth.controller.ts';
 import { createAuthRoutes } from './modules/auth/auth.routes.ts';
 import { createAuthService } from './modules/auth/auth.service.ts';
@@ -105,6 +117,14 @@ import { createVatLookupsRoutes } from './modules/vat-lookups/vat-lookups.routes
 import { createVatLookupsService } from './modules/vat-lookups/vat-lookups.service.ts';
 import { createUsersRepository } from './modules/users/users.repository.ts';
 
+/** The defaults of the public API of the platform, from the configuration. */
+const publicApiLimitsOf = (config: Config): PublicApiLimits => ({
+  rateLimitPerMinute: config.publicApiDefaultRateLimitPerMinute,
+  dailyQuota: config.publicApiDefaultDailyQuota,
+  groupRateLimitPerMinute: config.publicApiDefaultGroupRateLimitPerMinute,
+  groupDailyQuota: config.publicApiDefaultGroupDailyQuota,
+});
+
 /** Everything the application needs from the backoffice modules, wired over real repositories. */
 export interface BackofficeModules {
   /** Routes to mount on `/v1`. */
@@ -184,8 +204,9 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   });
   const usersController = createUsersController(usersService);
   const dealersController = createDealersController(createDealersService({ dealers, users, usersService, activityLog, now }));
+  const managedGroups = createManagedGroupsRepository(databases, publicApiLimitsOf(config));
   const groupsController = createGroupsController(
-    createGroupsService({ groups: createManagedGroupsRepository(databases), users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now }),
+    createGroupsService({ groups: managedGroups, users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now }),
   );
   const groupServices = createGroupServicesController(createGroupServicesService({ services, users }));
   const catalogsService = createCatalogsService({
@@ -266,9 +287,10 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const vatLookups = createVatLookupsController(
     createVatLookupsService({ cerved: createCervedClient({ apiKey: config.cervedApiKey, baseUrl: config.cervedBaseUrl, ...deps.cervedHttp }), activityLog, logger }),
   );
+  const apiKeys = createApiKeysController(createApiKeysService({ repository: createApiKeysRepository(databases, publicApiLimitsOf(config)), groups: managedGroups, activityLog, now }));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
-    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createApiKeysRoutes(apiKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
       ...createCatalogRoutes(catalogsService, CATALOGS),
       ...createGroupServicesRoutes(groupServices),
       ...createLookupRoutes(lookup),
@@ -283,4 +305,42 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     authenticateStore,
     groups,
   };
+}
+
+/** Everything the public API (`/public/v1`) needs, wired over real repositories. */
+export interface PublicApiModules {
+  /** Routes to mount on `/public/v1`. */
+  readonly routes: readonly RouteDefinition[];
+  /** `X-Api-Key` authentication of the public surface, with the per-key rate limit and the daily quota. */
+  readonly authenticate: RequestHandler;
+  /** The usage meter: the server starts it with the process and stops it (which writes what is left) before the database is closed. */
+  readonly meter: UsageMeter;
+}
+
+/** Collaborators of {@link createPublicApiModules}. */
+export interface PublicApiDeps {
+  readonly config: Config;
+  readonly databases: Databases;
+  readonly activityLog: ActivityLog;
+  readonly logger: Logger;
+  /** The rate limit counters (the per-key limit and the daily quota use them). */
+  readonly rateLimiter: RateLimiter;
+  /** Clock in epoch milliseconds; defaults to `Date.now`. */
+  readonly now?: () => number;
+}
+
+/**
+ * Composition root of the public API: the API key authentication (with the usage meter), the reads of places, companies and the group catalogs, and their routes.
+ *
+ * @param deps Configuration, databases, activity log, logger, counters and clock.
+ * @returns Routes, authentication and meter, ready for `createApp` and the server.
+ */
+export function createPublicApiModules(deps: PublicApiDeps): PublicApiModules {
+  const { config, databases, activityLog, logger, rateLimiter } = deps;
+  const now = deps.now ?? Date.now;
+  const keys = createApiKeysRepository(databases, publicApiLimitsOf(config));
+  const meter = createUsageMeter({ repository: keys, logger, flushIntervalMs: config.publicApiUsageFlushSeconds * 1000 });
+  const groups = createManagedGroupsRepository(databases, publicApiLimitsOf(config));
+  const controller = createPublicController(createPublicService({ repository: createPublicRepository(databases), groups, rateLimiter }));
+  return { routes: createPublicRoutes(controller), authenticate: createAuthenticateApiKey({ repository: keys, rateLimiter, activityLog, logger, meter, now }), meter };
 }

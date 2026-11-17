@@ -1,0 +1,119 @@
+<header class="head">
+  <h2>{{ 'PUBLIC_API.LIST.TITLE' | t }}</h2>
+  @if (canManage()) {
+    <button fc-button (click)="create()">{{ 'PUBLIC_API.LIST.NEW' | t }}</button>
+  }
+</header>
+<p class="hint">{{ 'PUBLIC_API.LIST.HINT' | t }}</p>
+
+@if (loadFailed()) {
+  <fc-error-state
+    [title]="'PUBLIC_API.LIST.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'PUBLIC_API.LIST.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    rowHeader="name"
+    [loading]="loading()"
+    [emptyTitle]="'PUBLIC_API.LIST.EMPTY' | t"
+    [emptyMessage]="'PUBLIC_API.LIST.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="status" let-row>
+      <fc-status-badge [tone]="tone(row.status)">{{
+        'PUBLIC_API.STATUS.' + row.status.toUpperCase() | t
+      }}</fc-status-badge>
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      <fc-actions-menu
+        [text]="'PUBLIC_API.LIST.ACTIONS' | t"
+        [label]="rowLabel('PUBLIC_API.LIST.ACTIONS_LABEL', row)"
+      >
+        @if (canManage() && row.status === 'active') {
+          <button
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="rowLabel('PUBLIC_API.LIST.EDIT_LABEL', row)"
+            (click)="edit(row)"
+          >
+            {{ 'PUBLIC_API.LIST.EDIT' | t }}
+          </button>
+          <button
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="rowLabel('PUBLIC_API.LIST.REVOKE_LABEL', row)"
+            (click)="askRevoke(row)"
+          >
+            {{ 'PUBLIC_API.LIST.REVOKE' | t }}
+          </button>
+        }
+        <button
+          fc-button
+          variant="ghost"
+          [attr.aria-label]="rowLabel('PUBLIC_API.LIST.USAGE_LABEL', row)"
+          (click)="showUsage(row)"
+        >
+          {{ 'PUBLIC_API.LIST.USAGE' | t }}
+        </button>
+      </fc-actions-menu>
+    </ng-template>
+  </fc-data-table>
+  <fc-cursor-paginator
+    [limit]="limit()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="hasPrevious()"
+    [loading]="loading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-dialog
+  [heading]="(editing() === null ? 'PUBLIC_API.KEY.NEW_TITLE' : 'PUBLIC_API.KEY.EDIT_TITLE') | t"
+  [wide]="true"
+  [open]="editorOpen()"
+  (openChange)="editorOpen.set($event)"
+>
+  @if (editorOpen()) {
+    <fc-api-key-editor
+      [groupId]="groupId()"
+      [item]="editing()"
+      [inherited]="inherited()"
+      [canSetLimits]="canSetLimits()"
+      [error]="saveError()"
+      [busy]="saving()"
+      (save)="onSave($event)"
+      (cancelled)="editorOpen.set(false)"
+    />
+  }
+</fc-dialog>
+
+<fc-api-key-secret #secret />
+
+<fc-confirm-dialog
+  [heading]="'PUBLIC_API.REVOKE.TITLE' | t"
+  [message]="'PUBLIC_API.REVOKE.MESSAGE' | t: { name: revoking()?.name ?? '' }"
+  [confirmLabel]="'PUBLIC_API.LIST.REVOKE' | t"
+  [danger]="true"
+  [busy]="revokeBusy()"
+  [open]="revokeOpen()"
+  (openChange)="revokeOpen.set($event)"
+  (confirmed)="confirmRevoke()"
+/>
+
+<fc-dialog
+  [heading]="'PUBLIC_API.USAGE.TITLE' | t: { name: usageKey()?.name ?? '' }"
+  [wide]="true"
+  [open]="usageOpen()"
+  (openChange)="usageOpen.set($event)"
+>
+  @if (usageOpen() && usageKey(); as key) {
+    <fc-api-key-usage [groupId]="groupId()" [keyId]="key.id" />
+  }
+</fc-dialog>

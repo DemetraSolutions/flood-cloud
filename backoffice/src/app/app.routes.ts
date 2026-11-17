@@ -441,6 +441,13 @@ const groupSettingsRoutes: Routes = [
         loadComponent: () =>
           import('./features/groups/group-integrations').then((m) => m.GroupIntegrations),
       },
+      {
+        path: 'public-api',
+        canMatch: [permission('apiKeys:read')],
+        title: 'GROUP_SETTINGS.SECTION.PUBLIC_API',
+        loadComponent: () =>
+          import('./features/groups/public-api/group-public-api').then((m) => m.GroupPublicApi),
+      },
       ...catalogRoutes,
     ],
   },

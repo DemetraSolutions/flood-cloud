@@ -61,6 +61,8 @@ export class GroupSettingsState {
   });
   /** `demo`: the PSA only. */
   readonly canDemo = computed(() => this.canUpdate() && this.session.me()?.role === 'PSA');
+  /** The public API settings of the group: the PSA only (a dealer reads them). */
+  readonly canPublicApi = this.canDemo;
 
   /** Loads the group again (after an action on its state). */
   reload(): void {

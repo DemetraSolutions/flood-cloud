@@ -791,15 +791,15 @@ Decisioni dell'utente del 2026-11-17 (analisi in `backend/reports/public-api-leg
 - **Ambito:** infrastruttura (chiavi, `X-Api-Key`, rate limit, quote, conteggio d'uso, pagine del backoffice) e le **prime letture** possibili oggi: `GET /me`, `/places`, `/companies`, `/price-lists`, `/taxes`. Prodotti, vendite, ordini, prenotazioni e clienti arrivano con i loro domini.
 - **Più chiavi per gruppo**, ognuna con i propri permessi e limiti: un gruppo che si integra con tre provider ne dà una a ciascuno.
 - **Chi gestisce:** PSA e D creano e revocano le chiavi dei gruppi che gestiscono (non il SA, a differenza di quanto previsto in `Security-Model.md` §6, da allineare); **solo il PSA** cambia i limiti.
-- **Limiti di default:** 60 richieste al minuto e 10 000 al giorno per chiave; nessuna quota mensile.
+- **Limiti di default:** 60 richieste al minuto e 10 000 al giorno per chiave; nessuna quota mensile. Dopo la revisione di sicurezza (2026-11-17): anche un **tetto complessivo del gruppo**, sommato su tutte le sue chiavi e impostato solo dal PSA (default 120 al minuto e 20 000 al giorno), perché un D non moltiplichi i limiti creando più chiavi; una chiave **scaduta non si riattiva** (`409`, come una revocata) e non conta nel tetto delle 50 chiavi attive.
 - **Campi nel gruppo, impostabili solo dal PSA:** interruttore "API pubbliche attive" (spento: nessuna chiave del gruppo funziona) e limiti di default ereditati dalle nuove chiavi del gruppo.
 - **Contratto nuovo**, nessuna compatibilità con gli endpoint dei partner del legacy (servizio integrazioni), che restano sul legacy finché non migrano; i widget web (oggi con la chiave di gruppo nel browser) avranno una superficie dedicata in un'area futura.
-- [ ] **9.1.1** Collection `apiKeys`: creazione, elenco e revoca da SA (e da D e PSA per i loro gruppi); chiave mostrata una sola volta.
-- [ ] **9.1.2** Middleware `X-Api-Key` con scope sul gruppo e restrizioni ad aziende e punti vendita; CORS chiuso.
-- [ ] **9.1.3** Rate limit per chiave e quote (`QUOTA_EXCEEDED`).
-- [ ] **9.1.4** Conteggio d'uso aggregato a blocchi (`apiUsage`) e consultazione dal backoffice.
-- [ ] **9.1.5** Pagine del backoffice per la gestione delle chiavi.
-- [ ] **9.1.6** `doc/Public-API.md` e `doc/API.md`; revisione del `security_expert`; conferma dell'utente.
+- [x] **9.1.1** Collection `apiKeys`: creazione, elenco e revoca da SA (e da D e PSA per i loro gruppi); chiave mostrata una sola volta. *Fatto (passi 9A/9B, confermato dall'utente il 2026-11-17): collection `apiKeys` (hash SHA-256, prefisso visibile), più chiavi per gruppo, creazione e revoca da **PSA e D** (non SA, decisione dell'utente), segreto mostrato una sola volta; limiti solo dal PSA; chiave scaduta non riattivabile; tetto di 50 chiavi attive (non atomico, accettato).*
+- [x] **9.1.2** Middleware `X-Api-Key` con scope sul gruppo e restrizioni ad aziende e punti vendita; CORS chiuso. *Fatto: `X-Api-Key` solo su `/public/v1` (mai su `/v1`, e nessun token del backoffice o chiave di negozio sulla superficie pubblica), `401` generico per ogni motivo, scope sul gruppo e restrizioni ad aziende e punti vendita (`404` fuori perimetro), nessun header CORS; interruttore `publicApi.enabled` del gruppo (solo PSA, spento di default).*
+- [x] **9.1.3** Rate limit per chiave e quote (`QUOTA_EXCEEDED`). *Fatto: limite al minuto e quota giornaliera per chiave (default 60 e 10 000) e tetto complessivo del gruppo (default 120 e 20 000), impostati solo dal PSA; `QUOTA_EXCEEDED` con `Retry-After` fino a mezzanotte UTC; nessuna quota mensile; bucket per IP dei `401` separato da `/v1`.*
+- [x] **9.1.4** Conteggio d'uso aggregato a blocchi (`apiUsage`) e consultazione dal backoffice. *Fatto: `apiUsage` per chiave, giorno ed endpoint (chiamate, 4xx, 5xx, limitate, interrotte), aggregato in memoria e scritto a blocchi ogni 30 s, TTL 400 giorni; consultabile con `GET …/api-keys/{keyId}/usage`.*
+- [x] **9.1.5** Pagine del backoffice per la gestione delle chiavi. *Fatto: scheda "API pubbliche" nelle impostazioni del gruppo (PSA e D): impostazioni del gruppo (solo PSA), elenco, creazione con segreto mostrato una volta, modifica, revoca e utilizzo; eventi `apiKey.*` nel registro attività (`doc/Technical-Guide.md` §11.22).*
+- [x] **9.1.6** `doc/Public-API.md` e `doc/API.md`; revisione del `security_expert`; conferma dell'utente. *Fatto: `doc/Public-API.md` (primi endpoint in sola lettura: `/me`, `/places`, `/companies`, `/price-lists`, `/taxes`; l'host pubblico è ancora da definire), `doc/API.md`, `doc/Security-Model.md` §3, §6–8; revisioni del `security_expert` su 9A e 9B applicate; confermato dall'utente il 2026-11-17.*
 
 ---
 
@@ -815,6 +815,26 @@ Passi (confermati dall'utente il 2026-11-17; codice in `c176155`):
 - [x] **T1** Diagnostica. *`GET /v1/diagnostics/devices` (paginata a cursore, al massimo 100 per pagina) e `GET /v1/diagnostics/devices.csv` con gli stessi filtri, permesso `places:read`; pagina `/tools/diagnostics` per ogni ruolo con quel permesso (il gruppo di menu "Strumenti" non è più solo di PSA e D). Scelte oltre le decisioni: CSV al massimo di 50 000 righe (`413` "restringi i filtri"), un solo scarico alla volta per utente, celle neutralizzate contro le formule (CSV injection), testi limitati a 200 caratteri; mai credenziali, dati di rete o numeri di serie in tabella o nel CSV. Documentato in `doc/API.md`, `doc/Technical-Guide.md` §11.19.*
 - [x] **T2** Template e-mail. *CRUD su `email_templates` del database del gruppo (`legacy-write`), feature `email` obbligatoria (`403 FEATURE_DISABLED`), creazione con `Idempotency-Key`, modifica con `If-Match`, eliminazione `409` con i punti vendita che lo usano. Scelte oltre le decisioni: nome al massimo di 150 caratteri, testo 64 KB, HTML 256 KB; i sette modelli del legacy come file statici del backoffice ("Parti da un modello"), con il logo del vecchio dominio sostituito da un segnaposto da cambiare; anteprima in un documento statico a parte (`/email-preview.html`) con CSP propria servita dal server statico, `iframe` con `sandbox` senza `allow-same-origin` e HTML consegnato solo su un `MessageChannel`. Debito noto S8: i link Conferma/Rifiuta del modello delle prenotazioni sono `GET` non firmati come nel legacy, da rifare con il dominio delle prenotazioni. Documentato in `doc/API.md`, `doc/Technical-Guide.md` §11.20.*
 - [x] **T3** Listino Tabacchi. *`GET /v1/tobaccos` e `POST /v1/tobaccos/import`, solo PSA con i permessi `tobaccos:read` e `tobaccos:import`; collection `tobaccos` del common (`legacy-write`, stessa forma del legacy). Lettore XLSX nativo in `src/shared/xlsx/` con limiti stretti (file 10 MB, 50 voci, rapporto di compressione 100, 100 000 righe, 50 colonne, 32 767 caratteri per cella e 50 MB di testo in tutto); import validato per intero e poi sostituito in una sola transazione (al massimo 20 000 prodotti, fino a 10 coppie barcode/quantità per prodotto, al massimo 50 problemi riportati), un'importazione alla volta (`503`), esito anche negativo nel registro attività (`tobaccos.imported`). La tabella mostra il primo barcode di ogni prodotto. Revisione di sicurezza: corretto il blocco B1 (file piccolo con spazi che bloccava il server). Documentato in `doc/API.md`, `doc/Technical-Guide.md` §11.21.*
+
+## 9-ter. Piattaforma: Gestione stati, Cestino, Documenti in errore
+
+Decisioni dell'utente del 2026-11-17 (analisi in `backend/reports/settings-trash-errors-legacy.md`, non versionata). Le Attivazioni restano fuori: l'utente vuole prima discuterne delle modifiche.
+
+- **Gestione stati** (`countries` del common, paesi con le province in `areas[]`, letti anche dal POS e dalle select del backoffice: forma identica al legacy):
+  - lettura per tutti come oggi (`GET /v1/countries`), **scrittura solo PSA** (creare paesi e province, cambiare il nome, eliminare);
+  - **codici non modificabili**: si cambia solo il nome;
+  - eliminazione di un paese o di una provincia **usati** da aziende o punti vendita (copie del common): `409` con i riferimenti; i contatti dei gruppi non si controllano;
+  - **codici unici** (paese; provincia nel paese): in development nessun duplicato su 240 paesi (conteggio in sola lettura del 2026-11-17); il conteggio in produzione è da fare prima dell'indice univoco.
+- **Cestino:** pagina unica "Cestino" con schede come il legacy: Gruppi, Aziende, Punti vendita, Utenti, sulle API già esistenti; Prodotti, Media e Contatti si aggiungono con i loro domini.
+  - eliminazione **solo manuale**, nessuna retention automatica; la data di cestinazione si salva solo come informazione quando cestina il nuovo backend;
+  - ripristino ed eliminazione con i **permessi già decisi** negli elenchi;
+  - selezione multipla e **"Svuota cestino" per scheda, solo PSA**, con conferma esplicita.
+- **Documenti in errore** (fatture e note di credito elettroniche dell'hub Aruba, PSA e D):
+  - letti **in sola lettura dalla coda del legacy** finché l'invio resta al legacy;
+  - come il legacy, solo ciò che è in coda (upload rifiutati e `refused`); gli scarti SDI arrivano con il dominio dei documenti fiscali;
+  - **sola lettura e dettaglio** dell'errore (testo sempre trattato come testo); "ritenta" e "gestita manualmente" arrivano con il dominio dei documenti;
+  - perimetro applicato dal server (PSA tutti, D i propri gruppi);
+  - oltre alle colonne del legacy (Numero, Data, Tipo, Cliente, Importo, Azienda): **Gruppo** (colonna e filtro), **codice e data dell'errore**, filtro per **dealer** (solo PSA) e **scarico CSV** come la Diagnostica.
 
 ## 10. Aree successive (da dettagliare)
 Ogni area parte con l'analisi del `legacy_analyst` (skill `legacy-module-analysis`) e si dettaglia in task prima di iniziare. Il server di punto vendita è un'applicazione separata, fuori da questo progetto (D-22), e usa le API del backoffice (D-23).

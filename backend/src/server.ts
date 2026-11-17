@@ -4,7 +4,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { MongoClient } from 'mongodb';
 import { createApp } from './app.ts';
-import { createBackofficeModules } from './composition.ts';
+import { createBackofficeModules, createPublicApiModules } from './composition.ts';
 import { createMediaStorage } from './integrations/gcs/index.ts';
 import type { MediaStorage } from './integrations/gcs/index.ts';
 import { loadConfig } from './config.ts';
@@ -160,13 +160,14 @@ export async function run(
   });
   const rateLimiter = createRateLimiter(databases);
   const backoffice = createBackofficeModules({ config, databases, activityLog, logger, rateLimiter, mediaStorage });
+  const publicApi = createPublicApiModules({ config, databases, activityLog, logger, rateLimiter });
   const app = createApp({
     config,
     logger,
     activityLog,
     rateLimiter,
-    routes: { v1: backoffice.routes },
-    authenticate: { v1: backoffice.authenticate, store: backoffice.authenticateStore },
+    routes: { v1: backoffice.routes, public: publicApi.routes },
+    authenticate: { v1: backoffice.authenticate, store: backoffice.authenticateStore, public: publicApi.authenticate },
     groupAccess: { groups: backoffice.groups },
     readiness: { isShuttingDown: () => shuttingDown, checks: [createPingCheck(databases)] },
   });
@@ -196,6 +197,8 @@ export async function run(
     proc.exit(1);
     return undefined;
   }
+  // The usage of the public API is counted in memory and written in blocks; the shutdown writes what is left before the database is closed.
+  publicApi.meter.start();
   logger.info('server started', { port: (server.address() as AddressInfo).port, appEnv: config.appEnv });
 
   const shutdown = (signal: string): void => {
@@ -213,7 +216,7 @@ export async function run(
     forced.unref();
     setTimeout(() => {
       server.close((error) => {
-        void closeClients(openClusters).then((clientClosed) => {
+        void publicApi.meter.stop().then(() => closeClients(openClusters)).then((clientClosed) => {
           clearTimeout(forced);
           if (error === undefined && clientClosed) {
             logger.info('shutdown completed');

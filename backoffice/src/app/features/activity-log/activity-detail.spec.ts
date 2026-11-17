@@ -56,6 +56,21 @@ describe('ActivityDetail', () => {
     expect(root.querySelector('dd.code')?.textContent?.trim()).toBe('session');
   });
 
+  it('names an API key actor and shows what the event recorded about the key', () => {
+    const root = render(
+      fakeEntry({
+        action: 'apiKey.updated',
+        actor: { kind: 'apiKey', id: '6650c0a1b2c3d4e5f6a7b8c9', role: null, username: null },
+        metadata: { name: 'Webshop', keyHint: 'AbCdEf', fields: 'name,expiresAt' },
+      }),
+    );
+    const text = root.textContent ?? '';
+    expect(text).toContain('ACTIVITY.ACTION.API_KEY_UPDATED');
+    expect(text).toContain('ACTIVITY.ACTOR.API_KEY');
+    expect(text).toContain('keyHint');
+    expect(text).toContain('AbCdEf');
+  });
+
   it('names a user actor without username by its id, or by nothing', () => {
     expect(
       render(fakeEntry({ actor: { kind: 'user', id: 'abc', role: null, username: null } }))

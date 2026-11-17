@@ -5,6 +5,7 @@ import { PROVIDERS } from '../modules/groups/group.types.ts';
 import { LEGACY_MODULES, READ_ONLY_MODULE } from '../shared/security/rbac/permission-matrix.ts';
 import { POS_OWNED_FIELDS, POS_PRICE_LISTS_PATH } from '../modules/users/pos.catalog.ts';
 import { SHIFT_SPECIAL_PATH, SHIFT_TIME_OWNED_FIELDS } from '../modules/users/shift-time.ts';
+import { API_KEYS_INDEXES, API_KEYS_VALIDATOR, API_USAGE_INDEXES, API_USAGE_VALIDATOR } from './api-keys-schema.ts';
 import { ACTIVITY_EVENTS_INDEXES } from './activity-events-schema.ts';
 import { DEALERS_INDEXES, DEALERS_VALIDATOR } from './dealers-schema.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
@@ -118,9 +119,15 @@ export const GROUPS_OWNED_CATALOGS: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * The leaves of the top-level `publicApi` field of a `groups` document (the switch of the public API and the default limits of the keys of the group, step 9A): written only by the PSA, one leaf at
+ * a time. It is a top-level key of its own, not part of `settings`, because the legacy update of a group writes `settings` as a whole and would erase it; it writes only named top-level keys, so this one survives.
+ */
+export const GROUPS_PUBLIC_API_FIELDS: readonly string[] = Object.freeze(['publicApi.enabled', 'publicApi.defaultRateLimitPerMinute', 'publicApi.defaultDailyQuota', 'publicApi.groupRateLimitPerMinute', 'publicApi.groupDailyQuota']);
+
+/**
  * Fields of the shared legacy `groups` documents this backend may write (`$set`/`$unset` only): name, description,
  * the state flags (`demo`, `status`, `trash`), the feature flags, the languages, the statistics settings, the
- * enabled state and the key (set only, never read back) of each integration, the catalogs of {@link GROUPS_OWNED_CATALOGS} and
+ * enabled state and the key (set only, never read back) of each integration, the catalogs of {@link GROUPS_OWNED_CATALOGS}, the leaves of {@link GROUPS_PUBLIC_API_FIELDS} and
  * `updateDate`. Everything else (`apiKey`, `databaseHost`, `filesHost`, `type`, `plan`, `expirationDate`, `places`) belongs to the legacy.
  * The management of the group (and its catalogs) writes only these: the registry adds {@link GROUPS_PLACES_FIELD} for the write service of places.
  */
@@ -137,6 +144,7 @@ export const GROUPS_OWNED_FIELDS: readonly string[] = Object.freeze([
   'settings.stats.timeSlots',
   ...PROVIDERS.flatMap((provider) => [`settings.integrations.${provider}.status`, `settings.integrations.${provider}.apiKey`]),
   ...GROUPS_OWNED_CATALOGS,
+  ...GROUPS_PUBLIC_API_FIELDS,
   'updateDate',
 ]);
 
@@ -310,6 +318,9 @@ export const COLLECTIONS = {
     // The server of a point of sale (D-24): the pending activation code of a place and its store keys, hashes only. Ours alone: the legacy knows nothing of them.
     storeActivationCodes: { ownership: 'new', indexes: STORE_ACTIVATION_CODES_INDEXES, validator: STORE_ACTIVATION_CODES_VALIDATOR },
     storeKeys: { ownership: 'new', indexes: STORE_KEYS_INDEXES, validator: STORE_KEYS_VALIDATOR },
+    // The public API keys of the groups (step 9A), hashes only, and the daily usage counters of each key and route. Ours alone: the legacy knows nothing of them.
+    apiKeys: { ownership: 'new', indexes: API_KEYS_INDEXES, validator: API_KEYS_VALIDATOR },
+    apiUsage: { ownership: 'new', indexes: API_USAGE_INDEXES, validator: API_USAGE_VALIDATOR },
     // The national tobacco price list (step T3): replaced as a whole by the import, read by the list; the legacy writes it too (same documents), so no unique index and no validator.
     tobaccos: {
       ownership: 'legacy-write',

@@ -1,23 +1,24 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Feature } from './features.ts';
-import type { Group, GroupChanges, Provider } from './group.types.ts';
+import type { Group, GroupChanges, Provider, PublicApiSettings } from './group.types.ts';
 import type { PatchGroupBody } from './groups.schemas.ts';
 
 /** The fields of the modification body, in the order they are reported. */
-export const PATCH_FIELDS = Object.freeze(['name', 'description', 'languages', 'statsSettings', 'features', 'integrations', 'demo'] as const);
+export const PATCH_FIELDS = Object.freeze(['name', 'description', 'languages', 'statsSettings', 'features', 'integrations', 'demo', 'publicApi'] as const);
 
 /** A field of the modification body. */
 export type PatchField = (typeof PATCH_FIELDS)[number];
 
 /**
  * The fields of the modification each role may send (D-13): name, description, languages and statistics settings are for the PSA,
- * the dealer and the group administrator; features and integrations for the PSA and the dealer; `demo` for the PSA only.
+ * the dealer and the group administrator; features and integrations for the PSA and the dealer; `demo` for the PSA only; `publicApi` is the PSA's to change, but a dealer may send it with the values it already has (the
+ * service refuses a dealer who changes a value: the reserved-field rule).
  * `status` and `trash` are not here at all: they have their own actions. A role that is not listed may send nothing.
  */
 export const EDITABLE_FIELDS: Readonly<Record<string, readonly PatchField[]>> = Object.freeze({
   PSA: PATCH_FIELDS,
   D: PATCH_FIELDS.filter((field) => field !== 'demo'),
-  SA: PATCH_FIELDS.filter((field) => field !== 'demo' && field !== 'features' && field !== 'integrations'),
+  SA: PATCH_FIELDS.filter((field) => field !== 'demo' && field !== 'features' && field !== 'integrations' && field !== 'publicApi'),
 });
 
 /**
@@ -57,6 +58,7 @@ export function changesOf(before: Group, patch: PatchGroupBody): GroupChanges {
       : {}),
     ...(stats?.timeSlots !== undefined && !isDeepStrictEqual(stats.timeSlots, before.statsSettings.timeSlots) ? { timeSlots: stats.timeSlots } : {}),
   };
+  const publicApi = (Object.entries(patch.publicApi ?? {}) as Array<[keyof PublicApiSettings, boolean | number]>).filter(([name, value]) => before.publicApi[name] !== value);
   return {
     ...(patch.name !== undefined && patch.name !== before.name ? { name: patch.name } : {}),
     ...(patch.description !== undefined && patch.description !== before.description ? { description: patch.description } : {}),
@@ -65,5 +67,6 @@ export function changesOf(before: Group, patch: PatchGroupBody): GroupChanges {
     ...(features.length > 0 ? { features: Object.fromEntries(features) } : {}),
     ...(integrations.length > 0 ? { integrations: Object.fromEntries(integrations) } : {}),
     ...(patch.demo !== undefined && patch.demo !== before.demo ? { demo: patch.demo } : {}),
+    ...(publicApi.length > 0 ? { publicApi: Object.fromEntries(publicApi) } : {}),
   };
 }

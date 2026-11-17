@@ -1,0 +1,41 @@
+:host {
+  display: block;
+}
+
+.range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.range button {
+  margin-block-start: var(--space-5);
+}
+
+.note {
+  color: var(--color-text-muted);
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.totals div {
+  display: flex;
+  flex-direction: column;
+}
+
+.totals dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.totals dd {
+  margin: 0;
+  font-size: var(--font-size-lg, 1.25rem);
+  font-weight: var(--font-weight-bold);
+}

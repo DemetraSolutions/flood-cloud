@@ -36,6 +36,8 @@ export interface RateLimitRules {
   readonly cervedLookupPerUser: RateLimitRule;
   /** Company lookups on Cerved per authenticated user per day (a cap on the cost, next to the per-minute rule). */
   readonly cervedLookupPerUserDaily: RateLimitRule;
+  /** Failed authentications per client IP on `/public/v1`, apart from the ones of `/v1` (the public surface is called by servers, `/v1` by offices behind a NAT). */
+  readonly unauthenticatedPublicPerIp: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
   readonly apiPerUser: RateLimitRule;
   /** Every `/v1` request per store key (the route builder applies it to every route a store key may call, and to no other: the per-user rule would let a store through with no limit, its key being the user's). */
@@ -44,6 +46,8 @@ export interface RateLimitRules {
   readonly storeActivationPerIp: RateLimitRule;
   /** Creations and cancellations of activation codes and revocations of store keys per authenticated user. */
   readonly storeKeyAdminPerUser: RateLimitRule;
+  /** Creations, changes and revocations of public API keys per authenticated user. */
+  readonly apiKeyAdminPerUser: RateLimitRule;
 }
 
 /** Length of an hourly window. */
@@ -78,6 +82,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     }),
     loginPerIp: Object.freeze({ bucket: 'login:ip', limit: config.rateLimitLoginPerIp, key: ip }),
     unauthenticatedPerIp: Object.freeze({ bucket: 'auth-fail:ip', limit: config.rateLimitUnauthenticatedPerIp, key: ip }),
+    unauthenticatedPublicPerIp: Object.freeze({ bucket: 'auth-fail:public:ip', limit: config.rateLimitUnauthenticatedPublicPerIp, key: ip }),
     refreshPerIp: Object.freeze({ bucket: 'refresh:ip', limit: config.rateLimitRefreshPerIp, key: ip }),
     usernameCheckPerUser: Object.freeze({ bucket: 'usernameCheck:user', limit: config.rateLimitUsernameCheckPerUser, key: perUser }),
     userCredentialsPerUser: Object.freeze({ bucket: 'user-credentials:user', limit: config.rateLimitUserCredentialsPerUser, key: perUser }),
@@ -100,5 +105,6 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     apiPerStore: Object.freeze({ bucket: 'api:store', limit: config.rateLimitApiPerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),
     storeKeyAdminPerUser: Object.freeze({ bucket: 'storeKeyAdmin:user', limit: config.rateLimitStoreKeyAdminPerUser, key: perUser }),
+    apiKeyAdminPerUser: Object.freeze({ bucket: 'apiKeyAdmin:user', limit: config.rateLimitApiKeyAdminPerUser, key: perUser }),
   });
 }

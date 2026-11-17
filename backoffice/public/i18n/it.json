@@ -682,7 +682,9 @@
     "ACTOR": {
       "SYSTEM": "Sistema",
       "ANONYMOUS": "Anonimo",
-      "USER": "Utente"
+      "USER": "Utente",
+      "STORE": "Negozio",
+      "API_KEY": "Chiave API {id}"
     },
     "COLUMN": {
       "AT": "Data e ora",
@@ -762,7 +764,141 @@
       "PLACE_UPDATED": "Punto vendita modificato",
       "PLACE_TRASHED": "Punto vendita spostato nel cestino",
       "PLACE_RESTORED": "Punto vendita ripristinato",
-      "PLACE_DELETED": "Punto vendita eliminato"
+      "PLACE_DELETED": "Punto vendita eliminato",
+      "API_KEY_CREATED": "Chiave API creata",
+      "API_KEY_UPDATED": "Chiave API modificata",
+      "API_KEY_REVOKED": "Chiave API revocata"
+    }
+  },
+  "PUBLIC_API": {
+    "SAVED": "Chiave salvata.",
+    "REVOKED": "Chiave revocata.",
+    "PERMISSION": {
+      "PLACES_READ": {
+        "LABEL": "Punti vendita: lettura",
+        "HINT": "Elenco e dettaglio dei punti vendita."
+      },
+      "COMPANIES_READ": {
+        "LABEL": "Aziende: lettura",
+        "HINT": "Elenco e dettaglio delle aziende."
+      },
+      "CATALOG_READ": {
+        "LABEL": "Listini e aliquote: lettura",
+        "HINT": "Listini e aliquote IVA del gruppo."
+      }
+    },
+    "STATUS": {
+      "ACTIVE": "Attiva",
+      "REVOKED": "Revocata",
+      "EXPIRED": "Scaduta"
+    },
+    "SETTINGS": {
+      "OFF_NOTICE": "Le API pubbliche di questo gruppo sono spente: nessuna chiave del gruppo funziona, nemmeno quelle attive, finché non vengono accese.",
+      "READ_ONLY": "Solo l’amministratore di piattaforma può cambiare queste impostazioni.",
+      "LEGEND": "API pubbliche del gruppo",
+      "ENABLED": "API pubbliche attive",
+      "ENABLED_HINT": "Se è spenta, nessuna chiave del gruppo può chiamare le API pubbliche.",
+      "DEFAULTS": "Limiti predefiniti delle nuove chiavi",
+      "DEFAULTS_HINT": "Una chiave creata senza limiti propri eredita questi valori.",
+      "DEFAULT_PER_MINUTE": "Richieste al minuto",
+      "DEFAULT_PER_DAY": "Richieste al giorno",
+      "CAP": "Tetto del gruppo",
+      "CAP_HINT": "Limite di tutte le chiavi del gruppo sommate: creare più chiavi non lo aumenta.",
+      "CAP_PER_MINUTE": "Richieste al minuto del gruppo",
+      "CAP_PER_DAY": "Richieste al giorno del gruppo"
+    },
+    "LIST": {
+      "TITLE": "Chiavi API",
+      "HINT": "Una chiave per ogni integrazione: ognuna ha permessi, restrizioni, scadenza e limiti propri. Il segreto si vede una sola volta, alla creazione.",
+      "NEW": "Nuova chiave",
+      "LOAD_ERROR": "Impossibile caricare le chiavi API",
+      "EMPTY": "Nessuna chiave",
+      "EMPTY_MESSAGE": "Questo gruppo non ha ancora chiavi API.",
+      "NAME": "Nome",
+      "PREFIX": "Prefisso",
+      "PERMISSIONS": "Permessi",
+      "RESTRICTIONS": "Restrizioni",
+      "NO_RESTRICTIONS": "Nessuna",
+      "COMPANIES_COUNT": "Aziende: {count}",
+      "PLACES_COUNT": "Punti vendita: {count}",
+      "LIMITS": "Limiti",
+      "LIMITS_VALUE": "{minute} al minuto, {day} al giorno",
+      "EXPIRES": "Scadenza",
+      "NEVER_EXPIRES": "Nessuna",
+      "STATUS": "Stato",
+      "CREATED": "Creata il",
+      "LAST_USED": "Ultimo uso",
+      "NEVER_USED": "Mai usata",
+      "ACTIONS": "Azioni",
+      "ACTIONS_LABEL": "Azioni sulla chiave {name}",
+      "EDIT": "Modifica",
+      "EDIT_LABEL": "Modifica la chiave {name}",
+      "REVOKE": "Revoca",
+      "REVOKE_LABEL": "Revoca la chiave {name}",
+      "USAGE": "Utilizzo",
+      "USAGE_LABEL": "Utilizzo della chiave {name}"
+    },
+    "KEY": {
+      "NEW_TITLE": "Nuova chiave API",
+      "EDIT_TITLE": "Modifica la chiave API",
+      "NAME": "Nome",
+      "NAME_HINT": "Per riconoscerla: l’integrazione o il fornitore che la usa.",
+      "PERMISSIONS": "Permessi",
+      "PERMISSIONS_HINT": "Cosa può leggere la chiave. Almeno un permesso.",
+      "RESTRICTIONS": "Restrizioni",
+      "RESTRICTIONS_HINT": "Facoltative: senza una scelta la chiave vede tutto il gruppo. Con aziende e punti vendita insieme vale l’intersezione.",
+      "COMPANIES": "Aziende",
+      "PLACES": "Punti vendita",
+      "EXPIRES": "Scade il",
+      "EXPIRES_HINT": "Facoltativa, fino a tre anni da oggi. La chiave vale fino alla fine del giorno scelto (UTC).",
+      "LIMITS": "Limiti",
+      "LIMITS_HINT": "Se non li cambi, la chiave eredita quelli del gruppo.",
+      "LIMITS_READ_ONLY": "Sono quelli del gruppo: solo l’amministratore di piattaforma può cambiarli.",
+      "PER_MINUTE": "Richieste al minuto",
+      "PER_DAY": "Richieste al giorno"
+    },
+    "ERROR": {
+      "TOO_MANY": "Il gruppo ha già 50 chiavi attive: revoca una chiave che non serve più e riprova.",
+      "NOT_EDITABLE": "La chiave è stata revocata o è scaduta e non si può modificare. Se serve, creane una nuova."
+    },
+    "SECRET": {
+      "TITLE": "Chiave creata",
+      "INTRO": "Ecco il segreto della chiave «{name}».",
+      "WARNING": "Copialo ora: non potrà essere mostrato di nuovo. Incollalo solo nella configurazione dell’integrazione. Se lo perdi, crea una chiave nuova e revoca questa.",
+      "SAVED_CHECK": "Ho salvato il segreto in un posto sicuro",
+      "CLOSE_HINT": "Per chiudere, copia il segreto o conferma di averlo salvato.",
+      "LOST": "Chiave «{name}» creata ma il segreto non è stato mostrato: revocala e creane una nuova.",
+      "LABEL": "Segreto della chiave",
+      "COPY": "Copia",
+      "COPIED": "Segreto copiato negli appunti.",
+      "COPY_FAILED": "Non è stato possibile copiare: selezionalo e copialo a mano."
+    },
+    "REVOKE": {
+      "TITLE": "Revocare la chiave?",
+      "MESSAGE": "Revocare la chiave «{name}»? Le integrazioni che la usano smetteranno di funzionare subito. L’operazione non si può annullare."
+    },
+    "USAGE": {
+      "TITLE": "Utilizzo della chiave {name}",
+      "FROM": "Dal",
+      "TO": "Al",
+      "SHOW": "Mostra",
+      "HINT": "Giorni UTC, al massimo 92. Il conteggio si aggiorna a blocchi: gli ultimi secondi possono mancare.",
+      "RANGE_FORMAT": "Inserisci una data valida.",
+      "RANGE_ORDER": "La data iniziale è dopo quella finale.",
+      "RANGE_TOO_LONG": "Il periodo non può superare 92 giorni.",
+      "LOAD_ERROR": "Impossibile caricare l’utilizzo",
+      "TOTALS": "Totali dal {from} al {to}",
+      "BY_DAY": "Per giorno",
+      "BY_ROUTE": "Per route",
+      "EMPTY": "Nessun utilizzo",
+      "EMPTY_MESSAGE": "La chiave non ha fatto richieste nel periodo.",
+      "DAY": "Giorno",
+      "ROUTE": "Route",
+      "CALLS": "Richieste",
+      "ERRORS_4XX": "Errori 4xx",
+      "ERRORS_5XX": "Errori 5xx",
+      "RATE_LIMITED": "Limitate",
+      "ABORTED": "Interrotte"
     }
   },
   "DEALERS": {
@@ -985,6 +1121,7 @@
       "GENERAL": "Generale",
       "FEATURES": "Funzioni",
       "INTEGRATIONS": "Integrazioni",
+      "PUBLIC_API": "API pubbliche",
       "PRICE_LISTS": "Listini",
       "TAXES": "Aliquote IVA",
       "CURRENCIES": "Valute",

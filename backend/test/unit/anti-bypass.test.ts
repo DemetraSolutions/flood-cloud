@@ -17,6 +17,8 @@ async function filesUnder(dir: string): Promise<string[]> {
   return nested.flat();
 }
 
+const MIRROR_FILE = 'shared/security/scope/group-mirror.ts';
+
 describe('database access cannot be bypassed outside src/db', () => {
   const forbidden = ['.db(', 'new Db(', "['db']", '["db"]', '.admin(', '.client.', '$out', '$merge', 'renameCollection'];
   const mayCreateDatabases = (file: string): boolean => {
@@ -307,6 +309,61 @@ describe('database access cannot be bypassed outside src/db', () => {
         assert.ok(!/from 'sharp'/.test(text) || path === 'modules/media/image-processing.ts', `${path} imports sharp`);
         assert.ok(!/from 'multer'/.test(text) || path === 'modules/media/upload.ts' || path === 'modules/tobaccos/tobaccos.upload.ts', `${path} imports multer`);
       }
+    });
+  });
+
+  describe('the public API keys (step 9A)', () => {
+    const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
+
+    it('reads the header of the key only in the authentication of the keys, and generates a public key only when one is created', async () => {
+      const readers: string[] = [];
+      const generators: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const text = await readFile(file, 'utf8');
+        if (/\.get\(\s*['"]x-api-key['"]\s*\)/i.test(text) && !posix(file).startsWith('tools/')) {
+          readers.push(posix(file));
+        }
+        if (/generateSecret\('fc_pk_'\)/.test(text)) {
+          generators.push(posix(file));
+        }
+      }
+      assert.deepEqual(readers, ['modules/api-keys/authenticate-api-key.ts']);
+      assert.deepEqual(generators, ['modules/api-keys/api-keys.service.ts']);
+    });
+
+    it('reads the keys and their usage only from the repository of the keys, and never projects the hash anywhere but in the lookup of the authentication', async () => {
+      const seen: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const text = await readFile(file, 'utf8');
+        if (/\.collection(?:<[^>]*>)?\(\s*['"`](apiKeys|apiUsage)['"`]/.test(text) && !posix(file).startsWith('db/')) {
+          seen.push(posix(file));
+        }
+      }
+      assert.deepEqual(seen, ['modules/api-keys/api-keys.repository.ts']);
+      const repository = await readFile(join(SRC, 'modules/api-keys/api-keys.repository.ts'), 'utf8');
+      // Every read but the lookup by hash names its fields without the hash.
+      assert.equal([...repository.matchAll(/projection: API_KEY_PROJECTION/g)].length, 4);
+      assert.equal([...repository.matchAll(/API_KEYS_LIST, API_KEY_PROJECTION/g)].length, 1);
+      assert.equal([...repository.matchAll(/findOne\(\{ hash \}/g)].length, 1);
+      const mapper = await readFile(join(SRC, 'modules/api-keys/api-keys.mapper.ts'), 'utf8');
+      assert.ok(!/API_KEY_PROJECTION = Object\.freeze\(\{[^}]*\bhash\b/.test(mapper));
+    });
+
+    it('shows the public API only what the copies may give: the projections of the public places and companies are inside the central allowlist, which holds no credential, bank or setting', async () => {
+      const mirror = await readFile(join(SRC, MIRROR_FILE), 'utf8');
+      const sets = [...mirror.matchAll(/(companies|places): new Set\(\[([^\]]*)\]\)/g)].map((match) => [match[1], [...match[2]!.matchAll(/'([^']+)'/g)].map((name) => name[1]!)] as const);
+      assert.deepEqual(sets.map(([name]) => name), ['companies', 'places']);
+      const forbidden = /integrations|banks|iban|settings|fattura|devices|rooms|printStations|productionCenter|platform|server|connector|contact|invoice|medias|general|delivery|apiKey|password|secret|key/i;
+      for (const [name, fields] of sets) {
+        assert.ok(fields.length > 0 && fields.every((field) => !forbidden.test(field)), `${name}: ${fields.join(',')}`);
+      }
+    });
+
+    it('opens the public repository only through the per-group openers of group-mirror.ts, from the group of the principal', async () => {
+      const repository = await readFile(join(SRC, 'modules/public-api/public.repository.ts'), 'utf8');
+      assert.ok(!/\.collection\(/.test(repository));
+      assert.equal([...repository.matchAll(/trustedGroupMirror\(principal\.groupId, databases, '(places|companies)'\)/g)].length, 2);
+      assert.ok(!/req\.|res\.|\bquery\b/.test(repository));
     });
   });
 

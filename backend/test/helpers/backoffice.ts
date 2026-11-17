@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Document, ObjectId } from 'mongodb';
-import { createBackofficeModules } from '../../src/composition.ts';
+import { createBackofficeModules, createPublicApiModules } from '../../src/composition.ts';
+import type { UsageMeter } from '../../src/modules/api-keys/usage-meter.ts';
 import type { CervedHttpOptions } from '../../src/integrations/cerved/index.ts';
 import type { MediaStorage } from '../../src/integrations/gcs/index.ts';
 import { ensureIndexes } from '../../src/db/indexes.ts';
@@ -57,6 +58,10 @@ export interface Backoffice {
   tokens(userName: string, headers?: Record<string, string>): Promise<Tokens>;
   /** A request to `/v1` with a Bearer access token. */
   call(method: string, path: string, accessToken: string | undefined, body?: unknown, headers?: Record<string, string>): Promise<Response>;
+  /** A request to `/public/v1` with an `X-Api-Key` (none when `apiKey` is `undefined`); the body of the response is not read. */
+  publicCall(method: string, path: string, apiKey: string | undefined, headers?: Record<string, string>): Promise<Response>;
+  /** The usage meter of the public API (never started here: a test calls `flush`). */
+  readonly meter: UsageMeter;
   /** Events of the application logger (parsed lines). */
   readonly logEvents: Array<Record<string, unknown>>;
   /** Stops the server. */
@@ -91,6 +96,7 @@ const GENEROUS = {
   RATE_LIMIT_API_PER_STORE: '100000',
   RATE_LIMIT_STORE_ACTIVATION_PER_IP: '100000',
   RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: '100000',
+  RATE_LIMIT_API_KEY_ADMIN_PER_USER: '100000',
 };
 
 /**
@@ -112,6 +118,7 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
   const logs = memoryLogger();
   const rateLimiter = options.rateLimiter ?? memoryRateLimiter();
   const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, rateLimiter, mediaStorage: options.mediaStorage ?? null, ...(options.cervedHttp === undefined ? {} : { cervedHttp: options.cervedHttp }) });
+  const publicApi = createPublicApiModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, rateLimiter, now: clock.now });
   const app = await startApp(
     {
       config,
@@ -119,8 +126,8 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
       activityLog: activity,
       now: clock.now,
       rateLimiter,
-      routes: { v1: [...modules.routes, ...(options.extraRoutes ?? [])] },
-      authenticate: { v1: modules.authenticate, store: modules.authenticateStore },
+      routes: { v1: [...modules.routes, ...(options.extraRoutes ?? [])], public: publicApi.routes },
+      authenticate: { v1: modules.authenticate, store: modules.authenticateStore, public: publicApi.authenticate },
       groupAccess: { groups: modules.groups },
     },
     env,
@@ -135,6 +142,8 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+  const publicCall: Backoffice['publicCall'] = (method, path, apiKey, headers = {}) =>
+    fetch(`${app.baseUrl}/public/v1${path}`, { method, headers: { ...(apiKey === undefined ? {} : { 'x-api-key': apiKey }), ...headers } });
   const login: Backoffice['login'] = (name, password = TEST_PASSWORD, headers) =>
     call('POST', '/auth/login', undefined, { username: name, password }, headers);
   return {
@@ -145,6 +154,8 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
     logEvents: logs.events,
     login,
     call,
+    publicCall,
+    meter: publicApi.meter,
     tokens: async (name, headers) => {
       const response = await login(name, TEST_PASSWORD, headers);
       if (response.status !== 200) {

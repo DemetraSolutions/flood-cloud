@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, input, untracked } from '@angular/
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { Can } from '../../core/auth/can';
+import { SessionService } from '../../core/session/session.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { Button } from '../../shared/ui/button/button';
@@ -16,13 +17,20 @@ export const GROUP_SECTIONS = [
   { path: '', key: 'GENERAL', exact: true },
   { path: 'features', key: 'FEATURES', exact: false },
   { path: 'integrations', key: 'INTEGRATIONS', exact: false },
+  { path: 'public-api', key: 'PUBLIC_API', exact: false, permission: 'apiKeys:read' },
   { path: 'price-lists', key: 'PRICE_LISTS', exact: false },
   { path: 'taxes', key: 'TAXES', exact: false },
   { path: 'currencies', key: 'CURRENCIES', exact: false },
   { path: 'measure-units', key: 'MEASURE_UNITS', exact: false },
   { path: 'warehouse-rules', key: 'WAREHOUSE_RULES', exact: false },
   { path: 'fidelity-card-rules', key: 'FIDELITY_CARD_RULES', exact: false },
-] as const;
+] as const satisfies readonly {
+  path: string;
+  key: string;
+  exact: boolean;
+  /** Permission needed to see the section; sections without one are for everyone with `groups:read`. */
+  permission?: string;
+}[];
 
 /**
  * Record of a group (`/groups/:groupId/settings`): the name, the state, a banner for a
@@ -56,7 +64,12 @@ export class GroupSettings {
   /** Route parameter. */
   readonly groupId = input.required<string>();
 
-  protected readonly sections = GROUP_SECTIONS;
+  private readonly session = inject(SessionService);
+  protected readonly sections = computed(() =>
+    GROUP_SECTIONS.filter(
+      (section) => !('permission' in section) || this.session.can(section.permission),
+    ),
+  );
   protected readonly errorMessage = computed(() => {
     const error = this.state.loadError();
     return this.i18n.t(error === null ? 'ERRORS.GENERIC.MESSAGE' : apiErrorMessageKey(error));

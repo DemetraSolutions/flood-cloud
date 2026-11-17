@@ -1,0 +1,86 @@
+<form novalidate (submit)="onSubmit($event)">
+  @if (errors().form; as message) {
+    <fc-form-error [message]="message" />
+  }
+  <fc-text-field
+    [formField]="keyForm.name"
+    [label]="'PUBLIC_API.KEY.NAME' | t"
+    [hint]="'PUBLIC_API.KEY.NAME_HINT' | t"
+    [error]="message(keyForm.name, 'name')"
+    (blurred)="keyForm.name().markAsTouched()"
+  />
+  <fieldset [attr.aria-describedby]="permissionsError() ? permissionsErrorId : null">
+    <legend>{{ 'PUBLIC_API.KEY.PERMISSIONS' | t }}</legend>
+    <p class="note">{{ 'PUBLIC_API.KEY.PERMISSIONS_HINT' | t }}</p>
+    @for (permission of permissions; track permission) {
+      <fc-checkbox
+        [formField]="keyForm.permissions[permission]"
+        [label]="label(permission)"
+        [hint]="hint(permission)"
+        (blurred)="keyForm.permissions[permission]().markAsTouched()"
+      />
+    }
+    <div class="error" [id]="permissionsErrorId" aria-live="polite">
+      @if (permissionsError(); as text) {
+        <fc-icon name="error" />
+        <span>{{ text }}</span>
+      }
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>{{ 'PUBLIC_API.KEY.RESTRICTIONS' | t }}</legend>
+    <p class="note">{{ 'PUBLIC_API.KEY.RESTRICTIONS_HINT' | t }}</p>
+    <fc-reference-picker
+      [formField]="keyForm.companyIds"
+      [label]="'PUBLIC_API.KEY.COMPANIES' | t"
+      [loader]="companyLoader()"
+      [labels]="companyNames()"
+      [error]="message(keyForm.companyIds, 'restrictions.companyIds')"
+      (blurred)="keyForm.companyIds().markAsTouched()"
+    />
+    <fc-reference-picker
+      [formField]="keyForm.placeIds"
+      [label]="'PUBLIC_API.KEY.PLACES' | t"
+      [loader]="placeLoader()"
+      [labels]="placeNames()"
+      [error]="message(keyForm.placeIds, 'restrictions.placeIds')"
+      (blurred)="keyForm.placeIds().markAsTouched()"
+    />
+  </fieldset>
+  <fc-text-field
+    [formField]="keyForm.expiresOn"
+    type="date"
+    [label]="'PUBLIC_API.KEY.EXPIRES' | t"
+    [hint]="'PUBLIC_API.KEY.EXPIRES_HINT' | t"
+    [error]="message(keyForm.expiresOn, 'expiresAt')"
+    (blurred)="keyForm.expiresOn().markAsTouched()"
+  />
+  <fieldset>
+    <legend>{{ 'PUBLIC_API.KEY.LIMITS' | t }}</legend>
+    <p class="note">
+      {{ (canSetLimits() ? 'PUBLIC_API.KEY.LIMITS_HINT' : 'PUBLIC_API.KEY.LIMITS_READ_ONLY') | t }}
+    </p>
+    <fc-text-field
+      [formField]="keyForm.rateLimitPerMinute"
+      type="number"
+      [label]="'PUBLIC_API.KEY.PER_MINUTE' | t"
+      [error]="message(keyForm.rateLimitPerMinute, 'rateLimitPerMinute')"
+      (blurred)="keyForm.rateLimitPerMinute().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="keyForm.dailyQuota"
+      type="number"
+      [label]="'PUBLIC_API.KEY.PER_DAY' | t"
+      [error]="message(keyForm.dailyQuota, 'dailyQuota')"
+      (blurred)="keyForm.dailyQuota().markAsTouched()"
+    />
+  </fieldset>
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="cancelled.emit()">
+      {{ 'COMMON.CANCEL' | t }}
+    </button>
+    <button fc-button type="submit" [loading]="busy()" [disabled]="!hasChanges()">
+      {{ 'COMMON.SAVE' | t }}
+    </button>
+  </div>
+</form>

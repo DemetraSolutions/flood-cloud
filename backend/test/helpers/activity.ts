@@ -70,7 +70,7 @@ export function recordingErrorReporter(): { reporter: ErrorActivityReporter; rep
 /** `rateLimit` option of `mountRoutes` backed by an in-memory limiter and the default thresholds. */
 export function memoryRateLimitMount(limiter: RateLimiter = memoryRateLimiter()): NonNullable<MountOptions['rateLimit']> {
   const rules = createRateLimitRules(testConfig());
-  return { limiter, apiRule: rules.apiPerUser, authFailureRule: rules.unauthenticatedPerIp, onExceeded: () => undefined };
+  return { limiter, apiRule: rules.apiPerUser, authFailureRule: rules.unauthenticatedPerIp, apiKeyAuthFailureRule: rules.unauthenticatedPublicPerIp, onExceeded: () => undefined };
 }
 
 /** A generous rate limit rule for test routes that are anonymous but not about rate limiting. */

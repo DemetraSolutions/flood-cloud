@@ -154,6 +154,7 @@ describe('writing a group', () => {
       integrations: Object.fromEntries(PROVIDERS.map((p) => [p, { enabled: true, apiKey: 'k'.repeat(16) }])),
       languages: ['it', 'en'],
       statsSettings: { openingTime: '06:00', compressProductsCategories: true, timeSlots: [{ from: '00:00', to: '24:00' }] },
+      publicApi: { enabled: true, defaultRateLimitPerMinute: 120, defaultDailyQuota: 5000, groupRateLimitPerMinute: 600, groupDailyQuota: 50000 },
     };
     const { $set } = toLegacyUpdate(everything, NOW);
     for (const field of Object.keys($set)) {

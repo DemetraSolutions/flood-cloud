@@ -22,7 +22,7 @@ class FeaturesStub {}
 const GROUP = fakeGroup();
 const URL = `${API}/v1/groups/${GROUP.id}`;
 const BASE = `/groups/${GROUP.id}/settings`;
-const ALL = ['groups:read', 'groups:update', 'groups:suspend', 'groups:trash'];
+const ALL = ['groups:read', 'groups:update', 'groups:suspend', 'groups:trash', 'apiKeys:read'];
 
 async function render(profile: Partial<Profile> = {}, extra: Provider[] = [], url = BASE) {
   emulateNativeDialog();
@@ -108,6 +108,21 @@ describe('GroupSettings', () => {
     expect(root.querySelector('nav')?.getAttribute('aria-label')).toBe('GROUP_SETTINGS.SECTIONS');
     expect(root.textContent).toContain('general section');
   });
+
+  it.each([
+    ['PSA', ['groups:read', 'groups:update'], false],
+    ['SA', ['groups:read'], false],
+    ['D', ['groups:read', 'groups:update', 'apiKeys:read'], true],
+  ] as const)(
+    'shows the public API tab only with apiKeys:read (%s)',
+    async (role, permissions, shown) => {
+      const { root, load } = await render({ role, permissions: [...permissions] });
+      await load();
+      const keys = [...root.querySelectorAll('nav.sections a')].map((a) => a.textContent?.trim());
+      expect(keys.includes('GROUP_SETTINGS.SECTION.PUBLIC_API')).toBe(shown);
+      expect(keys).toHaveLength(GROUP_SECTIONS.length - (shown ? 0 : 1));
+    },
+  );
 
   it('marks the open section as the current page and navigates between sections', async () => {
     const { root, load, view, router } = await render();

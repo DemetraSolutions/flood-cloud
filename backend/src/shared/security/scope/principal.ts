@@ -5,6 +5,7 @@ import { effectivePermissionsOf } from '../rbac/effective-permissions.ts';
 import { normalizeMatrix } from '../rbac/permission-matrix.ts';
 import type { PermissionMatrix } from '../rbac/permission-matrix.ts';
 import type { Permission, Role } from '../rbac/permissions.ts';
+import type { PublicPermission } from '../rbac/public-permissions.ts';
 import { computeScope } from './scope.ts';
 import type { ComputeScopeDeps, Scope, ScopeAnomaly, UserScope } from './scope.ts';
 
@@ -95,4 +96,42 @@ export async function buildPrincipal(user: StoredUser, deps: ComputeScopeDeps): 
     scope,
   });
   return { principal, anomalies };
+}
+
+/** The restrictions of a public API key to some companies and some places of its group; `null` means no restriction on that kind. */
+export interface ApiKeyRestrictions {
+  readonly companyIds: readonly ObjectId[] | null;
+  readonly placeIds: readonly ObjectId[] | null;
+}
+
+/**
+ * Verified, deeply frozen context of an integration that authenticated with a public API key (`doc/Security-Model.md` section 6), stored in `res.locals.apiKey`, never in `res.locals.auth`
+ * or `res.locals.store`: nothing written for users or stores finds it. Every field is computed by the server on every request from the stored key and the state of the group.
+ */
+export interface ApiKeyPrincipal {
+  /** Marks the API key principal. */
+  readonly kind: 'apiKey';
+  /** Id of the key that authenticated the request. */
+  readonly keyId: ObjectId;
+  /** The only group the key sees. */
+  readonly groupId: ObjectId;
+  /** Name of the group, for `GET /me`. */
+  readonly groupName: string;
+  /** Name given to the key, for `GET /me`. */
+  readonly name: string;
+  /** First characters of the key, as the backoffice shows them. */
+  readonly prefix: string;
+  /** What the key may read (read-only). */
+  readonly permissions: ReadOnlySet<PublicPermission>;
+  readonly restrictions: ApiKeyRestrictions;
+  /** Requests per minute allowed to the key. */
+  readonly rateLimitPerMinute: number;
+  /** Requests per UTC day allowed to the key. */
+  readonly dailyQuota: number;
+  /** Requests per minute allowed to all the keys of the group together. */
+  readonly groupRateLimitPerMinute: number;
+  /** Requests per UTC day allowed to all the keys of the group together. */
+  readonly groupDailyQuota: number;
+  /** When the key stops working, `null` when it never does. */
+  readonly expiresAt: Date | null;
 }

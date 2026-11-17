@@ -1,0 +1,61 @@
+<form class="range" novalidate (submit)="apply($event)">
+  <fc-text-field
+    type="date"
+    [label]="'PUBLIC_API.USAGE.FROM' | t"
+    [value]="from()"
+    [error]="fromError()"
+    (valueChange)="from.set($event)"
+  />
+  <fc-text-field
+    type="date"
+    [label]="'PUBLIC_API.USAGE.TO' | t"
+    [value]="to()"
+    [error]="toError()"
+    (valueChange)="to.set($event)"
+  />
+  <button fc-button type="submit" [loading]="loading()">
+    {{ 'PUBLIC_API.USAGE.SHOW' | t }}
+  </button>
+</form>
+<p class="note">{{ 'PUBLIC_API.USAGE.HINT' | t }}</p>
+
+@if (loadFailed()) {
+  <fc-error-state
+    [title]="'PUBLIC_API.USAGE.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  @if (usage(); as data) {
+    <h3>{{ 'PUBLIC_API.USAGE.TOTALS' | t: { from: data.from, to: data.to } }}</h3>
+    <dl class="totals">
+      @for (total of totals(); track total.key) {
+        <div>
+          <dt>{{ total.label }}</dt>
+          <dd>{{ total.value }}</dd>
+        </div>
+      }
+    </dl>
+  }
+  <h3>{{ 'PUBLIC_API.USAGE.BY_DAY' | t }}</h3>
+  <fc-data-table
+    [caption]="'PUBLIC_API.USAGE.BY_DAY' | t"
+    [columns]="dayColumns()"
+    [rows]="days()"
+    [rowKey]="dayKey"
+    [loading]="loading()"
+    [emptyTitle]="'PUBLIC_API.USAGE.EMPTY' | t"
+    [emptyMessage]="'PUBLIC_API.USAGE.EMPTY_MESSAGE' | t"
+  />
+  <h3>{{ 'PUBLIC_API.USAGE.BY_ROUTE' | t }}</h3>
+  <fc-data-table
+    [caption]="'PUBLIC_API.USAGE.BY_ROUTE' | t"
+    [columns]="routeColumns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="loading()"
+    [emptyTitle]="'PUBLIC_API.USAGE.EMPTY' | t"
+    [emptyMessage]="'PUBLIC_API.USAGE.EMPTY_MESSAGE' | t"
+  />
+}

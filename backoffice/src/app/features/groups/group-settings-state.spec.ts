@@ -131,6 +131,8 @@ describe('GroupSettingsState', () => {
         canManage,
         canDemo,
       ]);
+      // The public API settings are the platform administrator's, like `demo`.
+      expect(state.canPublicApi()).toBe(canDemo);
     });
 
     it.each(['PSA', 'D', 'SA', 'CA'] as const)(

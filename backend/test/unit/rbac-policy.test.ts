@@ -49,6 +49,8 @@ const EXPECTED: Record<Permission, Role[]> = {
   'clientErrors:create': FROM_PA,
   'storeKeys:read': FROM_D,
   'storeKeys:manage': FROM_D,
+  'apiKeys:read': FROM_D,
+  'apiKeys:manage': FROM_D,
 };
 
 describe('permission catalog', () => {

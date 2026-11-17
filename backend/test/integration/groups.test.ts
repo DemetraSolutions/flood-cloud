@@ -56,12 +56,13 @@ describe('GET /v1/groups/{groupId}', () => {
     const reply = await as.call(office.cluster.psa, 'GET', path(0));
     assert.equal(reply.status, 200);
     const data = reply.body.data;
-    assert.deepEqual(Object.keys(data).sort(), ['createdAt', 'currencies', 'dataCluster', 'dealerId', 'demo', 'description', 'features', 'fidelityCardRules', 'id', 'integrations', 'languages', 'measureUnits', 'name', 'priceLists', 'status', 'statsSettings', 'taxes', 'trashed', 'updatedAt', 'warehouseRules'].sort());
+    assert.deepEqual(Object.keys(data).sort(), ['createdAt', 'currencies', 'dataCluster', 'dealerId', 'demo', 'description', 'features', 'fidelityCardRules', 'id', 'integrations', 'languages', 'measureUnits', 'name', 'priceLists', 'publicApi', 'status', 'statsSettings', 'taxes', 'trashed', 'updatedAt', 'warehouseRules'].sort());
     assert.deepEqual([data.id, data.name, data.dealerId, data.status, data.trashed, data.demo, data.dataCluster], [hex(g(0).groupId), 'group-001', hex(g(0).dealerId), 'active', false, false, null]);
     assert.deepEqual([data.features.cash, data.features.warehouse, data.features.rooms], [true, true, false]);
     assert.deepEqual(data.languages, ['it', 'en']);
     assert.deepEqual(data.statsSettings, { openingTime: '06:30', compressProductsCategories: true, timeSlots: [{ from: '00:00', to: '06:00' }] });
     assert.deepEqual([data.integrations.yellgo, data.integrations.satispay], [{ enabled: true, apiKeySet: true }, undefined]);
+    assert.deepEqual(data.publicApi, { enabled: false, defaultRateLimitPerMinute: 60, defaultDailyQuota: 10000, groupRateLimitPerMinute: 120, groupDailyQuota: 20000 });
     const text = JSON.stringify(reply.body);
     for (const secret of ['plain-key', 'integration-key', 'databaseHost', 'db.example', 'files.example', 'smtp', 'fixture-secret']) {
       assert.ok(!text.includes(secret), secret);

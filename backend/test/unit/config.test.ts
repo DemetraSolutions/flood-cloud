@@ -499,3 +499,34 @@ describe('multi-cluster configuration', () => {
     assert.ok(!bad.includes('Secret-Value'));
   });
 });
+
+describe('the settings of the public API (step 9A)', () => {
+  it('has the defaults of the decision: 60 requests a minute, 10 000 a day, a write of the usage every 30 seconds, 20 key writes a minute per user', () => {
+    const config = loadConfig(validEnv());
+    assert.deepEqual([config.publicApiDefaultRateLimitPerMinute, config.publicApiDefaultDailyQuota, config.publicApiUsageFlushSeconds, config.rateLimitApiKeyAdminPerUser], [60, 10_000, 30, 20]);
+    assert.deepEqual([config.publicApiDefaultGroupRateLimitPerMinute, config.publicApiDefaultGroupDailyQuota, config.rateLimitUnauthenticatedPublicPerIp], [120, 20_000, 300]);
+  });
+
+  it('reads the variables and refuses what is out of the bounds of a key (1 to 6000 a minute, 1 to 10 000 000 a day)', () => {
+    const custom = loadConfig(validEnv({ PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE: '6000', PUBLIC_API_DEFAULT_DAILY_QUOTA: '10000000', PUBLIC_API_USAGE_FLUSH_SECONDS: '3600', RATE_LIMIT_API_KEY_ADMIN_PER_USER: '5', PUBLIC_API_DEFAULT_GROUP_RATE_LIMIT_PER_MINUTE: '6000', PUBLIC_API_DEFAULT_GROUP_DAILY_QUOTA: '10000000', RATE_LIMIT_UNAUTHENTICATED_PUBLIC_PER_IP: '7' }));
+    assert.deepEqual([custom.publicApiDefaultGroupRateLimitPerMinute, custom.publicApiDefaultGroupDailyQuota, custom.rateLimitUnauthenticatedPublicPerIp], [6000, 10_000_000, 7]);
+    assert.deepEqual([custom.publicApiDefaultRateLimitPerMinute, custom.publicApiDefaultDailyQuota, custom.publicApiUsageFlushSeconds, custom.rateLimitApiKeyAdminPerUser], [6000, 10_000_000, 3600, 5]);
+    for (const [variable, bad] of [
+      ['PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE', '0'],
+      ['PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE', '6001'],
+      ['PUBLIC_API_DEFAULT_DAILY_QUOTA', '0'],
+      ['PUBLIC_API_DEFAULT_DAILY_QUOTA', '10000001'],
+      ['PUBLIC_API_USAGE_FLUSH_SECONDS', '0'],
+      ['PUBLIC_API_USAGE_FLUSH_SECONDS', '3601'],
+      ['RATE_LIMIT_API_KEY_ADMIN_PER_USER', '0'],
+      ['PUBLIC_API_DEFAULT_GROUP_RATE_LIMIT_PER_MINUTE', '0'],
+      ['PUBLIC_API_DEFAULT_GROUP_RATE_LIMIT_PER_MINUTE', '6001'],
+      ['PUBLIC_API_DEFAULT_GROUP_DAILY_QUOTA', '0'],
+      ['PUBLIC_API_DEFAULT_GROUP_DAILY_QUOTA', '10000001'],
+      ['RATE_LIMIT_UNAUTHENTICATED_PUBLIC_PER_IP', '0'],
+      ['PUBLIC_API_DEFAULT_DAILY_QUOTA', 'many'],
+    ] as const) {
+      assert.throws(() => loadConfig(validEnv({ [variable]: bad })), (error: unknown) => error instanceof ConfigError && error.issues.some((issue) => issue.variable === variable));
+    }
+  });
+});

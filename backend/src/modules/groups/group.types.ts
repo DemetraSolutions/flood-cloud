@@ -49,6 +49,22 @@ export interface StatsSettings {
   readonly timeSlots: readonly StatsTimeSlot[];
 }
 
+/**
+ * The public API of a group (`doc/Security-Model.md` section 6), set by the PSA alone: the switch (off: no key of the group works) and the limits the new keys of the group start with. A group that
+ * has none stored is off, with the platform defaults of the configuration.
+ */
+export interface PublicApiSettings {
+  readonly enabled: boolean;
+  /** Requests per minute a new key gets. */
+  readonly defaultRateLimitPerMinute: number;
+  /** Requests per UTC day a new key gets. */
+  readonly defaultDailyQuota: number;
+  /** Requests per minute all the keys of the group may make together. */
+  readonly groupRateLimitPerMinute: number;
+  /** Requests per UTC day all the keys of the group may make together. */
+  readonly groupDailyQuota: number;
+}
+
 /** Whether a group is in service: a suspended group is refused to everybody but the PSA. */
 export type GroupStatus = 'active' | 'suspended';
 
@@ -67,6 +83,7 @@ export interface Group {
   readonly languages: readonly string[];
   readonly statsSettings: StatsSettings;
   readonly integrations: IntegrationFlags;
+  readonly publicApi: PublicApiSettings;
   readonly catalogs: GroupCatalogs;
   /** The cluster that holds the data of the group (only its id); `null` means the default cluster. */
   readonly dataCluster: string | null;
@@ -87,6 +104,8 @@ export interface GroupResponse extends GroupCatalogs {
   readonly languages: readonly string[];
   readonly statsSettings: StatsSettings;
   readonly integrations: IntegrationFlags;
+  /** The public API of the group; present only for a PSA and a dealer. */
+  readonly publicApi?: PublicApiSettings;
   readonly dataCluster?: string | null;
   readonly createdAt: string | null;
   readonly updatedAt: string | null;
@@ -124,6 +143,7 @@ export type LegacyGroupDocument = {
   readonly trash?: unknown;
   readonly demo?: unknown;
   readonly settings?: unknown;
+  readonly publicApi?: unknown;
   readonly apiKeySet?: unknown;
   readonly priceLists?: unknown;
   readonly taxes?: unknown;
@@ -150,6 +170,8 @@ export interface GroupChanges {
     readonly timeSlots?: readonly StatsTimeSlot[];
   };
   readonly demo?: boolean;
+  /** The public API settings that change; the PSA alone may send them. */
+  readonly publicApi?: Readonly<Partial<PublicApiSettings>>;
   readonly status?: GroupStatus;
   readonly trashed?: boolean;
 }

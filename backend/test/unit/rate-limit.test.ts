@@ -13,10 +13,10 @@ import { testConfig } from '../helpers/app.ts';
 const rules = createRateLimitRules(testConfig());
 
 describe('createRateLimitRules', () => {
-  it('builds the nineteen rules from the thresholds', () => {
+  it('builds the twenty-one rules from the thresholds', () => {
     assert.deepEqual(
       Object.values(rules).map(({ bucket, limit }) => [bucket, limit]),
-      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['media-upload:user', 30], ['media-upload-day:user', 300], ['media-upload-day:group', 2000], ['diagnostics-export:user', 5], ['tobaccos-import:user', 5], ['cerved-lookup:user', 10], ['cerved-lookup-day:user', 200], ['api:user', 300], ['api:store', 600], ['storeActivation:ip', 10], ['storeKeyAdmin:user', 20]],
+      [['login:username', 5], ['login:ip', 15], ['auth-fail:ip', 300], ['auth-fail:public:ip', 300], ['refresh:ip', 30], ['usernameCheck:user', 15], ['user-credentials:user', 20], ['password-change:user', 5], ['client-errors:user', 30], ['media-upload:user', 30], ['media-upload-day:user', 300], ['media-upload-day:group', 2000], ['diagnostics-export:user', 5], ['tobaccos-import:user', 5], ['cerved-lookup:user', 10], ['cerved-lookup-day:user', 200], ['api:user', 300], ['api:store', 600], ['storeActivation:ip', 10], ['storeKeyAdmin:user', 20], ['apiKeyAdmin:user', 20]],
     );
     const custom = createRateLimitRules(testConfig({ RATE_LIMIT_LOGIN_PER_USERNAME: '7', RATE_LIMIT_API_PER_USER: '9', RATE_LIMIT_MEDIA_UPLOAD_PER_USER: '4', RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY: '8', RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY: '9' }));
     assert.deepEqual([custom.loginPerUsername.limit, custom.apiPerUser.limit, custom.mediaUploadPerUser.limit], [7, 9, 4]);
@@ -28,6 +28,7 @@ describe('createRateLimitRules', () => {
     assert.ok(Object.isFrozen(rules) && Object.isFrozen(rules.apiPerUser));
     const tuned = createRateLimitRules(testConfig({ RATE_LIMIT_API_PER_STORE: '11', RATE_LIMIT_STORE_ACTIVATION_PER_IP: '3', RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: '4' }));
     assert.deepEqual([tuned.apiPerStore.limit, tuned.storeActivationPerIp.limit, tuned.storeKeyAdminPerUser.limit], [11, 3, 4]);
+    assert.equal(createRateLimitRules(testConfig({ RATE_LIMIT_API_KEY_ADMIN_PER_USER: '6' })).apiKeyAdminPerUser.limit, 6);
   });
 
   it('counts a store per its key and never per a user: the rule of a store has no subject outside a store principal', () => {
@@ -38,6 +39,7 @@ describe('createRateLimitRules', () => {
     assert.equal(rules.apiPerUser.key({} as never, store), null, 'a store is not counted by the per-user rule: the route builder must mount its own');
     assert.equal(rules.storeActivationPerIp.key({ ip: '203.0.113.9' } as never, { locals: {} } as never), '203.0.113.9');
     assert.equal(rules.storeKeyAdminPerUser.key({} as never, user), '0123456789abcdef01234567');
+    assert.equal(rules.apiKeyAdminPerUser.key({} as never, user), '0123456789abcdef01234567');
     assert.equal(rules.diagnosticsExportPerUser.key({} as never, user), '0123456789abcdef01234567');
     assert.equal(rules.diagnosticsExportPerUser.limit, 5);
     assert.equal(rules.tobaccosImportPerUser.key({} as never, user), '0123456789abcdef01234567');

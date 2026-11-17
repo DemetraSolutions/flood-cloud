@@ -81,6 +81,8 @@ export interface RateLimitMount extends RateLimitDeps {
   readonly apiRule: RateLimitRule;
   /** Counts failed authentications per IP; see {@link guardAuthentication}. */
   readonly authFailureRule: RateLimitRule;
+  /** The same for the routes of the public surface: its own bucket, so what a client guesses there never locks an office out of `/v1`, and the other way round. */
+  readonly apiKeyAuthFailureRule: RateLimitRule;
 }
 
 /**
