@@ -132,6 +132,8 @@ export interface Config {
   readonly publicApiUsageFlushSeconds: number;
   /** CSV exports of the diagnostics per minute allowed to a user (`RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER`). */
   readonly rateLimitDiagnosticsExportPerUser: number;
+  /** CSV exports of the electronic documents in error per minute allowed to a user (`RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER`). */
+  readonly rateLimitErrorDocumentsExportPerUser: number;
   /** Imports of the tobacco price list per hour allowed to a user (`RATE_LIMIT_TOBACCOS_IMPORT_PER_USER`). */
   readonly rateLimitTobaccosImportPerUser: number;
   /** Company lookups on Cerved per minute allowed to a user (`RATE_LIMIT_CERVED_LOOKUP_PER_USER`): each is two paid calls to the provider. */
@@ -680,6 +682,7 @@ export function loadConfig(env: Env): Config {
   const rateLimitUnauthenticatedPublicPerIp = readInteger(env, issues, 'RATE_LIMIT_UNAUTHENTICATED_PUBLIC_PER_IP', 300, 1, 100000);
   const publicApiUsageFlushSeconds = readInteger(env, issues, 'PUBLIC_API_USAGE_FLUSH_SECONDS', 30, 1, 3600);
   const rateLimitDiagnosticsExportPerUser = readInteger(env, issues, 'RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', 5, 1, 100000);
+  const rateLimitErrorDocumentsExportPerUser = readInteger(env, issues, 'RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER', 5, 1, 100000);
   const rateLimitTobaccosImportPerUser = readInteger(env, issues, 'RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', 5, 1, 100000);
   const rateLimitCervedLookupPerUser = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER', 10, 1, 100000);
   const rateLimitCervedLookupPerUserDaily = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY', 200, 1, 1_000_000);
@@ -761,6 +764,7 @@ export function loadConfig(env: Env): Config {
     rateLimitUnauthenticatedPublicPerIp === undefined ||
     publicApiUsageFlushSeconds === undefined ||
     rateLimitDiagnosticsExportPerUser === undefined ||
+    rateLimitErrorDocumentsExportPerUser === undefined ||
     rateLimitTobaccosImportPerUser === undefined ||
     rateLimitCervedLookupPerUser === undefined ||
     rateLimitCervedLookupPerUserDaily === undefined ||
@@ -814,6 +818,7 @@ export function loadConfig(env: Env): Config {
     rateLimitUnauthenticatedPublicPerIp,
     publicApiUsageFlushSeconds,
     rateLimitDiagnosticsExportPerUser,
+    rateLimitErrorDocumentsExportPerUser,
     rateLimitTobaccosImportPerUser,
     rateLimitCervedLookupPerUser,
     rateLimitCervedLookupPerUserDaily,

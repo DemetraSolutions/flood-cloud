@@ -32,6 +32,9 @@ const COUNTRIES = [P.COUNTRIES_MANAGE] as const;
 /** Emptying the trash of a group, tab by tab (`doc/Tasks.md` 9-ter, step P2): only the PSA. Restoring and deleting selected items use the permissions of each domain. */
 const TRASH = [P.TRASH_EMPTY] as const;
 
+/** The electronic invoices and credit notes of the legacy send queue that Aruba refused or that ended in error (`doc/Tasks.md` 9-ter, step 3): read only, the PSA and the dealers (the legacy page was theirs). */
+const ERROR_DOCUMENTS = [P.ERROR_DOCUMENTS_READ] as const;
+
 /**
  * What the server of a point of sale may do with its store key (`doc/Security-Model.md` section 8.2): an explicit allowlist, never derived from a role, a matrix or a request, and never
  * extended from the interface. For now only the reading of its own place; the domains that come later (cash desk, sales, catalog) add what they decide, each with its own step.
@@ -44,8 +47,8 @@ export const STORE_PROFILE: ReadOnlySet<Permission> = frozenSet<Permission>([P.P
  * immutable.
  */
 export const ROLE_CEILING: Readonly<Record<Role, ReadOnlySet<Permission>>> = Object.freeze({
-  PSA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
-  D: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  PSA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...ERROR_DOCUMENTS, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  D: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...ERROR_DOCUMENTS, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   SA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   CA: frozenSet<Permission>([P.COMPANIES_READ, P.COMPANIES_UPDATE, P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   PA: frozenSet<Permission>([P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),

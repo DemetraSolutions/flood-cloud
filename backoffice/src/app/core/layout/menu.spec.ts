@@ -182,6 +182,26 @@ describe('visibleMenu', () => {
     });
   });
 
+  it('shows "Strumenti › Documenti in errore" to platform administrators and dealers with errorDocuments:read', () => {
+    const children = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children('PSA', 'errorDocuments:read')).toEqual(['error-documents']);
+    expect(children('D', 'errorDocuments:read')).toEqual(['error-documents']);
+    for (const role of ['SA', 'CA', 'PA', 'E', undefined] as const) {
+      expect(children(role, 'errorDocuments:read')).toBeUndefined();
+    }
+    expect(
+      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'error-documents'),
+    ).toMatchObject({
+      route: '/tools/error-documents',
+      labelKey: 'MENU.ERROR_DOCUMENTS',
+      permission: 'errorDocuments:read',
+      roles: ['PSA', 'D'],
+    });
+  });
+
   it('shows "Strumenti › Listino Tabacchi" only to platform administrators with tobaccos:read', () => {
     const children = (role: Role | undefined, permission: string) =>
       visibleMenu(MENU, (p) => p === permission, allowAll, role)

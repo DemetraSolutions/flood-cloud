@@ -580,6 +580,15 @@ export const routes: Routes = [
               import('./features/diagnostics/diagnostics-page').then((m) => m.DiagnosticsPage),
           },
           {
+            path: 'tools/error-documents',
+            canMatch: [permission('errorDocuments:read')],
+            title: 'ERROR_DOCUMENTS.TITLE',
+            loadComponent: () =>
+              import('./features/error-documents/error-documents-page').then(
+                (m) => m.ErrorDocumentsPage,
+              ),
+          },
+          {
             path: 'tools/tobaccos',
             canMatch: [role('PSA'), permission('tobaccos:read')],
             title: 'TOBACCOS.TITLE',

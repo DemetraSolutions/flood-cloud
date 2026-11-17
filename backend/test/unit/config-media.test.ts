@@ -42,10 +42,12 @@ describe('media storage configuration', () => {
     assert.deepEqual([custom.rateLimitApiPerStore, custom.rateLimitStoreActivationPerIp, custom.rateLimitStoreKeyAdminPerUser, custom.storeActivationCodeTtlMinutes], [1_000_000, 1, 100_000, 5]);
     assert.equal(loadConfig(validEnv({ STORE_ACTIVATION_CODE_TTL_MINUTES: '10080' })).storeActivationCodeTtlMinutes, 10080);
     assert.equal(defaults.rateLimitDiagnosticsExportPerUser, 5);
+    assert.equal(defaults.rateLimitErrorDocumentsExportPerUser, 5);
+    assert.equal(loadConfig(validEnv({ RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER: '100000' })).rateLimitErrorDocumentsExportPerUser, 100000);
     assert.equal(defaults.rateLimitTobaccosImportPerUser, 5);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_TOBACCOS_IMPORT_PER_USER: '100000' })).rateLimitTobaccosImportPerUser, 100000);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER: '100000' })).rateLimitDiagnosticsExportPerUser, 100000);
-    for (const [variable, bad] of [['RATE_LIMIT_API_PER_STORE', '0'], ['RATE_LIMIT_API_PER_STORE', '1000001'], ['RATE_LIMIT_STORE_ACTIVATION_PER_IP', '100001'], ['RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 'x'], ['RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', '0'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '4'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '10081']] as const) {
+    for (const [variable, bad] of [['RATE_LIMIT_API_PER_STORE', '0'], ['RATE_LIMIT_API_PER_STORE', '1000001'], ['RATE_LIMIT_STORE_ACTIVATION_PER_IP', '100001'], ['RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 'x'], ['RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', '0'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '4'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '10081']] as const) {
       assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/, `${variable}=${bad}`);
     }
   });

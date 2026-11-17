@@ -26,6 +26,19 @@ export function commonDatabaseName(context: DatabaseNameContext): string {
 }
 
 /**
+ * Name of the legacy send queue database (the electronic invoices waiting for the Aruba hub). It is the legacy
+ * `CronEngine`'s: this backend only reads it, through `Databases.queue()`.
+ *
+ * @param context Prefix and environment.
+ * @returns `<prefix><appEnv>_queue`.
+ * @example
+ * queueDatabaseName({ prefix: '', appEnv: 'development' }); // 'development_queue'
+ */
+export function queueDatabaseName(context: DatabaseNameContext): string {
+  return `${context.prefix}${context.appEnv}_queue`;
+}
+
+/**
  * Name of the operational database of a group.
  *
  * @param context Prefix and environment.

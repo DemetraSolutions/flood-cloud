@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ObjectId } from 'mongodb';
-import { commonDatabaseName, groupDatabaseName, parseGroupDatabaseName } from '../../src/db/names.ts';
+import { commonDatabaseName, groupDatabaseName, parseGroupDatabaseName, queueDatabaseName } from '../../src/db/names.ts';
 import { assertAllowedDatabaseName } from '../../src/db/databases.ts';
 
 const HEX = '0123456789abcdef01234567';
@@ -39,12 +39,21 @@ describe('assertAllowedDatabaseName', () => {
     assertAllowedDatabaseName('my.pre-production_common', prefixed);
   });
 
+  it('accepts the legacy send queue of this environment (read through Databases.queue() only)', () => {
+    assertAllowedDatabaseName('development_queue', ctx);
+    assertAllowedDatabaseName('my.pre-production_queue', prefixed);
+    assert.equal(queueDatabaseName(ctx), 'development_queue');
+    assert.equal(queueDatabaseName(prefixed), 'my.pre-production_queue');
+  });
+
   it('refuses other environments, prefixes, and malformed names', () => {
     for (const name of [
       'production_common',
       `production_${HEX}`,
       'development_flite_common',
-      'development_queue',
+      'production_queue',
+      'development_queue_extra',
+      'development_QUEUE',
       'development_COMMON',
       `development_${HEX}x`,
       'xdevelopment_common',

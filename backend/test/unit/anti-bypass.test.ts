@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
+import { MongoClient } from 'mongodb';
+import { createDatabases } from '../../src/db/databases.ts';
+import { isPublicPermission } from '../../src/shared/security/rbac/public-permissions.ts';
 
 const SRC = fileURLToPath(new URL('../../src', import.meta.url));
 
@@ -389,6 +392,50 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.ok(!/\.collection\(/.test(repository));
       assert.equal([...repository.matchAll(/trustedGroupMirror\(principal\.groupId, databases, '(places|companies)'\)/g)].length, 2);
       assert.ok(!/req\.|res\.|\bquery\b/.test(repository));
+    });
+  });
+
+  describe('the legacy send queue (step 9-ter/3)', () => {
+    const REPOSITORY = 'modules/error-documents/error-documents.repository.ts';
+    const posix = (file: string): string => relative(SRC, file).split('\\').join('/');
+
+    it('opens the queue database only from the error documents repository, and builds its name only in src/db', async () => {
+      const openers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        const text = await readFile(file, 'utf8');
+        if (!path.startsWith('db/') && /\.queue\(\)/.test(text)) {
+          openers.push(path);
+        }
+        if (!path.startsWith('db/')) {
+          assert.ok(!text.includes('queueDatabaseName') && !/_queue\b/.test(text), `${path} names the queue database`);
+        }
+      }
+      assert.deepEqual(openers, [REPOSITORY]);
+    });
+
+    it('has no write, index or output operation anywhere in the repository that reads it', async () => {
+      const text = await readFile(join(SRC, REPOSITORY), 'utf8');
+      const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      assert.ok(!/\b(insert|update|replace|delete|bulkWrite|createIndex|createIndexes|dropIndex|drop|rename|findOneAnd|createCollection|\$out|\$merge)/i.test(code.replace(/\bupdateDate\b/g, '')), 'the repository of the queue must only read');
+      assert.ok(!/\.(db|admin|client)\(/.test(code));
+    });
+
+    it('hands out a handle that has read methods only, and refuses an aggregation that writes', () => {
+      const client = new MongoClient('mongodb://127.0.0.1:1/?directConnection=true');
+      const databases = createDatabases({ clusters: new Map([['cluster0', { main: client, analytics: client }]]), commonCluster: 'cluster0', defaultGroupCluster: 'cluster0' }, { prefix: '', appEnv: 'development' });
+      const documents = databases.queue().collection('documents');
+      assert.deepEqual(Object.keys(documents).sort(), ['aggregate', 'countDocuments', 'distinct', 'estimatedDocumentCount', 'find', 'findOne']);
+      assert.deepEqual(Object.keys(databases.queue()), ['collection']);
+      assert.throws(() => documents.aggregate([{ $out: 'x' }]), /\$out or \$merge/);
+      assert.throws(() => documents.aggregate([{ $merge: { into: 'x' } }]), /\$out or \$merge/);
+    });
+
+    it('registers the permission on /v1 only: it is not a public permission, and the public routes do not mention the documents', async () => {
+      assert.equal(isPublicPermission('errorDocuments:read'), false);
+      for (const file of await filesUnder(join(SRC, 'modules', 'public-api'))) {
+        assert.ok(!/error-?documents/i.test(await readFile(file, 'utf8')), file);
+      }
     });
   });
 

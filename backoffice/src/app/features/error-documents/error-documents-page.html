@@ -1,0 +1,94 @@
+<header class="page-header">
+  <h1>{{ 'ERROR_DOCUMENTS.TITLE' | t }}</h1>
+  <button fc-button variant="secondary" [loading]="downloading()" (click)="download()">
+    {{ 'ERROR_DOCUMENTS.DOWNLOAD' | t }}
+  </button>
+</header>
+<p class="hint">{{ 'ERROR_DOCUMENTS.HINT' | t }}</p>
+<p class="download-status" role="status" [class.failed]="downloadError() !== null">
+  {{ downloadStatus() }}
+</p>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  @if (showDealerFilter()) {
+    <fc-select
+      [label]="'ERROR_DOCUMENTS.FILTER.DEALER' | t"
+      [placeholder]="'ERROR_DOCUMENTS.FILTER.ALL_DEALERS' | t"
+      [options]="dealerOptions()"
+      [value]="dealerId() ?? ''"
+      (valueChange)="onFilter('dealerId', $event)"
+    />
+  }
+  <fc-select
+    [label]="'ERROR_DOCUMENTS.FILTER.TYPE' | t"
+    [placeholder]="'ERROR_DOCUMENTS.FILTER.ALL_TYPES' | t"
+    [options]="typeOptions()"
+    [value]="documentType() ?? ''"
+    (valueChange)="onFilter('documentType', $event)"
+  />
+  <fc-text-field
+    [label]="'ERROR_DOCUMENTS.FILTER.ERROR_CODE' | t"
+    [value]="codeText()"
+    (valueChange)="onCode($event)"
+  />
+</form>
+
+@if (documents.error()) {
+  <fc-error-state
+    [title]="'ERROR_DOCUMENTS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="documents.reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'ERROR_DOCUMENTS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [rowHeader]="'number'"
+    [loading]="documents.isLoading()"
+    [emptyTitle]="'ERROR_DOCUMENTS.EMPTY' | t"
+    [emptyMessage]="'ERROR_DOCUMENTS.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="detail" let-row>
+      <button
+        fc-icon-button
+        class="detail-button"
+        icon="alert"
+        [label]="'ERROR_DOCUMENTS.DETAIL' | t"
+        (click)="openDetail(row)"
+      ></button>
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="documents.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-dialog
+  [heading]="'ERROR_DOCUMENTS.DETAIL_TITLE' | t"
+  [open]="detail() !== null"
+  (openChange)="closeDetail()"
+>
+  @if (detail(); as document) {
+    @if (document.error?.code; as code) {
+      <p class="error-code">{{ 'ERROR_DOCUMENTS.ERROR_CODE' | t: { code: code } }}</p>
+    }
+    <p class="error-description">
+      {{ document.error?.description ?? ('ERROR_DOCUMENTS.NO_DESCRIPTION' | t) }}
+    </p>
+  }
+  <ng-container ngProjectAs="[fcDialogActions]">
+    <button fc-button variant="secondary" (click)="closeDetail()">
+      {{ 'COMMON.CLOSE' | t }}
+    </button>
+  </ng-container>
+</fc-dialog>

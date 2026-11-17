@@ -30,6 +30,8 @@ export interface RateLimitRules {
   readonly mediaUploadPerGroupDaily: RateLimitRule;
   /** CSV exports of the diagnostics per authenticated user: each reads every device of the perimeter. */
   readonly diagnosticsExportPerUser: RateLimitRule;
+  /** CSV exports of the electronic documents in error per authenticated user: each reads every document of the perimeter. */
+  readonly errorDocumentsExportPerUser: RateLimitRule;
   /** Imports of the tobacco price list per authenticated user per hour: each parses a workbook of up to 10 MB and replaces the whole collection. */
   readonly tobaccosImportPerUser: RateLimitRule;
   /** Company lookups on Cerved per authenticated user: each is two paid calls to the provider. */
@@ -102,6 +104,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
       key: (_req: Request, res: Response) => res.locals.groupAccess?.groupId.toHexString() ?? null,
     }),
     diagnosticsExportPerUser: Object.freeze({ bucket: 'diagnostics-export:user', limit: config.rateLimitDiagnosticsExportPerUser, key: perUser }),
+    errorDocumentsExportPerUser: Object.freeze({ bucket: 'error-documents-export:user', limit: config.rateLimitErrorDocumentsExportPerUser, key: perUser }),
     tobaccosImportPerUser: Object.freeze({ bucket: 'tobaccos-import:user', limit: config.rateLimitTobaccosImportPerUser, windowSeconds: HOUR_SECONDS, key: perUser }),
     cervedLookupPerUser: Object.freeze({ bucket: 'cerved-lookup:user', limit: config.rateLimitCervedLookupPerUser, key: perUser }),
     cervedLookupPerUserDaily: Object.freeze({ bucket: 'cerved-lookup-day:user', limit: config.rateLimitCervedLookupPerUserDaily, windowSeconds: DAY_SECONDS, key: perUser }),

@@ -61,6 +61,9 @@ describe('ensureIndexes (real MongoDB)', () => {
     await users.createIndex({ userName: 1 }, { name: 'userName_1', unique: true });
     await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
     await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+    // The legacy send queue is registered but never touched: no database, no collection and no index is created there.
+    const { databases: existing } = await ctx.client.db().admin().listDatabases({ nameOnly: true });
+    assert.ok(!existing.some((entry) => entry.name === `${ctx.prefix}development_queue`));
     const byName = new Map((await users.indexes()).map((index) => [index.name, index]));
     assert.deepEqual([...byName.keys()].sort(), ['_id_', 'dealerId_1', 'groupId_1_role_1', 'userName_1']);
     assert.equal(byName.get('userName_1')?.unique, true);

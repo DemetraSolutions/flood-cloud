@@ -1365,6 +1365,49 @@ Sola lettura sulle **copie dei punti vendita** nel database comune (mai sui data
 - **Limite:** al massimo **50 000 righe**; oltre, `413 PAYLOAD_TOO_LARGE` prima del primo byte (si restringe con i filtri); il file non supera mai il tetto nemmeno se dopo il conteggio si aggiungono righe. Un solo export alla volta per utente (un secondo è `429 RATE_LIMITED`) e al massimo 5 minuti di durata (poi la connessione si chiude).
 - **Errori:** `401`, `403 FORBIDDEN`, `403 PASSWORD_CHANGE_REQUIRED`, `413 PAYLOAD_TOO_LARGE`, `422 VALIDATION_ERROR`, `429 RATE_LIMITED`
 
+## Documenti in errore (`/v1`, passo 9-ter/3)
+
+Le **fatture e note di credito elettroniche** inviate tramite l'hub Aruba che si trovano nella **coda di invio del legacy** con un errore. Sola lettura: nessun riprova, nessun "gestita manualmente", nessuna scrittura (il `CronEngine` del legacy resta l'unico a inviare e a scrivere la coda). Ci sono solo i documenti **ancora in coda** con un `error` (il caricamento è stato rifiutato dall'hub) o con `sendStatus` tra `processingError`, `rejected`, `notDelivered`, `deliveryImpossible`, `refused`, `effectiveDate` (la stessa condizione della pagina legacy); i rifiuti SDI arriveranno con il dominio dei documenti fiscali. Le route sono solo di `/v1`: **non** esistono su `/public/v1` e non sono aperte alla chiave di negozio.
+
+**Permesso** `errorDocuments:read`, nel tetto del solo **PSA** e dei **D**: SA, CA, PA, E e la chiave di negozio ricevono `403 FORBIDDEN`. **Perimetro** (lo decide il server): il PSA legge tutti i documenti; il D solo quelli dei gruppi **il cui `dealerId` è il suo** (i gruppi disponibili, non nel cestino, risolti da `common.groups`; il `dealerId` scritto nel documento in coda non conta mai). Un `groupId` fuori dal perimetro non dà errore: il risultato è vuoto. Se il database della coda non esiste l'elenco è vuoto (non è un errore); se una lettura supera il tempo massimo (5 s) la risposta è `503 SERVICE_UNAVAILABLE`.
+
+**Mai restituito**: l'`XML`, i dati fiscali e anagrafici della controparte oltre al nome da mostrare, il nome del file dell'hub (`hubId`), l'oggetto `error` grezzo di Aruba e ogni altro campo.
+
+### GET /v1/error-documents
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** Bearer backoffice, `errorDocuments:read` (solo PSA e D)
+- **Query:**
+  | Parametro | Tipo | Note |
+  |---|---|---|
+  | `limit` | intero 1–100 | default 50 |
+  | `cursor` | opaco | quello di `page.next`; un cursore non emesso dal server è `422` (`cursor`/`format`) |
+  | `groupId` | 24 caratteri esadecimali | restringe a un gruppo dentro il perimetro |
+  | `dealerId` | 24 caratteri esadecimali | **solo PSA**: restringe ai gruppi di quel dealer; un **D** che lo invia riceve `403 FORBIDDEN` |
+  | `documentType` | `invoice`, `creditNote` | |
+  | `errorCode` | `^[A-Za-z0-9]{1,10}$` | codice dell'errore dell'hub (`0034`, `0099`…), uguaglianza esatta |
+  Parametri sconosciuti (compresi `sort` e `q`) o operatori sono `422`. L'ordine è fisso: `_id` decrescente (più recenti per primi).
+- **Risposta:** `200` `{ data, page: { limit, next } }` con `ETag` debole e `Cache-Control: no-store`; `If-None-Match` uguale dà `304`. Ogni riga:
+  ```json
+  {
+    "id": "6745a1b2c3d4e5f600112233",
+    "groupId": "665f1c2e9b1d4a0012ab34a1", "groupName": "Gruppo Esempio", "companyName": "SUSHINISI SRL",
+    "number": "105 M", "date": "2026-09-25T10:00:00.000Z",
+    "documentType": "invoice", "eInvoiceType": "TD01",
+    "customer": "FABIOLA FREZZA", "total": 33.8, "sendStatus": "queued",
+    "error": { "code": "0034", "description": "File già inviato di recente" }
+  }
+  ```
+  `number` è il numero **come lo mostrava il legacy**: il prefisso o il suffisso memorizzato (con il suo separatore, per esempio `/B`, ` M`, `A`) messo prima (`company.invoicesPS = prefix`) o dopo (`suffix`) il numero memorizzato, senza separatore aggiunto (`105 M`, `399/B`, `A647`); con un'altra posizione compare il solo numero. `customer` è nome e cognome per una persona (`customerType` 1) o la ragione sociale per un'azienda (2), `null` altrimenti. `documentType` è `invoice`, `creditNote` o `null`; `eInvoiceType` è il tipo del documento elettronico (`TD01`…). `total` è un importo **decimale in euro**. `groupName` è `null` se il gruppo non esiste più; `groupId` è `null` solo per un documento in coda con un `groupId` che non è un id (dato legacy anomalo, visibile solo al PSA). `error` è `null` se il documento è in elenco per il solo `sendStatus`; `error.description` è **testo semplice** (può contenere il testo di un'altra risposta, anche markup: va mostrato come testo, mai come HTML), tagliato a 2000 caratteri. I valori mancanti o del tipo sbagliato nel dato memorizzato sono `null`; le date sono ISO UTC. **Non c'è una data dell'errore**: il legacy non la memorizza.
+- **Errori:** `401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `403 FORBIDDEN` (permesso mancante, chiave di negozio, `dealerId` inviato da un D), `403 PASSWORD_CHANGE_REQUIRED`, `422 VALIDATION_ERROR`, `429 RATE_LIMITED`, `503 SERVICE_UNAVAILABLE` (lettura oltre il tempo massimo)
+
+### GET /v1/error-documents.csv
+- **Superficie:** backoffice
+- **Autenticazione e permesso:** come sopra; **rate limit** dedicato per utente (`RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER`, 5 al minuto di default) oltre a quello generale.
+- **Query:** gli stessi filtri (`groupId`, `dealerId`, `documentType`, `errorCode`), senza `limit` né `cursor` (`limit` è `422`).
+- **Risposta:** `200` `text/csv; charset=utf-8` in streaming (blocchi di 500 righe, con contropressione), `Content-Disposition: attachment; filename="error-documents_<AAAA-MM-GG>.csv"`, `Cache-Control: no-store`. UTF-8 con BOM, separatore `;`, fine riga CRLF, valori con `;`, `"` o a capo tra virgolette. Colonne, nell'ordine: `NUMERO;DATA;TIPO DOCUMENTO;TIPO FE;CLIENTE;IMPORTO;AZIENDA;GRUPPO;STATO INVIO;CODICE ERRORE;DESCRIZIONE ERRORE`. `DATA` è `gg-mm-aaaa` nel fuso `Europe/Rome`; `TIPO DOCUMENTO` è `Fattura` o `Nota di credito`; `IMPORTO` ha due decimali con la virgola e nessun separatore delle migliaia (`33,80`). **Iniezione di formule**: ogni cella di testo che inizia con `=`, `+`, `-`, `@`, tabulazione o ritorno a capo riceve un `'` iniziale (l'importo, costruito da un numero, no). La descrizione è già tagliata a 2000 caratteri. Senza righe il file ha solo l'intestazione.
+- **Limite:** al massimo **50 000 righe**; oltre, `413 PAYLOAD_TOO_LARGE` prima del primo byte (si restringe con i filtri). Un solo export alla volta per utente (un secondo è `429 RATE_LIMITED`) e al massimo 5 minuti di durata.
+- **Errori:** `401`, `403 FORBIDDEN`, `403 PASSWORD_CHANGE_REQUIRED`, `413 PAYLOAD_TOO_LARGE`, `422 VALIDATION_ERROR`, `429 RATE_LIMITED`, `503 SERVICE_UNAVAILABLE`
+
 ## Template e-mail del gruppo (`/v1`, passo T2)
 
 Testi e HTML delle e-mail che il gruppo invia (conferme di prenotazione e di appuntamento, report avanzato); i punti vendita li scelgono nelle impostazioni (`GET /v1/groups/{groupId}/lookup/email-templates`). Collection `email_templates` del database del gruppo. Tutte le route sono **di gruppo** (il gruppo è verificato sul perimetro del chiamante: PSA e D sul gruppo scelto, SA, CA e PA sul proprio), richiedono la **feature `email`** del gruppo (altrimenti `403 FEATURE_DISABLED`, qualunque ruolo) e **non sono aperte alla chiave di negozio**. Permessi: lettura `places:read`, scrittura `places:update`. Un template è del gruppo, non di un punto vendita: CA e PA vedono e modificano quelli di tutto il gruppo, come nel legacy.

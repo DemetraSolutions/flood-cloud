@@ -50,11 +50,14 @@ export interface CollectionSpec {
   readonly validator?: Readonly<Record<string, unknown>>;
 }
 
-/** The two kinds of database. */
+/** The kinds of database that hold the data of this backend (the common database and the group databases). */
 export type DatabaseKind = 'common' | 'group';
 
-/** Registry shape: database kind, then collection name. */
-export type CollectionRegistry = Readonly<Record<DatabaseKind, Readonly<Record<string, CollectionSpec>>>>;
+/**
+ * Registry shape: database kind, then collection name. `queue` is the legacy send queue database (read only, never indexed):
+ * optional, because only the real registry declares it.
+ */
+export type CollectionRegistry = Readonly<Record<DatabaseKind, Readonly<Record<string, CollectionSpec>>>> & { readonly queue?: Readonly<Record<string, CollectionSpec>> };
 
 /**
  * Fields of the shared legacy `users` documents this backend may write (`$set`/`$unset` only): profile
@@ -361,6 +364,11 @@ export const COLLECTIONS = {
     contacts: { ownership: 'legacy-read' },
     contacts_groups: { ownership: 'legacy-read' },
   },
+  // The legacy send queue (`<prefix><env>_queue`, step 9-ter/3): written only by the legacy services and by its `CronEngine`; read here, only by the error documents repository, through `Databases.queue()`.
+  // No index, no validator: this backend never creates anything in that database.
+  queue: {
+    documents: { ownership: 'legacy-read' },
+  },
 } as const satisfies CollectionRegistry;
 
 /**
@@ -370,6 +378,7 @@ export const COLLECTIONS = {
  * - Legacy collections cannot have unique or TTL indexes.
  * - Every index has a non-empty explicit name.
  * - Only `new` collections can have a validator.
+ * - The `queue` database (legacy send queue) holds `legacy-read` collections with no index and no validator.
  * - `mirror` collections live in the common database only, take no `ownedFields`, no validator, and only non-unique,
  *   non-TTL indexes: a copy must always be writable and never expire.
  *
@@ -378,6 +387,11 @@ export const COLLECTIONS = {
  */
 export function validateRegistry(registry: CollectionRegistry = COLLECTIONS): void {
   const problems: string[] = [];
+  for (const [name, spec] of Object.entries(registry.queue ?? {})) {
+    if (spec.ownership !== 'legacy-read' || spec.indexes !== undefined || spec.validator !== undefined) {
+      problems.push(`queue.${name}: the legacy send queue is read only: legacy-read, no index and no validator`);
+    }
+  }
   for (const kind of ['common', 'group'] as const) {
     for (const [name, spec] of Object.entries(registry[kind])) {
       const where = `${kind}.${name}`;
@@ -423,5 +437,5 @@ export function validateRegistry(registry: CollectionRegistry = COLLECTIONS): vo
  * @returns Names without duplicates.
  */
 export function registeredCollectionNames(registry: CollectionRegistry = COLLECTIONS): ReadonlySet<string> {
-  return new Set([...Object.keys(registry.common), ...Object.keys(registry.group)]);
+  return new Set([...Object.keys(registry.common), ...Object.keys(registry.group), ...Object.keys(registry.queue ?? {})]);
 }

@@ -54,6 +54,7 @@
     "TRASH": "Cestino",
     "NEW_CUSTOMER": "Nuovo cliente",
     "DIAGNOSTICS": "Diagnostica",
+    "ERROR_DOCUMENTS": "Documenti in errore",
     "RELEASES": "Release",
     "EMAIL_TEMPLATES": "Template e-mail",
     "TOBACCOS": "Listino Tabacchi",
@@ -3180,6 +3181,45 @@
       "EXTERNAL_DISPLAY": "Display esterno",
       "KIOSK": "Kiosk",
       "TGM": "TGM"
+    }
+  },
+  "ERROR_DOCUMENTS": {
+    "TITLE": "Documenti in errore",
+    "HINT": "Fatture e note di credito elettroniche rifiutate o con un errore di invio. Elenco di sola lettura.",
+    "DOWNLOAD": "Scarica CSV",
+    "DOWNLOADING": "Download del CSV in corso…",
+    "DOWNLOAD_ERROR": {
+      "TOO_LARGE": "Troppi dati: restringi i filtri e riprova",
+      "TOO_MANY": "Troppe richieste, riprova tra poco",
+      "GENERIC": "Impossibile scaricare il CSV. Riprova."
+    },
+    "LOAD_ERROR": "Impossibile caricare i documenti in errore",
+    "EMPTY": "Nessun documento in errore",
+    "EMPTY_MESSAGE": "Nessun documento in errore corrisponde ai filtri scelti.",
+    "DETAIL": "Dettaglio errore",
+    "DETAIL_TITLE": "Dettaglio errore",
+    "ERROR_CODE": "Codice errore: {code}",
+    "NO_DESCRIPTION": "Nessuna descrizione dell’errore disponibile.",
+    "FILTER": {
+      "DEALER": "Dealer",
+      "ALL_DEALERS": "Tutti i dealer",
+      "TYPE": "Tipo documento",
+      "ALL_TYPES": "Tutti i tipi",
+      "ERROR_CODE": "Codice errore"
+    },
+    "COLUMN": {
+      "NUMBER": "Numero",
+      "DATE": "Data",
+      "TYPE": "Tipo",
+      "CUSTOMER": "Cliente",
+      "TOTAL": "Importo",
+      "COMPANY": "Azienda",
+      "GROUP": "Gruppo",
+      "ERROR_CODE": "Codice errore"
+    },
+    "TYPE": {
+      "INVOICE": "Fattura",
+      "CREDIT_NOTE": "Nota di credito"
     }
   },
   "TOBACCOS": {

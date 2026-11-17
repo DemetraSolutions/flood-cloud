@@ -95,7 +95,30 @@ describe('collection registry', () => {
     ]);
     assert.deepEqual(COLLECTIONS.common.storeActivationCodes.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null]), [['codeHash_1', true, null], ['placeId_1', true, null], ['expiresAt_1', false, 0]]);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'documents', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
+  });
+
+  it('registers the documents of the legacy send queue as read only, with no index and no validator, and refuses anything else there', () => {
+    assert.deepEqual(COLLECTIONS.queue, { documents: { ownership: 'legacy-read' } });
+    const bad: CollectionRegistry = {
+      common: {},
+      group: {},
+      queue: {
+        a: { ownership: 'legacy-write', ownedFields: ['x'] },
+        b: { ownership: 'legacy-read', indexes: [{ name: 'x_1', key: { x: 1 } }] },
+        c: { ownership: 'legacy-read', validator: { bsonType: 'object' } },
+        d: { ownership: 'legacy-read' },
+      },
+    };
+    assert.throws(() => validateRegistry(bad), (error: Error) => {
+      for (const where of ['queue.a', 'queue.b', 'queue.c']) {
+        assert.ok(error.message.includes(where), where);
+      }
+      assert.ok(!error.message.includes('queue.d'));
+      return true;
+    });
+    assert.deepEqual([...registeredCollectionNames({ common: { a: { ownership: 'legacy-read' } }, group: {}, queue: { q: { ownership: 'legacy-read' } } })].sort(), ['a', 'q']);
+    assert.deepEqual([...registeredCollectionNames({ common: { a: { ownership: 'legacy-read' } }, group: {} })], ['a']);
   });
 
   it('keeps the api key of the group out of every field a $set can write: it is written only when a new customer is inserted', () => {
@@ -194,6 +217,22 @@ describe('collection registry', () => {
         assert.ok(all - literal.length <= dynamic, `${file}: more non-literal collection names than expected`);
         if (dynamic === 1) {
           assert.equal(all - literal.length, 1, `${file}: the read-only handle is expected to be the single non-literal use`);
+        }
+      }
+    }
+  });
+
+  it('keeps the collections of the legacy queue out of the common and group databases: its names are used only by the queue repository, through queue()', async () => {
+    const queueOnly = Object.keys(COLLECTIONS.queue).filter((name) => !(name in COLLECTIONS.common) && !(name in COLLECTIONS.group));
+    assert.deepEqual(queueOnly, ['documents']);
+    for (const file of await sourceFiles()) {
+      const text = await readFile(file, 'utf8');
+      for (const name of queueOnly) {
+        const uses = [...text.matchAll(new RegExp(`(.{0,60})\\.collection(?:<[^>]*>)?\\(\\s*['"\`]${name}['"\`]`, 'g'))];
+        if (file.endsWith('modules/error-documents/error-documents.repository.ts')) {
+          assert.ok(uses.length > 0 && uses.every((use) => use[1]!.includes('.queue()')), `${file}: "${name}" must be read through queue()`);
+        } else {
+          assert.equal(uses.length, 0, `${file}: "${name}" belongs to the queue database only`);
         }
       }
     }

@@ -180,6 +180,14 @@ export const MENU: readonly MenuItem[] = [
         permission: 'places:read',
       },
       {
+        id: 'error-documents',
+        labelKey: 'MENU.ERROR_DOCUMENTS',
+        icon: 'alert',
+        route: '/tools/error-documents',
+        permission: 'errorDocuments:read',
+        roles: ['PSA', 'D'],
+      },
+      {
         id: 'tobaccos',
         labelKey: 'MENU.TOBACCOS',
         icon: 'tag',

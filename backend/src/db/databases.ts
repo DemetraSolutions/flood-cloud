@@ -2,7 +2,7 @@ import type { AggregateOptions, ClientSession, CountDocumentsOptions, Db, Docume
 import type { AggregationCursor } from 'mongodb';
 import type { ClusterId } from '../config.ts';
 import type { ClusterClients, ClusterRegistry } from './clusters.ts';
-import { commonDatabaseName, groupDatabaseName, parseGroupDatabaseName } from './names.ts';
+import { commonDatabaseName, groupDatabaseName, parseGroupDatabaseName, queueDatabaseName } from './names.ts';
 import type { DatabaseNameContext } from './names.ts';
 
 /** Escapes a string for literal use inside a regular expression. */
@@ -20,7 +20,7 @@ const ADMIN_MAX_TIME_MS = 30_000;
 const TRANSACTION_OPTIONS = { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } } as const;
 
 /**
- * Environment guard: accepts only `^<prefix><appEnv>_(common|<24 hex>)$`, at most 63 bytes long.
+ * Environment guard: accepts only `^<prefix><appEnv>_(common|queue|<24 hex>)$`, at most 63 bytes long.
  * It keeps `production_*` databases out of reach when `APP_ENV=development` and vice versa.
  *
  * @param name Database name to check.
@@ -28,7 +28,7 @@ const TRANSACTION_OPTIONS = { readConcern: { level: 'snapshot' }, writeConcern: 
  * @throws {Error} If the name does not belong to this environment (the message never contains the URI).
  */
 export function assertAllowedDatabaseName(name: string, context: DatabaseNameContext): void {
-  const allowed = new RegExp(`^${escapeRegExp(context.prefix)}${escapeRegExp(context.appEnv)}_(common|[0-9a-f]{24})$`);
+  const allowed = new RegExp(`^${escapeRegExp(context.prefix)}${escapeRegExp(context.appEnv)}_(common|queue|[0-9a-f]{24})$`);
   if (!allowed.test(name) || Buffer.byteLength(name) > MAX_DATABASE_NAME_BYTES) {
     throw new Error(`Database "${name}" is not allowed in environment "${context.appEnv}"`);
   }
@@ -129,6 +129,11 @@ export interface Databases {
   group(groupId: ObjectId, clusterId: ClusterId): Db;
   /** The common database through the analytics connection of the common cluster (reads only). */
   analyticsCommon(): ReadOnlyDb;
+  /**
+   * The legacy send queue database (`<prefix><appEnv>_queue`, on the common cluster) through the analytics connection: reads only. The
+   * legacy `CronEngine` is its only writer; this backend never writes to it nor creates an index on it. Only the error documents repository may call it.
+   */
+  queue(): ReadOnlyDb;
   /**
    * The operational database of a group through the analytics connection of its cluster (reads only).
    *
@@ -263,6 +268,7 @@ export function createDatabases(registry: ClusterRegistry, context: DatabaseName
     common: () => open(clientsOf(registry.commonCluster).main, commonName),
     group: (groupId, clusterId) => open(clientsOf(clusterId, groupId).main, groupDatabaseName(context, groupId)),
     analyticsCommon: () => readOnly(open(clientsOf(registry.commonCluster).analytics, commonName)),
+    queue: () => readOnly(open(clientsOf(registry.commonCluster).analytics, queueDatabaseName(context))),
     analyticsGroup: (groupId, clusterId) => readOnly(open(clientsOf(clusterId, groupId).analytics, groupDatabaseName(context, groupId))),
     resolveGroupCluster: (group) => {
       if (group.dataCluster === undefined) {

@@ -287,6 +287,24 @@ Passo 9-ter. Letta da tutti (select del backoffice, POS), scritta dal solo PSA. 
 
 Campi posseduti (`COUNTRIES_OWNED_FIELDS`): `code`, `name`, `areas`, `insertDate`, `updateDate`; ogni altra chiave di un paese o di una provincia è del legacy e non si tocca mai. Scritture: inserimento di un documento intero (`areas: []`), `$set` di `name` e `updateDate`, `$push` / `$pull` / `$set` posizionale (`arrayFilters`) su `areas`, `deleteOne`. L'inserimento di una provincia è **un solo update atomico** condizionato dall'assenza di quel `code` tra le province: l'elenco non si legge e riscrive mai. **Indici:** nessuno. L'unicità del `code` di paese è garantita dalle scritture (controllo prima e dopo l'inserimento); l'indice univoco aspetta il conteggio dei duplicati in produzione, non ancora fatto (in development nessun duplicato su 240 paesi). Un paese o una provincia **in uso** (`countryCode`, e `countryAreaCode`, di una azienda o di un punto vendita nelle copie del common, cestinati compresi) non si elimina; i contatti dei gruppi non si controllano.
 
+## documents — coda di invio del legacy (database esterno `<prefisso><env>_queue`, sola lettura)
+Passo 9-ter/3. Non è un database di Flood Cloud: è la **coda delle fatture e note di credito elettroniche** del legacy (`ms-documents-service`, `ms-sales-service` e `CronEngine`, che è l'unico a inviare). Sta sul cluster del database common (`APP_ENV` e `DB_NAME_PREFIX` come gli altri, nome costruito solo da `src/db/names.ts`), collection `documents`, registrata `legacy-read`. Il backend la legge **solo** dal repository dei documenti in errore, attraverso `Databases.queue()` (connessione di analisi, sola lettura: nessun metodo di scrittura, nessuna aggregazione `$out`/`$merge`); **non scrive nulla e non crea nessun indice** (oggi esiste solo `_id`; in produzione non è stata profilata, per questo ogni query ha `maxTimeMS`, un limite e il cursore su `_id`). Un database o una collection assenti si leggono come vuoti.
+
+Un documento in coda è una **copia intera** del documento fiscale del gruppo più `groupId` e `dealerId`. Campi che il backend legge (proiezione fissa, ogni valore trattato come dato legacy non fidato: il tipo sbagliato diventa `null`):
+
+| Campo | Tipo atteso | Uso |
+|---|---|---|
+| `_id` | ObjectId | ordine e cursore (un `_id` di altro tipo non si elenca) |
+| `groupId` | ObjectId | perimetro (mai `dealerId`) e nome del gruppo |
+| `type` | `invoice` \| `credit-note` | tipo documento e filtro |
+| `number`, `prefixSuffix`, `company.invoicesPS` | numero o stringa; `prefix` \| `suffix` | numero mostrato |
+| `date`, `total` | Date, numero | data e importo |
+| `customerType`, `counterpart.name`, `counterpart.surname`, `counterpart.companyName` | 1 \| 2, stringhe | nome del cliente (mai gli altri dati della controparte) |
+| `fattura_elettronica.tipo`, `company.name` | stringhe | tipo FE e azienda |
+| `sendStatus`, `error` (`errorCode`, `errorDescription`) | stringa; oggetto | condizione di elenco, stato e dettaglio dell'errore |
+
+Non si leggono mai `XML`, `hubId`, `sent`, `dealerId` né gli altri dati della controparte. Condizione di elenco (quella del legacy): `error` presente e non nullo, oppure `sendStatus` in `processingError`, `rejected`, `notDelivered`, `deliveryImpossible`, `refused`, `effectiveDate`.
+
 ## Collection dei database di gruppo lette dal nuovo backend
 Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul cluster del gruppo:
 | Collection | Perché | Campi usati |

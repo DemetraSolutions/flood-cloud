@@ -42,6 +42,10 @@ import { createDiagnosticsController } from './modules/diagnostics/diagnostics.c
 import { createDiagnosticsRepository } from './modules/diagnostics/diagnostics.repository.ts';
 import { createDiagnosticsRoutes } from './modules/diagnostics/diagnostics.routes.ts';
 import { createDiagnosticsService } from './modules/diagnostics/diagnostics.service.ts';
+import { createErrorDocumentsController } from './modules/error-documents/error-documents.controller.ts';
+import { createErrorDocumentsRepository } from './modules/error-documents/error-documents.repository.ts';
+import { createErrorDocumentsRoutes } from './modules/error-documents/error-documents.routes.ts';
+import { createErrorDocumentsService } from './modules/error-documents/error-documents.service.ts';
 import { createCountriesController } from './modules/countries/countries.controller.ts';
 import { createCountriesRepository } from './modules/countries/countries.repository.ts';
 import { createCountriesRoutes } from './modules/countries/countries.routes.ts';
@@ -291,6 +295,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   );
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
+  const errorDocuments = createErrorDocumentsController(createErrorDocumentsService({ repository: createErrorDocumentsRepository(databases), dealerGroups: createDealerGroupsRepository(databases) }), now);
   const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
   const countries = createCountriesController(createCountriesService({ repository: createCountriesRepository(databases, logger), activityLog, versionKey, now }));
   const tobaccos = createTobaccosController(createTobaccosService({ repository: createTobaccosRepository(databases), activityLog, now }));
@@ -306,6 +311,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createLookupRoutes(lookup),
       ...createActivityLogRoutes(activity),
       ...createDiagnosticsRoutes(diagnostics, rules),
+      ...createErrorDocumentsRoutes(errorDocuments, rules),
       ...createEmailTemplatesRoutes(emailTemplates, idempotency),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createCountriesRoutes(countries, rules),
