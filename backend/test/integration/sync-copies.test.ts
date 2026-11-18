@@ -709,10 +709,10 @@ describe('sync-copies: errors', () => {
 });
 
 describe('sync-copies: environment and clusters', () => {
-  it('works on development only: production is refused, as --env or as APP_ENV, before any client is created', async () => {
+  it('refuses to run when --env and APP_ENV disagree, in either direction, before any client is created', async () => {
     await seed();
     const before = await snapshot();
-    for (const [argv, appEnv] of [[['--env', 'production', '--apply'], 'development'], [['--env', 'production'], 'production'], [['--apply'], 'production'], [['--env', 'development', '--apply'], 'production']] as const) {
+    for (const [argv, appEnv] of [[['--env', 'production', '--apply'], 'development'], [['--apply'], 'production'], [['--env', 'development', '--apply'], 'production']] as const) {
       let created = 0;
       const errors: string[] = [];
       const code = await main([...argv], {
@@ -726,11 +726,56 @@ describe('sync-copies: environment and clusters', () => {
         },
       });
       assert.equal(code, 1, argv.join(' '));
-      assert.match(errors.join(), /development environment only|does not match/, argv.join(' '));
+      assert.match(errors.join(), /does not match/, argv.join(' '));
       assert.equal(created, 0);
     }
-    assert.match((await run(['--env', 'production'])).error.join(), /development environment only/);
     assert.deepEqual(await snapshot(), before);
+  });
+
+  it('keeps the TLS rule of production and never connects when it fails', async () => {
+    const weak = await run(['--env', 'production'], env({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:27027/?directConnection=true' }));
+    assert.equal(weak.code, 1);
+    assert.match(weak.error.join(), /MONGODB_URI: must use TLS in production/);
+  });
+
+  it('accepts --env production when APP_ENV is production: dry run writes nothing, --apply writes only the production common copies', async () => {
+    const prod = await openTestDatabases('production');
+    try {
+      const prodCommon = prod.databases.common();
+      const prodGroup = prod.databases.group(G(1), 'cluster0');
+      await prodCommon.collection('groups').insertOne(legacyGroup(1));
+      await prodGroup.collection('companies').insertOne(legacyCompany(1, G(1)));
+      await prodGroup.collection('places').insertOne(legacyPlace(1, G(1), fixtureId('company', 1)));
+      const call = async (argv: string[]): Promise<Run> => {
+        const info: string[] = [];
+        const error: string[] = [];
+        const code = await main(argv, {
+          env: {},
+          loadEnvFile: () => undefined,
+          info: (line) => info.push(line),
+          error: (line) => error.push(line),
+          now: () => NOW,
+          // The TLS rule is not weakened: the loader and client factory are replaced because the local server has no TLS.
+          loadDatabaseConfig: () => ({ ...loadDatabaseConfig(env()), appEnv: 'production', dbNamePrefix: prod.prefix }),
+          createClient: (config, options) => createMongoClient({ ...config, appEnv: 'development' }, options),
+        });
+        return { code, info, error };
+      };
+      const dry = await call(['--env', 'production']);
+      assert.equal(dry.code, 2, dry.error.join());
+      assert.match(dry.info.join('\n'), /Dry run on production, nothing written/);
+      assert.deepEqual(await prodCommon.listCollections({ name: { $in: ['companies', 'places', 'syncIssues'] } }, { nameOnly: true }).toArray(), []);
+      const applied = await call(['--env', 'production', '--apply']);
+      // Exit code 2 by design: copies were missing and have been written.
+      assert.equal(applied.code, 2, applied.error.join());
+      assert.match(applied.info.join('\n'), /Applied on production/);
+      assert.equal(await prodCommon.collection('companies').countDocuments(), 1);
+      assert.equal(await prodCommon.collection('places').countDocuments(), 1);
+      assert.equal(await prodGroup.collection('companies').countDocuments(), 1);
+      assert.equal(await common().collection('companies').countDocuments(), 0);
+    } finally {
+      await prod.cleanup();
+    }
   });
 
   it('refuses to run when the common database is not there (wrong prefix) or has no groups, and writes nothing', async () => {

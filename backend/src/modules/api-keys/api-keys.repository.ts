@@ -129,7 +129,30 @@ export interface ApiKeysRepository {
    * @param to Last day, `YYYY-MM-DD`.
    */
   usage(groupId: ObjectId, keyId: ObjectId, from: string, to: string): Promise<UsageRow[]>;
+  /**
+   * Counts the keys of a group and their usage rows. Read only; used by the audit of the purge of trashed groups.
+   *
+   * @param groupId Id of the group.
+   */
+  countOfGroup(groupId: ObjectId): Promise<GroupPurgeCounts>;
+  /**
+   * Deletes for good every key of a group and every usage row of those keys, in batches. The usage rows go first, so a run that fails halfway can be repeated and never leaves rows
+   * that no key points to. Used only by the purge of trashed groups; the API never deletes a key.
+   *
+   * @param groupId Id of the group.
+   * @returns How many documents were deleted from each collection.
+   */
+  deleteAllOfGroup(groupId: ObjectId): Promise<GroupPurgeCounts>;
 }
+
+/** How many keys and usage rows of a group a purge counts or deletes. */
+export interface GroupPurgeCounts {
+  readonly keys: number;
+  readonly usageRows: number;
+}
+
+/** Keys handled by each step of the purge of a group. */
+const PURGE_BATCH = 100;
 
 /**
  * Builds the repository of the public API keys over the common database.
@@ -140,6 +163,8 @@ export interface ApiKeysRepository {
 export function createApiKeysRepository(databases: Databases, defaults: PublicApiLimits = BUILT_IN_PUBLIC_API_LIMITS): ApiKeysRepository {
   const keys = (): Collection<Document> => databases.common().collection('apiKeys');
   const usage = (): Collection<Document> => databases.common().collection('apiUsage');
+  const keyIdsOfGroup = async (groupId: ObjectId, after: ObjectId | null): Promise<ObjectId[]> =>
+    (await keys().find({ groupId, ...(after === null ? {} : { _id: { $gt: after } }) }, { projection: { _id: 1 }, sort: { _id: 1 }, limit: PURGE_BATCH, maxTimeMS: LIST_MAX_TIME_MS }).toArray()).map((document) => document._id);
   return {
     insert: async (key) => {
       const { hash, ...rest } = key;
@@ -249,6 +274,26 @@ export function createApiKeysRepository(databases: Databases, defaults: PublicAp
         .find({ keyId, groupId, day: { $gte: from, $lte: to } }, { projection: { day: 1, route: 1, calls: 1, errors4xx: 1, errors5xx: 1, rateLimited: 1, aborted: 1 }, sort: { day: 1, route: 1 }, limit: MAX_USAGE_ROWS, maxTimeMS: LIST_MAX_TIME_MS })
         .toArray();
       return documents.map(toUsageRow);
+    },
+
+    countOfGroup: async (groupId) => {
+      let counts: GroupPurgeCounts = { keys: 0, usageRows: 0 };
+      for (let ids = await keyIdsOfGroup(groupId, null); ids.length > 0; ids = await keyIdsOfGroup(groupId, ids[ids.length - 1] as ObjectId)) {
+        const rows = await usage().countDocuments({ keyId: { $in: ids }, groupId }, { maxTimeMS: LIST_MAX_TIME_MS });
+        counts = { keys: counts.keys + ids.length, usageRows: counts.usageRows + rows };
+      }
+      return counts;
+    },
+
+    deleteAllOfGroup: async (groupId) => {
+      let counts: GroupPurgeCounts = { keys: 0, usageRows: 0 };
+      // Nothing is skipped by a cursor here: each pass deletes what it read, so the next pass reads the next keys.
+      for (let ids = await keyIdsOfGroup(groupId, null); ids.length > 0; ids = await keyIdsOfGroup(groupId, null)) {
+        const rows = await usage().deleteMany({ keyId: { $in: ids }, groupId });
+        const removed = await keys().deleteMany({ _id: { $in: ids }, groupId });
+        counts = { keys: counts.keys + removed.deletedCount, usageRows: counts.usageRows + rows.deletedCount };
+      }
+      return counts;
     },
   };
 }

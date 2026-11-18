@@ -52,7 +52,7 @@ describe('database access cannot be bypassed outside src/db', () => {
         assert.ok(mayCreateDatabases(file), `${path} must not call createDatabases`);
       }
     }
-    assert.deepEqual(callers.sort(), ['server.ts', 'tools/migrate-dealers/main.ts', 'tools/profile-legacy/main.ts', 'tools/sync-copies/main.ts']);
+    assert.deepEqual(callers.sort(), ['server.ts', 'tools/migrate-dealers/main.ts', 'tools/profile-legacy/main.ts', 'tools/purge-trashed-groups/main.ts', 'tools/sync-copies/main.ts']);
   });
 
   it('creates the cluster clients only from the server and from tool entry points', async () => {
@@ -68,7 +68,7 @@ describe('database access cannot be bypassed outside src/db', () => {
         assert.ok(mayCreateDatabases(file), `${path} must not create database clients`);
       }
     }
-    assert.deepEqual(callers.sort(), ['server.ts', 'tools/migrate-dealers/main.ts', 'tools/profile-legacy/main.ts', 'tools/sync-copies/main.ts']);
+    assert.deepEqual(callers.sort(), ['server.ts', 'tools/migrate-dealers/main.ts', 'tools/profile-legacy/main.ts', 'tools/purge-trashed-groups/main.ts', 'tools/sync-copies/main.ts']);
   });
 
   it('keeps the analytics handles unused outside src/db until a report needs them', async () => {
@@ -101,6 +101,24 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
     }
     assert.ok((await readFile(join(SRC, 'modules/trash/trash.routes.ts'), 'utf8')).includes('requireGroupAccesses('));
+  });
+
+  it('drops the collections of a group database only through the purger of src/db, which only the purge tool imports (the bare names are forbidden everywhere else, aliases included)', async () => {
+    const importers: string[] = [];
+    for (const file of await filesUnder(SRC)) {
+      const path = relative(SRC, file).split('\\').join('/');
+      const text = await readFile(file, 'utf8');
+      if (!path.startsWith('db/') && !path.startsWith('tools/purge-trashed-groups/')) {
+        assert.ok(!/dropCollection|\.drop\(|dropDatabase/.test(text), `${path} must not drop collections or databases`);
+        assert.ok(!/GroupDatabasePurger|dropGroupDatabase|describeGroupDatabase|group-database-purger/.test(text), `${path} must not reach the group database purger`);
+      }
+      if (/createGroupDatabasePurger/.test(text) && !path.startsWith('db/')) {
+        importers.push(path);
+      }
+    }
+    assert.deepEqual(importers, ['tools/purge-trashed-groups/main.ts']);
+    const databases = await readFile(join(SRC, 'db/databases.ts'), 'utf8');
+    assert.ok(!/dropCollection|dropGroup|describeGroup|assertPurgeable|GroupDatabasePurger/.test(databases), 'the Databases interface of the server carries no destructive group operation');
   });
 
   it('opens a group database only from the verified group access and the tools (always with an explicit cluster)', async () => {
@@ -142,10 +160,10 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.ok(seen, 'group-mirror.ts is expected to be the single place');
     });
 
-    it('has no file outside group-mirror.ts, src/db and tools/sync-copies that names the common database and a copy collection', async () => {
+    it('has no file outside group-mirror.ts, src/db, tools/sync-copies and tools/purge-trashed-groups that names the common database and a copy collection', async () => {
       for (const file of await filesUnder(SRC)) {
         const path = posix(file);
-        if (path === MIRROR || path === WRITER || path.startsWith('db/') || path.startsWith('tools/sync-copies/')) {
+        if (path === MIRROR || path === WRITER || path.startsWith('db/') || path.startsWith('tools/sync-copies/') || path.startsWith('tools/purge-trashed-groups/')) {
           continue;
         }
         const text = await readFile(file, 'utf8');

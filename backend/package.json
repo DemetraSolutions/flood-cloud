@@ -11,6 +11,7 @@
     "profile:legacy": "node src/tools/profile-legacy/cli.ts",
     "migrate:dealers": "node src/tools/migrate-dealers/cli.ts",
     "sync:copies": "node src/tools/sync-copies/cli.ts",
+    "purge:trashed-groups": "node src/tools/purge-trashed-groups/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --env-file-if-exists=.env.test --test --experimental-test-coverage --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test-coverage-include=src/** \"test/**/*.test.ts\""
   },

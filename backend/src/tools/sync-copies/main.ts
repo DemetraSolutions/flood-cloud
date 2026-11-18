@@ -32,8 +32,6 @@ export interface MainDeps {
   readonly limits?: BlockLimits;
 }
 
-const DEVELOPMENT_ONLY = 'Refusing to run: this command works on the development environment only (--env production is refused, and APP_ENV=production never matches --env development)';
-
 const USAGE = 'Usage: node src/tools/sync-copies/cli.ts [--env development|production] [--apply] [--group <24 hex characters>]';
 
 /** The validated command line. */
@@ -44,7 +42,7 @@ interface Args {
 }
 
 /**
- * Reads the command line: any order of `--env <development|production>` (production is then refused), `--apply` (a flag) and `--group <24 lowercase hex>`, each at most once.
+ * Reads the command line: any order of `--env <development|production>` (default `development`), `--apply` (a flag) and `--group <24 lowercase hex>`, each at most once.
  *
  * @returns The arguments, or `undefined` for anything else.
  */
@@ -81,9 +79,10 @@ function parseArgs(argv: readonly string[]): Args | undefined {
 /**
  * Entry point of the copy command (`doc/Tasks.md` 5.4 and 5.5): loads the copies of `companies` and `places` of the
  * group databases into the common database. The first run is the initial load, the next ones the reconciliation. It copies
- * the current state only: it writes missing and different copies and never deletes. It works on the development
- * environment only: `--env production` is refused before any connection and `APP_ENV=production` can never equal the
- * only accepted `--env development`. It is a dry run unless `--apply` is given, only replica sets are supported, groups on
+ * the current state only: it writes missing and different copies and never deletes. It works on `development` and, by
+ * the decision of 2026-11-18, on `production`, with the same safety model as the dealer migration: it refuses to run
+ * unless `APP_ENV` equals `--env` (`development` by default), before any connection and any write. It is a dry run
+ * (the default: nothing at all is written) unless `--apply` is given, only replica sets are supported, groups on
  * clusters other than the common one are copied without a transaction (D-25), and it stops with exit code 1 before any write when a cluster
  * is older than MongoDB 4.4 or is not a replica set. Every database name goes through the environment guard of
  * `databases.ts`. Group databases are only read. Output is counts and group ids: no document value, no connection string.
@@ -96,10 +95,6 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
   const parsed = parseArgs(argv);
   if (parsed === undefined) {
     deps.error(USAGE);
-    return 1;
-  }
-  if (parsed.env === 'production') {
-    deps.error(DEVELOPMENT_ONLY);
     return 1;
   }
   try {

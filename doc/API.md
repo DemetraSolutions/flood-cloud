@@ -1115,7 +1115,7 @@ Rappresentazione del gruppo:
 ### POST /v1/groups/{groupId}/trash
 - **Autenticazione e permesso:** Bearer backoffice, `groups:trash`; solo **PSA**
 - **Body:** nessuno
-- **Risposta:** `200` con il gruppo (`trashed: true`), con la stessa revoca delle sessioni della sospensione. Eventi `group.trashed` (sicurezza e dati) e `session.revoked`. I gruppi non si eliminano mai definitivamente.
+- **Risposta:** `200` con il gruppo (`trashed: true`), con la stessa revoca delle sessioni della sospensione. Eventi `group.trashed` (sicurezza e dati) e `session.revoked`. Nessuna API elimina definitivamente un gruppo: l'eliminazione avviene solo con lo strumento da riga di comando `purge:trashed-groups` (`doc/Technical-Guide.md`).
 - **Errori:** comuni; `403 FORBIDDEN`; `409 CONFLICT` (già nel cestino)
 
 ### POST /v1/groups/{groupId}/restore
