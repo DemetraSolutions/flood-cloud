@@ -1,0 +1,175 @@
+<header class="page-header">
+  <h1>
+    {{ 'ACTIVATIONS.STATEMENT.TITLE' | t: { dealer: dealerName() } }}
+  </h1>
+  <div class="header-actions no-print">
+    <button fc-button variant="secondary" (click)="print()">
+      {{ 'ACTIVATIONS.PRINT' | t }}
+    </button>
+    <button fc-button variant="secondary" [loading]="downloading()" (click)="download()">
+      {{ 'ACTIVATIONS.DOWNLOAD' | t }}
+    </button>
+  </div>
+</header>
+<p class="back no-print">
+  <a routerLink="/tools/activations" [queryParams]="{ month: selected() }">{{
+    'ACTIVATIONS.STATEMENT.BACK' | t
+  }}</a>
+</p>
+<p class="summary">
+  {{ 'ACTIVATIONS.STATEMENT.INVOICES_OF' | t: { month: invoiceMonth() } }}
+  @if (loaded()) {
+    @if (status() === 'closed') {
+      <fc-status-badge tone="success">{{ 'ACTIVATIONS.STATUS.CLOSED' | t }}</fc-status-badge>
+    } @else {
+      <fc-status-badge tone="info">{{ 'ACTIVATIONS.STATUS.OPEN' | t }}</fc-status-badge>
+    }
+  }
+</p>
+<p class="download-status no-print" role="status" [class.failed]="downloadError() !== null">
+  {{ downloadStatus() }}
+</p>
+
+<div class="no-print">
+  <fc-tab-list
+    idPrefix="statement"
+    [label]="'ACTIVATIONS.STATEMENT.TABS' | t"
+    [tabs]="tabs()"
+    [active]="active()"
+    (activeChange)="select($event)"
+  />
+</div>
+
+@for (tab of [active()]; track tab) {
+  <div
+    role="tabpanel"
+    tabindex="0"
+    [id]="'statement-panel-' + tab"
+    [attr.aria-labelledby]="'statement-tab-' + tab"
+  >
+    <p class="intro">{{ intro() }}</p>
+
+    @if (statement.error()) {
+      <fc-error-state
+        [title]="'ACTIVATIONS.STATEMENT.LOAD_ERROR' | t"
+        [message]="errorMessage()"
+        [requestId]="loadError()?.requestId ?? null"
+        (retry)="statement.reload()"
+      />
+    } @else if (statement.isLoading()) {
+      <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+    } @else {
+      @let sum = totals();
+      <dl class="totals">
+        <div>
+          <dt>{{ 'ACTIVATIONS.STATEMENT.TOTAL_PLACES' | t }}</dt>
+          <dd>{{ number(sum.places) }}</dd>
+        </div>
+        <div>
+          <dt>{{ 'ACTIVATIONS.STATEMENT.TOTAL_AMOUNT' | t }}</dt>
+          <dd>{{ money(sum.amountCents) }}</dd>
+        </div>
+        @if (sum.projection12Cents !== undefined) {
+          <div>
+            <dt>{{ 'ACTIVATIONS.COLUMN.PROJECTION' | t }}</dt>
+            <dd>{{ money(sum.projection12Cents) }}</dd>
+          </div>
+        }
+      </dl>
+
+      @if (prices().length > 0) {
+        <details class="prices">
+          <summary>{{ 'ACTIVATIONS.STATEMENT.PRICES' | t }}</summary>
+          <ul>
+            @for (price of prices(); track price.name) {
+              <li>{{ priceText(price) }}</li>
+            }
+          </ul>
+        </details>
+      }
+
+      @if (lines().length === 0) {
+        <fc-empty-state
+          [title]="'ACTIVATIONS.STATEMENT.EMPTY' | t"
+          [message]="'ACTIVATIONS.STATEMENT.EMPTY_MESSAGE' | t"
+        />
+      }
+      @for (group of blocks(); track group.groupId) {
+        <section class="group" [attr.aria-label]="group.groupName">
+          <h2>{{ group.groupName }}</h2>
+          @for (company of group.companies; track company.companyId) {
+            <div class="scroll">
+              <table>
+                <caption>
+                  {{
+                    company.companyName
+                  }}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{{ 'ACTIVATIONS.COLUMN.PLACE' | t }}</th>
+                    <th scope="col">{{ 'ACTIVATIONS.COLUMN.ACTIVATED_ON' | t }}</th>
+                    <th scope="col">{{ 'ACTIVATIONS.COLUMN.PLAN' | t }}</th>
+                    <th scope="col">{{ 'ACTIVATIONS.COLUMN.ITEMS' | t }}</th>
+                    @if (tab === 'activations') {
+                      <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.MONTHS' | t }}</th>
+                    }
+                    <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.AMOUNT' | t }}</th>
+                    @if (tab === 'activations') {
+                      <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.PROJECTION' | t }}</th>
+                    }
+                    <th scope="col">{{ 'ACTIVATIONS.COLUMN.NOTES' | t }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (line of company.lines; track line.placeId) {
+                    <tr>
+                      <th scope="row">{{ line.placeName }}</th>
+                      <td>{{ day(line.activatedAt) }}</td>
+                      <td>{{ line.plan ?? '—' }}</td>
+                      <td>
+                        <fc-fee-items
+                          [items]="line.items"
+                          [monthlyCents]="line.monthlyCents"
+                          [devices]="line.devices"
+                        />
+                      </td>
+                      @if (tab === 'activations') {
+                        <td class="num">{{ number(line.months) }}</td>
+                      }
+                      <td class="num">{{ money(line.amountCents) }}</td>
+                      @if (tab === 'activations') {
+                        <td class="num">{{ money(line.projection12Cents) }}</td>
+                      }
+                      <td>
+                        @for (flag of flags(line); track $index) {
+                          <fc-status-badge [tone]="flag.warning ? 'warning' : 'neutral'">{{
+                            flag.text
+                          }}</fc-status-badge>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
+    }
+    @if (!statement.error()) {
+      <div class="no-print">
+        <fc-cursor-paginator
+          [limit]="pageSize()"
+          [limits]="pageSizes"
+          [nextCursor]="nextCursor()"
+          [hasPrevious]="cursorStack().length > 0"
+          [loading]="statement.isLoading()"
+          (previousPage)="onPrevious()"
+          (nextPage)="onNext($event)"
+          (limitChange)="onLimit($event)"
+        />
+      </div>
+    }
+  </div>
+}

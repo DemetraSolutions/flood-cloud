@@ -53,6 +53,7 @@ import {
   toDealerFormModel,
   toFormErrors,
 } from './dealer.types';
+import { DealerPriceOverrides } from './dealer-price-overrides';
 import { DealersApi } from './dealers-api';
 
 const PHONE_PATTERN = /^[0-9 +\-()]*$/;
@@ -69,6 +70,7 @@ const PASSWORD_MAX = 128;
   selector: 'fc-dealer-form',
   imports: [
     Button,
+    DealerPriceOverrides,
     ErrorState,
     FormError,
     FormField,
@@ -116,6 +118,8 @@ export class DealerForm {
   protected readonly canWrite = computed(() =>
     this.session.can(this.isNew() ? 'dealers:create' : 'dealers:update'),
   );
+  /** The section of the custom prices is for who may manage them (platform administrators). */
+  protected readonly canManagePrices = computed(() => this.session.can('activations:manage'));
   protected readonly languages = SUPPORTED_LANGUAGES.map((language) => ({
     value: language,
     label: this.i18n.t(`LANGUAGE.NAME.${language.toUpperCase()}`),

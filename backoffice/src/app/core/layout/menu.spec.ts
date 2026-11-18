@@ -202,6 +202,35 @@ describe('visibleMenu', () => {
     });
   });
 
+  it('shows "Strumenti › Attivazioni" to platform administrators and dealers, and "Listino" to platform administrators only', () => {
+    const children = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children('PSA', 'activations:read')).toEqual(['activations']);
+    expect(children('D', 'activations:read')).toEqual(['activations']);
+    expect(children('PSA', 'activations:manage')).toEqual(['price-list']);
+    for (const role of ['SA', 'CA', 'PA', 'E', undefined] as const) {
+      expect(children(role, 'activations:read')).toBeUndefined();
+    }
+    for (const role of ['D', 'SA', undefined] as const) {
+      expect(children(role, 'activations:manage')).toBeUndefined();
+    }
+    const tools = MENU.find((i) => i.id === 'tools')?.children;
+    expect(tools?.find((i) => i.id === 'activations')).toMatchObject({
+      route: '/tools/activations',
+      labelKey: 'MENU.ACTIVATIONS',
+      permission: 'activations:read',
+      roles: ['PSA', 'D'],
+    });
+    expect(tools?.find((i) => i.id === 'price-list')).toMatchObject({
+      route: '/tools/price-list',
+      labelKey: 'MENU.PRICE_LIST',
+      permission: 'activations:manage',
+      roles: ['PSA'],
+    });
+  });
+
   it('shows "Strumenti › Listino Tabacchi" only to platform administrators with tobaccos:read', () => {
     const children = (role: Role | undefined, permission: string) =>
       visibleMenu(MENU, (p) => p === permission, allowAll, role)

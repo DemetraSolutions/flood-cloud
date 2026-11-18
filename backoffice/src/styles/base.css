@@ -85,3 +85,14 @@ textarea {
     scroll-behavior: auto !important;
   }
 }
+
+/* Printing a page of the backoffice: the shell (header, side menu) and the controls stay out. */
+@media print {
+  fc-shell > header,
+  fc-shell > .skip-link,
+  fc-shell > .body > nav,
+  fc-shell > .body > .backdrop,
+  .no-print {
+    display: none !important;
+  }
+}

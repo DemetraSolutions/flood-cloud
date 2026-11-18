@@ -1,4 +1,5 @@
 import { MongoServerError, ObjectId } from 'mongodb';
+import { createHmac } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { actorOf } from '../../shared/activity-log/actor.ts';
 import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
@@ -6,9 +7,14 @@ import { recordDataChange } from '../../shared/activity-log/data-change.ts';
 import type { ClientContext } from '../../shared/http/client-context.ts';
 import type { PageInfo } from '../../shared/http/envelope.ts';
 import { AppError } from '../../shared/http/errors.ts';
+import { canonicalJson } from '../../shared/http/etag.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
 import { hasPermission } from '../../shared/security/rbac/policy.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { effectivePrices, overridesOf } from '../settings/price-list.ts';
+import type { PriceList, PriceOverrides } from '../settings/price-list.ts';
+import type { PriceOverridesBody } from '../settings/settings.schemas.ts';
+import type { SettingsService } from '../settings/settings.service.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import type { UsersService } from '../users/users.service.ts';
 import { mergeCompany } from './dealer-rules.ts';
@@ -22,6 +28,13 @@ import type { CreateDealerBody, DealersQuery, PatchDealerBody } from './dealers.
 export interface DealerListing {
   readonly items: readonly DealerResponse[];
   readonly page: PageInfo;
+}
+
+/** The price overrides of a dealer with the prices that result, and the version (the `ETag` of the response, the `If-Match` of the next write). */
+export interface DealerPricesResult {
+  readonly overrides: PriceOverrides;
+  readonly effective: PriceList;
+  readonly version: string;
 }
 
 /** The dealer registry (D-09): the company data of the dealers, whose `_id` is the id of their `D` user. */
@@ -59,6 +72,24 @@ export interface DealersService {
    * @throws {AppError} `NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT` (VAT number taken).
    */
   update(principal: AuthPrincipal, dealerId: ObjectId, patch: PatchDealerBody, client: ClientContext): Promise<DealerResponse>;
+  /**
+   * The prices a dealer pays instead of the ones of the price list, and the prices that result.
+   *
+   * @param dealerId Id of the dealer.
+   * @throws {AppError} `NOT_FOUND`.
+   */
+  getPriceOverrides(dealerId: ObjectId): Promise<DealerPricesResult>;
+  /**
+   * Replaces the price overrides of a dealer (`{}` removes them all).
+   *
+   * @param principal The authenticated administrator (the route requires `activations:manage`).
+   * @param dealerId Id of the dealer.
+   * @param expected The version the client read.
+   * @param body The validated overrides.
+   * @param client Request context.
+   * @throws {AppError} `NOT_FOUND`, `PRECONDITION_FAILED` when the overrides are no longer the ones that were read.
+   */
+  replacePriceOverrides(principal: AuthPrincipal, dealerId: ObjectId, expected: string, body: PriceOverridesBody, client: ClientContext): Promise<DealerPricesResult>;
 }
 
 /** Collaborators of {@link createDealersService}. */
@@ -68,6 +99,10 @@ export interface DealersServiceDeps {
   /** The user management: creating the dealer creates his user with the same rules. */
   readonly usersService: Pick<UsersService, 'create'>;
   readonly activityLog: ActivityLog;
+  /** The price list in force, which the overrides of a dealer are put on top of. */
+  readonly priceLists: Pick<SettingsService, 'getPriceList'>;
+  /** Secret key of the versions of the overrides (`VERSION_HMAC_KEY`). */
+  readonly versionKey: Buffer;
   /** Clock in epoch milliseconds. */
   readonly now: () => number;
 }
@@ -84,6 +119,15 @@ const isDuplicateKey = (error: unknown): boolean => error instanceof MongoServer
 export function createDealersService(deps: DealersServiceDeps): DealersService {
   const { dealers, users, usersService, activityLog } = deps;
   const date = (): Date => new Date(deps.now());
+
+  /** The version of the overrides of a dealer: HMAC-SHA256 of their canonical JSON with the secret key of the server, bound to the dealer. */
+  const versionOf = (dealerId: ObjectId, overrides: PriceOverrides): string =>
+    createHmac('sha256', deps.versionKey).update(canonicalJson({ kind: 'dealerPriceOverrides', dealerId: dealerId.toHexString(), overrides })).digest('base64url');
+  const pricesOf = async (dealerId: ObjectId, overrides: PriceOverrides): Promise<DealerPricesResult> => ({
+    overrides,
+    effective: effectivePrices((await deps.priceLists.getPriceList()).list, overrides),
+    version: versionOf(dealerId, overrides),
+  });
 
   const respond = async (found: readonly Dealer[]): Promise<DealerResponse[]> => {
     const summaries = await users.findSummaries(found.map((dealer) => dealer.id));
@@ -170,6 +214,42 @@ export function createDealersService(deps: DealersServiceDeps): DealersService {
       const after: Dealer = { ...before, ...company, updatedAt: now };
       await logChange(principal, client, dealerId, 'dealer.updated', before, after);
       return (await respond([after]))[0]!;
+    },
+
+    getPriceOverrides: async (dealerId) => {
+      const stored = await dealers.readPriceOverrides(dealerId);
+      if (stored === null) {
+        throw new AppError('NOT_FOUND');
+      }
+      return pricesOf(dealerId, overridesOf(stored.raw));
+    },
+
+    replacePriceOverrides: async (principal, dealerId, expected, body, client) => {
+      const stored = await dealers.readPriceOverrides(dealerId);
+      if (stored === null) {
+        throw new AppError('NOT_FOUND');
+      }
+      const before = overridesOf(stored.raw);
+      if (versionOf(dealerId, before) !== expected) {
+        throw new AppError('PRECONDITION_FAILED');
+      }
+      const next = overridesOf(body);
+      if (canonicalJson(next) === canonicalJson(before)) {
+        return pricesOf(dealerId, before);
+      }
+      if (!(await dealers.replacePriceOverrides(dealerId, stored.raw, next))) {
+        throw new AppError('PRECONDITION_FAILED');
+      }
+      await recordDataChange(activityLog, {
+        actor: actorOf(principal),
+        resource: { type: 'dealer', id: dealerId.toHexString() },
+        action: 'dealer.priceOverridesUpdated',
+        before: { ...before },
+        after: { ...next },
+        requestId: client.requestId,
+        ...(client.ip === null ? {} : { ip: client.ip }),
+      });
+      return pricesOf(dealerId, next);
     },
   };
 }

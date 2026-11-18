@@ -140,10 +140,10 @@ export function defineRoute(definition: RouteDefinition): RouteDefinition {
 
 /**
  * Normalizes a path so that paths Express would match identically compare equal:
- * lower case, no trailing slash (except the root) and every `:param` replaced by `:`.
+ * lower case, no trailing slash (except the root) and every `:param` replaced by `:`. A parameter name is made of word characters, so `:dealerId.csv` is a parameter followed by `.csv`.
  */
 function normalizePath(path: string): string {
-  const lower = path.toLowerCase().replace(/:[^/]+/g, ':');
+  const lower = path.toLowerCase().replace(/:\w+/g, ':');
   return lower.length > 1 && lower.endsWith('/') ? lower.slice(0, -1) : lower;
 }
 

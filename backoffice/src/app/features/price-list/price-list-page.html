@@ -1,0 +1,87 @@
+<header class="page-header">
+  <h1>{{ 'PRICE_LIST.TITLE' | t }}</h1>
+</header>
+<p class="hint">{{ 'PRICE_LIST.HINT' | t }}</p>
+
+@if (failed()) {
+  <fc-error-state
+    [title]="'PRICE_LIST.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else if (ready()) {
+  @if (stale()) {
+    <section class="notice" role="alert">
+      <p>{{ 'PRICE_LIST.STALE' | t }}</p>
+      <button fc-button variant="secondary" (click)="reload()">
+        {{ 'PRICE_LIST.RELOAD' | t }}
+      </button>
+    </section>
+  }
+  <form novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+    }
+    <fieldset>
+      <legend>{{ 'PRICE_LIST.PLANS' | t }}</legend>
+      <p class="note">{{ 'PRICE_LIST.PLANS_HINT' | t }}</p>
+      @for (plan of priceForm.plans; track $index; let i = $index) {
+        <div class="row">
+          <fc-text-field
+            [formField]="plan.key"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+            [label]="planKeyLabel(i)"
+            [error]="error(plan.key)"
+            (blurred)="plan.key().markAsTouched()"
+          />
+          <fc-text-field
+            [formField]="plan.price"
+            autocomplete="off"
+            inputmode="decimal"
+            [label]="planPriceLabel(i)"
+            [error]="error(plan.price)"
+            (blurred)="plan.price().markAsTouched()"
+          />
+          <button
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="removeLabel(i)"
+            (click)="removePlan(i)"
+          >
+            {{ 'PRICE_LIST.REMOVE' | t }}
+          </button>
+        </div>
+      }
+      <div>
+        <button fc-button variant="secondary" [disabled]="!canAddPlan()" (click)="addPlan()">
+          {{ 'PRICE_LIST.ADD_PLAN' | t }}
+        </button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ 'PRICE_LIST.SERVICES' | t }}</legend>
+      <div class="grid">
+        @for (key of serviceKeys; track key) {
+          <fc-text-field
+            [formField]="priceForm.services[key]"
+            autocomplete="off"
+            inputmode="decimal"
+            [label]="serviceLabel(key)"
+            [error]="error(priceForm.services[key])"
+            (blurred)="priceForm.services[key]().markAsTouched()"
+          />
+        }
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <button fc-button type="submit" [loading]="submitting()">{{ 'COMMON.SAVE' | t }}</button>
+    </div>
+  </form>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+}

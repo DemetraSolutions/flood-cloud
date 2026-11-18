@@ -23,6 +23,7 @@ export type TextFieldType =
   | 'date'
   | 'time'
   | 'datetime-local'
+  | 'month'
   | 'color';
 
 /**

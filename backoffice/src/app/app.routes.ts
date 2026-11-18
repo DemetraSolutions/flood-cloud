@@ -589,6 +589,27 @@ export const routes: Routes = [
               ),
           },
           {
+            path: 'tools/activations',
+            canMatch: [permission('activations:read')],
+            title: 'ACTIVATIONS.TITLE',
+            loadComponent: () =>
+              import('./features/activations/activations-page').then((m) => m.ActivationsPage),
+          },
+          {
+            path: 'tools/activations/:dealerId',
+            canMatch: [permission('activations:read')],
+            title: 'ACTIVATIONS.STATEMENT.PAGE_TITLE',
+            loadComponent: () =>
+              import('./features/activations/statement-page').then((m) => m.StatementPage),
+          },
+          {
+            path: 'tools/price-list',
+            canMatch: [role('PSA'), permission('activations:manage')],
+            title: 'PRICE_LIST.TITLE',
+            loadComponent: () =>
+              import('./features/price-list/price-list-page').then((m) => m.PriceListPage),
+          },
+          {
             path: 'tools/tobaccos',
             canMatch: [role('PSA'), permission('tobaccos:read')],
             title: 'TOBACCOS.TITLE',

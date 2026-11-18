@@ -58,7 +58,9 @@
     "RELEASES": "Release",
     "EMAIL_TEMPLATES": "Template e-mail",
     "TOBACCOS": "Listino Tabacchi",
-    "COUNTRIES": "Gestione stati"
+    "COUNTRIES": "Gestione stati",
+    "ACTIVATIONS": "Attivazioni",
+    "PRICE_LIST": "Listino"
   },
   "THEME": {
     "LABEL": "Tema",
@@ -963,6 +965,22 @@
       "UPDATED": "Ultima modifica",
       "DELETE_NOTE": "Un dealer non si elimina da qui: elimina il suo utente dal cestino degli utenti di piattaforma.",
       "CREATED_ON": "Creato il"
+    },
+    "PRICES": {
+      "TITLE": "Prezzi personalizzati",
+      "HINT": "Un prezzo indicato qui vale per questo rivenditore al posto di quello del listino. Lascia il campo vuoto per usare il prezzo predefinito.",
+      "LOAD_ERROR": "Impossibile caricare i prezzi personalizzati",
+      "STALE": "I prezzi sono stati modificati nel frattempo: ricaricali prima di salvare.",
+      "RELOAD": "Ricarica",
+      "PLANS": "Piani",
+      "SERVICES": "Servizi",
+      "NO_PLANS": "Il listino non ha piani.",
+      "PLAN": "Piano {plan} (€)",
+      "DEFAULT": "Predefinito: {price}",
+      "NO_DEFAULT": "Nessun prezzo predefinito",
+      "RESTORE": "Ripristina predefinito",
+      "RESTORE_LABEL": "Ripristina il prezzo predefinito: {name}",
+      "SAVED": "Prezzi personalizzati salvati."
     }
   },
   "FEATURE": {
@@ -3574,5 +3592,199 @@
       "NOT_TRASHED": "L'elemento non è più nel cestino",
       "NOT_FOUND": "L'elemento non esiste più o non è accessibile"
     }
+  },
+  "PRICE_SERVICE": {
+    "EXTRA_DESK": "Cassa aggiuntiva",
+    "KIOSK": "Kiosk",
+    "API": "API",
+    "TOBACCOS": "Tabacchi",
+    "RESERVATION_WIDGET": "Widget prenotazioni",
+    "FLOOD_PAY": "Flood Pay",
+    "ARUBA_E_INVOICING": "Fatturazione elettronica Aruba",
+    "RESERVE_WITH_GOOGLE": "Prenota con Google",
+    "BIZERBA": "Bizerba"
+  },
+  "PRICE_LIST": {
+    "TITLE": "Listino",
+    "HINT": "Canone mensile in euro, IVA esclusa, di ogni piano e servizio. Vale per tutti i rivenditori, salvo i prezzi personalizzati nella loro scheda. I mesi già chiusi non cambiano.",
+    "LOAD_ERROR": "Impossibile caricare il listino",
+    "STALE": "Il listino è stato modificato nel frattempo: ricaricalo prima di salvare.",
+    "RELOAD": "Ricarica",
+    "PLANS": "Piani",
+    "PLANS_HINT": "Il codice è il piano memorizzato sui punti vendita (per esempio basic). Un piano senza prezzo compare nei prospetti come «Piano senza prezzo».",
+    "PLAN_KEY": "Codice del piano {number}",
+    "PLAN_PRICE": "Prezzo mensile del piano {number} (€)",
+    "REMOVE": "Rimuovi",
+    "REMOVE_PLAN": "Rimuovi il piano {number}",
+    "ADD_PLAN": "Aggiungi piano",
+    "SERVICES": "Servizi",
+    "SAVED": "Listino salvato."
+  },
+  "ACTIVATIONS": {
+    "TITLE": "Attivazioni",
+    "HINT": "Quanto Flood deve fatturare a ogni rivenditore nel mese scelto: le attivazioni del mese precedente e la rata dei rinnovi dell’anno. Importi in euro, IVA esclusa.",
+    "MONTH": "Mese delle fatture",
+    "MONTH_HINT": "Formato AAAA-MM",
+    "EXPLANATION": "Fatture di {invoice}: attivazioni di {activity} e rata di {month} dei rinnovi {year}",
+    "ACTIONS": "Chiusura del mese",
+    "BASE_NOT_FROZEN": "Per chiudere il mese congela prima la base dei rinnovi {year}.",
+    "LOAD_ERROR": "Impossibile caricare le attivazioni",
+    "EMPTY": "Nessun rivenditore",
+    "EMPTY_MESSAGE": "Non ci sono attivazioni né rinnovi da fatturare per questo mese.",
+    "TABLE": "Riepilogo per rivenditore",
+    "TOTALS": "Totale",
+    "ANOMALIES": "{count} segnalazioni",
+    "PRINT": "Stampa",
+    "DOWNLOAD": "Scarica CSV",
+    "DOWNLOADING": "Download del CSV in corso…",
+    "DOWNLOAD_ERROR": {
+      "TOO_LARGE": "Troppi dati per un solo file CSV",
+      "TOO_MANY": "Troppe richieste, riprova tra poco",
+      "GENERIC": "Impossibile scaricare il CSV. Riprova."
+    },
+    "STATUS": {
+      "OPEN": "Aperto",
+      "CLOSED": "Chiuso"
+    },
+    "COLUMN": {
+      "DEALER": "Rivenditore",
+      "PLACES": "Attivazioni",
+      "ACTIVATIONS_INVOICE": "Fattura attivazioni",
+      "RENEWALS_INSTALMENT": "Rata rinnovi",
+      "TOTAL": "Totale del mese",
+      "PROJECTION": "Proiezione a 12 mesi",
+      "STATUS": "Stato",
+      "ANOMALIES": "Segnalazioni",
+      "PLACE": "Punto vendita",
+      "ACTIVATED_ON": "Attivato il",
+      "PLAN": "Piano",
+      "ITEMS": "Voci",
+      "MONTHLY": "Canone mensile",
+      "MONTHS": "Mesi",
+      "AMOUNT": "Importo",
+      "NOTES": "Segnalazioni"
+    },
+    "FLAG": {
+      "UNPRICED_PLAN": "Piano senza prezzo",
+      "EXPIRED": "Scaduto",
+      "GROUP_SUSPENDED": "Gruppo sospeso",
+      "COMPANY_DISABLED": "Azienda disabilitata",
+      "DATE_FROM_ID": "Data di attivazione stimata"
+    },
+    "ITEM": {
+      "PLAN": "Piano {plan}",
+      "EXTRA_DESKS": "{count} casse aggiuntive",
+      "NO_PLAN": "Piano non impostato",
+      "UNPRICED": "senza prezzo",
+      "CAPTION": "Composizione del canone mensile",
+      "NAME": "Voce",
+      "QUANTITY": "Quantità",
+      "UNIT": "Prezzo unitario",
+      "AMOUNT": "Importo",
+      "DEVICES": "Casse: {desks}, Kiosk: {kiosks}, Palmari: {handhelds}"
+    },
+    "CONFLICT": {
+      "GENERIC": "L’operazione non è possibile nello stato attuale dei dati.",
+      "BASE_NOT_FROZEN": "Per chiudere il mese congela prima la base dei rinnovi dell’anno.",
+      "MONTH_IN_FUTURE": "Il mese non è ancora iniziato: non si può chiudere.",
+      "ALREADY_CLOSED": "Il mese è già chiuso.",
+      "MONTH_CLOSED": "Un mese dell’anno è chiuso: riaprilo prima di sbloccare la base dei rinnovi.",
+      "TOO_MANY_LINES": "Un rivenditore ha troppi punti vendita per salvare il mese: non si può chiudere.",
+      "ALREADY_FROZEN": "La base dei rinnovi è già congelata.",
+      "EMPTY": "Nessun punto vendita da congelare per l’anno.",
+      "NOT_FROZEN": "La base dei rinnovi non è congelata.",
+      "NOT_CLOSED": "Il mese non è chiuso.",
+      "YEAR_IN_FUTURE": "Non si può congelare la base dei rinnovi di un anno futuro."
+    },
+    "ACTION": {
+      "FREEZE": {
+        "LABEL": "Congela base rinnovi {year}",
+        "TITLE": "Congelare la base dei rinnovi?",
+        "MESSAGE": "Congelando la base dei rinnovi {year} i punti vendita e i prezzi che servono alle rate vengono salvati e non cambiano più, anche se i dati o il listino cambiano. Si può sbloccare finché nessun mese dell’anno è chiuso.",
+        "CONFIRM": "Congela",
+        "DONE": "Base dei rinnovi {year} congelata."
+      },
+      "UNFREEZE": {
+        "LABEL": "Sblocca base rinnovi {year}",
+        "TITLE": "Sbloccare la base dei rinnovi?",
+        "MESSAGE": "La base dei rinnovi {year} torna a essere calcolata in tempo reale con i dati e i prezzi attuali. Non è possibile se un mese del {year} è già chiuso.",
+        "CONFIRM": "Sblocca",
+        "DONE": "Base dei rinnovi {year} sbloccata."
+      },
+      "CLOSE": {
+        "LABEL": "Chiudi mese",
+        "TITLE": "Chiudere il mese?",
+        "MESSAGE": "Chiudendo {month} le righe e gli importi di tutti i rivenditori vengono salvati e non cambiano più, anche se i dati o i prezzi cambiano. Potrai riaprire il mese più avanti.",
+        "CONFIRM": "Chiudi mese",
+        "DONE": "Mese {month} chiuso."
+      },
+      "REOPEN": {
+        "LABEL": "Riapri mese",
+        "TITLE": "Riaprire il mese?",
+        "MESSAGE": "Riaprendo {month} le righe e gli importi salvati vengono eliminati: il mese torna a essere calcolato in tempo reale con i dati e i prezzi attuali.",
+        "CONFIRM": "Riapri mese",
+        "DONE": "Mese {month} riaperto."
+      }
+    },
+    "STATEMENT": {
+      "TITLE": "Attivazioni: {dealer}",
+      "PAGE_TITLE": "Prospetto del rivenditore",
+      "DEALER": "Rivenditore",
+      "BACK": "Torna al riepilogo",
+      "INVOICES_OF": "Fatture di {month}",
+      "TABS": "Sezioni del prospetto",
+      "TAB": {
+        "ACTIVATIONS": "Attivazioni del mese",
+        "RENEWALS": "Rinnovi"
+      },
+      "INTRO": {
+        "ACTIVATIONS": "Punti vendita attivati a {activity}: ognuno paga il canone mensile per i mesi che mancano a dicembre, escluso il mese di attivazione.",
+        "RENEWALS": "Rata di {month} dei rinnovi {year}: un dodicesimo del canone annuo dei punti vendita attivati entro il 31 dicembre dell’anno precedente."
+      },
+      "LOAD_ERROR": "Impossibile caricare il prospetto",
+      "TOTAL_PLACES": "Punti vendita",
+      "TOTAL_AMOUNT": "Importo da fatturare",
+      "PRICES": "Listino applicato",
+      "EMPTY": "Nessun punto vendita",
+      "EMPTY_MESSAGE": "Questa sezione non ha righe per il mese scelto."
+    },
+    "PROVIDER": {
+      "QODEUP": "Qodeup",
+      "GOOGLE_MAPS": "Google Maps",
+      "YELLGO": "YellGo",
+      "LEGGIMENU": "Leggimenu",
+      "PLATEFORM": "Plateform",
+      "COOPERTO": "Cooperto",
+      "TOMATOAI": "TomatoAi",
+      "KEENON": "Keenon",
+      "PHLEX": "Phlex",
+      "STATMANAGER": "StatManager"
+    },
+    "DETAIL": {
+      "HINT": "Tutte le attivazioni del periodo con le voci attive e come si compone il prezzo. È un’analisi calcolata ora con i dati e i prezzi attuali, non una fattura.",
+      "FROM": "Dal mese",
+      "TO": "Al mese",
+      "ALL_DEALERS": "Tutti i rivenditori",
+      "NO_DEALER": "Senza rivenditore",
+      "LOAD_ERROR": "Impossibile caricare il dettaglio delle attivazioni",
+      "TOTAL_PLACES": "Punti vendita attivati",
+      "TOTAL_MONTHLY": "Canone mensile totale",
+      "TOTAL_AMOUNT": "Importo attivazioni",
+      "EMPTY": "Nessuna attivazione",
+      "EMPTY_MESSAGE": "Nessun punto vendita è stato attivato nel periodo scelto.",
+      "ERROR": {
+        "MONTH": "Indica un mese valido (AAAA-MM, dal 2020 al 2100).",
+        "ORDER": "Il mese finale non può precedere quello iniziale.",
+        "SPAN": "Il periodo può durare al massimo 24 mesi."
+      },
+      "DOWNLOAD_ERROR": {
+        "TOO_MANY_LINES": "Troppi punti vendita per un solo file CSV: restringi il periodo"
+      }
+    },
+    "TAB": {
+      "INVOICES": "Fatture del mese",
+      "DETAIL": "Dettaglio attivazioni"
+    },
+    "TABS": "Viste delle attivazioni"
   }
 }

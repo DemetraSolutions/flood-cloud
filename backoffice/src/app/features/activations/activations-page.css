@@ -1,0 +1,124 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.hint,
+.note {
+  margin-block: 0 var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.month {
+  max-inline-size: 16rem;
+  margin-block-end: var(--space-3);
+}
+
+.explanation {
+  font-weight: var(--font-weight-medium);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+.actions .note {
+  margin: 0;
+}
+
+.notice {
+  margin-block-end: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.scroll {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+caption {
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  font-weight: var(--font-weight-bold);
+}
+
+th,
+td {
+  padding: var(--space-2) var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+  text-align: start;
+  vertical-align: middle;
+}
+
+thead th,
+tfoot th,
+tfoot td {
+  background: var(--color-surface-muted);
+  font-weight: var(--font-weight-bold);
+}
+
+thead th {
+  white-space: nowrap;
+}
+
+tbody th {
+  font-weight: var(--font-weight-medium);
+}
+
+tbody tr {
+  position: relative;
+}
+
+tbody tr:hover {
+  background: var(--color-surface-muted);
+}
+
+.num {
+  text-align: end;
+  white-space: nowrap;
+}
+
+/* The link of the dealer covers the whole row, so that the row is clickable. */
+.row-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.row-link:focus-visible::after {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: calc(var(--focus-ring-offset) * -1);
+}
+
+@media print {
+  .scroll {
+    border: 0;
+    overflow: visible;
+  }
+}

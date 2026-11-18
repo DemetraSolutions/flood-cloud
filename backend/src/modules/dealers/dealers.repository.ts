@@ -2,6 +2,7 @@ import type { ClientSession, Collection, Document, ObjectId } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
 import type { PageInfo } from '../../shared/http/envelope.ts';
 import { LIST_MAX_TIME_MS, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
+import type { PriceOverrides } from '../settings/price-list.ts';
 import type { ListParams } from '../../shared/http/list.ts';
 import { DEALER_PROJECTION, companyOf, fromDocument } from './dealer.mapper.ts';
 import type { Company, Dealer, DealerSummary } from './dealer.types.ts';
@@ -68,6 +69,22 @@ export interface DealersRepository {
    * @returns The deleted dealer, or `null` when there was no document (a user `D` created before the registry and not yet migrated).
    */
   deleteById(id: ObjectId, session: ClientSession): Promise<Dealer | null>;
+  /**
+   * Reads the price overrides of a dealer exactly as stored.
+   *
+   * @param id Id of the dealer.
+   * @returns `null` when the dealer does not exist, otherwise the stored `priceOverrides` (`undefined` when the dealer has none).
+   */
+  readPriceOverrides(id: ObjectId): Promise<{ readonly raw: unknown } | null>;
+  /**
+   * Saves the price overrides of a dealer, only if they are still the ones that were read: overrides saved meanwhile are never overwritten. An empty set removes the field. `updatedAt` is not touched: the company data did not change.
+   *
+   * @param id Id of the dealer.
+   * @param read What {@link readPriceOverrides} returned (`undefined` for a dealer without overrides).
+   * @param next The whole new overrides, in their canonical order.
+   * @returns Whether the dealer was still found with the overrides that were read.
+   */
+  replacePriceOverrides(id: ObjectId, read: unknown, next: PriceOverrides): Promise<boolean>;
 }
 
 /**
@@ -104,6 +121,17 @@ export function createDealersRepository(databases: Databases): DealersRepository
     update: async (id, company, now) => {
       const result = await dealers().updateOne({ _id: id }, { $set: { ...companyOf(company), updatedAt: now } });
       return result.matchedCount === 1;
+    },
+
+    readPriceOverrides: async (id) => {
+      const document = await dealers().findOne({ _id: id }, { projection: { priceOverrides: 1 }, maxTimeMS: LIST_MAX_TIME_MS });
+      return document === null ? null : { raw: document['priceOverrides'] as unknown };
+    },
+
+    replacePriceOverrides: async (id, read, next) => {
+      const guard = read === undefined ? { $exists: false } : read;
+      const change = Object.keys(next).length === 0 ? { $unset: { priceOverrides: '' } } : { $set: { priceOverrides: next } };
+      return (await dealers().updateOne({ _id: id, priceOverrides: guard }, change)).matchedCount === 1;
     },
 
     deleteById: async (id, session) => {

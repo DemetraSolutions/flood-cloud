@@ -490,3 +490,26 @@ describe('DealerForm: detail', () => {
     expect(root.querySelector('fc-error-state')?.textContent).toContain('ERRORS.GENERIC.MESSAGE');
   });
 });
+
+describe('DealerForm: custom prices', () => {
+  it('shows the section to who manages the activations, and only then', async () => {
+    const { loadDealer, root, view } = await render(`/dealers/${ID}`, {
+      permissions: [...ALL, 'activations:manage'],
+    });
+    await loadDealer();
+    expect(root.querySelector('fc-dealer-price-overrides')).not.toBeNull();
+    // The section reads the price list and the overrides of this dealer.
+    const reads = backend().match(() => true);
+    expect(reads.map((request) => request.request.url).sort()).toEqual([
+      `${URL}/${ID}/price-overrides`,
+      `${API}/v1/settings/price-list`,
+    ]);
+    await view();
+  });
+
+  it('does not show it, nor read the prices, without the permission', async () => {
+    const { loadDealer, root } = await render(`/dealers/${ID}`);
+    await loadDealer();
+    expect(root.querySelector('fc-dealer-price-overrides')).toBeNull();
+  });
+});

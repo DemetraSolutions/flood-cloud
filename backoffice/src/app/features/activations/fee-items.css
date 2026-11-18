@@ -1,0 +1,37 @@
+:host {
+  display: block;
+}
+
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+th,
+td {
+  padding: var(--space-1) var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+  text-align: start;
+  font-weight: var(--font-weight-regular);
+}
+
+thead th {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+tfoot th,
+tfoot td {
+  border-block-end: 0;
+  font-weight: var(--font-weight-bold);
+}
+
+.devices td {
+  color: var(--color-text-muted);
+}
+
+.num {
+  text-align: end;
+  white-space: nowrap;
+}

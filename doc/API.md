@@ -1737,3 +1737,72 @@ Azioni sulla pagina "Cestino". **Non hanno `If-Match`**: le selezioni vengono da
 - **Body:** `{ "ids": [ … ] }` (1–100). Non esistono eliminazione né svuotamento dei gruppi.
 - **Risposta:** `200`, risposta comune con `outcome: "restored"`; un gruppo inesistente è `notFound`, uno non in cestino `notTrashed`. Evento per chiamata `trash.bulkRestored` (senza gruppo) e per gruppo `group.restored`.
 - **Errori:** comuni; `403`; `422`; `429`
+
+## Listino, personalizzazioni e attivazioni (`/v1`, passo 9-ter/4)
+
+Strumento con cui Flood sa quali licenze sono state attivate ogni mese e quanto deve pagare ogni dealer. Importi sempre in **centesimi di euro, IVA esclusa**. Il **mese della fattura** `I` (anno `Y`) ha due fatture per dealer: (1) le **attivazioni** dei punti vendita attivati nel mese prima di `I` (mese di `places.insertDate` in `Europe/Rome`; il mese di attivazione non si paga: ogni punto vendita paga il canone mensile per `12 − mese di attivazione` mesi, maggio 7, dicembre 0); (2) la **rata dei rinnovi**: un dodicesimo del canone annuo del parco al 31 dicembre `Y−1`, cioè la somma dei canoni mensili dei punti vendita attivati fino ad allora. Un mese **chiuso** si serve dalle chiusure e non cambia più; uno aperto si calcola al momento (la base dei rinnovi è viva finché il PSA non la congela). Tutte le risposte hanno l'envelope `{ data }`; nessuna route è su `/public/v1` né aperta alla chiave di negozio. Errori comuni: `401`, `403`, `429`, `503` (lettura oltre il limite di tempo).
+
+Permessi: `activations:read` (PSA e D; un D vede solo i propri dati: un `dealerId` diverso dal suo, o `none`, dà `403`) e `activations:manage` (solo PSA). Rate limit: scritture `RATE_LIMIT_ACTIVATIONS_ADMIN_PER_USER` (30/min), CSV `RATE_LIMIT_ACTIVATIONS_EXPORT_PER_USER` (5/min), oltre al limite generale.
+
+### GET /v1/settings/price-list e PUT /v1/settings/price-list
+- **Permesso:** `activations:manage`.
+- **GET:** `200` `{ "data": { "plans": { "basic": 2000, … }, "services": { "extraDesk": 500, "kiosk": 1500, "api": 500, "tobaccos": 1300, "reservationWidget": 1000, "floodPay": 1500, "arubaEInvoicing": 0, "reserveWithGoogle": 0, "bizerba": 0 } } }` con `ETag` forte. Senza listino salvato risponde il default.
+- **PUT:** `If-Match` obbligatorio; corpo = la lista intera (`plans` con al più 30 chiavi `^[A-Za-z0-9_-]{1,30}$`, `services` con **tutte e nove** le chiavi, ogni importo intero 0–10 000 000; nient'altro). Risponde `200` come il GET con il nuovo `ETag`. Evento `priceList.updated`.
+- **Errori:** `422` con campi `plans.<chiave>`, `services.<chiave>` o `If-Match`; `412` se la lista è cambiata dopo la lettura.
+
+### GET /v1/dealers/{dealerId}/price-overrides e PUT …
+- **Permesso:** `activations:manage`. Prezzi che il dealer paga al posto di quelli del listino, chiave per chiave.
+- **GET:** `200` `{ "data": { "overrides": { "plans"?: {…}, "services"?: {…} }, "effective": { "plans": {…}, "services": {…} } } }` con `ETag`; `404` se il dealer non esiste.
+- **PUT:** `If-Match` obbligatorio; corpo `{ "plans"?: {…}, "services"?: {…} }` (sostituzione completa; `{}` toglie tutto; `services` solo le nove chiavi note). Risponde come il GET con il nuovo `ETag`. Evento `dealer.priceOverridesUpdated`. Errori: `404`, `412`, `422`.
+
+### GET /v1/activations?month=AAAA-MM[&dealerId=<id>|none]
+- **Permesso:** `activations:read`. `month` è il mese della fattura (anni 2020–2100); `dealerId` restringe a un dealer (`none` = gruppi senza rivenditore, solo PSA; `404` se il dealer non esiste, `403` per un D che ne chiede un altro).
+- **Risposta:** `200`
+```json
+{
+  "data": [
+    {
+      "dealer": { "id": "665f1c2e9b1d4a0012ab34d1", "name": "Dealer Nord Srl" },
+      "status": "open",
+      "activations": { "activityMonth": "2026-05", "places": 3, "monthlyCents": 8000, "amountCents": 56000, "projection12Cents": 96000 },
+      "renewals": { "year": 2026, "places": 2, "annualCents": 60000, "instalmentCents": 5000, "frozen": false },
+      "totalCents": 61000,
+      "anomalies": 3
+    }
+  ],
+  "month": "2026-06", "activityMonth": "2026-05", "status": "open",
+  "totals": { "activations": { "places": 3, "monthlyCents": 8000, "amountCents": 56000, "projection12Cents": 96000 }, "renewals": { "places": 2, "annualCents": 60000, "instalmentCents": 5000 }, "totalCents": 61000, "anomalies": 3 },
+  "renewalBase": { "year": 2026, "frozen": false }
+}
+```
+Le righe (`data`) sono ordinate per nome del dealer; `dealer.id` è `null` per i gruppi senza rivenditore ("Senza rivenditore", solo PSA). Il PSA vede i dealer che hanno qualcosa (o quello richiesto); un D sempre la propria riga, anche a zeri. `projection12Cents` = canone mensile × 12 delle nuove attivazioni. `anomalies`: punti vendita esclusi perché l'azienda manca, è di un altro gruppo o è nel cestino. Contano (con segnalazione) punti vendita scaduti, gruppi sospesi e aziende disattivate; non contano gruppi demo o nel cestino, aziende e punti vendita nel cestino.
+- **Errori:** `422` (formato del mese, parametri sconosciuti), `403`, `404`.
+
+### GET /v1/activations/statements/{dealerId|none}?month=AAAA-MM&section=activations|renewals[&limit&cursor]
+- **Permesso:** `activations:read` (un D solo il proprio id). `limit` 1–100 (default 50), `cursor` opaco.
+- **Risposta:** `200` `{ "data": [ <riga> ], "page": { "limit": 50, "next": null }, "dealer": { "id", "name" }, "month", "activityMonth", "section", "status", "renewalBase": { "year", "frozen" }, "totals": {…}, "prices": { "plans", "services" } }`. Le righe sono ordinate per nome del gruppo, dell'azienda, del punto vendita e id. `totals` è della **sezione intera** (non della pagina): per le attivazioni `{ places, monthlyCents, amountCents, projection12Cents, anomalies }`; per i rinnovi `{ places, annualCents, instalmentCents, anomalies, amountCents, projection12Cents }` (`amountCents` = rata, `projection12Cents` = canone annuo). `prices` è il listino effettivo applicato (quello salvato nella chiusura per un mese chiuso).
+- **Riga:** `{ groupId, groupName, companyId, companyName, placeId, placeName, activatedAt, plan, items: [{ key, quantity, unitCents, amountCents, providers? }], monthlyCents, months, amountCents, projection12Cents, flags, devices? }`. `items`: `plan:<piano>` (sempre; senza prezzo `unitCents: null`, importo 0, flag `unpricedPlan`, mai `NaN`), `extraDesk` (casse oltre la prima), `kiosk`, `arubaEInvoicing`, `floodPay`, `reservationWidget`, `reserveWithGoogle`, `tobaccos`, `bizerba`, `api`; **ogni servizio attivo è una voce, anche a prezzo 0**; un servizio non attivo non ha voce. La voce `api` ha in più `providers`: le integrazioni che la determinano (le chiavi dei fornitori attivi, poi `statmanager` se il gruppo lo ha attivo). Ogni riga ha `devices: { desks, kiosks, handhelds }` (casse totali, la prima inclusa nel piano; kiosk; palmari `handheld`, `palmare`, `room-handheld`, gratuiti; assente nelle righe di chiusure scritte prima). `flags` tra `unpricedPlan`, `activationDateFromId` (senza `insertDate` valida si usa la data dell'`_id`), `expired`, `groupSuspended`, `companyDisabled`. Nei rinnovi `months` è 1 e `amountCents` è la rata (= `monthlyCents`).
+- **Errori:** `403`, `404`, `409` (`tooManyLines`: più di 5000 righe per il rivenditore), `422` (parametri, `cursor`/`format`).
+
+### GET /v1/activations/statements/{dealerId|none}.csv?month=AAAA-MM&section=…
+Stesse righe in CSV (BOM UTF-8, separatore `;`, CRLF, celle che iniziano come una formula rese testo con un apostrofo). Colonne: Rivenditore, Gruppo, Azienda, Punto vendita, Attivato il, Piano, Dettaglio voci, Canone mensile, Mesi, Importo, Proiezione 12 mesi, Segnalazioni (importi in euro con la virgola). File `attivazioni_<mese>_<sezione>_<dealerId|none>.csv`. Un solo export alla volta per utente (`429`), tempo massimo come gli altri CSV. Errori come il prospetto.
+
+### GET /v1/activations/lines?from=AAAA-MM&to=AAAA-MM[&dealerId=<id>|none][&limit&cursor]
+Dettaglio di **tutte le attivazioni** di un periodo, con le voci che compongono il prezzo. Sempre **calcolato al momento** coi prezzi effettivi correnti di ogni dealer (vista di analisi, non fattura: le chiusure non c'entrano); stesso motore, stesse regole su chi conta e stesse segnalazioni dei prospetti.
+- **Permesso:** `activations:read`. `from` e `to` (obbligatori) sono **mesi di attivazione** (mese di `insertDate` a Roma), inclusi; `from ≤ to` e al più 24 mesi, altrimenti `422` (campo `to`: `minimum` o `maximum`). Un D è forzato a se stesso (`dealerId` di un altro o `none` → `403`); il PSA vede tutti o il dealer chiesto (`none` incluso, `404` se non esiste). `limit` 1–100 (default 50), `cursor` opaco.
+- **Risposta:** `200` `{ "data": [ <riga> ], "page": { "limit", "next" }, "totals": { "places", "monthlyCents", "amountCents", "projection12Cents", "anomalies" }, "from", "to" }`. `totals` è dell'**insieme filtrato intero**, non della pagina. La riga è quella del prospetto più `dealer: { id | null, name }`; `months` = `12 − mese di attivazione`, `amountCents` = canone × mesi (importo della fattura delle attivazioni), `projection12Cents` = canone × 12.
+- **Ordine:** data di attivazione decrescente, poi nome del dealer, del gruppo, del punto vendita, id. Al più 5000 righe: oltre, `409` con `details: [{ "field": "lines", "issue": "tooManyLines" }]` (restringere il periodo).
+- **Errori:** `401`, `403`, `404`, `422` (mesi, intervallo, parametri sconosciuti, `cursor`/`format`), `409`, `503`.
+
+### GET /v1/activations/lines.csv?from=…&to=…[&dealerId=…]
+Le stesse righe in CSV, stesse colonne e protezioni di quello dei prospetti (la prima colonna è il dealer di ogni riga), stesso rate limit di esportazione, un solo export alla volta per utente. File `attivazioni-dettaglio_<from>_<to>.csv`. Stessi errori, `409 tooManyLines` oltre 5000 righe.
+
+### PUT/DELETE /v1/activations/renewal-bases/{anno}
+- **Permesso:** `activations:manage`; nessun corpo (un corpo non vuoto è `422`); anno 2020–2100.
+- **PUT** congela la base dei rinnovi dell'anno (parco di ogni dealer al 31 dicembre dell'anno prima, con righe e prezzi applicati): `200` `{ "data": { "period": "2026", "dealers": 2, "lines": 40 } }`; evento `activations.renewalBaseFrozen`. `409` con `details[0].issue`: `alreadyFrozen`, `yearInFuture` (anno successivo a quello corrente in `Europe/Rome`), `empty` (nessun punto vendita da congelare), `tooManyLines`. Congelamento, sblocco, chiusura e riapertura dello stesso anno si serializzano (documento di blocco per anno): due richieste concorrenti non riescono mai entrambe in conflitto tra loro, una ha `409`.
+- **DELETE** la sblocca: `204`; evento `activations.renewalBaseUnfrozen`. `409`: `notFrozen`, `monthClosed` (un mese dell'anno è chiuso).
+
+### PUT/DELETE /v1/activations/closures/{AAAA-MM}
+- **Permesso:** `activations:manage`; nessun corpo.
+- **PUT** chiude il mese della fattura per tutti i dealer, in una transazione: `200` `{ "data": { "period": "2026-06", "dealers": 3, "lines": 7 } }`; evento `activations.monthClosed`. Si può chiudere dal primo giorno del mese (che fattura le attivazioni del mese prima). `409`: `baseNotFrozen`, `monthInFuture`, `alreadyClosed`, `tooManyLines`. Chiusura e sblocco della base dello stesso anno non possono riuscire insieme: la chiusura legge la base dentro la transazione. Un dealer che compare dopo la chiusura non ne fa parte: il riepilogo di un mese chiuso serve solo la chiusura (un D senza documento vede una riga a zeri).
+- **DELETE** riapre il mese (cancella la chiusura, torna calcolato al momento): `204`; evento `activations.monthReopened`. `409`: `notClosed`.

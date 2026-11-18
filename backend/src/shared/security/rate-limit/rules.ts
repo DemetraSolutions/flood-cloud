@@ -54,6 +54,10 @@ export interface RateLimitRules {
   readonly countriesAdminPerUser: RateLimitRule;
   /** Bulk restores, deletions and emptying of the trash per authenticated user per minute: one call is one request, whatever the number of items. */
   readonly trashAdminPerUser: RateLimitRule;
+  /** Writes of the price list, of the price overrides of a dealer, of the renewal bases and of the month closures per authenticated user per minute (the PSA only). */
+  readonly activationsAdminPerUser: RateLimitRule;
+  /** CSV exports of the statements of the activations per authenticated user: each reads the lines of a dealer for a month. */
+  readonly activationsExportPerUser: RateLimitRule;
 }
 
 /** Length of an hourly window. */
@@ -115,5 +119,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     apiKeyAdminPerUser: Object.freeze({ bucket: 'apiKeyAdmin:user', limit: config.rateLimitApiKeyAdminPerUser, key: perUser }),
     countriesAdminPerUser: Object.freeze({ bucket: 'countriesAdmin:user', limit: config.rateLimitCountriesAdminPerUser, key: perUser }),
     trashAdminPerUser: Object.freeze({ bucket: 'trashAdmin:user', limit: config.rateLimitTrashAdminPerUser, key: perUser }),
+    activationsAdminPerUser: Object.freeze({ bucket: 'activationsAdmin:user', limit: config.rateLimitActivationsAdminPerUser, key: perUser }),
+    activationsExportPerUser: Object.freeze({ bucket: 'activations-export:user', limit: config.rateLimitActivationsExportPerUser, key: perUser }),
   });
 }

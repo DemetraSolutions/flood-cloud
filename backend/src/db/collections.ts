@@ -7,7 +7,9 @@ import { POS_OWNED_FIELDS, POS_PRICE_LISTS_PATH } from '../modules/users/pos.cat
 import { SHIFT_SPECIAL_PATH, SHIFT_TIME_OWNED_FIELDS } from '../modules/users/shift-time.ts';
 import { API_KEYS_INDEXES, API_KEYS_VALIDATOR, API_USAGE_INDEXES, API_USAGE_VALIDATOR } from './api-keys-schema.ts';
 import { ACTIVITY_EVENTS_INDEXES } from './activity-events-schema.ts';
+import { BILLING_CLOSURES_INDEXES, BILLING_CLOSURES_VALIDATOR } from './billing-closures-schema.ts';
 import { DEALERS_INDEXES, DEALERS_VALIDATOR } from './dealers-schema.ts';
+import { SETTINGS_INDEXES, SETTINGS_VALIDATOR } from './settings-schema.ts';
 import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
 import { STORE_ACTIVATION_CODES_INDEXES, STORE_ACTIVATION_CODES_VALIDATOR, STORE_KEYS_INDEXES, STORE_KEYS_VALIDATOR } from './store-keys-schema.ts';
 import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
@@ -323,6 +325,9 @@ export const COLLECTIONS = {
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
     activityEvents: { ownership: 'new', indexes: ACTIVITY_EVENTS_INDEXES },
     dealers: { ownership: 'new', indexes: DEALERS_INDEXES, validator: DEALERS_VALIDATOR },
+    // The settings of the platform, one document per key (now only the price list of the activations), and the closures of the billing of the dealers (frozen renewal bases and invoice months). Ours alone.
+    settings: { ownership: 'new', indexes: SETTINGS_INDEXES, validator: SETTINGS_VALIDATOR },
+    billingClosures: { ownership: 'new', indexes: BILLING_CLOSURES_INDEXES, validator: BILLING_CLOSURES_VALIDATOR },
     // Exact copies of the documents of the group databases (D-20), without validator (no collMod dependency).
     companies: { ownership: 'mirror', indexes: COMPANIES_MIRROR_INDEXES },
     places: { ownership: 'mirror', indexes: PLACES_MIRROR_INDEXES },

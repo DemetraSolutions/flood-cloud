@@ -1,0 +1,87 @@
+<section aria-labelledby="prices-heading">
+  <h2 id="prices-heading">{{ 'DEALERS.PRICES.TITLE' | t }}</h2>
+  <p class="note">{{ 'DEALERS.PRICES.HINT' | t }}</p>
+
+  @if (failed()) {
+    <fc-error-state
+      [title]="'DEALERS.PRICES.LOAD_ERROR' | t"
+      [message]="loadErrorMessage()"
+      [requestId]="loadError()?.requestId ?? null"
+      (retry)="reload()"
+    />
+  } @else if (ready()) {
+    @if (stale()) {
+      <section class="notice" role="alert">
+        <p>{{ 'DEALERS.PRICES.STALE' | t }}</p>
+        <button fc-button variant="secondary" (click)="reload()">
+          {{ 'DEALERS.PRICES.RELOAD' | t }}
+        </button>
+      </section>
+    }
+    <form novalidate (submit)="onSubmit($event)">
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+      }
+      <fieldset>
+        <legend>{{ 'DEALERS.PRICES.PLANS' | t }}</legend>
+        @for (plan of overridesForm.plans; track $index; let i = $index) {
+          @let key = model().plans[i].key;
+          <div class="row">
+            <fc-text-field
+              [formField]="plan.price"
+              autocomplete="off"
+              inputmode="decimal"
+              [label]="planLabel(key)"
+              [hint]="defaultHint('plans', key)"
+              [error]="error(plan.price)"
+              (blurred)="plan.price().markAsTouched()"
+            />
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="restoreLabel(planLabel(key))"
+              [disabled]="plan.price().value() === ''"
+              (click)="restore(plan.price)"
+            >
+              {{ 'DEALERS.PRICES.RESTORE' | t }}
+            </button>
+          </div>
+        } @empty {
+          <p class="note">{{ 'DEALERS.PRICES.NO_PLANS' | t }}</p>
+        }
+      </fieldset>
+
+      <fieldset>
+        <legend>{{ 'DEALERS.PRICES.SERVICES' | t }}</legend>
+        @for (key of serviceKeys; track key) {
+          <div class="row">
+            <fc-text-field
+              [formField]="overridesForm.services[key]"
+              autocomplete="off"
+              inputmode="decimal"
+              [label]="serviceLabel(key)"
+              [hint]="defaultHint('services', key)"
+              [error]="error(overridesForm.services[key])"
+              (blurred)="overridesForm.services[key]().markAsTouched()"
+            />
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="restoreLabel(serviceLabel(key))"
+              [disabled]="overridesForm.services[key]().value() === ''"
+              (click)="restore(overridesForm.services[key])"
+            >
+              {{ 'DEALERS.PRICES.RESTORE' | t }}
+            </button>
+          </div>
+        }
+      </fieldset>
+
+      <div class="actions">
+        <button fc-button type="submit" [loading]="submitting()">{{ 'COMMON.SAVE' | t }}</button>
+      </div>
+    </form>
+  } @else if (loading()) {
+    <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+  }
+</section>

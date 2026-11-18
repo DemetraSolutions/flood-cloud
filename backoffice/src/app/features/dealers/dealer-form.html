@@ -213,4 +213,8 @@
       </div>
     </form>
   }
+
+  @if (current && canManagePrices()) {
+    <fc-dealer-price-overrides [dealerId]="current.id" />
+  }
 }

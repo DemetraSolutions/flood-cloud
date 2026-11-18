@@ -188,6 +188,22 @@ export const MENU: readonly MenuItem[] = [
         roles: ['PSA', 'D'],
       },
       {
+        id: 'activations',
+        labelKey: 'MENU.ACTIVATIONS',
+        icon: 'card',
+        route: '/tools/activations',
+        permission: 'activations:read',
+        roles: ['PSA', 'D'],
+      },
+      {
+        id: 'price-list',
+        labelKey: 'MENU.PRICE_LIST',
+        icon: 'tag',
+        route: '/tools/price-list',
+        permission: 'activations:manage',
+        roles: ['PSA'],
+      },
+      {
         id: 'tobaccos',
         labelKey: 'MENU.TOBACCOS',
         icon: 'tag',

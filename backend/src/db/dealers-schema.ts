@@ -1,4 +1,5 @@
 import type { IndexSpec } from './collections.ts';
+import { PRICE_OVERRIDES_SCHEMA } from './price-schema.ts';
 
 /**
  * Indexes of `common.dealers` (`doc/Tasks.md` D-09): a VAT number identifies one dealer, so it is unique
@@ -43,5 +44,7 @@ export const DEALERS_VALIDATOR: Readonly<Record<string, unknown>> = Object.freez
     updatedAt: { bsonType: 'date' },
     createdBy: { bsonType: ['objectId', 'null'] },
     source: { enum: ['manual', 'migration', 'user'] },
+    // The prices of the plans and of the services this dealer pays instead of the ones of the price list (absent: none). Optional on purpose: the dealers that exist have none.
+    priceOverrides: PRICE_OVERRIDES_SCHEMA,
   },
 });

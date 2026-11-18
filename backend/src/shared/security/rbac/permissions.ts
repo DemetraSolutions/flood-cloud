@@ -60,6 +60,8 @@ export const PERMISSIONS = Object.freeze({
   COUNTRIES_MANAGE: 'countries:manage',
   TRASH_EMPTY: 'trash:empty',
   ERROR_DOCUMENTS_READ: 'errorDocuments:read',
+  ACTIVATIONS_READ: 'activations:read',
+  ACTIVATIONS_MANAGE: 'activations:manage',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

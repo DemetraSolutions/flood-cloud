@@ -1,0 +1,173 @@
+<p class="hint">{{ 'ACTIVATIONS.DETAIL.HINT' | t }}</p>
+
+<form class="filters no-print" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="month"
+    [label]="'ACTIVATIONS.DETAIL.FROM' | t"
+    [value]="fromText()"
+    [error]="fromError()"
+    (valueChange)="onFrom($event)"
+  />
+  <fc-text-field
+    type="month"
+    [label]="'ACTIVATIONS.DETAIL.TO' | t"
+    [value]="toText()"
+    [error]="toError()"
+    (valueChange)="onTo($event)"
+  />
+  @if (showDealerFilter()) {
+    <fc-select
+      [label]="'ACTIVATIONS.COLUMN.DEALER' | t"
+      [placeholder]="'ACTIVATIONS.DETAIL.ALL_DEALERS' | t"
+      [options]="dealerOptions()"
+      [value]="dealerId() ?? ''"
+      (valueChange)="onDealer($event)"
+    />
+  }
+  <div class="buttons">
+    <button fc-button variant="secondary" (click)="print()">
+      {{ 'ACTIVATIONS.PRINT' | t }}
+    </button>
+    <button
+      fc-button
+      variant="secondary"
+      [disabled]="period() === null"
+      [loading]="downloading()"
+      (click)="download()"
+    >
+      {{ 'ACTIVATIONS.DOWNLOAD' | t }}
+    </button>
+  </div>
+</form>
+<p class="download-status no-print" role="status" [class.failed]="downloadError() !== null">
+  {{ downloadStatus() }}
+</p>
+
+@if (detail.error()) {
+  <fc-error-state
+    [title]="'ACTIVATIONS.DETAIL.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="detail.reload()"
+  />
+} @else if (detail.isLoading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else if (period() !== null) {
+  @let sum = totals();
+  <dl class="totals">
+    <div>
+      <dt>{{ 'ACTIVATIONS.DETAIL.TOTAL_PLACES' | t }}</dt>
+      <dd>{{ number(sum.places) }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'ACTIVATIONS.DETAIL.TOTAL_MONTHLY' | t }}</dt>
+      <dd>{{ money(sum.monthlyCents) }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'ACTIVATIONS.DETAIL.TOTAL_AMOUNT' | t }}</dt>
+      <dd>{{ money(sum.amountCents) }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'ACTIVATIONS.COLUMN.PROJECTION' | t }}</dt>
+      <dd>{{ money(sum.projection12Cents) }}</dd>
+    </div>
+    @if (sum.anomalies > 0) {
+      <div>
+        <dt>{{ 'ACTIVATIONS.COLUMN.ANOMALIES' | t }}</dt>
+        <dd>{{ number(sum.anomalies) }}</dd>
+      </div>
+    }
+  </dl>
+
+  @if (lines().length === 0) {
+    <fc-empty-state
+      [title]="'ACTIVATIONS.DETAIL.EMPTY' | t"
+      [message]="'ACTIVATIONS.DETAIL.EMPTY_MESSAGE' | t"
+    />
+  }
+  <ul class="places">
+    @for (line of lines(); track line.placeId) {
+      <li>
+        <article class="place">
+          <header>
+            <h3>
+              @if (showDealerFilter()) {
+                <span class="dealer">{{ line.dealer.name }}</span>
+              }
+              @if (canGroup()) {
+                <a [routerLink]="['/groups', line.groupId, 'settings']">{{ line.groupName }}</a>
+              } @else {
+                {{ line.groupName }}
+              }
+              {{ separator }}
+              @if (canCompany()) {
+                <a [routerLink]="['/groups', line.groupId, 'companies', line.companyId]">{{
+                  line.companyName
+                }}</a>
+              } @else {
+                {{ line.companyName }}
+              }
+              {{ separator }}
+              @if (canPlace()) {
+                <a [routerLink]="['/groups', line.groupId, 'places', line.placeId]">{{
+                  line.placeName
+                }}</a>
+              } @else {
+                {{ line.placeName }}
+              }
+            </h3>
+            <div class="flags">
+              @for (flag of flags(line); track $index) {
+                <fc-status-badge [tone]="flag.warning ? 'warning' : 'neutral'">{{
+                  flag.text
+                }}</fc-status-badge>
+              }
+            </div>
+          </header>
+          <dl class="facts">
+            <div>
+              <dt>{{ 'ACTIVATIONS.COLUMN.ACTIVATED_ON' | t }}</dt>
+              <dd>{{ day(line.activatedAt) }}</dd>
+            </div>
+            <div>
+              <dt>{{ 'ACTIVATIONS.COLUMN.PLAN' | t }}</dt>
+              <dd>{{ line.plan ?? '—' }}</dd>
+            </div>
+            <div>
+              <dt>{{ 'ACTIVATIONS.COLUMN.MONTHS' | t }}</dt>
+              <dd>{{ number(line.months) }}</dd>
+            </div>
+            <div>
+              <dt>{{ 'ACTIVATIONS.COLUMN.AMOUNT' | t }}</dt>
+              <dd>{{ money(line.amountCents) }}</dd>
+            </div>
+            <div>
+              <dt>{{ 'ACTIVATIONS.COLUMN.PROJECTION' | t }}</dt>
+              <dd>{{ money(line.projection12Cents) }}</dd>
+            </div>
+          </dl>
+          <fc-fee-items
+            [items]="line.items"
+            [monthlyCents]="line.monthlyCents"
+            [devices]="line.devices"
+          />
+        </article>
+      </li>
+    }
+  </ul>
+}
+
+@if (!detail.error() && period() !== null) {
+  <div class="no-print">
+    <fc-cursor-paginator
+      [limit]="pageSize()"
+      [limits]="pageSizes"
+      [nextCursor]="nextCursor()"
+      [hasPrevious]="cursorStack().length > 0"
+      [loading]="detail.isLoading()"
+      (previousPage)="onPrevious()"
+      (nextPage)="onNext($event)"
+      (limitChange)="onLimit($event)"
+    />
+  </div>
+}

@@ -30,6 +30,14 @@ import {
 } from '../../features/places/place-nav';
 import { TEMPLATE_MODELS } from '../../features/email-templates/template-models';
 import { importProblems } from '../../features/tobaccos/tobaccos.types';
+import {
+  ACTION_TEXTS,
+  CONFLICT_KEYS,
+  FLAG_KEYS,
+  PROVIDER_KEYS,
+  STATEMENT_SECTIONS,
+} from '../../features/activations/activations.types';
+import { SERVICE_LABEL_KEYS } from '../../features/price-list/price-list.types';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -369,6 +377,22 @@ describe('templates', () => {
       ...SETTINGS_ENTRIES.map((entry) => `PLACES.MENU.${entry.key}`),
       ...SETTINGS_MENU_GROUPS.map((group) => `PLACES.MENU_GROUP.${group}`),
     ];
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the texts of the activations, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    const expected = [
+      ...Object.values(SERVICE_LABEL_KEYS),
+      ...Object.values(FLAG_KEYS),
+      ...Object.values(PROVIDER_KEYS),
+      ...['MONTH', 'ORDER', 'SPAN'].map((part) => `ACTIVATIONS.DETAIL.ERROR.${part}`),
+      ...['INVOICES', 'DETAIL'].map((part) => `ACTIVATIONS.TAB.${part}`),
+      ...Object.values(CONFLICT_KEYS),
+      ...Object.values(ACTION_TEXTS).flatMap((texts) => Object.values(texts)),
+      ...STATEMENT_SECTIONS.map((id) => `ACTIVATIONS.STATEMENT.TAB.${id.toUpperCase()}`),
+    ];
+    expect(expected.length).toBeGreaterThan(20);
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });
 });

@@ -65,6 +65,14 @@ import { createGroupServicesService } from './modules/group-services/services.se
 import { createClientErrorsController } from './modules/client-errors/client-errors.controller.ts';
 import { createClientErrorsRoutes } from './modules/client-errors/client-errors.routes.ts';
 import { createClientErrorsService } from './modules/client-errors/client-errors.service.ts';
+import { createActivationsController } from './modules/activations/activations.controller.ts';
+import { createActivationsRepository } from './modules/activations/activations.repository.ts';
+import { createActivationsRoutes } from './modules/activations/activations.routes.ts';
+import { createActivationsService } from './modules/activations/activations.service.ts';
+import { createSettingsController } from './modules/settings/settings.controller.ts';
+import { createSettingsRepository } from './modules/settings/settings.repository.ts';
+import { createSettingsRoutes } from './modules/settings/settings.routes.ts';
+import { createSettingsService } from './modules/settings/settings.service.ts';
 import { createDealersController } from './modules/dealers/dealers.controller.ts';
 import { createDealersRepository } from './modules/dealers/dealers.repository.ts';
 import { createDealersRoutes } from './modules/dealers/dealers.routes.ts';
@@ -167,7 +175,7 @@ export interface BackofficeDeps {
 
 /**
  * Composition root of the backoffice (`/v1`) modules: builds the repositories over the databases and
- * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the countries and their provinces, the companies, the places, the store keys of the points of sale, the media (images), the groups, the activity log monitor, the company lookup on Cerved and the browser error reports. The only place that
+ * the services, controllers and routes of login and sessions, the profile, the user management, the dealer registry, the reference lists, the countries and their provinces, the settings (the price list) and the activations (the billing of the dealers), the companies, the places, the store keys of the points of sale, the media (images), the groups, the activity log monitor, the company lookup on Cerved and the browser error reports. The only place that
  * knows how the layers are connected.
  *
  * @param deps Configuration, databases, activity log, logger and clock.
@@ -215,7 +223,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     now,
   });
   const usersController = createUsersController(usersService);
-  const dealersController = createDealersController(createDealersService({ dealers, users, usersService, activityLog, now }));
+  const settingsService = createSettingsService({ repository: createSettingsRepository(databases), activityLog, versionKey, now });
+  const dealersController = createDealersController(createDealersService({ dealers, users, usersService, priceLists: settingsService, versionKey, activityLog, now }));
   const managedGroups = createManagedGroupsRepository(databases, publicApiLimitsOf(config));
   const groupsService = createGroupsService({ groups: managedGroups, users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now });
   const groupsController = createGroupsController(groupsService);
@@ -302,6 +311,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const vatLookups = createVatLookupsController(
     createVatLookupsService({ cerved: createCervedClient({ apiKey: config.cervedApiKey, baseUrl: config.cervedBaseUrl, ...deps.cervedHttp }), activityLog, logger }),
   );
+  const settings = createSettingsController(settingsService);
+  const activations = createActivationsController(createActivationsService({ repository: createActivationsRepository(databases), priceLists: settingsService, activityLog, now }));
   const apiKeys = createApiKeysController(createApiKeysService({ repository: createApiKeysRepository(databases, publicApiLimitsOf(config)), groups: managedGroups, activityLog, now }));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
@@ -315,6 +326,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createEmailTemplatesRoutes(emailTemplates, idempotency),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createCountriesRoutes(countries, rules),
+      ...createSettingsRoutes(settings, rules),
+      ...createActivationsRoutes(activations, rules),
       ...createTrashRoutes(trash, rules, groups, createCrossGroupAuditor({ activityLog, now })),
       ...createVatLookupsRoutes(vatLookups, rules),
       ...createClientErrorsRoutes(clientErrors, rules),

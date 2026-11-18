@@ -18,6 +18,7 @@ import { memoryActivityLog } from '../helpers/activity.ts';
 import { legacyUser } from '../helpers/legacy-fixtures.ts';
 import { TEST_PEPPER, addUser, startBackoffice } from '../helpers/backoffice.ts';
 import type { Backoffice } from '../helpers/backoffice.ts';
+import { DEFAULT_PRICE_LIST } from '../../src/modules/settings/price-list.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 import { principalOf } from '../helpers/principal.ts';
@@ -235,7 +236,7 @@ describe('creating a dealer is all or nothing', () => {
       transaction: (work) => ctx.databases.transaction(work),
       now: () => Date.now(),
     });
-    return { activityLog, service: createDealersService({ dealers: repository, users: usersRepository, usersService, activityLog, now: () => Date.now() }) };
+    return { activityLog, service: createDealersService({ dealers: repository, users: usersRepository, usersService, priceLists: { getPriceList: async () => ({ list: DEFAULT_PRICE_LIST, version: 'unused' }) }, versionKey: Buffer.alloc(32, 7), activityLog, now: () => Date.now() }) };
   };
   const input = (username: string, vatNumber?: string) => ({ company: { businessName: 'Atomic Srl', ...(vatNumber === undefined ? {} : { vatNumber }) }, user: { username, password: PASSWORD } });
 

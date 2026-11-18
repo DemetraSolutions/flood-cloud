@@ -9,6 +9,8 @@ import { assertCountedGroups, countByGroupPipeline, countsByGroup } from './grou
 import type { TrashCount } from './group-counts.ts';
 import type { GroupAccess } from './group-access.ts';
 import type { ScopeHolder } from './principal.ts';
+import { ACTIVATION_COMPANY_PROJECTION, ACTIVATION_PLACE_PROJECTION, ACTIVATION_PROVIDERS, activationPlacesFilter } from './mirror-activations.ts';
+import type { ActivationWindow } from './mirror-activations.ts';
 import { deviceCountPipeline, deviceRowsPipeline, selectionCondition } from './mirror-devices.ts';
 import type { DeviceAfter, DeviceRowsQuery, GroupSelection } from './mirror-devices.ts';
 
@@ -26,11 +28,22 @@ const MIRROR_COLLECTIONS: readonly string[] = ['companies', 'places'];
  * the companies expose, besides the compact reference (`name`, `trash`, `trashDate`), the fields of the list of companies (`code`, `city`, `countryAreaCode`, `countryCode`, `status`);
  * the places the compact reference (`name`, `trash`, `trashDate`, `companyId`) and the fields of the list of places (`plan`, `status`, `city`, `countryAreaCode`, `countryCode`, `expirationDate`).
  * The public API (step 9A) adds the registry data it shows, and nothing else: of a company the fiscal code and the contact data (`code2`, `address`, `postcode`, `email`, `telephone`), of a place the contact data and the time zone
- * (`address`, `postcode`, `email`, `telephone`, `timezone`). No bank, invoicing, credential or setting field is ever in this list.
+ * (`address`, `postcode`, `email`, `telephone`, `timezone`). The activations (billing of the dealers) add the date of the activation of a place (`insertDate`). No bank, invoicing, credential or setting field is ever in this list:
+ * the few leaves of the containers that hold them are in {@link MIRROR_LEAVES}.
  */
 export const MIRROR_FIELDS: Readonly<Record<MirrorCollection, ReadonlySet<string>>> = Object.freeze({
   companies: new Set(['_id', 'name', 'trash', 'trashDate', 'code', 'city', 'countryAreaCode', 'countryCode', 'status', 'code2', 'address', 'postcode', 'email', 'telephone']),
-  places: new Set(['_id', 'name', 'trash', 'trashDate', 'companyId', 'plan', 'status', 'city', 'countryAreaCode', 'countryCode', 'expirationDate', 'address', 'postcode', 'email', 'telephone', 'timezone']),
+  places: new Set(['_id', 'name', 'trash', 'trashDate', 'companyId', 'plan', 'status', 'city', 'countryAreaCode', 'countryCode', 'expirationDate', 'address', 'postcode', 'email', 'telephone', 'timezone', 'insertDate']),
+});
+
+/**
+ * The leaves of the containers that are not in {@link MIRROR_FIELDS} as a whole (the integrations of a place hold credentials, its settings and its devices network data, and the invoicing of a company its credentials) that a read may
+ * nevertheless name, each as its exact dotted path and never as a prefix: the type of the devices, the `status` of each integration of the activations, the two switches of the reservation widget, `tgm.status` and the hub of the
+ * electronic invoicing. Naming `integrations`, `devices` or `roomsSettings` themselves stays refused.
+ */
+export const MIRROR_LEAVES: Readonly<Record<MirrorCollection, ReadonlySet<string>>> = Object.freeze({
+  companies: new Set(['fattura_elettronica.hub']),
+  places: new Set(['devices.type', ...ACTIVATION_PROVIDERS.map((provider) => `integrations.${provider}.status`), 'roomsSettings.reservation.status', 'roomsSettings.reservation.webWidget.status', 'tgm.status']),
 });
 
 /** Prefix of the computed keys a pipeline may add (`__sortKey`); they are never stored fields. */
@@ -106,6 +119,11 @@ function isReadable(root: string, name: MirrorCollection): boolean {
   return MIRROR_FIELDS[name].has(root) || root === 'groupId' || root.startsWith(COMPUTED_PREFIX);
 }
 
+/** A dotted path a filter, a sort or an expression may read: one of a readable field, or exactly one of the leaves of {@link MIRROR_LEAVES}. */
+function isReadablePath(path: string, name: MirrorCollection): boolean {
+  return isReadable(path.split('.', 1)[0]!, name) || MIRROR_LEAVES[name].has(path);
+}
+
 /** Throws if an operator that runs code, or reads a field by name, appears anywhere in a value. */
 function rejectForbiddenOperators(value: unknown): void {
   if (Array.isArray(value)) {
@@ -124,8 +142,7 @@ function rejectForbiddenOperators(value: unknown): void {
 function assertExpression(value: unknown, name: MirrorCollection): void {
   rejectForbiddenOperators(value);
   if (typeof value === 'string' && value.startsWith('$')) {
-    const root = value.slice(1).split('.', 1)[0]!;
-    if (value.startsWith('$$') || !isReadable(root, name)) {
+    if (value.startsWith('$$') || !isReadablePath(value.slice(1), name)) {
       throw new Error('Reference to a field that is not readable on the copies');
     }
   } else if (Array.isArray(value)) {
@@ -148,7 +165,7 @@ function assertFilter(filter: unknown, name: MirrorCollection): asserts filter i
       value.forEach((inner) => assertFilter(inner, name));
     } else if (key === '$expr') {
       assertExpression(value, name);
-    } else if (key.startsWith('$') || !isReadable(key.split('.', 1)[0]!, name)) {
+    } else if (key.startsWith('$') || !isReadablePath(key, name)) {
       throw new Error('Filter on a field that is not readable on the copies');
     } else {
       rejectForbiddenOperators(value);
@@ -162,14 +179,14 @@ function assertProjection(projection: unknown, name: MirrorCollection, computed:
     throw new Error('A read of the copies needs a projection');
   }
   const entries = Object.entries(projection);
-  const allowed = ([field]: [string, unknown]): boolean => MIRROR_FIELDS[name].has(field.split('.', 1)[0]!) || (computed && field.startsWith(COMPUTED_PREFIX));
+  const allowed = ([field]: [string, unknown]): boolean => MIRROR_FIELDS[name].has(field.split('.', 1)[0]!) || MIRROR_LEAVES[name].has(field) || (computed && field.startsWith(COMPUTED_PREFIX));
   if (entries.length === 0 || entries.some((entry) => entry[1] !== 1 || !allowed(entry))) {
     throw new Error('A read of the copies needs an allowlist projection (inclusion of allowed fields only)');
   }
 }
 
 function assertSort(sort: unknown, name: MirrorCollection): void {
-  if (!isContainer(sort) || Object.entries(sort).some(([field, direction]) => (direction !== 1 && direction !== -1) || !isReadable(field.split('.', 1)[0]!, name))) {
+  if (!isContainer(sort) || Object.entries(sort).some(([field, direction]) => (direction !== 1 && direction !== -1) || !isReadablePath(field, name))) {
     throw new Error('A sort of the copies needs readable fields and a direction');
   }
 }
@@ -370,6 +387,76 @@ export async function trashedCompanyIds(databases: Databases, groups: GroupSelec
     throw new Error('Too many companies in the trash to exclude them');
   }
   return found.map((company) => company['_id'] as ObjectId);
+}
+
+/** Most places (or companies) a read of the activations returns in one batch. */
+export const ACTIVATION_BATCH_MAX = 1000;
+
+/** Runs a read, answering `503` when it exceeds its time limit: the answer is unknown, never an empty one. */
+async function bounded<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    throw error instanceof MongoServerError && error.code === MAX_TIME_EXPIRED ? new AppError('SERVICE_UNAVAILABLE') : error;
+  }
+}
+
+/**
+ * Reads a batch of the places activated in a window from the copies, for the activations (the billing of the dealers): the places not in the trash of the given groups, by `_id`, after a position. The filter is built here
+ * from the window and the ids, and the projection is the fixed {@link ACTIVATION_PLACE_PROJECTION}: of a place only its registry fields, the date of its activation and the leaves that decide a service ever leave the database.
+ *
+ * @param databases Database accessor.
+ * @param window The window of the activation date: `from` included (`null` for none), `to` excluded.
+ * @param groupIds The groups to read (already restricted to the caller's perimeter), or `null` for every group.
+ * @param after The `_id` of the last place already read, or `null` for the first batch.
+ * @param limit How many places to read at most, from 1 to {@link ACTIVATION_BATCH_MAX}.
+ * @returns The places, by `_id`.
+ * @throws {Error} If the window, the groups, the position or the limit are not valid.
+ * @throws {AppError} `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+ */
+export async function readMirrorActivationPlaces(databases: Databases, window: ActivationWindow, groupIds: readonly ObjectId[] | null, after: ObjectId | null, limit: number): Promise<Document[]> {
+  if (!(window.to instanceof Date) || Number.isNaN(window.to.getTime()) || (window.from !== null && (!(window.from instanceof Date) || Number.isNaN(window.from.getTime())))) {
+    throw new Error('A read of the activations needs a window of dates');
+  }
+  if (groupIds !== null && (groupIds.length === 0 || groupIds.some((id: unknown) => !(id instanceof ObjectId)))) {
+    throw new Error('A read of the activations needs group ids');
+  }
+  if (after !== null && !(after instanceof ObjectId)) {
+    throw new Error('A read of the activations needs a position that is an id');
+  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > ACTIVATION_BATCH_MAX) {
+    throw new Error('A read of the activations needs a limit between 1 and the batch maximum');
+  }
+  return bounded(() =>
+    databases
+      .common()
+      .collection('places')
+      .find(activationPlacesFilter(window, groupIds, after), { projection: { ...ACTIVATION_PLACE_PROJECTION }, sort: { _id: 1 }, limit, maxTimeMS: LIST_MAX_TIME_MS })
+      .toArray(),
+  );
+}
+
+/**
+ * Reads the companies of a batch of places from the copies, for the activations: the companies with the given ids (the caller checks that each belongs to the group of the place), projected with the fixed
+ * {@link ACTIVATION_COMPANY_PROJECTION}, so nothing of a company but its name, its state and the hub of its electronic invoicing leaves the database.
+ *
+ * @param databases Database accessor.
+ * @param companyIds The ids of the companies, a non-empty list of at most {@link ACTIVATION_BATCH_MAX}.
+ * @returns The companies found (not necessarily all of them).
+ * @throws {Error} If the list is empty, too long or holds something that is not an `ObjectId`.
+ * @throws {AppError} `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+ */
+export async function readMirrorActivationCompanies(databases: Databases, companyIds: readonly ObjectId[]): Promise<Document[]> {
+  if (companyIds.length === 0 || companyIds.length > ACTIVATION_BATCH_MAX || companyIds.some((id: unknown) => !(id instanceof ObjectId))) {
+    throw new Error('A read of the companies of the activations needs between 1 and the batch maximum company ids');
+  }
+  return bounded(() =>
+    databases
+      .common()
+      .collection('companies')
+      .find({ _id: { $in: [...companyIds] } }, { projection: { ...ACTIVATION_COMPANY_PROJECTION }, limit: companyIds.length, maxTimeMS: LIST_MAX_TIME_MS })
+      .toArray(),
+  );
 }
 
 function assertSelection(groups: GroupSelection): void {

@@ -541,6 +541,20 @@ describe('the rate limit of the countries (step 9-ter)', () => {
   });
 });
 
+describe('the rate limits of the activations', () => {
+  it('allow 30 writes and 5 exports a minute per user by default, read their variables and refuse what is out of 1 to 100000', () => {
+    const defaults = loadConfig(validEnv());
+    assert.deepEqual([defaults.rateLimitActivationsAdminPerUser, defaults.rateLimitActivationsExportPerUser], [30, 5]);
+    const tuned = loadConfig(validEnv({ RATE_LIMIT_ACTIVATIONS_ADMIN_PER_USER: '4', RATE_LIMIT_ACTIVATIONS_EXPORT_PER_USER: '2' }));
+    assert.deepEqual([tuned.rateLimitActivationsAdminPerUser, tuned.rateLimitActivationsExportPerUser], [4, 2]);
+    for (const variable of ['RATE_LIMIT_ACTIVATIONS_ADMIN_PER_USER', 'RATE_LIMIT_ACTIVATIONS_EXPORT_PER_USER']) {
+      for (const bad of ['0', '100001', 'many']) {
+        assert.throws(() => loadConfig(validEnv({ [variable]: bad })), (error: unknown) => error instanceof ConfigError && error.issues.some((issue) => issue.variable === variable));
+      }
+    }
+  });
+});
+
 describe('the rate limit of the bulk trash operations (step P2)', () => {
   it('allows 30 calls a minute per user by default, reads the variable and refuses what is out of 1 to 100000', () => {
     assert.equal(loadConfig(validEnv()).rateLimitTrashAdminPerUser, 30);

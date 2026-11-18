@@ -1,0 +1,46 @@
+<table>
+  <caption class="visually-hidden">
+    {{
+      'ACTIVATIONS.ITEM.CAPTION' | t
+    }}
+  </caption>
+  <thead>
+    <tr>
+      <th scope="col">{{ 'ACTIVATIONS.ITEM.NAME' | t }}</th>
+      <th scope="col" class="num">{{ 'ACTIVATIONS.ITEM.QUANTITY' | t }}</th>
+      <th scope="col" class="num">{{ 'ACTIVATIONS.ITEM.UNIT' | t }}</th>
+      <th scope="col" class="num">{{ 'ACTIVATIONS.ITEM.AMOUNT' | t }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (row of rows(); track $index) {
+      <tr>
+        <th scope="row">{{ row.name }}</th>
+        <td class="num">{{ row.quantity }}</td>
+        <td class="num">{{ row.unit }}</td>
+        <td class="num">{{ row.amount }}</td>
+      </tr>
+    }
+    @if (devices(); as placeDevices) {
+      <tr class="devices">
+        <td colspan="4">
+          {{
+            'ACTIVATIONS.ITEM.DEVICES'
+              | t
+                : {
+                    desks: placeDevices.desks,
+                    kiosks: placeDevices.kiosks,
+                    handhelds: placeDevices.handhelds,
+                  }
+          }}
+        </td>
+      </tr>
+    }
+  </tbody>
+  <tfoot>
+    <tr>
+      <th scope="row" colspan="3">{{ 'ACTIVATIONS.COLUMN.MONTHLY' | t }}</th>
+      <td class="num">{{ total() }}</td>
+    </tr>
+  </tfoot>
+</table>

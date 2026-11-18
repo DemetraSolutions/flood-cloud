@@ -1,0 +1,187 @@
+<header class="page-header">
+  <h1>{{ 'ACTIVATIONS.TITLE' | t }}</h1>
+</header>
+<p class="hint">{{ 'ACTIVATIONS.HINT' | t }}</p>
+
+<div class="no-print">
+  <fc-tab-list
+    idPrefix="activations"
+    [label]="'ACTIVATIONS.TABS' | t"
+    [tabs]="tabs()"
+    [active]="active()"
+    (activeChange)="select($event)"
+  />
+</div>
+
+@if (active() === 'detail') {
+  <div
+    role="tabpanel"
+    tabindex="0"
+    id="activations-panel-detail"
+    aria-labelledby="activations-tab-detail"
+  >
+    <fc-activations-detail
+      [from]="from()"
+      [to]="to()"
+      [dealerId]="dealerId()"
+      [limit]="limit()"
+      [cursor]="cursor()"
+    />
+  </div>
+} @else {
+  <div
+    role="tabpanel"
+    tabindex="0"
+    id="activations-panel-invoices"
+    aria-labelledby="activations-tab-invoices"
+  >
+    <div class="month no-print">
+      <fc-text-field
+        type="month"
+        [label]="'ACTIVATIONS.MONTH' | t"
+        [hint]="'ACTIVATIONS.MONTH_HINT' | t"
+        [value]="selected()"
+        (valueChange)="onMonth($event)"
+      />
+    </div>
+    <p class="explanation" role="status">{{ explanation() }}</p>
+
+    @if (canManage() && renewalBase(); as base) {
+      <section class="actions no-print" [attr.aria-label]="'ACTIVATIONS.ACTIONS' | t">
+        @if (base.frozen) {
+          <button fc-button variant="secondary" (click)="ask('unfreeze')">
+            {{ actionTexts.unfreeze.label | t: { year: base.year } }}
+          </button>
+        } @else {
+          <button fc-button variant="secondary" (click)="ask('freeze')">
+            {{ actionTexts.freeze.label | t: { year: base.year } }}
+          </button>
+        }
+        @if (monthClosed()) {
+          <button fc-button variant="secondary" (click)="ask('reopen')">
+            {{ actionTexts.reopen.label | t }}
+          </button>
+        } @else {
+          <button fc-button [disabled]="!baseFrozen()" (click)="ask('close')">
+            {{ actionTexts.close.label | t }}
+          </button>
+        }
+        @if (!monthClosed() && !baseFrozen()) {
+          <p class="note">{{ 'ACTIVATIONS.BASE_NOT_FROZEN' | t: { year: base.year } }}</p>
+        }
+      </section>
+    }
+
+    @if (notice(); as message) {
+      <section class="notice" role="alert">
+        <p>{{ message }}</p>
+      </section>
+    }
+
+    @if (summary.error()) {
+      <fc-error-state
+        [title]="'ACTIVATIONS.LOAD_ERROR' | t"
+        [message]="errorMessage()"
+        [requestId]="loadError()?.requestId ?? null"
+        (retry)="summary.reload()"
+      />
+    } @else if (summary.isLoading()) {
+      <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+    } @else if (rows().length === 0) {
+      <fc-empty-state
+        [title]="'ACTIVATIONS.EMPTY' | t"
+        [message]="'ACTIVATIONS.EMPTY_MESSAGE' | t"
+      />
+    } @else {
+      <div class="scroll">
+        <table>
+          <caption>
+            {{
+              'ACTIVATIONS.TABLE' | t
+            }}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{{ 'ACTIVATIONS.COLUMN.DEALER' | t }}</th>
+              <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.PLACES' | t }}</th>
+              <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.ACTIVATIONS_INVOICE' | t }}</th>
+              <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.RENEWALS_INSTALMENT' | t }}</th>
+              <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.TOTAL' | t }}</th>
+              <th scope="col" class="num">{{ 'ACTIVATIONS.COLUMN.PROJECTION' | t }}</th>
+              <th scope="col">{{ 'ACTIVATIONS.COLUMN.STATUS' | t }}</th>
+              <th scope="col">{{ 'ACTIVATIONS.COLUMN.ANOMALIES' | t }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.dealer.id) {
+              <tr>
+                <th scope="row">
+                  <a
+                    class="row-link"
+                    [routerLink]="['/tools/activations', dealerSegment(row)]"
+                    [queryParams]="{ month: selected() }"
+                    >{{ row.dealer.name }}</a
+                  >
+                </th>
+                <td class="num">{{ number(row.activations.places) }}</td>
+                <td class="num">{{ money(row.activations.amountCents) }}</td>
+                <td class="num">{{ money(row.renewals.instalmentCents) }}</td>
+                <td class="num">{{ money(row.totalCents) }}</td>
+                <td class="num">{{ money(row.activations.projection12Cents) }}</td>
+                <td>
+                  @if (row.status === 'closed') {
+                    <fc-status-badge tone="success">{{
+                      'ACTIVATIONS.STATUS.CLOSED' | t
+                    }}</fc-status-badge>
+                  } @else {
+                    <fc-status-badge tone="info">{{
+                      'ACTIVATIONS.STATUS.OPEN' | t
+                    }}</fc-status-badge>
+                  }
+                </td>
+                <td>
+                  @if (row.anomalies > 0) {
+                    <fc-status-badge tone="warning">{{
+                      'ACTIVATIONS.ANOMALIES' | t: { count: row.anomalies }
+                    }}</fc-status-badge>
+                  } @else {
+                    {{ dash }}
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+          @let sum = totals();
+          <tfoot>
+            <tr>
+              <th scope="row">{{ 'ACTIVATIONS.TOTALS' | t }}</th>
+              <td class="num">{{ number(sum.activations.places) }}</td>
+              <td class="num">{{ money(sum.activations.amountCents) }}</td>
+              <td class="num">{{ money(sum.renewals.instalmentCents) }}</td>
+              <td class="num">{{ money(sum.totalCents) }}</td>
+              <td class="num">{{ money(sum.activations.projection12Cents) }}</td>
+              <td></td>
+              <td>
+                @if (sum.anomalies > 0) {
+                  {{ 'ACTIVATIONS.ANOMALIES' | t: { count: sum.anomalies } }}
+                } @else {
+                  {{ dash }}
+                }
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    }
+  </div>
+}
+
+<fc-confirm-dialog
+  [heading]="confirmTexts().title"
+  [message]="confirmTexts().message"
+  [confirmLabel]="confirmTexts().confirm"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="confirm()"
+/>

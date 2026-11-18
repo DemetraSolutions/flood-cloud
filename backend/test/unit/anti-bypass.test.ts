@@ -188,14 +188,15 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
       assert.deepEqual(importers, ['modules/email-templates/email-templates.repository.ts']);
       const mirror = await readFile(join(SRC, MIRROR), 'utf8');
-      assert.match(mirror, /MIRROR_FIELDS[\s\S]*?places: new Set\(\[[^\]]*\]\)/);
-      assert.ok(!/places: new Set\(\[[^\]]*(?:appointment|roomsSettings)/.test(mirror));
+      const fields = mirror.slice(mirror.indexOf('export const MIRROR_FIELDS'), mirror.indexOf('export const MIRROR_LEAVES'));
+      assert.match(fields, /places: new Set\(\[[^\]]*\]\)/);
+      assert.ok(!/places: new Set\(\[[^\]]*(?:appointment|roomsSettings)/.test(fields));
     });
 
     it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups the three fixed reads of the diagnostics and the fixed read of the places that use a template and the fixed read of the companies and places that use a country', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
-      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'findPlacesUsingTemplate', 'readCountryUsage']);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readCountryUsage']);
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
       // The diagnostics (T1) add two more, each running a pipeline made by `mirror-devices.ts` (the whole of what leaves the copies: an allowlist of the fields of a device).
@@ -379,7 +380,9 @@ describe('database access cannot be bypassed outside src/db', () => {
 
     it('shows the public API only what the copies may give: the projections of the public places and companies are inside the central allowlist, which holds no credential, bank or setting', async () => {
       const mirror = await readFile(join(SRC, MIRROR_FILE), 'utf8');
-      const sets = [...mirror.matchAll(/(companies|places): new Set\(\[([^\]]*)\]\)/g)].map((match) => [match[1], [...match[2]!.matchAll(/'([^']+)'/g)].map((name) => name[1]!)] as const);
+      // The whole fields (the central allowlist); the leaves of the containers that hold credentials have their own test.
+      const allowlist = mirror.slice(mirror.indexOf('export const MIRROR_FIELDS'), mirror.indexOf('export const MIRROR_LEAVES'));
+      const sets = [...allowlist.matchAll(/(companies|places): new Set\(\[([^\]]*)\]\)/g)].map((match) => [match[1], [...match[2]!.matchAll(/'([^']+)'/g)].map((name) => name[1]!)] as const);
       assert.deepEqual(sets.map(([name]) => name), ['companies', 'places']);
       const forbidden = /integrations|banks|iban|settings|fattura|devices|rooms|printStations|productionCenter|platform|server|connector|contact|invoice|medias|general|delivery|apiKey|password|secret|key/i;
       for (const [name, fields] of sets) {
