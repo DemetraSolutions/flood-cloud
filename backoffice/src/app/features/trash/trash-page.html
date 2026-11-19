@@ -3,6 +3,17 @@
 </header>
 <p class="hint">{{ 'TRASH.HINT' | t }}</p>
 
+@if (isAll()) {
+  <form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+    <fc-cross-group-filters
+      [showGroup]="active() !== 'groups'"
+      [groupId]="groupFilter()"
+      [dealerId]="dealerFilter()"
+      (filterChange)="onFilter($event)"
+    />
+  </form>
+}
+
 <fc-tab-list
   idPrefix="trash"
   [label]="'TRASH.TABS' | t"
@@ -20,7 +31,10 @@
   >
     <fc-trash-tab
       [kind]="kind"
-      [groupId]="groupId()"
+      [groupId]="ownGroupId()"
+      [all]="isAll()"
+      [groupFilter]="groupFilter()"
+      [dealerFilter]="dealerFilter()"
       [q]="q()"
       [limit]="limit()"
       [cursor]="cursor()"

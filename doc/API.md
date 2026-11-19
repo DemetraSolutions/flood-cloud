@@ -468,8 +468,8 @@ Le richieste di creazione e modifica accettano `permissions` come `{ "modules": 
 - **Autenticazione e permesso:** Bearer backoffice, `users:read`
 - **Ruoli:** **PSA** (tutti gli utenti) e **D** (gli utenti dei gruppi del dealer); ogni altro ruolo `403 FORBIDDEN`
 - **Query:** come l'elenco del gruppo, con `role` su tutti i ruoli (`PSA`, `D`, `SA`, `CA`, `PA`, `E`) e in più `groupId` e `dealerId` (24 caratteri esadecimali). `dealerId` è riservato al PSA (un D riceve `403 FORBIDDEN`).
-- **Risposta:** `200` `{ "data": [ … ], "page": { "limit": 50, "next": "…" } }`
-- **Errori:** comuni; `403 FORBIDDEN`; `422`
+- **Risposta:** `200` `{ "data": [ … ], "page": { "limit": 50, "next": "…" } }`. Ogni voce ha anche `groupName`, il nome del gruppo dell'utente, cercato solo per i gruppi della pagina: `""` se il gruppo non ha un nome, `null` per un utente senza gruppo (PSA e D) o con un gruppo che non esiste. L'elenco del gruppo e il dettaglio dell'utente non lo hanno. Con `trashed=true` il D vede solo gli utenti nel cestino dei propri gruppi (mai gli utenti di piattaforma); il PSA tutti. Il ripristino (`POST /v1/users/{id}/restore`) e l'eliminazione definitiva (`DELETE /v1/users/{id}`) degli utenti di piattaforma (PSA, D) nel cestino sono del solo PSA (il D riceve `403`); gli utenti di un gruppo si ripristinano ed eliminano sulle rotte del gruppo.
+- **Errori:** comuni; `403 FORBIDDEN`; `422`; `503 SERVICE_UNAVAILABLE` se la lettura dei nomi dei gruppi supera il tempo massimo
 
 ### POST /v1/users
 - **Autenticazione e permesso:** Bearer backoffice, `users:create`; solo **PSA**

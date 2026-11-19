@@ -92,8 +92,11 @@
       <a *fcCan="'users:create'" fcEmptyAction [routerLink]="route">{{ 'USERS.NEW' | t }}</a>
     }
     <ng-template fcCell="groupId" let-row>
-      @if (row.groupId) {
-        <a [routerLink]="['/groups', row.groupId, 'users']">{{ abbreviate(row.groupId) }}</a>
+      @let cell = groupCell(row);
+      @if (cell.id) {
+        <a [routerLink]="['/groups', cell.id, 'settings']">{{ cell.label }}</a>
+      } @else {
+        {{ cell.label }}
       }
     </ng-template>
     <ng-template fcCell="select" let-row>

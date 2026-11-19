@@ -10,6 +10,7 @@ import {
   role,
   companiesLanding,
   placesLanding,
+  trashLanding,
   usersLanding,
 } from './core/auth/guards';
 import { Shell } from './core/layout/shell';
@@ -276,6 +277,18 @@ const emailTemplateRoutes: Routes = [
  * user may read, and the server checks the group against the perimeter of the user.
  */
 const trashRoutes: Routes = [
+  // The trash of every group in the scope of a PSA or dealer (no working group).
+  {
+    path: 'trash',
+    canMatch: [
+      role('PSA', 'D'),
+      anyPermission('companies:read', 'places:read', 'users:read'),
+      trashLanding,
+    ],
+    title: 'TRASH.TITLE',
+    data: { scope: 'all' },
+    loadComponent: () => import('./features/trash/trash-page').then((m) => m.TrashPage),
+  },
   {
     path: 'groups/:groupId/trash',
     canMatch: [anyPermission('companies:read', 'places:read', 'users:read')],

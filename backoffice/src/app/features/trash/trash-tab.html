@@ -36,6 +36,9 @@
         </button>
       }
     }
+    @if (emptyNeedsGroup()) {
+      <p class="needs-group">{{ 'TRASH.EMPTY.NEEDS_GROUP' | t }}</p>
+    }
     @if (canEmpty()) {
       <button
         fc-button
@@ -64,8 +67,17 @@
         type="checkbox"
         [checked]="isSelected(row)"
         [attr.aria-label]="selectLabel(row)"
+        [disabled]="!isSelectable(row)"
         (change)="toggleRow(row, $any($event.target).checked)"
       />
+    </ng-template>
+    <ng-template fcCell="group" let-row>
+      @let cell = groupCell(row);
+      @if (cell.id) {
+        <a [routerLink]="['/groups', cell.id, 'settings']">{{ cell.label }}</a>
+      } @else {
+        {{ cell.label }}
+      }
     </ng-template>
     <ng-template fcCell="name" let-row>
       <a [routerLink]="detailRoute(row)">{{ label(row) }}</a>
@@ -101,7 +113,7 @@
 
 @if (canEmpty()) {
   <fc-trash-empty-dialog
-    [groupId]="groupId()"
+    [groupId]="emptyGroup()!"
     [kind]="groupKind()"
     [count]="knownCount()"
     [open]="emptyOpen()"

@@ -1,5 +1,6 @@
+import { ApiError } from '../../core/api/api-error';
 import { COMPANY_ROW, GROUP_ROW, PLACE_ROW, result, USER_ROW, GROUP } from '../../../testing/trash';
-import { summarize, trashRowLabel, trashRowRoute } from './trash.types';
+import { summarize, platformIssue, trashRowLabel, trashRowRoute } from './trash.types';
 
 describe('summarize', () => {
   it('counts what was restored and deleted and lists what was skipped', () => {
@@ -17,6 +18,7 @@ describe('summarize', () => {
         { id: 'd', issue: 'referenced' },
         { id: 'e', issue: 'notFound' },
       ],
+      failedGroups: [],
     });
   });
 
@@ -33,11 +35,12 @@ describe('summarize', () => {
       restored: 1,
       deleted: 1,
       skipped: [{ id: 'a', issue: 'referenced' }],
+      failedGroups: [],
     });
   });
 
   it('has nothing for no results', () => {
-    expect(summarize([])).toEqual({ restored: 0, deleted: 0, skipped: [] });
+    expect(summarize([])).toEqual({ restored: 0, deleted: 0, skipped: [], failedGroups: [] });
   });
 });
 
@@ -74,5 +77,23 @@ describe('trashRowLabel', () => {
     expect(trashRowLabel('users', USER_ROW)).toBe('anna');
     expect(trashRowLabel('companies', COMPANY_ROW)).toBe('Alfa Srl');
     expect(trashRowLabel('groups', GROUP_ROW)).toBe('Gruppo Alfa');
+  });
+});
+
+describe('platformIssue', () => {
+  const error = (status: number, details: { field: string; issue: string }[] = []) =>
+    new ApiError({ status, code: 'FORBIDDEN', message: 'x', details });
+
+  it('maps the errors about the user itself', () => {
+    expect(platformIssue(error(403))).toBe('forbidden');
+    expect(platformIssue(error(404))).toBe('notFound');
+    expect(platformIssue(error(409, [{ field: 'groups', issue: 'referenced' }]))).toBe('hasGroups');
+  });
+
+  it('leaves the other errors alone', () => {
+    expect(platformIssue(error(409, [{ field: 'x', issue: 'referenced' }]))).toBeNull();
+    expect(platformIssue(error(409))).toBeNull();
+    expect(platformIssue(error(500))).toBeNull();
+    expect(platformIssue(new Error('network'))).toBeNull();
   });
 });

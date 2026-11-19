@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
+import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupMirror } from '../../shared/security/scope/group-mirror.ts';
 import { companiesScopeFilter, placesScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
@@ -28,6 +29,14 @@ export interface GroupDirectoryRepository {
    * @param userId Id of the dealer user.
    */
   isDealerOfAnyGroup(userId: ObjectId): Promise<boolean>;
+  /**
+   * The names of some groups, those of one page of a list across groups.
+   *
+   * @param ids The groups, at most a page of users.
+   * @returns The names by hexadecimal id (a name that is not a text is `''`); a group that does not exist is missing.
+   * @throws {AppError} `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+   */
+  groupNames(ids: readonly ObjectId[]): Promise<Map<string, string>>;
   /**
    * Which of the given companies exist in the group (in the copies), are not in the trash and are inside the caller's
    * perimeter (the scope filter of the caller is applied): any other is simply not among the results.
@@ -64,6 +73,14 @@ export function createGroupDirectoryRepository(databases: Databases): GroupDirec
 
     isDealerOfAnyGroup: async (userId) =>
       (await databases.common().collection('groups').findOne({ dealerId: userId }, { projection: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS })) !== null,
+
+    groupNames: async (ids) => {
+      if (ids.length === 0) {
+        return new Map();
+      }
+      const found = await bounded(() => databases.common().collection('groups').find({ _id: { $in: [...ids] } }, { projection: { name: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS }).toArray());
+      return new Map(found.map((group) => [(group['_id'] as ObjectId).toHexString(), typeof group['name'] === 'string' ? group['name'] : '']));
+    },
 
     findCompanies: async (principal, access, ids) => {
       if (ids.length === 0) {

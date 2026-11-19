@@ -12,6 +12,7 @@ export const MAX_LISTED_NAMES = 10;
 const ISSUE_KEYS: Readonly<Record<Exclude<TrashIssue, 'referenced'>, string>> = {
   taken: 'TAKEN',
   forbidden: 'FORBIDDEN',
+  hasGroups: 'HAS_GROUPS',
   notTrashed: 'NOT_TRASHED',
   notFound: 'NOT_FOUND',
 };
@@ -46,10 +47,14 @@ export class TrashSummaryDialog {
   /** Whether the dialog is open (two-way). */
   readonly open = model(false);
 
+  protected readonly failedGroups = computed(() => this.summary().failedGroups.join(', '));
   protected readonly skippedCount = computed(() => this.summary().skipped.length);
   protected readonly nothingDone = computed(() => {
     const summary = this.summary();
-    return summary.restored + summary.deleted + summary.skipped.length === 0;
+    return (
+      summary.restored + summary.deleted + summary.skipped.length + summary.failedGroups.length ===
+      0
+    );
   });
   protected readonly groups = computed<IssueGroup[]>(() => {
     const skipped = this.summary().skipped;

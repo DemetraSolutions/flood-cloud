@@ -189,3 +189,10 @@ export const companiesLanding: CanMatchFn = crossGroupLanding('companies', COMPA
 
 /** Cross-group list of places (`/places`): the group's list when a group is chosen. */
 export const placesLanding: CanMatchFn = crossGroupLanding('places', PLACES_LIST_FILTERS);
+
+/**
+ * Cross-group trash (`/trash`): with a working group chosen the trash is that group's, so it
+ * redirects to it keeping the tab, the search and the page size (never the cursor, `groupId` or
+ * `dealerId`).
+ */
+export const trashLanding: CanMatchFn = crossGroupLanding('trash', ['tab', 'q', 'limit']);

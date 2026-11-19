@@ -3594,7 +3594,8 @@
       "STOP": "Interrompi",
       "STARTING": "Eliminazione in corso…",
       "PROGRESS": "Eliminati {deleted}, ancora nel cestino {remaining}.",
-      "STOPPING": "Interruzione dopo l'operazione in corso…"
+      "STOPPING": "Interruzione dopo l'operazione in corso…",
+      "NEEDS_GROUP": "Per svuotare il cestino scegli prima un gruppo con il filtro Gruppo."
     },
     "SUMMARY": {
       "TITLE": "Esito dell'operazione",
@@ -3603,7 +3604,8 @@
       "DELETED": "Eliminati: {count}.",
       "SKIPPED": "Non elaborati: {count}. Restano dove sono per questi motivi:",
       "COUNT": "({count})",
-      "MORE": "e altri {count}"
+      "MORE": "e altri {count}",
+      "FAILED_GROUPS": "Operazione non riuscita per i gruppi: {groups}. I loro elementi non sono stati elaborati."
     },
     "ISSUE": {
       "REFERENCED_COMPANIES": "L'azienda ha ancora punti vendita",
@@ -3612,6 +3614,7 @@
       "REFERENCED_GROUPS": "L'elemento è ancora in uso",
       "TAKEN": "La partita IVA è già usata da un'altra azienda",
       "FORBIDDEN": "Non hai il permesso di agire su questo elemento",
+      "HAS_GROUPS": "Il rivenditore ha ancora gruppi",
       "NOT_TRASHED": "L'elemento non è più nel cestino",
       "NOT_FOUND": "L'elemento non esiste più o non è accessibile"
     }

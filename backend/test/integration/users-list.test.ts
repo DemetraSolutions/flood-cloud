@@ -1,6 +1,11 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Document, ObjectId } from 'mongodb';
+import type { Document } from 'mongodb';
+import { MongoServerError, ObjectId } from 'mongodb';
+import { AppError } from '../../src/shared/http/errors.ts';
+import type { Databases } from '../../src/db/databases.ts';
+import { createGroupDirectoryRepository } from '../../src/modules/users/group-directory.repository.ts';
+import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { startBackoffice } from '../helpers/backoffice.ts';
 import type { Backoffice } from '../helpers/backoffice.ts';
 import { legacyUser } from '../helpers/legacy-fixtures.ts';
@@ -403,6 +408,56 @@ describe('GET /v1/users: the transversal list', () => {
     // Another dealer's group is just empty: a dealer cannot tell it exists.
     assert.deepEqual((await all(`&groupId=${hex(group(b1).groupId)}`, office.cluster.dealerA)).data, []);
     assert.deepEqual((await all('&role=PSA', office.cluster.dealerA)).data, []);
+  });
+
+  it('gives each user the name of his group, null for a user without one or whose group does not exist, and an empty name for a group without a text name', async () => {
+    const groups = ctx.databases.common().collection('groups');
+    const lost = legacyUser(1400, { role: 'E', groupId: fixtureId('group', 888), placeId: group(a1).ownPlaceId, placesId: [group(a1).ownPlaceId] });
+    await users().insertOne(lost);
+    await groups.updateOne({ _id: group(a2).groupId }, { $unset: { name: '' } });
+    try {
+      const body = await all();
+      const nameOf = (username: string) => body.data.find((user) => user.username === username)!['groupName'];
+      assert.equal(nameOf('user-003'), 'group-001');
+      assert.equal(nameOf('user-007'), '');
+      assert.equal(nameOf('user-1400'), null);
+      assert.equal(nameOf('user-002'), null);
+      assert.equal(nameOf('user-500'), null);
+      assert.equal((await all('', office.cluster.dealerA)).data.find((user) => user.username === 'user-003')!['groupName'], 'group-001');
+      // The group users list and the user itself do not have it.
+      assert.ok(!('groupName' in (await listed(gpath(a1), office.cluster.psa)).data[0]!));
+      assert.ok(!('groupName' in (await as.call(office.cluster.psa, 'GET', `/users/${hex(office.cluster.dealerA)}`)).body.data));
+    } finally {
+      await groups.updateOne({ _id: group(a2).groupId }, { $set: { name: 'group-002' } });
+      await users().deleteOne({ _id: lost['_id'] as ObjectId });
+    }
+  });
+
+  it('shows a dealer the users in the trash of his own groups only', async () => {
+    const mine = legacyUser(1401, { role: 'E', trash: true, groupId: group(a1).groupId, dealerId: group(a1).dealerId, placeId: group(a1).ownPlaceId, placesId: [group(a1).ownPlaceId] });
+    const other = legacyUser(1402, { role: 'E', trash: true, groupId: group(b1).groupId, dealerId: group(b1).dealerId, placeId: group(b1).ownPlaceId, placesId: [group(b1).ownPlaceId] });
+    const platform = legacyUser(1403, { role: 'D', trash: true });
+    await users().insertMany([mine, other, platform]);
+    try {
+      assert.deepEqual((await all('&trashed=true', office.cluster.dealerA)).data.map((user) => user.username), ['user-1010', 'user-1401']);
+      assert.deepEqual((await all('&trashed=true', office.cluster.dealerB)).data.map((user) => user.username), ['user-1402']);
+      assert.deepEqual((await all('&trashed=true')).data.map((user) => user.username), ['user-1010', 'user-1401', 'user-1402', 'user-1403']);
+      assert.equal((await all(`&trashed=true&groupId=${hex(group(b1).groupId)}`, office.cluster.dealerA)).data.length, 0);
+      // A trashed platform user is the PSA's alone, to restore and to delete.
+      for (const [method, path] of [['POST', `/users/${hex(platform['_id'] as ObjectId)}/restore`], ['DELETE', `/users/${hex(platform['_id'] as ObjectId)}`]] as const) {
+        assert.equal((await as.call(office.cluster.dealerA, method, path)).status, 403, path);
+      }
+      assert.equal((await as.call(office.cluster.psa, 'POST', `/users/${hex(platform['_id'] as ObjectId)}/restore`)).body.data.trashed, false);
+    } finally {
+      await users().deleteMany({ _id: { $in: [mine['_id'], other['_id'], platform['_id']] } });
+    }
+  });
+
+  it('answers 503 when the names of the groups cannot be read in time', async () => {
+    const expired = new MongoServerError({ message: 'operation exceeded time limit', code: 50, codeName: 'MaxTimeMSExpired' });
+    const failing = { common: () => ({ collection: () => ({ find: () => ({ toArray: () => Promise.reject(expired) }) }) }) } as unknown as Databases;
+    await assert.rejects(createGroupDirectoryRepository(failing).groupNames([group(a1).groupId]), (error: unknown) => error instanceof AppError && error.status === 503);
+    assert.deepEqual([...(await createGroupDirectoryRepository(ctx.databases).groupNames([]))], []);
   });
 
   it('refuses the dealer filter to a dealer and the whole list to every other role', async () => {

@@ -141,8 +141,11 @@ export function result(
 }
 
 /** URL of the list of a tab. */
-export function listUrl(kind: TrashKind): string {
-  return kind === 'groups' ? `${API}/v1/groups` : `${API}/v1/groups/${GROUP}/${kind}`;
+export function listUrl(kind: TrashKind, all = false): string {
+  if (kind === 'groups') {
+    return `${API}/v1/groups`;
+  }
+  return all ? `${API}/v1/${kind}` : `${API}/v1/groups/${GROUP}/${kind}`;
 }
 
 /** Answers the reads that go with a tab: the companies of the places (not the list) and the dealers of the groups. */
@@ -154,6 +157,9 @@ function answerLookups(companies: object[], dealers: object[]): void {
   }
   for (const read of backend().match((r) => r.url === `${API}/v1/dealers`)) {
     read.flush(trashPage(dealers));
+  }
+  for (const read of backend().match((r) => /\/v1\/groups\/[0-9a-f]{24}$/.test(r.url))) {
+    read.flush({ data: { name: 'Gruppo Uno' } });
   }
 }
 
@@ -171,6 +177,7 @@ export async function renderTrash(
       provideRouter(
         [
           { path: 'groups/:groupId/trash', component: TrashPage },
+          { path: 'trash', component: TrashPage, data: { scope: 'all' } },
           { path: '**', children: [] },
         ],
         withComponentInputBinding(),
@@ -193,8 +200,8 @@ export async function renderTrash(
     harness.detectChanges();
   };
   /** The read of the list of a tab (`trashed=true`). */
-  const request = (kind: TrashKind) =>
-    backend().expectOne((r) => r.url === listUrl(kind) && r.params.get('trashed') === 'true');
+  const request = (kind: TrashKind, all = url.startsWith('/trash')) =>
+    backend().expectOne((r) => r.url === listUrl(kind, all) && r.params.get('trashed') === 'true');
   /** Answers the reads that go with a tab (companies of the places, dealers of the groups). */
   const lookups = async (companies: object[] = [COMPANY_ROW], dealers: object[] = []) => {
     answerLookups(companies, dealers);

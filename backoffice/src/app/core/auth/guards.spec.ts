@@ -14,6 +14,7 @@ import {
   permission,
   placesLanding,
   role,
+  trashLanding,
   usersLanding,
 } from './guards';
 import { GroupContext } from '../groups/group-context';
@@ -255,6 +256,24 @@ describe('companiesLanding and placesLanding', () => {
     signIn({ role: 'PSA' });
     TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Alfa' });
     expect(serialized(run(placesLanding))).toBe(`/groups/${GROUP}/places`);
+    sessionStorage.clear();
+  });
+});
+
+describe('trashLanding', () => {
+  const GROUP = '665f1c2e9b1d4a0012ab34a2';
+
+  it('shows the cross-group trash when no group is chosen', () => {
+    sessionStorage.clear();
+    signIn({ role: 'PSA', groupId: null, group: null });
+    expect(run(trashLanding)).toBe(true);
+  });
+
+  it('redirects to the trash of the chosen group keeping tab, search and page size only', () => {
+    signIn({ role: 'D' });
+    TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Alfa' });
+    navigatingTo('/trash?tab=places&q=bar&limit=50&cursor=c1&groupId=x&dealerId=y');
+    expect(serialized(run(trashLanding))).toBe(`/groups/${GROUP}/trash?tab=places&q=bar&limit=50`);
     sessionStorage.clear();
   });
 });

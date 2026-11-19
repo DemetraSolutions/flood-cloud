@@ -33,7 +33,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('TrashSummaryDialog', () => {
   it('reports what was restored', async () => {
-    const { root, view } = render({ restored: 2, deleted: 0, skipped: [] });
+    const { root, view } = render({ restored: 2, deleted: 0, skipped: [], failedGroups: [] });
     await view();
     expect(root.textContent).toContain('TRASH.SUMMARY.RESTORED {"count":2}');
     expect(root.textContent).not.toContain('TRASH.SUMMARY.DELETED');
@@ -42,14 +42,14 @@ describe('TrashSummaryDialog', () => {
   });
 
   it('reports what was deleted', async () => {
-    const { root, view } = render({ restored: 0, deleted: 3, skipped: [] });
+    const { root, view } = render({ restored: 0, deleted: 3, skipped: [], failedGroups: [] });
     await view();
     expect(root.textContent).toContain('TRASH.SUMMARY.DELETED {"count":3}');
     expect(root.textContent).not.toContain('TRASH.SUMMARY.RESTORED');
   });
 
   it('says so when there was nothing to do', async () => {
-    const { root, view } = render({ restored: 0, deleted: 0, skipped: [] });
+    const { root, view } = render({ restored: 0, deleted: 0, skipped: [], failedGroups: [] });
     await view();
     expect(root.textContent).toContain('TRASH.SUMMARY.NOTHING');
   });
@@ -67,6 +67,7 @@ describe('TrashSummaryDialog', () => {
           { id: 'e', issue: 'notTrashed' },
           { id: 'f', issue: 'notFound' },
         ],
+        failedGroups: [],
       },
       [
         ['a', 'Alfa'],
@@ -91,7 +92,12 @@ describe('TrashSummaryDialog', () => {
   it('explains a referenced place with its own reason and caps the names listed', async () => {
     const ids = Array.from({ length: 12 }, (_, n) => `p${n}`);
     const { root, view } = render(
-      { restored: 0, deleted: 0, skipped: ids.map((id) => ({ id, issue: 'referenced' as const })) },
+      {
+        restored: 0,
+        deleted: 0,
+        skipped: ids.map((id) => ({ id, issue: 'referenced' as const })),
+        failedGroups: [],
+      },
       ids.map((id): [string, string] => [id, id.toUpperCase()]),
       'places',
     );
@@ -103,7 +109,12 @@ describe('TrashSummaryDialog', () => {
   });
 
   it('closes with the button of the dialog', async () => {
-    const { fixture, root, view } = render({ restored: 1, deleted: 0, skipped: [] });
+    const { fixture, root, view } = render({
+      restored: 1,
+      deleted: 0,
+      skipped: [],
+      failedGroups: [],
+    });
     await view();
     root.querySelector<HTMLButtonElement>('dialog header button')!.click();
     await view();
@@ -111,10 +122,27 @@ describe('TrashSummaryDialog', () => {
   });
 
   it('closes with its button', async () => {
-    const { fixture, root, view } = render({ restored: 1, deleted: 0, skipped: [] });
+    const { fixture, root, view } = render({
+      restored: 1,
+      deleted: 0,
+      skipped: [],
+      failedGroups: [],
+    });
     await view();
     root.querySelector<HTMLButtonElement>('dialog footer button')!.click();
     await view();
     expect(fixture.componentInstance.open()).toBe(false);
+  });
+
+  it('lists the groups whose request failed, and is not empty because of them', async () => {
+    const { root, view } = render({
+      restored: 0,
+      deleted: 0,
+      skipped: [],
+      failedGroups: ['Alfa', 'Beta'],
+    });
+    await view();
+    expect(root.querySelector('[role=alert]')?.textContent).toContain('"groups":"Alfa, Beta"');
+    expect(root.textContent).not.toContain('TRASH.SUMMARY.NOTHING');
   });
 });

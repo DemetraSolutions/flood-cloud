@@ -23,7 +23,10 @@ import { ToastService } from '../../shared/ui/toast/toast.service';
 import { createDebouncer } from '../../shared/util/debouncer';
 import { DealerRecord } from '../dealers/dealer.types';
 import { loadAll } from '../places/lookup-loader';
+import { abbreviateId } from '../activity-log/activity-log.types';
 import { apiErrorOf } from '../profile/sessions';
+import { UsersApi } from '../users/users-api';
+import { GroupCell, groupCell } from '../groups/group-cell';
 import { TrashApi } from './trash-api';
 import { TrashEmptyDialog } from './trash-empty-dialog';
 import { TrashSummaryDialog } from './trash-summary-dialog';
@@ -37,8 +40,10 @@ import {
   TrashedPlace,
   TrashedUser,
   TrashItemResult,
+  TrashOutcome,
   TrashKind,
   TrashRow,
+  platformIssue,
   trashRowLabel,
   trashRowRoute,
   TrashSummary,
@@ -98,14 +103,21 @@ export class TrashTab {
   private readonly session = inject(SessionService);
   private readonly store = inject(ReferenceStore);
   private readonly api = inject(TrashApi);
+  private readonly users = inject(UsersApi);
   private readonly toast = inject(ToastService);
   private readonly debouncer = createDebouncer();
   protected readonly i18n = inject(I18nService);
 
   /** Kind of the items of the tab. */
   readonly kind = input.required<TrashKind>();
-  /** Group of the page (the groups tab is platform-wide and ignores it). */
-  readonly groupId = input.required<string>();
+  /** Group of the page (the groups tab is platform-wide and ignores it); none in the cross-group trash. */
+  readonly groupId = input<string>();
+  /** Whether the tab lists the trash of every group in the scope of the user (`/trash`). */
+  readonly all = input(false);
+  /** Group filter of the cross-group trash (valid id or `undefined`). */
+  readonly groupFilter = input<string>();
+  /** Dealer filter of the cross-group trash (valid id or `undefined`). */
+  readonly dealerFilter = input<string>();
   /** Query parameters of the page (bound by the page). */
   readonly q = input<string>();
   readonly limit = input<string>();
@@ -125,17 +137,25 @@ export class TrashTab {
       sort: SORT[kind],
       trashed: 'true',
     };
-    const filters = { q: this.q()?.trim(), cursor: this.cursor() };
+    const filters = {
+      q: this.q()?.trim(),
+      cursor: this.cursor(),
+      groupId: this.all() && kind !== 'groups' ? this.groupFilter() : undefined,
+      dealerId: this.all() ? this.dealerFilter() : undefined,
+    };
     for (const [name, value] of Object.entries(filters)) {
       if (value) {
         params[name] = value;
       }
     }
+    const own = this.groupId();
     return {
       url:
         kind === 'groups'
           ? '/v1/groups'
-          : `/v1/groups/${encodeURIComponent(this.groupId())}/${kind}`,
+          : this.all()
+            ? `/v1/${kind}`
+            : `/v1/groups/${encodeURIComponent(own as string)}/${kind}`,
       params,
     };
   });
@@ -143,7 +163,11 @@ export class TrashTab {
   /** Companies of the group, to name the company of a place. */
   private readonly companiesResource = resource({
     params: () =>
-      this.kind() === 'places' && this.session.can('companies:read') ? this.groupId() : undefined,
+      this.kind() === 'places' && this.session.can('companies:read')
+        ? this.all()
+          ? this.groupFilter()
+          : this.groupId()
+        : undefined,
     loader: ({ params }) => loadAll(this.store, params, 'companies'),
   });
   /** Dealers, to name the dealer of a group. */
@@ -177,10 +201,21 @@ export class TrashTab {
       cell: (row) => this.date(row.trashedAt),
     };
     const select: TableColumn<TrashRow> = { key: 'select', header: text('SELECT'), narrow: true };
+    // In the cross-group trash every row says which group it belongs to (not the groups tab).
+    const group: TableColumn<TrashRow>[] =
+      this.all() && kind !== 'groups'
+        ? [{ key: 'group', header: this.i18n.t('CROSS_GROUP.COLUMN.GROUP'), hideNarrow: true }]
+        : [];
+    // The cross-group lists name no company: the column is there when a group is filtered.
+    const company: TableColumn<TrashRow>[] =
+      !this.all() || this.groupFilter() !== undefined
+        ? [{ key: 'company', header: text('COMPANY'), cell: (row) => this.companyName(row) }]
+        : [];
     switch (kind) {
       case 'companies':
         return [
           select,
+          ...group,
           { key: 'name', header: text('NAME') },
           {
             key: 'vatNumber',
@@ -195,7 +230,8 @@ export class TrashTab {
       case 'places':
         return [
           select,
-          { key: 'company', header: text('COMPANY'), cell: (row) => this.companyName(row) },
+          ...group,
+          ...company,
           { key: 'name', header: text('NAME') },
           { key: 'city', header: text('CITY'), hideNarrow: true, cell: field('city') },
           { key: 'province', header: text('PROVINCE'), hideNarrow: true, cell: field('province') },
@@ -205,6 +241,7 @@ export class TrashTab {
       case 'users':
         return [
           select,
+          ...group,
           {
             key: 'role',
             header: text('ROLE'),
@@ -250,11 +287,15 @@ export class TrashTab {
     source: this.rows,
     computation: () => new Set<string>(),
   });
+  /** Rows that can be selected: in the cross-group trash only the ones with a group (a bulk call is per group). */
+  protected readonly selectable = computed(() =>
+    this.rows().filter((row) => this.isSelectable(row)),
+  );
   protected readonly selectedRows = computed(() =>
-    this.rows().filter((row) => this.selection().has(row.id)),
+    this.selectable().filter((row) => this.selection().has(row.id)),
   );
   protected readonly allSelected = computed(
-    () => this.rows().length > 0 && this.selectedRows().length === this.rows().length,
+    () => this.selectable().length > 0 && this.selectedRows().length === this.selectable().length,
   );
 
   protected readonly canRestore = computed(() => this.session.can(RESTORE_PERMISSION[this.kind()]));
@@ -262,8 +303,20 @@ export class TrashTab {
     const kind = this.kind();
     return kind !== 'groups' && this.session.can(DELETE_PERMISSION[kind]);
   });
+  /** "Svuota cestino" is per group: in the cross-group trash it needs a group filter. */
+  protected readonly emptyGroup = computed(() => this.groupId() ?? this.groupFilter());
   protected readonly canEmpty = computed(
-    () => this.kind() !== 'groups' && this.session.can(EMPTY_PERMISSION),
+    () =>
+      this.kind() !== 'groups' &&
+      this.session.can(EMPTY_PERMISSION) &&
+      this.emptyGroup() !== undefined,
+  );
+  /** The user could empty a group's trash but has not chosen the group (cross-group trash). */
+  protected readonly emptyNeedsGroup = computed(
+    () =>
+      this.kind() !== 'groups' &&
+      this.session.can(EMPTY_PERMISSION) &&
+      this.emptyGroup() === undefined,
   );
   /** The kind of the group trash, for the bulk calls (never `groups`: those have their own). */
   protected readonly groupKind = computed(() => this.kind() as GroupTrashKind);
@@ -286,7 +339,31 @@ export class TrashTab {
   );
 
   protected detailRoute(row: TrashRow): string[] {
-    return trashRowRoute(this.kind(), this.groupId(), row);
+    return trashRowRoute(this.kind(), this.groupId() ?? this.groupOf(row) ?? '', row);
+  }
+
+  /** Group of a row of the cross-group trash (`null` for a platform user). */
+  private groupOf(row: TrashRow): string | null {
+    return (row as { groupId?: string | null }).groupId ?? null;
+  }
+
+  /** A platform user (no group) is handled with the platform routes, which only a PSA may use. */
+  private isPlatformUser(row: TrashRow): boolean {
+    return this.all() && this.kind() === 'users' && this.groupOf(row) === null;
+  }
+
+  protected isSelectable(row: TrashRow): boolean {
+    return (
+      !this.all() ||
+      this.kind() === 'groups' ||
+      this.groupOf(row) !== null ||
+      this.session.me()?.role === 'PSA'
+    );
+  }
+
+  /** What the group cell of a row shows: the name (a dash for none) and the group it links to. */
+  protected groupCell(row: TrashRow): GroupCell {
+    return groupCell(this.i18n, row as { groupId?: string | null; groupName?: string | null });
   }
 
   protected label(row: TrashRow): string {
@@ -314,29 +391,28 @@ export class TrashTab {
   }
 
   protected toggleAll(checked: boolean): void {
-    this.selection.set(new Set(checked ? this.rows().map((row) => row.id) : []));
+    this.selection.set(new Set(checked ? this.selectable().map((row) => row.id) : []));
   }
 
   /** Restores the selected items (no confirmation: it is reversible). */
   protected async restore(): Promise<void> {
-    const rows = this.selectedRows();
-    await this.run(rows, () => {
-      const ids = rows.map((row) => row.id);
-      return this.kind() === 'groups'
-        ? this.api.restoreGroups(ids)
-        : this.api.restore(this.groupId(), this.groupKind(), ids);
-    });
+    const kind = this.kind();
+    await this.run(
+      this.selectedRows(),
+      (groupId, ids) =>
+        kind === 'groups'
+          ? this.api.restoreGroups(ids)
+          : this.api.restore(groupId, this.groupKind(), ids),
+      { call: (id) => this.users.restore({ kind: 'platform' }, id), outcome: 'restored' },
+    );
   }
 
   /** Deletes the selected items for good, after the confirmation. */
   protected async remove(): Promise<void> {
-    const rows = this.selectedRows();
-    await this.run(rows, () =>
-      this.api.remove(
-        this.groupId(),
-        this.groupKind(),
-        rows.map((row) => row.id),
-      ),
+    await this.run(
+      this.selectedRows(),
+      (groupId, ids) => this.api.remove(groupId, this.groupKind(), ids),
+      { call: (id) => this.users.remove({ kind: 'platform' }, id), outcome: 'deleted' },
     );
     this.deleteOpen.set(false);
   }
@@ -367,20 +443,77 @@ export class TrashTab {
     void this.navigate({ cursor: stack[stack.length - 1] });
   }
 
+  /**
+   * Runs a bulk call for the rows, one request per group (the backend works on one group at a
+   * time), in order, and merges the results into one summary. A group whose request fails does not
+   * lose the results of the others: it is listed in the summary. When every request fails the
+   * error is shown as a message and there is no summary.
+   */
   private async run(
     rows: readonly TrashRow[],
-    call: () => Promise<{ readonly results: readonly TrashItemResult[] }>,
+    call: (
+      groupId: string,
+      ids: readonly string[],
+    ) => Promise<{ readonly results: readonly TrashItemResult[] }>,
+    platform: { readonly call: (id: string) => Promise<unknown>; readonly outcome: TrashOutcome },
   ): Promise<void> {
     this.busy.set(true);
+    const batches = new Map<string, TrashRow[]>();
+    const platformUsers: TrashRow[] = [];
+    for (const row of rows) {
+      if (this.isPlatformUser(row)) {
+        platformUsers.push(row);
+        continue;
+      }
+      const key = this.kind() === 'groups' ? '' : (this.groupId() ?? this.groupOf(row)!);
+      batches.set(key, [...(batches.get(key) ?? []), row]);
+    }
+    const results: TrashItemResult[] = [];
+    const failed: string[] = [];
+    let firstError: unknown = null;
     try {
-      const { results } = await call();
-      this.names.set(new Map(rows.map((row) => [row.id, this.label(row)])));
-      this.report(summarize(results));
-    } catch (error) {
-      this.toast.error(failureMessage(this.i18n, error));
+      for (const [groupId, batch] of batches) {
+        try {
+          const done = await call(
+            groupId,
+            batch.map((row) => row.id),
+          );
+          results.push(...done.results);
+        } catch (error) {
+          firstError ??= error;
+          failed.push(this.groupLabel(batch[0]));
+        }
+      }
+      // Platform users have no group: one request each, with the platform routes.
+      for (const user of platformUsers) {
+        try {
+          await platform.call(user.id);
+          results.push({ id: user.id, outcome: platform.outcome });
+        } catch (error) {
+          const issue = platformIssue(error);
+          if (issue === null) {
+            firstError ??= error;
+            failed.push(this.label(user));
+          } else {
+            results.push({ id: user.id, outcome: 'skipped', issue });
+          }
+        }
+      }
+      if (failed.length === batches.size + platformUsers.length) {
+        this.toast.error(failureMessage(this.i18n, firstError));
+      } else {
+        this.names.set(new Map(rows.map((row) => [row.id, this.label(row)])));
+        this.report({ ...summarize(results), failedGroups: this.all() ? failed : [] });
+      }
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Name of the group of a row for the list of the groups that failed (its short id without a name). */
+  private groupLabel(row: TrashRow): string {
+    const name = (row as { groupName?: string | null }).groupName;
+    return name ? name : abbreviateId(this.groupOf(row) ?? '');
   }
 
   private report(summary: TrashSummary): void {

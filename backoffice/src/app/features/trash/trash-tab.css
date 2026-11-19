@@ -22,3 +22,8 @@
 .empty {
   margin-inline-start: auto;
 }
+
+.needs-group {
+  margin: 0;
+  color: var(--color-text-muted);
+}

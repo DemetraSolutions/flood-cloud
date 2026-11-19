@@ -1,3 +1,4 @@
+import { ApiError } from '../../core/api/api-error';
 import { CompanyListItem } from '../companies/company.types';
 import { GroupListItem } from '../groups/group.types';
 import { PlaceListItem, placeRoute } from '../places/place.types';
@@ -45,13 +46,15 @@ export const MAX_BULK_IDS = 100;
 export type TrashOutcome = 'restored' | 'deleted' | 'skipped';
 
 /** Why an item was skipped. */
-export type TrashIssue = 'notFound' | 'notTrashed' | 'referenced' | 'taken' | 'forbidden';
+export type TrashIssue =
+  'notFound' | 'notTrashed' | 'referenced' | 'taken' | 'forbidden' | 'hasGroups';
 
 /** The issues, in the order the summary lists them. */
 export const TRASH_ISSUES: readonly TrashIssue[] = [
   'referenced',
   'taken',
   'forbidden',
+  'hasGroups',
   'notTrashed',
   'notFound',
 ];
@@ -95,6 +98,8 @@ export interface TrashSummary {
   readonly deleted: number;
   /** Skipped items by id: the reason and, when the item was selected, its name. */
   readonly skipped: readonly { readonly id: string; readonly issue: TrashIssue }[];
+  /** Groups whose request failed in a bulk call across groups (their items were not handled). */
+  readonly failedGroups: readonly string[];
 }
 
 /**
@@ -119,7 +124,12 @@ export function summarize(results: readonly TrashItemResult[]): TrashSummary {
       skipped.set(result.id, result.issue ?? 'notFound');
     }
   }
-  return { restored, deleted, skipped: [...skipped].map(([id, issue]) => ({ id, issue })) };
+  return {
+    restored,
+    deleted,
+    skipped: [...skipped].map(([id, issue]) => ({ id, issue })),
+    failedGroups: [],
+  };
 }
 
 /** Router commands of the detail page of a row. */
@@ -139,4 +149,26 @@ export function trashRowRoute(kind: TrashKind, groupId: string, row: TrashRow): 
 /** The text that names a row in the labels and in the summary. */
 export function trashRowLabel(kind: TrashKind, row: TrashRow): string {
   return kind === 'users' ? (row as TrashedUser).username : (row as { name: string }).name;
+}
+
+/**
+ * The reason a platform user could not be restored or deleted (`POST /v1/users/{id}/restore`,
+ * `DELETE /v1/users/{id}`), or `null` for an error that is not about the user itself: `403` is
+ * not allowed (also acting on oneself), `404` gone, `409` on `groups` a dealer that still has
+ * groups.
+ *
+ * @param error What the call threw.
+ */
+export function platformIssue(error: unknown): TrashIssue | null {
+  if (!(error instanceof ApiError)) {
+    return null;
+  }
+  if (error.status === 403) {
+    return 'forbidden';
+  }
+  if (error.status === 404) {
+    return 'notFound';
+  }
+  const hasGroups = error.details.some((d) => d.field === 'groups' && d.issue === 'referenced');
+  return error.status === 409 && hasGroups ? 'hasGroups' : null;
 }

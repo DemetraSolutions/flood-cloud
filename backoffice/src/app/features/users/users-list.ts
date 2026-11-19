@@ -23,7 +23,7 @@ import { Select } from '../../shared/ui/select/select';
 import { StatusBadge } from '../../shared/ui/status-badge/status-badge';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { createDebouncer } from '../../shared/util/debouncer';
-import { abbreviateId } from '../activity-log/activity-log.types';
+import { GroupCell, groupCell } from '../groups/group-cell';
 import { apiErrorOf } from '../profile/sessions';
 import { fullName, userRoute, UserRecord } from './user.types';
 import { UserActions } from './user-actions';
@@ -233,7 +233,9 @@ export class UsersList {
   ]);
   protected readonly rowKey = (row: UserRecord): string => row.id;
   protected readonly detailRoute = userRoute;
-  protected readonly abbreviate = abbreviateId;
+  protected groupCell(row: UserRecord): GroupCell {
+    return groupCell(this.i18n, row);
+  }
   protected readonly initials = initialsOf;
 
   /** Whether the user may do anything to a row (otherwise the actions menu is not offered). */

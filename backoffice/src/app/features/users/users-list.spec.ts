@@ -169,11 +169,11 @@ describe('UsersList', () => {
     it('links the users of the platform to their own pages in the cross-group list', async () => {
       const { flush, root } = await render('/users', { role: 'PSA', groupId: null, group: null });
       const platformUser = fakeUser({ id: '665f1c2e9b1d4a0012ab3499', groupId: null, role: 'D' });
-      await flush([platformUser, ONE]);
+      await flush([platformUser, { ...ONE, groupName: 'Gruppo Uno' }]);
       expect(root.querySelector('h1')?.textContent).toBe('USERS.TITLE');
       expect([...root.querySelectorAll('tbody a')].map((a) => a.getAttribute('href'))).toEqual([
         `/platform/users/${platformUser.id}`,
-        `/groups/${GROUP}/users`,
+        `/groups/${GROUP}/settings`,
         `/groups/${GROUP}/users/${ONE.id}`,
       ]);
       expect(root.querySelector('a.new')?.getAttribute('href')).toBe('/platform/users/new');
@@ -219,18 +219,25 @@ describe('UsersList', () => {
     it('lists the users of every group with a group column linking to each group', async () => {
       sessionStorage.clear();
       const { flush, root, cells } = await render('/users', PSA);
-      const grouped = fakeUser({ id: '665f1c2e9b1d4a0012ab3411', username: 'g1' });
+      const grouped = fakeUser({
+        id: '665f1c2e9b1d4a0012ab3411',
+        username: 'g1',
+        groupName: 'Gruppo Uno',
+      });
       const platformUser = fakeUser({
         id: '665f1c2e9b1d4a0012ab3412',
         username: 'p1',
         groupId: null,
+        groupName: null,
         role: 'D',
       });
       await flush([grouped, platformUser]);
       expect(root.querySelector('h1')?.textContent).toBe('USERS.TITLE');
-      expect(cells(0)[1]).toBe('…ab34a1');
-      expect(root.querySelector('tbody td a')?.getAttribute('href')).toBe(`/groups/${GROUP}/users`);
-      expect(cells(1)[1]).toBe('');
+      expect(cells(0)[1]).toBe('Gruppo Uno');
+      expect(root.querySelector('tbody td a')?.getAttribute('href')).toBe(
+        `/groups/${GROUP}/settings`,
+      );
+      expect(cells(1)[1]).toBe('CROSS_GROUP.NO_NAME');
       expect(root.querySelectorAll('tbody td a')).toHaveLength(1);
       expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     });

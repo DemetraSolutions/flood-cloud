@@ -268,6 +268,8 @@ export const MENU: readonly MenuItem[] = [
     icon: 'trash',
     route: '/groups',
     groupPath: 'trash',
+    allRoute: '/trash',
+    alsoActiveFor: ['/trash'],
     anyPermission: ['companies:read', 'places:read', 'users:read'],
   },
   {

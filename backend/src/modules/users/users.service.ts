@@ -61,6 +61,15 @@ export interface UserListing {
   readonly page: PageInfo;
 }
 
+/** A user of the list across groups: the user with the name of his group (`null` when he has no group or the group does not exist). */
+export type UserWithGroup = UserResponse & { readonly groupName: string | null };
+
+/** A page of users of the list across groups. */
+export interface CrossGroupUserListing {
+  readonly items: readonly UserWithGroup[];
+  readonly page: PageInfo;
+}
+
 /** Writes of the transaction that creates a user, run after the user and his credentials were written: it receives the session and the id of the new user. */
 export type AlongsideWrite = (session: ClientSession, userId: ObjectId) => Promise<void>;
 
@@ -112,13 +121,14 @@ export interface UsersService {
    */
   listGroup(principal: AuthPrincipal, access: GroupAccess, query: GroupUsersQuery): Promise<UserListing>;
   /**
-   * Lists the users of every group the caller reaches: all of them for the PSA, those of the dealer's groups for a dealer.
+   * Lists the users of every group the caller reaches: all of them for the PSA, those of the dealer's groups for a dealer. Each item has `groupName`, looked up for the groups of the page only
+   * (`""` when the group has no textual name, `null` for a user without a group, such as a PSA or a dealer, and for a group that does not exist).
    *
    * @param principal The authenticated caller.
    * @param query Validated query.
-   * @throws {AppError} `FORBIDDEN` for any other role, and for the `dealerId` filter used by a dealer.
+   * @throws {AppError} `FORBIDDEN` for any other role, and for the `dealerId` filter used by a dealer; `SERVICE_UNAVAILABLE` when the names of the groups cannot be read in time.
    */
-  listAll(principal: AuthPrincipal, query: AllUsersQuery): Promise<UserListing>;
+  listAll(principal: AuthPrincipal, query: AllUsersQuery): Promise<CrossGroupUserListing>;
   /**
    * Reads one user. A user that does not exist, is outside the perimeter or in another group is one and the same `404`.
    *
@@ -475,7 +485,11 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
       if (query.dealerId !== undefined && kind !== 'platform') {
         throw new AppError('FORBIDDEN');
       }
-      return listing(usersScopeFilter(principal), requestFilter(query), query);
+      return listing(usersScopeFilter(principal), requestFilter(query), query).then(async ({ items, page }) => {
+        const ids = [...new Set(items.flatMap((item) => (item.groupId === null ? [] : [item.groupId])))].map((hex) => ObjectId.createFromHexString(hex));
+        const names = await directory.groupNames(ids);
+        return { items: items.map((item) => ({ ...item, groupName: item.groupId === null ? null : (names.get(item.groupId) ?? null) })), page };
+      });
     },
 
     get: async (principal, area, userId) => toResponse((await findTarget(principal, area, userId)).user),

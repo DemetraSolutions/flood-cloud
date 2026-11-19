@@ -402,7 +402,6 @@ describe('visibleMenu', () => {
     });
 
     it('on the chooser only the entry that sent the user there is active', () => {
-      expect(activeFor('PSA', false, '/groups?to=trash')).toEqual(['trash']);
       expect(activeFor('PSA', false, '/groups?to=fidelity/card-types').sort()).toEqual([]);
       expect(activeFor('D', false, '/groups?to=email-templates')).toEqual(['email-templates']);
     });
@@ -434,6 +433,14 @@ describe('visibleMenu', () => {
       expect(activeFor('PSA', false, '/groups/665f1c2e9b1d4a0012ab34ff/settings/taxes')).toEqual([
         'groups',
       ]);
+    });
+
+    it('without a group the trash is the cross-group trash, not the chooser', () => {
+      expect(activeFor('PSA', false, '/trash')).toEqual(['trash']);
+      expect(activeFor('D', false, '/trash?tab=users')).toEqual(['trash']);
+      expect(activeFor('PSA', false, '/groups?to=trash')).toEqual([]);
+      expect(activeFor('PSA', true, '/trash')).toEqual(['trash']);
+      expect(MENU.find((i) => i.id === 'trash')).toMatchObject({ allRoute: '/trash' });
     });
 
     it('with a group the cross-group lists still belong to Aziende and Punti vendita', () => {

@@ -33,15 +33,17 @@ export interface CrossGroupFilterChange {
   selector: 'fc-cross-group-filters',
   imports: [SearchCombobox, Select, TPipe],
   template: `
-    <fc-search-combobox
-      [label]="'CROSS_GROUP.FILTER.GROUP' | t"
-      [placeholder]="'CROSS_GROUP.FILTER.ALL_GROUPS' | t"
-      [clearLabel]="'CROSS_GROUP.FILTER.CLEAR_GROUP' | t"
-      [search]="searchGroups"
-      [value]="groupId() ?? ''"
-      [valueLabel]="groupLabel()"
-      (choice)="onGroup($event)"
-    />
+    @if (showGroup()) {
+      <fc-search-combobox
+        [label]="'CROSS_GROUP.FILTER.GROUP' | t"
+        [placeholder]="'CROSS_GROUP.FILTER.ALL_GROUPS' | t"
+        [clearLabel]="'CROSS_GROUP.FILTER.CLEAR_GROUP' | t"
+        [search]="searchGroups"
+        [value]="groupId() ?? ''"
+        [valueLabel]="groupLabel()"
+        (choice)="onGroup($event)"
+      />
+    }
     @if (showDealer()) {
       <fc-select
         [label]="'CROSS_GROUP.FILTER.DEALER' | t"
@@ -62,6 +64,8 @@ export class CrossGroupFilters {
   readonly groupId = input<string>();
   /** Dealer currently filtered (valid id or `undefined`). */
   readonly dealerId = input<string>();
+  /** Whether the group filter is offered (not on a list of the groups themselves). */
+  readonly showGroup = input(true);
   /** A filter changed. */
   readonly filterChange = output<CrossGroupFilterChange>();
 

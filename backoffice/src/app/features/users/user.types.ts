@@ -47,6 +47,8 @@ export interface UserRecord {
   readonly phone: string | null;
   readonly role: Role;
   readonly groupId: string | null;
+  /** Name of the group in the cross-group list: `''` without a text name, `null` for a platform user or a group that does not exist. */
+  readonly groupName?: string | null;
   readonly dealerId: string | null;
   readonly companyIds: readonly string[];
   readonly placeIds: readonly string[];
