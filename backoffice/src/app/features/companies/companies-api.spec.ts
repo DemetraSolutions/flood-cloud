@@ -75,24 +75,6 @@ describe('CompaniesApi', () => {
     await done;
   });
 
-  it.each([
-    ['eInvoicing', 'e-invoicing'],
-    ['invoiceNumbering', 'invoice-numbering'],
-    ['bankAccounts', 'bank-accounts'],
-    ['mealVoucherIssuers', 'meal-voucher-issuers'],
-    ['customerApp', 'customer-app'],
-    ['media', 'media'],
-  ] as const)('replaces the %s block', async (section, path) => {
-    const { api } = setup();
-    const done = api.replace(GROUP, COMPANY, section, [1], ETAG, fakeCompany());
-    const req = backend().expectOne(`${BASE}/${COMPANY}/${path}`);
-    expect(req.request.method).toBe('PUT');
-    expect(req.request.headers.get('If-Match')).toBe(ETAG);
-    expect(req.request.body).toEqual([1]);
-    req.flush({ data: fakeCompany() });
-    await done;
-  });
-
   it('reads the version of a company', async () => {
     const { api } = setup();
     const done = api.version(GROUP, COMPANY);

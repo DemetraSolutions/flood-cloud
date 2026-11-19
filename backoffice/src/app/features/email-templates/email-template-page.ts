@@ -1,3 +1,4 @@
+import { PageHeader } from '../../shared/ui/page-header/page-header';
 import { RecordGroup } from '../groups/record-group';
 import {
   Component,
@@ -95,6 +96,7 @@ export const PLACEHOLDERS = [
 @Component({
   selector: 'fc-email-template-page',
   imports: [
+    PageHeader,
     RecordGroup,
     Button,
     ConfirmDialog,

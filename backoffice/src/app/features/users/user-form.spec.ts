@@ -110,7 +110,7 @@ async function render(url: string, options: Options = {}) {
   };
   const control = (label: string) => findControl(scope, label);
   const error = (label: string) => errorOf(scope, label);
-  const save = () => root.querySelector<HTMLButtonElement>('.actions button[type=submit]');
+  const save = () => root.querySelector<HTMLButtonElement>('.page-actions button[type=submit]');
   const check = async (label: string, checked: boolean) => {
     const box = control(label) as HTMLInputElement;
     box.checked = checked;
@@ -238,7 +238,7 @@ describe('UserForm: states', () => {
     const { root } = await render('/platform/users/new', {
       profile: { role: 'PSA', groupId: null, groupFeatures: null },
     });
-    expect(root.querySelector('.actions a')?.getAttribute('href')).toBe('/users');
+    expect(root.querySelector('.page-actions a')?.getAttribute('href')).toBe('/users');
   });
 });
 
@@ -365,7 +365,7 @@ describe('UserForm: summary actions', () => {
     expect(root.querySelector('.actions-bar')).toBeNull();
     expect(root.textContent).not.toContain('USERS.FORM.READ_ONLY');
     expect(save()).toBeNull();
-    expect(root.querySelector('.actions a')?.textContent).toBe('USERS.FORM.BACK');
+    expect(root.querySelector('.page-actions a')?.textContent).toBe('USERS.FORM.BACK');
   });
 
   it('is read-only without users:update', async () => {
@@ -377,7 +377,7 @@ describe('UserForm: summary actions', () => {
     expect(save()).toBeNull();
     expect((control('PROFILE.FIRST_NAME') as HTMLInputElement).disabled).toBe(true);
     expect(root.querySelector('.actions-bar button')).toBeNull();
-    expect(root.querySelector('.actions a')?.textContent).toBe('USERS.FORM.BACK');
+    expect(root.querySelector('.page-actions a')?.textContent).toBe('USERS.FORM.BACK');
   });
 });
 
@@ -715,7 +715,7 @@ describe('UserForm: creation', () => {
   it('keeps the submit label for a creation and offers cancel', async () => {
     const { save, root } = await render(NEW);
     expect(save()!.textContent?.trim()).toBe('USERS.FORM.CREATE');
-    expect(root.querySelector('.actions a')?.textContent).toBe('COMMON.CANCEL');
+    expect(root.querySelector('.page-actions a')?.textContent).toBe('COMMON.CANCEL');
     expect(save()!.disabled).toBe(false);
   });
 });

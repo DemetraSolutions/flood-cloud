@@ -3,7 +3,6 @@ import { FormField } from '@angular/forms/signals';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { LogoModel } from './company-model';
-import { CompanySave } from './company-save';
 import { CompanyState } from './company-state';
 import { LogoSlot } from './logo-slot';
 
@@ -13,7 +12,7 @@ import { LogoSlot } from './logo-slot';
  */
 @Component({
   selector: 'fc-company-media',
-  imports: [CompanySave, FormField, LogoSlot, TextField, TPipe],
+  imports: [FormField, LogoSlot, TextField, TPipe],
   templateUrl: './company-media.html',
   styleUrl: './company-section.css',
 })

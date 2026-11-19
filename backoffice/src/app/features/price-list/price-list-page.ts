@@ -1,3 +1,4 @@
+import { PageHeader } from '../../shared/ui/page-header/page-header';
 import { Component, computed, inject, linkedSignal, resource, signal } from '@angular/core';
 import {
   applyEach,
@@ -50,7 +51,7 @@ function toModel(list: PriceList | undefined): PriceFormModel {
  */
 @Component({
   selector: 'fc-price-list-page',
-  imports: [Button, ErrorState, FormError, FormField, TextField, TPipe],
+  imports: [Button, ErrorState, FormError, FormField, PageHeader, TextField, TPipe],
   templateUrl: './price-list-page.html',
   styleUrl: './price-list-page.css',
 })

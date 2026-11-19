@@ -1,4 +1,23 @@
-<h1>{{ (state.isNew() ? 'USERS.FORM.NEW_TITLE' : 'USERS.FORM.EDIT_TITLE') | t }}</h1>
+<fc-page-header [heading]="(state.isNew() ? 'USERS.FORM.NEW_TITLE' : 'USERS.FORM.EDIT_TITLE') | t">
+  @if (showForm()) {
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{
+        (state.canWrite() ? 'COMMON.CANCEL' : 'USERS.FORM.BACK') | t
+      }}</a>
+      @if (state.canWrite()) {
+        <button
+          fc-button
+          type="submit"
+          form="user-form"
+          [loading]="submitting()"
+          [disabled]="!state.hasChanges()"
+        >
+          {{ (state.isNew() ? 'USERS.FORM.CREATE' : 'COMMON.SAVE') | t }}
+        </button>
+      }
+    </ng-container>
+  }
+</fc-page-header>
 @if (groupId(); as ownGroup) {
   <fc-record-group [groupId]="ownGroup" />
 }
@@ -83,7 +102,7 @@
     @if (!state.canWrite() && !state.isSelf()) {
       <p class="note">{{ 'USERS.FORM.READ_ONLY' | t }}</p>
     }
-    <form novalidate (submit)="onSubmit($event)">
+    <form id="user-form" novalidate (submit)="onSubmit($event)">
       @if (failure(); as message) {
         <fc-form-error [message]="message" />
       }
@@ -165,17 +184,6 @@
       >
         <fc-user-shifts-section />
       </section>
-
-      <div class="actions">
-        @if (state.canWrite()) {
-          <button fc-button type="submit" [loading]="submitting()" [disabled]="!state.hasChanges()">
-            {{ (state.isNew() ? 'USERS.FORM.CREATE' : 'COMMON.SAVE') | t }}
-          </button>
-        }
-        <a [routerLink]="listRoute()">{{
-          (state.canWrite() ? 'COMMON.CANCEL' : 'USERS.FORM.BACK') | t
-        }}</a>
-      </div>
     </form>
   }
 }

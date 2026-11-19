@@ -11,48 +11,49 @@
 } @else {
   @let place = state.place();
   @if (state.isNew() || place) {
-    <header class="page-header">
-      <h1>{{ state.isNew() ? ('PLACES.NEW_TITLE' | t) : place?.name }}</h1>
+    <fc-page-header [heading]="state.isNew() ? ('PLACES.NEW_TITLE' | t) : (place?.name ?? '')">
       @if (place?.trashed) {
         <fc-status-badge tone="danger">{{ 'PLACES.STATUS.TRASHED' | t }}</fc-status-badge>
       } @else if (place?.license.status === 'disabled') {
         <fc-status-badge tone="warning">{{ 'PLACES.STATUS.DISABLED' | t }}</fc-status-badge>
       }
-      @if (state.canWrite()) {
-        <button
-          fc-button
-          [loading]="state.saving()"
-          [disabled]="!state.isNew() && !state.anyDirty()"
-          (click)="state.save()"
-        >
-          {{ (state.isNew() ? 'PLACES.CREATE' : 'COMMON.SAVE') | t }}
-        </button>
-      }
-      @if (state.isPrivileged() && !state.isNew()) {
-        <fc-actions-menu
-          [text]="'PLACES.TRANSFER.MENU' | t"
-          [label]="'PLACES.TRANSFER.MENU_LABEL' | t"
-        >
-          <button fc-button variant="ghost" (click)="download()">
-            {{ 'PLACES.TRANSFER.DOWNLOAD' | t }}
-          </button>
-          @if (state.canWrite()) {
-            <button fc-button variant="ghost" (click)="fileChooser.click()">
-              {{ 'PLACES.TRANSFER.UPLOAD' | t }}
+      <ng-container fcPageActions>
+        @if (state.isPrivileged() && !state.isNew()) {
+          <fc-actions-menu
+            [text]="'PLACES.TRANSFER.MENU' | t"
+            [label]="'PLACES.TRANSFER.MENU_LABEL' | t"
+          >
+            <button fc-button variant="ghost" (click)="download()">
+              {{ 'PLACES.TRANSFER.DOWNLOAD' | t }}
             </button>
-          }
-        </fc-actions-menu>
-        <input
-          #fileChooser
-          class="file-input"
-          type="file"
-          accept=".json,application/json"
-          tabindex="-1"
-          [attr.aria-label]="'PLACES.TRANSFER.UPLOAD' | t"
-          (change)="upload($event)"
-        />
-      }
-    </header>
+            @if (state.canWrite()) {
+              <button fc-button variant="ghost" (click)="fileChooser.click()">
+                {{ 'PLACES.TRANSFER.UPLOAD' | t }}
+              </button>
+            }
+          </fc-actions-menu>
+          <input
+            #fileChooser
+            class="file-input"
+            type="file"
+            accept=".json,application/json"
+            tabindex="-1"
+            [attr.aria-label]="'PLACES.TRANSFER.UPLOAD' | t"
+            (change)="upload($event)"
+          />
+        }
+        @if (state.canWrite()) {
+          <button
+            fc-button
+            [loading]="state.saving()"
+            [disabled]="!state.isNew() && !state.anyDirty()"
+            (click)="state.save()"
+          >
+            {{ (state.isNew() ? 'PLACES.CREATE' : 'COMMON.SAVE') | t }}
+          </button>
+        }
+      </ng-container>
+    </fc-page-header>
     <fc-record-group [groupId]="groupId()" />
 
     @if (!state.canWrite()) {

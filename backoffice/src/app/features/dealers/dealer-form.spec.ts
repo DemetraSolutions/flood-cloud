@@ -467,7 +467,7 @@ describe('DealerForm: detail', () => {
     expect(root.textContent).toContain('DEALERS.FORM.READ_ONLY');
     expect(save()).toBeNull();
     expect(root.querySelector<HTMLInputElement>('form input')!.disabled).toBe(true);
-    expect(root.querySelector('.actions a')?.textContent).toBe('DEALERS.FORM.BACK');
+    expect(root.querySelector('.page-actions a')?.textContent).toBe('DEALERS.FORM.BACK');
   });
 
   it('shows the load error with a link back, and retries', async () => {

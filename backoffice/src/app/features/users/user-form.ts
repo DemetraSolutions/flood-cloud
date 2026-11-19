@@ -1,3 +1,4 @@
+import { PageHeader } from '../../shared/ui/page-header/page-header';
 import { RecordGroup } from '../groups/record-group';
 import {
   afterNextRender,
@@ -53,6 +54,7 @@ export type UserSection = 'profile' | 'access' | 'scope' | 'permissions' | 'pos'
 @Component({
   selector: 'fc-user-form',
   imports: [
+    PageHeader,
     RecordGroup,
     Button,
     Can,
@@ -92,6 +94,13 @@ export class UserForm {
     this.state.area().kind === 'platform'
       ? ['/users']
       : this.groups.listRoute(this.groupId() as string, 'users'),
+  );
+  /** Whether the form is on the page (loaded, or a new user): the header offers its actions. */
+  protected readonly showForm = computed(
+    () =>
+      !this.state.failed() &&
+      !this.state.loading() &&
+      (this.state.isNew() || this.state.user() !== null),
   );
   protected readonly failure = signal<string | null>(null);
   protected readonly submitting = computed(() => this.userForm().submitting());

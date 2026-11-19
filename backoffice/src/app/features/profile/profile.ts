@@ -1,3 +1,4 @@
+import { PageHeader } from '../../shared/ui/page-header/page-header';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, inject, linkedSignal, signal } from '@angular/core';
 import {
@@ -133,6 +134,7 @@ export function buildProfilePatch(model: ProfileModel, profile: Profile | null):
 @Component({
   selector: 'fc-profile',
   imports: [
+    PageHeader,
     AvatarField,
     Button,
     FormError,

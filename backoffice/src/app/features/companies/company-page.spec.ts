@@ -16,7 +16,7 @@ import { AppConfig } from '../../core/config/app-config';
 import { GroupContext } from '../../core/groups/group-context';
 
 const NAME = 'COMPANIES.GENERAL.NAME';
-const SAVE_ALL = 'COMPANIES.SAVE_ALL';
+const SAVE = 'COMMON.SAVE';
 const IBAN = 'COMPANIES.BANKS.IBAN {"number":1}';
 const PEC = 'COMPANIES.E_INVOICING.PEC';
 
@@ -68,12 +68,12 @@ async function fresh(options: Parameters<typeof renderCompany>[0] = {}) {
 
 describe('CompanyPage', () => {
   describe('header', () => {
-    it('shows the name with "Salva tutto" disabled until something changes', async () => {
+    it('shows the name with "Salva" disabled until something changes', async () => {
       const { root, button, type } = await render();
       expect(root.querySelector('h1')?.textContent).toBe('Azienda Esempio Srl');
-      expect(button(SAVE_ALL)?.disabled).toBe(true);
+      expect(button(SAVE)?.disabled).toBe(true);
       await type(NAME, 'Altro');
-      expect(button(SAVE_ALL)?.disabled).toBe(false);
+      expect(button(SAVE)?.disabled).toBe(false);
     });
 
     it('tells a company in the trash or disabled', async () => {
@@ -88,7 +88,7 @@ describe('CompanyPage', () => {
       const { button, text } = await render({
         permissions: ['companies:read', 'groups:read', 'profile:read'],
       });
-      expect(button(SAVE_ALL)).toBeUndefined();
+      expect(button(SAVE)).toBeUndefined();
       expect(text()).toContain('COMPANIES.READ_ONLY');
     });
 
@@ -136,9 +136,7 @@ describe('CompanyPage', () => {
       expect(state.textContent).toContain('ERRORS.API.NOT_FOUND');
       expect(state.textContent).toContain('r-1');
       // No working group: the way back is the cross-group list.
-      expect(root.querySelector<HTMLAnchorElement>('p a')?.getAttribute('href')).toBe(
-        '/companies',
-      );
+      expect(root.querySelector<HTMLAnchorElement>('p a')?.getAttribute('href')).toBe('/companies');
       state.querySelector('button')!.click();
       await view();
       backend()
@@ -244,7 +242,7 @@ describe('CompanyPage', () => {
       await type(NAME, 'Nuova Srl');
       await goTo('bank-accounts');
       await type('COMPANIES.BANKS.NAME {"number":1}', 'Altra banca');
-      await click(SAVE_ALL);
+      await click(SAVE);
       const req = backend().expectOne(COMPANY_URL);
       expect(req.request.method).toBe('PATCH');
       expect(req.request.headers.get('If-Match')).toBe(ETAG);
@@ -276,28 +274,32 @@ describe('CompanyPage', () => {
       expect(control(NAME).value).toBe('Nuova Srl');
     });
 
-    it('saves a tab on its own and keeps the drafts of the others', async () => {
-      const { type, goTo, click, text, view, control } = await render();
+    it('saves every changed tab at once, leaves nothing unsaved and uses the new version next', async () => {
+      const { type, goTo, click, text, view, control, button } = await render();
       await type(NAME, 'Bozza Srl');
       await goTo('e-invoicing');
       await type(PEC, 'nuova@pec.it');
-      await click('COMMON.SAVE');
-      const req = backend().expectOne(`${COMPANY_URL}/e-invoicing`);
-      const saved = fakeCompany();
+      await click(SAVE);
+      const req = backend().expectOne(COMPANY_URL);
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.headers.get('If-Match')).toBe(ETAG);
+      expect(Object.keys(req.request.body as object).sort()).toEqual(['eInvoicing', 'name']);
+      const saved = fakeCompany({ name: 'Bozza Srl' });
       req.flush(
         { data: { ...saved, eInvoicing: { ...saved.eInvoicing, pec: 'nuova@pec.it' } } },
         { headers: { ETag: '"v2"' } },
       );
       await view();
-      expect(text()).toContain('COMPANIES.UNSAVED');
+      expect(text()).not.toContain('COMPANIES.UNSAVED');
+      expect(button(SAVE)?.disabled).toBe(true);
       await goTo(COMPANY);
       expect(control(NAME).value).toBe('Bozza Srl');
-      // The next save uses the new version.
-      await click(SAVE_ALL);
+      await type(NAME, 'Ancora');
+      await click(SAVE);
       const next = backend().expectOne(COMPANY_URL);
       expect(next.request.headers.get('If-Match')).toBe('"v2"');
-      expect(next.request.body).toEqual({ name: 'Bozza Srl' });
-      next.flush({ data: fakeCompany({ name: 'Bozza Srl' }) }, { headers: { ETag: '"v3"' } });
+      expect(next.request.body).toEqual({ name: 'Ancora' });
+      next.flush({ data: fakeCompany({ name: 'Ancora' }) }, { headers: { ETag: '"v3"' } });
       await view();
     });
 
@@ -307,7 +309,7 @@ describe('CompanyPage', () => {
       await goTo('bank-accounts');
       await type(IBAN, '');
       await goTo(COMPANY);
-      await click(SAVE_ALL);
+      await click(SAVE);
       await view();
       await settle();
       await view();
@@ -321,7 +323,7 @@ describe('CompanyPage', () => {
       await type(NAME, 'Nuova Srl');
       await goTo('e-invoicing');
       await type(PEC, 'x@y.it');
-      await click(SAVE_ALL);
+      await click(SAVE);
       backend()
         .expectOne(COMPANY_URL)
         .flush(
@@ -344,7 +346,7 @@ describe('CompanyPage', () => {
       await type(NAME, 'Bozza Srl');
       await goTo('e-invoicing');
       await type(PEC, 'x@y.it');
-      await click(SAVE_ALL);
+      await click(SAVE);
       backend()
         .expectOne(COMPANY_URL)
         .flush(errorBody('PRECONDITION_FAILED'), { status: 412, statusText: 'x' });

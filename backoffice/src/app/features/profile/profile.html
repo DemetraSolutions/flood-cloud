@@ -1,4 +1,18 @@
-<h1>{{ 'PROFILE.TITLE' | t }}</h1>
+<fc-page-header [heading]="'PROFILE.TITLE' | t">
+  @if (session.me()) {
+    <ng-container fcPageActions>
+      <button
+        fc-button
+        type="submit"
+        form="profile-form"
+        [loading]="submitting()"
+        [disabled]="!hasChanges()"
+      >
+        {{ 'COMMON.SAVE' | t }}
+      </button>
+    </ng-container>
+  }
+</fc-page-header>
 
 @if (session.me(); as me) {
   <section aria-labelledby="account-heading">
@@ -31,7 +45,7 @@
 
   <section aria-labelledby="personal-heading">
     <h2 id="personal-heading">{{ 'PROFILE.PERSONAL' | t }}</h2>
-    <form novalidate (submit)="onSubmit($event)">
+    <form id="profile-form" novalidate (submit)="onSubmit($event)">
       @if (failure(); as message) {
         <fc-form-error [message]="message" />
       }
@@ -91,11 +105,6 @@
           <fc-pos-options-fields [options]="options" [favorites]="favorites()" />
         </section>
       }
-      <div class="actions">
-        <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
-          {{ 'COMMON.SAVE' | t }}
-        </button>
-      </div>
     </form>
   </section>
 

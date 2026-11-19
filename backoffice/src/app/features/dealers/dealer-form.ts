@@ -1,3 +1,4 @@
+import { PageHeader } from '../../shared/ui/page-header/page-header';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, effect, inject, input, linkedSignal, signal } from '@angular/core';
 import {
@@ -69,6 +70,7 @@ const PASSWORD_MAX = 128;
 @Component({
   selector: 'fc-dealer-form',
   imports: [
+    PageHeader,
     Button,
     DealerPriceOverrides,
     ErrorState,
@@ -194,6 +196,10 @@ export class DealerForm {
   });
 
   protected readonly patch = computed(() => buildCompanyPatch(this.model(), this.dealer()));
+  /** Whether the form is on the page (loaded, or a new dealer): the header offers its actions. */
+  protected readonly showForm = computed(
+    () => !this.failed() && !this.loading() && (this.isNew() || this.dealer() !== null),
+  );
   protected readonly hasChanges = computed(
     () => this.isNew() || Object.keys(this.patch()).length > 0,
   );

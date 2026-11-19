@@ -1,6 +1,12 @@
-<header class="page-header">
-  <h1>{{ 'PRICE_LIST.TITLE' | t }}</h1>
-</header>
+<fc-page-header [heading]="'PRICE_LIST.TITLE' | t">
+  @if (ready() && !failed()) {
+    <ng-container fcPageActions>
+      <button fc-button type="submit" form="price-list-form" [loading]="submitting()">
+        {{ 'COMMON.SAVE' | t }}
+      </button>
+    </ng-container>
+  }
+</fc-page-header>
 <p class="hint">{{ 'PRICE_LIST.HINT' | t }}</p>
 
 @if (failed()) {
@@ -19,7 +25,7 @@
       </button>
     </section>
   }
-  <form novalidate (submit)="onSubmit($event)">
+  <form id="price-list-form" novalidate (submit)="onSubmit($event)">
     @if (failure(); as message) {
       <fc-form-error [message]="message" />
     }
@@ -77,10 +83,6 @@
         }
       </div>
     </fieldset>
-
-    <div class="actions">
-      <button fc-button type="submit" [loading]="submitting()">{{ 'COMMON.SAVE' | t }}</button>
-    </div>
   </form>
 } @else if (loading()) {
   <p role="status">{{ 'COMMON.LOADING' | t }}</p>

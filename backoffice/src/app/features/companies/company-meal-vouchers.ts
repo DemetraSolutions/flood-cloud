@@ -4,7 +4,6 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { Button } from '../../shared/ui/button/button';
 import { TextField } from '../../shared/ui/text-field/text-field';
-import { CompanySave } from './company-save';
 import { CompanyState } from './company-state';
 
 /** Most issuers a company can have, and most cuts each issuer can have. */
@@ -17,7 +16,7 @@ export const MAX_CUTS = 50;
  */
 @Component({
   selector: 'fc-company-meal-vouchers',
-  imports: [Button, CompanySave, FormField, TextField, TPipe],
+  imports: [Button, FormField, TextField, TPipe],
   templateUrl: './company-meal-vouchers.html',
   styleUrl: './company-section.css',
 })

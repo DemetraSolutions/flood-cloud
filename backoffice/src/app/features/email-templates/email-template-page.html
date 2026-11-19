@@ -11,12 +11,24 @@
 } @else if (loading()) {
   <p role="status">{{ 'COMMON.LOADING' | t }}</p>
 } @else {
-  <header class="page-header">
-    <h1>
-      {{ (isNew() ? 'EMAIL_TEMPLATES.FORM.NEW_TITLE' : 'EMAIL_TEMPLATES.FORM.EDIT_TITLE') | t }}
-    </h1>
-    <a [routerLink]="listRoute()">{{ 'EMAIL_TEMPLATES.FORM.BACK' | t }}</a>
-  </header>
+  <fc-page-header
+    [heading]="(isNew() ? 'EMAIL_TEMPLATES.FORM.NEW_TITLE' : 'EMAIL_TEMPLATES.FORM.EDIT_TITLE') | t"
+  >
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{ 'EMAIL_TEMPLATES.FORM.BACK' | t }}</a>
+      @if (canWrite()) {
+        <button
+          fc-button
+          type="submit"
+          form="email-template-form"
+          [loading]="submitting()"
+          [disabled]="!hasChanges()"
+        >
+          {{ (isNew() ? 'EMAIL_TEMPLATES.FORM.CREATE' : 'COMMON.SAVE') | t }}
+        </button>
+      }
+    </ng-container>
+  </fc-page-header>
   <fc-record-group [groupId]="groupId()" />
 
   @if (template(); as current) {
@@ -26,7 +38,7 @@
   }
 
   <div class="layout">
-    <form novalidate (submit)="onSubmit($event)" class="editor">
+    <form id="email-template-form" novalidate (submit)="onSubmit($event)" class="editor">
       @if (failure(); as message) {
         <fc-form-error [message]="message" />
         @if (stale()) {
@@ -76,13 +88,6 @@
           <code>{{ placeholder }}</code>
         }
       </p>
-      @if (canWrite()) {
-        <div class="actions">
-          <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
-            {{ (isNew() ? 'EMAIL_TEMPLATES.FORM.CREATE' : 'COMMON.SAVE') | t }}
-          </button>
-        </div>
-      }
     </form>
 
     <section class="preview" aria-labelledby="preview-heading">

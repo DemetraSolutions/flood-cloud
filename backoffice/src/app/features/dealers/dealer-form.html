@@ -1,4 +1,21 @@
-<h1>{{ (isNew() ? 'DEALERS.FORM.NEW_TITLE' : 'DEALERS.FORM.EDIT_TITLE') | t }}</h1>
+<fc-page-header [heading]="(isNew() ? 'DEALERS.FORM.NEW_TITLE' : 'DEALERS.FORM.EDIT_TITLE') | t">
+  @if (showForm()) {
+    <ng-container fcPageActions>
+      <a routerLink="/dealers">{{ (canWrite() ? 'COMMON.CANCEL' : 'DEALERS.FORM.BACK') | t }}</a>
+      @if (canWrite()) {
+        <button
+          fc-button
+          type="submit"
+          form="dealer-form"
+          [loading]="submitting()"
+          [disabled]="!hasChanges()"
+        >
+          {{ (isNew() ? 'DEALERS.FORM.CREATE' : 'COMMON.SAVE') | t }}
+        </button>
+      }
+    </ng-container>
+  }
+</fc-page-header>
 
 @if (failed()) {
   <fc-error-state
@@ -54,7 +71,7 @@
     @if (!canWrite()) {
       <p class="note">{{ 'DEALERS.FORM.READ_ONLY' | t }}</p>
     }
-    <form novalidate (submit)="onSubmit($event)">
+    <form id="dealer-form" novalidate (submit)="onSubmit($event)">
       @if (failure(); as message) {
         <fc-form-error [message]="message" />
       }
@@ -202,15 +219,6 @@
           />
         </fieldset>
       }
-
-      <div class="actions">
-        @if (canWrite()) {
-          <button fc-button type="submit" [loading]="submitting()" [disabled]="!hasChanges()">
-            {{ (isNew() ? 'DEALERS.FORM.CREATE' : 'COMMON.SAVE') | t }}
-          </button>
-        }
-        <a routerLink="/dealers">{{ (canWrite() ? 'COMMON.CANCEL' : 'DEALERS.FORM.BACK') | t }}</a>
-      </div>
     </form>
   }
 

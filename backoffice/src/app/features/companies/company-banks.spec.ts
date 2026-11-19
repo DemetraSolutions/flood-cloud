@@ -2,7 +2,10 @@ import { backend, errorBody, settle } from '../../../testing/api';
 import { COMPANY_URL, ETAG, fakeCompany, renderCompany } from '../../../testing/companies';
 
 const n = (key: string, number: number) => `COMPANIES.BANKS.${key} {"number":${number}}`;
-const URL = `${COMPANY_URL}/bank-accounts`;
+const URL = COMPANY_URL;
+/** The block the page sent: the one save puts every changed section in one `PATCH`. */
+const blockOf = (req: { request: { body: unknown } }) =>
+  (req.request.body as Record<string, unknown>)['bankAccounts'];
 const SAVE = 'COMMON.SAVE';
 
 afterEach(() => {
@@ -69,9 +72,9 @@ describe('CompanyBanks', () => {
     await type(n('BIC', 2), 'COBADEFF');
     await click(SAVE);
     const req = backend().expectOne(URL);
-    expect(req.request.method).toBe('PUT');
+    expect(req.request.method).toBe('PATCH');
     expect(req.request.headers.get('If-Match')).toBe(ETAG);
-    expect(req.request.body).toEqual([
+    expect(blockOf(req)).toEqual([
       {
         id: '6a1b00000000000000000001',
         name: 'Banca',

@@ -3,7 +3,10 @@ import { COMPANY_URL, ETAG, fakeCompany, renderCompany } from '../../../testing/
 
 const name = (n: number) => `COMPANIES.VOUCHERS.NAME {"number":${n}}`;
 const cut = (n: number, c: number) => `COMPANIES.VOUCHERS.CUT {"number":${n},"cut":${c}}`;
-const URL = `${COMPANY_URL}/meal-voucher-issuers`;
+const URL = COMPANY_URL;
+/** The block the page sent: the one save puts every changed section in one `PATCH`. */
+const blockOf = (req: { request: { body: unknown } }) =>
+  (req.request.body as Record<string, unknown>)['mealVoucherIssuers'];
 const SAVE = 'COMMON.SAVE';
 
 afterEach(() => {
@@ -53,9 +56,9 @@ describe('CompanyMealVouchers', () => {
     await type(cut(2, 1), '7.5');
     await click(SAVE);
     const req = backend().expectOne(URL);
-    expect(req.request.method).toBe('PUT');
+    expect(req.request.method).toBe('PATCH');
     expect(req.request.headers.get('If-Match')).toBe(ETAG);
-    expect(req.request.body).toEqual([
+    expect(blockOf(req)).toEqual([
       { id: '6a1c00000000000000000001', name: 'Buoni Pasto', cuts: [5, 10, null, null] },
       { name: 'Ticket', cuts: [7.5] },
     ]);

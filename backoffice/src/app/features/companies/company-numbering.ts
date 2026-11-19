@@ -6,7 +6,6 @@ import { Button } from '../../shared/ui/button/button';
 import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { Select } from '../../shared/ui/select/select';
 import { TextField } from '../../shared/ui/text-field/text-field';
-import { CompanySave } from './company-save';
 import { CompanyState } from './company-state';
 
 /** Most series an invoice numbering can have. */
@@ -19,7 +18,7 @@ export const MAX_NUMBERING_VALUES = 50;
  */
 @Component({
   selector: 'fc-company-numbering',
-  imports: [Button, Checkbox, CompanySave, FormField, Select, TextField, TPipe],
+  imports: [Button, Checkbox, FormField, Select, TextField, TPipe],
   templateUrl: './company-numbering.html',
   styleUrl: './company-section.css',
 })

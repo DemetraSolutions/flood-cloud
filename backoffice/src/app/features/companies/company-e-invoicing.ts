@@ -6,7 +6,6 @@ import { Countries } from '../../core/reference/countries';
 import { Select } from '../../shared/ui/select/select';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { withCurrent } from './company-options';
-import { CompanySave } from './company-save';
 import { CompanyState } from './company-state';
 
 /** Tax regimes of the electronic invoice (`RF03` was repealed). */
@@ -39,7 +38,7 @@ export const TAX_REGIMES = [
  */
 @Component({
   selector: 'fc-company-e-invoicing',
-  imports: [CompanySave, FormField, Select, TextField, TPipe],
+  imports: [FormField, Select, TextField, TPipe],
   templateUrl: './company-e-invoicing.html',
   styleUrl: './company-section.css',
 })

@@ -3,23 +3,13 @@ import { inject, Service } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { ApiData } from '../../core/api/api.types';
 import { ReferenceStore } from '../../core/reference/reference-store';
-import { CompanyRecord, CompanySection } from './company.types';
+import { CompanyRecord } from './company.types';
 
 /** A company with the version (`ETag`) the next write must present in `If-Match`. */
 export interface VersionedCompany {
   readonly company: CompanyRecord;
   readonly etag: string | null;
 }
-
-/** URL path of the `PUT` of each block. */
-const BLOCK_PATHS: Readonly<Record<Exclude<CompanySection, 'general'>, string>> = {
-  eInvoicing: 'e-invoicing',
-  invoiceNumbering: 'invoice-numbering',
-  bankAccounts: 'bank-accounts',
-  mealVoucherIssuers: 'meal-voucher-issuers',
-  customerApp: 'customer-app',
-  media: 'media',
-};
 
 /**
  * Writes on the companies of a group (`/v1/groups/{groupId}/companies`); reads use
@@ -74,26 +64,6 @@ export class CompaniesApi {
         headers: ifMatch(etag),
         observe: 'response',
       }),
-      before,
-    );
-  }
-
-  /** Replaces one block of the company. */
-  async replace(
-    groupId: string,
-    companyId: string,
-    section: Exclude<CompanySection, 'general'>,
-    body: unknown,
-    etag: string | null,
-    before: CompanyRecord,
-  ): Promise<VersionedCompany> {
-    return this.write(
-      groupId,
-      this.http.put<ApiData<CompanyRecord>>(
-        `${this.companyUrl(groupId, companyId)}/${BLOCK_PATHS[section]}`,
-        body,
-        { headers: ifMatch(etag), observe: 'response' },
-      ),
       before,
     );
   }

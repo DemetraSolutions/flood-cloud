@@ -6,7 +6,6 @@ import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { Select } from '../../shared/ui/select/select';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { withCurrent } from './company-options';
-import { CompanySave } from './company-save';
 import { CompanyState } from './company-state';
 import { ECOMMERCE_FLAGS, EcommerceFlag } from './company.types';
 
@@ -17,7 +16,7 @@ import { ECOMMERCE_FLAGS, EcommerceFlag } from './company.types';
  */
 @Component({
   selector: 'fc-company-customer-app',
-  imports: [Checkbox, CompanySave, FormField, Select, TextField, TPipe],
+  imports: [Checkbox, FormField, Select, TextField, TPipe],
   templateUrl: './company-customer-app.html',
   styleUrl: './company-section.css',
 })

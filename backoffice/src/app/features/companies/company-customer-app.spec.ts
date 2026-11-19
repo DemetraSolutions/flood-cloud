@@ -6,7 +6,10 @@ const REMAINING = 'COMPANIES.CUSTOMER_APP.REMAINING_QUANTITY';
 const STATUS = 'COMPANIES.CUSTOMER_APP.STATUS';
 const minimum = (currency: string) =>
   `COMPANIES.CUSTOMER_APP.MINIMUM_FOR {"currency":"${currency}"}`;
-const URL = `${COMPANY_URL}/customer-app`;
+const URL = COMPANY_URL;
+/** The block the page sent: the one save puts every changed section in one `PATCH`. */
+const blockOf = (req: { request: { body: unknown } }) =>
+  (req.request.body as Record<string, unknown>)['customerApp'];
 const SAVE = 'COMMON.SAVE';
 
 afterEach(() => {
@@ -100,9 +103,9 @@ describe('CompanyCustomerApp', () => {
     await toggle('COMPANIES.CUSTOMER_APP.FLAG.CATALOG_MODE', true);
     await click(SAVE);
     const req = backend().expectOne(URL);
-    expect(req.request.method).toBe('PUT');
+    expect(req.request.method).toBe('PATCH');
     expect(req.request.headers.get('If-Match')).toBe(ETAG);
-    expect(req.request.body).toMatchObject({
+    expect(blockOf(req)).toMatchObject({
       enableLoginSignup: true,
       ecommerce: {
         status: false,
@@ -113,7 +116,7 @@ describe('CompanyCustomerApp', () => {
         showProductAvailability: false,
       },
     });
-    expect(Object.keys((req.request.body as { ecommerce: object }).ecommerce)).toHaveLength(27);
+    expect(Object.keys((blockOf(req) as { ecommerce: object }).ecommerce)).toHaveLength(27);
     req.flush({ data: fakeCompany() }, { headers: { ETag: '"v2"' } });
     await view();
     expect(toasts()).toEqual(['COMPANIES.SAVED']);

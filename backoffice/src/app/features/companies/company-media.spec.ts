@@ -15,7 +15,10 @@ const URL_LABEL = 'COMPANIES.MEDIA.EXTERNAL_URL';
 const STORED_ID = '6734a1c2e9b1d4a0012ab3f1';
 const STORED_URL = `${API}/v1/groups/${GROUP}/media/images/${STORED_ID}`;
 const IMAGES = `${API}/v1/groups/${GROUP}/media/images`;
-const URL = `${COMPANY_URL}/media`;
+const URL = COMPANY_URL;
+/** The block the page sent: the one save puts every changed section in one `PATCH`. */
+const blockOf = (req: { request: { body: unknown } }) =>
+  (req.request.body as Record<string, unknown>)['media'];
 const SAVE = 'COMMON.SAVE';
 
 afterEach(() => {
@@ -120,9 +123,9 @@ describe('CompanyMedia', () => {
     await type(URL_LABEL, 'https://esempio.it/logo.png');
     await click(SAVE);
     const req = backend().expectOne(URL);
-    expect(req.request.method).toBe('PUT');
+    expect(req.request.method).toBe('PATCH');
     expect(req.request.headers.get('If-Match')).toBe(ETAG);
-    expect(req.request.body).toEqual({
+    expect(blockOf(req)).toEqual({
       internalFileName: 'logo-bar.png',
       externalUrl: 'https://esempio.it/logo.png',
       customersAppLogoLight: null,
@@ -152,7 +155,7 @@ describe('CompanyMedia', () => {
     expect(preview(1)?.src).toBe('https://files.test/s/logo.png');
     await click(SAVE);
     const req = backend().expectOne(URL);
-    expect(req.request.body).toMatchObject({
+    expect(blockOf(req)).toMatchObject({
       customersAppLogoLight: fakeCompany().media.customersAppLogoLight,
       customersAppLogoDark: { imageId: fakeImage().id },
     });

@@ -11,24 +11,25 @@
 } @else {
   @let company = state.company();
   @if (state.isNew() || company) {
-    <header class="page-header">
-      <h1>{{ state.isNew() ? ('COMPANIES.NEW_TITLE' | t) : company?.name }}</h1>
+    <fc-page-header [heading]="state.isNew() ? ('COMPANIES.NEW_TITLE' | t) : (company?.name ?? '')">
       @if (company?.trashed) {
         <fc-status-badge tone="danger">{{ 'COMPANIES.STATUS.TRASHED' | t }}</fc-status-badge>
       } @else if (company?.status === 'disabled') {
         <fc-status-badge tone="warning">{{ 'COMPANIES.STATUS.DISABLED' | t }}</fc-status-badge>
       }
-      @if (!state.isNew() && state.canWrite()) {
-        <button
-          fc-button
-          [loading]="state.saving()"
-          [disabled]="!state.anyDirty()"
-          (click)="state.save('all')"
-        >
-          {{ 'COMPANIES.SAVE_ALL' | t }}
-        </button>
-      }
-    </header>
+      <ng-container fcPageActions>
+        @if (state.canWrite()) {
+          <button
+            fc-button
+            [loading]="state.saving()"
+            [disabled]="!state.isNew() && !state.anyDirty()"
+            (click)="state.save()"
+          >
+            {{ (state.isNew() ? 'COMPANIES.CREATE' : 'COMMON.SAVE') | t }}
+          </button>
+        }
+      </ng-container>
+    </fc-page-header>
     <fc-record-group [groupId]="groupId()" />
 
     @if (!state.canWrite()) {

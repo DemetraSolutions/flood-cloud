@@ -6,7 +6,10 @@ const PEC = 'COMPANIES.E_INVOICING.PEC';
 const CAPITAL = 'COMPANIES.E_INVOICING.REA_SHARE_CAPITAL';
 const OFFICE = 'COMPANIES.E_INVOICING.REA_OFFICE';
 const COUNTRY = 'COMPANIES.E_INVOICING.TRANSMITTER_COUNTRY';
-const URL = `${COMPANY_URL}/e-invoicing`;
+const URL = COMPANY_URL;
+/** The block the page sent: the one save puts every changed section in one `PATCH`. */
+const blockOf = (req: { request: { body: unknown } }) =>
+  (req.request.body as Record<string, unknown>)['eInvoicing'];
 const SAVE = 'COMMON.SAVE';
 
 afterEach(() => {
@@ -95,9 +98,9 @@ describe('CompanyEInvoicing', () => {
     await type(OFFICE, 'RM');
     await click(SAVE);
     const req = backend().expectOne(URL);
-    expect(req.request.method).toBe('PUT');
+    expect(req.request.method).toBe('PATCH');
     expect(req.request.headers.get('If-Match')).toBe(ETAG);
-    expect(req.request.body).toEqual({
+    expect(blockOf(req)).toEqual({
       hub: null,
       transmitter: { country: 'IT', code: '01879020517' },
       eori: null,

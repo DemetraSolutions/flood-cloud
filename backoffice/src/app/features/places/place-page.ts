@@ -1,6 +1,16 @@
+import { PageHeader } from '../../shared/ui/page-header/page-header';
 import { GroupContext } from '../../core/groups/group-context';
 import { RecordGroup } from '../groups/record-group';
-import { Component, computed, DOCUMENT, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  Component,
+  computed,
+  DOCUMENT,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { GroupFeatures } from '../../core/groups/group-features';
@@ -27,6 +37,7 @@ import { exportSettings, importSettings, MAX_IMPORT_BYTES } from './settings-tra
 @Component({
   selector: 'fc-place-page',
   imports: [
+    PageHeader,
     RecordGroup,
     ActionsMenu,
     Button,

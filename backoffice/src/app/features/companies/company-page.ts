@@ -1,3 +1,4 @@
+import { PageHeader } from '../../shared/ui/page-header/page-header';
 import { GroupContext } from '../../core/groups/group-context';
 import { RecordGroup } from '../groups/record-group';
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
@@ -22,6 +23,7 @@ import { CompanyState } from './company-state';
 @Component({
   selector: 'fc-company-page',
   imports: [
+    PageHeader,
     RecordGroup,
     Button,
     ConfirmDialog,

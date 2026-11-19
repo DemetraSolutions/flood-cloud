@@ -42,7 +42,6 @@ import { apiErrorOf } from '../profile/sessions';
 import { CompaniesApi, VersionedCompany } from './companies-api';
 import { hasFieldDetails, isStale, resolveField } from './company-errors';
 import {
-  blockBody,
   CompanyModel,
   createBody,
   dirtySections,
@@ -70,18 +69,15 @@ interface Source {
 /** Reads a tab asks the state for when it is shown. */
 export type CompanyLookup = 'countries' | 'currencies' | 'priceLists' | 'hubs';
 
-/** What a save sends: one section, or every section with unsaved changes. */
-export type SaveScope = CompanySection | 'all';
-
 /**
  * State of the company page, shared by its tabs (child routes): the company as the server has
  * it with its version (`ETag`), the whole form (one Signal Form with a property per tab, so
  * switching tabs loses nothing), what each tab has changed, the lookups the tabs need and the
  * saves. It is provided by the page, so every opened company has its own.
  *
- * Saving presents the version in `If-Match`: a tab saves with its own request (`PATCH` for the
- * general data, `PUT` for a block), "save all" sends the sections with changes in the unique
- * `PATCH`. A save puts back only the sections it wrote; the drafts of the others stay. `422`,
+ * The one save presents the version in `If-Match` and sends the sections with changes in a
+ * single `PATCH` (the general fields and whole blocks), or creates the company on the page of a
+ * new one. A save puts back the sections it wrote. `422`,
  * `409` and `403` errors with details land on the fields, whichever tab they are in.
  */
 @Service({ autoProvided: false })
@@ -336,37 +332,35 @@ export class CompanyState {
   }
 
   /**
-   * Saves one section, or every section with changes. Validates what it saves (the fields of
-   * the section, or the whole form) and moves the focus to the first error.
+   * The one save of the page: creates the company on the page of a new one, otherwise sends every
+   * section with changes in a single `PATCH` presenting the version (`If-Match`), so that the
+   * company is never left half saved. Validates the whole form and, when something is invalid,
+   * opens the first tab with an error and moves the focus to its first invalid field.
    *
-   * @param scope A section or `all`.
    * @returns Whether the save succeeded.
    */
-  async save(scope: SaveScope): Promise<boolean> {
-    const target = scope === 'all' ? this.form : (this.form[scope] as FieldTree<unknown>);
+  async save(): Promise<boolean> {
     this.saving.set(true);
     try {
-      return await submit(target as FieldTree<unknown>, {
-        action: () => this.send(scope),
-        onInvalid: () => void this.reveal(scope),
+      return await submit(this.form, {
+        action: () => this.send(),
+        onInvalid: () => void this.reveal(),
       });
     } finally {
       this.saving.set(false);
     }
   }
 
-  private async send(scope: SaveScope): Promise<TreeValidationResult> {
+  private async send(): Promise<TreeValidationResult> {
     this.failure.set(null);
     this.stale.set(false);
     const created = this.isNew();
     const sections: ReadonlySet<CompanySection> = created
       ? new Set(COMPANY_SECTIONS.map((section) => section.id))
-      : scope === 'all'
-        ? this.dirty()
-        : new Set([scope]);
+      : this.dirty();
     let result: VersionedCompany;
     try {
-      result = await this.request(scope, sections);
+      result = await this.request(sections);
     } catch (error) {
       return this.reject(error);
     }
@@ -382,10 +376,7 @@ export class CompanyState {
     return undefined;
   }
 
-  private request(
-    scope: SaveScope,
-    sections: ReadonlySet<CompanySection>,
-  ): Promise<VersionedCompany> {
+  private request(sections: ReadonlySet<CompanySection>): Promise<VersionedCompany> {
     const groupId = this.groupId() as string;
     const model = this.model();
     if (this.isNew()) {
@@ -393,20 +384,9 @@ export class CompanyState {
       return this.api.create(groupId, body, this.createKey.forBody(body));
     }
     const current = this.saved() as VersionedCompany;
-    const companyId = current.company.id;
-    if (scope !== 'all' && scope !== 'general') {
-      return this.api.replace(
-        groupId,
-        companyId,
-        scope,
-        blockBody(model, scope),
-        current.etag,
-        current.company,
-      );
-    }
     return this.api.patch(
       groupId,
-      companyId,
+      current.company.id,
       patchBody(model, this.baseline(), sections),
       current.etag,
       current.company,
@@ -440,12 +420,10 @@ export class CompanyState {
   }
 
   /** Opens the first tab that has an error and moves the focus to its first invalid field. */
-  private async reveal(scope: SaveScope): Promise<void> {
-    const id =
-      scope === 'all'
-        ? (COMPANY_SECTIONS.find((candidate) => this.errorCounts()[candidate.id] > 0) as Section).id
-        : scope;
-    const section = COMPANY_SECTIONS.find((candidate) => candidate.id === id) as Section;
+  private async reveal(): Promise<void> {
+    const section = COMPANY_SECTIONS.find(
+      (candidate) => this.errorCounts()[candidate.id] > 0,
+    ) as Section;
     if (!this.isNew()) {
       const base = companyRoute(this.groupId() as string, this.companyId() as string);
       await this.router.navigate([...base, section.path].filter((segment) => segment !== ''));

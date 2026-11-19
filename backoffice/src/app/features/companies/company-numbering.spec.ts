@@ -7,7 +7,10 @@ const CERVED = 'COMPANIES.NUMBERING.CERVED';
 const DISCOUNT = 'COMPANIES.NUMBERING.DISCOUNT_LINES';
 const name = (n: number) => `COMPANIES.NUMBERING.SERIES_NAME {"number":${n}}`;
 const cash = (n: number) => `COMPANIES.NUMBERING.CASH {"number":${n}}`;
-const URL = `${COMPANY_URL}/invoice-numbering`;
+const URL = COMPANY_URL;
+/** The block the page sent: the one save puts every changed section in one `PATCH`. */
+const blockOf = (req: { request: { body: unknown } }) =>
+  (req.request.body as Record<string, unknown>)['invoiceNumbering'];
 const SAVE = 'COMMON.SAVE';
 
 afterEach(() => {
@@ -74,9 +77,9 @@ describe('CompanyNumbering', () => {
     await toggle(CERVED, true);
     await click(SAVE);
     const req = backend().expectOne(URL);
-    expect(req.request.method).toBe('PUT');
+    expect(req.request.method).toBe('PATCH');
     expect(req.request.headers.get('If-Match')).toBe(ETAG);
-    expect(req.request.body).toEqual({
+    expect(blockOf(req)).toEqual({
       position: 'suffix',
       values: [
         { name: 'FE', cash: true },

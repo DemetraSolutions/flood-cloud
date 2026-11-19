@@ -5,7 +5,6 @@ import { TPipe } from '../../core/i18n/t-pipe';
 import { Button } from '../../shared/ui/button/button';
 import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { TextField } from '../../shared/ui/text-field/text-field';
-import { CompanySave } from './company-save';
 import { CompanyState } from './company-state';
 import { formatIban, hasValidIbanChecksum } from './iban';
 
@@ -19,7 +18,7 @@ export const MAX_BANK_ACCOUNTS = 20;
  */
 @Component({
   selector: 'fc-company-banks',
-  imports: [Button, Checkbox, CompanySave, FormField, TextField, TPipe],
+  imports: [Button, Checkbox, FormField, TextField, TPipe],
   templateUrl: './company-banks.html',
   styleUrl: './company-section.css',
 })
