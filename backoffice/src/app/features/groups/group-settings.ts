@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, untracked } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { Can } from '../../core/auth/can';
@@ -82,12 +82,5 @@ export class GroupSettings {
 
   constructor() {
     this.state.attach(this.groupId);
-    // The record loaded: its group becomes the working group of the selector and the menu.
-    effect(() => {
-      const group = this.state.group();
-      if (group !== null) {
-        untracked(() => this.state.adopt(group));
-      }
-    });
   }
 }

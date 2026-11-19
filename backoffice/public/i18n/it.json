@@ -256,6 +256,14 @@
     "ALL": "Tutti i gruppi",
     "CLEAR": "Mostra tutti i gruppi"
   },
+  "RECORD_GROUP": {
+    "LABEL": "Gruppo:"
+  },
+  "SEARCH_COMBOBOX": {
+    "EMPTY": "Nessun risultato.",
+    "MIN_CHARS": "Scrivi almeno {count} caratteri per cercare.",
+    "RESULTS": "{count} risultati"
+  },
   "GROUP_CHOOSER": {
     "TITLE": "Scegli un gruppo",
     "MESSAGE": "Seleziona il gruppo su cui lavorare con il selettore in alto: vedrai i suoi utenti."
@@ -1654,6 +1662,7 @@
     "FILTER": {
       "GROUP": "Gruppo",
       "ALL_GROUPS": "Tutti i gruppi",
+      "CLEAR_GROUP": "Mostra tutti i gruppi",
       "DEALER": "Rivenditore",
       "ALL_DEALERS": "Tutti i rivenditori"
     },

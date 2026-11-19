@@ -40,7 +40,10 @@ function setup(profile: Partial<Profile> = {}) {
   };
 }
 
-afterEach(() => backend().verify());
+afterEach(() => {
+  backend().verify();
+  sessionStorage.clear();
+});
 
 describe('GroupSettingsState', () => {
   it('does not read anything before the layout attached the group id', async () => {
@@ -94,29 +97,34 @@ describe('GroupSettingsState', () => {
       .flush({ data: fakeGroup({ status: 'suspended' }) });
     await settle();
     expect(state.group()?.status).toBe('suspended');
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledExactlyOnceWith(GROUP.id);
   });
 
-  it('takes the updated group, adopts it as working group and refreshes the features', async () => {
+  it('reloads without a group before the layout attached it, refreshing the working group', () => {
+    const { state, refresh } = setup();
+    state.reload();
+    expect(refresh).toHaveBeenCalledExactlyOnceWith(undefined);
+  });
+
+  it('takes the updated group, renames it when it is the working group and refreshes its features', async () => {
     const { state, attach, refresh, context } = setup();
     await attach();
     backend().expectOne(URL).flush({ data: GROUP });
     await settle();
+    context.choose({ id: GROUP.id, name: GROUP.name });
     state.apply(fakeGroup({ name: 'Nuovo nome' }));
     expect(state.group()?.name).toBe('Nuovo nome');
     expect(context.groupId()).toBe(GROUP.id);
     expect(context.groupName()).toBe('Nuovo nome');
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledExactlyOnceWith(GROUP.id);
   });
 
-  it('adopts the loaded group as working group', async () => {
-    const { state, attach, context } = setup();
+  it('does not make the loaded group the working group', async () => {
+    const { attach, context } = setup();
     await attach();
     backend().expectOne(URL).flush({ data: GROUP });
     await settle();
-    state.adopt(GROUP);
-    expect(context.groupId()).toBe(GROUP.id);
-    expect(context.groupName()).toBe(GROUP.name);
+    expect(context.groupId()).toBeNull();
   });
 
   describe('what the user may change', () => {

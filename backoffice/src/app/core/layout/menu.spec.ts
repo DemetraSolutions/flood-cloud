@@ -416,16 +416,36 @@ describe('visibleMenu', () => {
       expect(MENU.find((i) => i.id === 'places')).toMatchObject({ allRoute: '/places' });
     });
 
+    it.each([
+      ['companies', 'companies'],
+      ['companies/c1', 'companies'],
+      ['places/p1/devices', 'places'],
+      ['users', 'users'],
+      ['users/u1', 'users'],
+      ['trash', 'trash'],
+      ['email-templates/t1', 'email-templates'],
+    ])('a page /groups/:id/%s of a group other than the working one highlights %s', (path, id) => {
+      const OTHER = '665f1c2e9b1d4a0012ab34ff';
+      expect(activeFor('PSA', false, `/groups/${OTHER}/${path}`)).toEqual([id]);
+      expect(activeFor('PSA', true, `/groups/${OTHER}/${path}`)).toEqual([id]);
+    });
+
+    it('the record of a group (settings) of another group highlights Gruppi', () => {
+      expect(activeFor('PSA', false, '/groups/665f1c2e9b1d4a0012ab34ff/settings/taxes')).toEqual([
+        'groups',
+      ]);
+    });
+
     it('with a group the cross-group lists still belong to Aziende and Punti vendita', () => {
       expect(activeFor('PSA', true, '/companies')).toEqual(['companies']);
       expect(activeFor('PSA', true, '/places')).toEqual(['places']);
     });
 
-    it('on the chooser nothing is active without a valid destination, nor on group pages', () => {
+    it('on the chooser nothing is active without a valid destination', () => {
       for (const url of ['/groups', '/groups?to=evil', '/groups?to=//x', '/groups?to=']) {
         expect(activeFor('PSA', false, url)).toEqual([]);
       }
-      expect(activeFor('PSA', false, `/groups/${GROUP}/companies`)).toEqual([]);
+      expect(activeFor('PSA', false, `/groups/${GROUP}/companies`)).toEqual(['companies']);
     });
 
     it('accepts as destination only the page paths of the menu', () => {

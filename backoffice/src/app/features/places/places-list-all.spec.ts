@@ -71,9 +71,10 @@ async function render(url = '/places', profile: Partial<Profile> = {}) {
     const request = backend().expectOne((r) => r.url === LIST);
     request.flush({ data, page: { limit: 25, next: null } });
     backend().expectOne(`${API}/v1/countries`).flush(COUNTRIES);
-    backend()
-      .expectOne((r) => r.url === `${API}/v1/groups`)
-      .flush({ data: [{ id: GROUP, name: 'Gruppo Uno' }], page: { limit: 100, next: null } });
+    await view();
+    for (const request of backend().match((r) => /\/v1\/groups\/[0-9a-f]{24}$/.test(r.url))) {
+      request.flush({ data: { name: 'Gruppo Uno' } });
+    }
     for (const request of backend().match((r) => r.url === `${API}/v1/dealers`)) {
       request.flush({ data: dealers, page: { limit: 200, next: null } });
     }
@@ -120,15 +121,6 @@ describe('PlacesList across groups', () => {
     expect(headers).not.toContain('PLACES.COLUMN.COMPANY');
   });
 
-  it('opens the place in its group and makes that group the working group', async () => {
-    const { flush, root, view } = await render();
-    await flush([ONE]);
-    root.querySelector<HTMLAnchorElement>(`a[href="/groups/${GROUP}/places/${PLACE}"]`)!.click();
-    await view();
-    expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
-    expect(TestBed.inject(GroupContext).groupName()).toBe('Gruppo Uno');
-  });
-
   it('shows the expiration as text (no renewal), no actions, no create and the hint', async () => {
     const { flush, root } = await render();
     await flush([ONE]);
@@ -165,26 +157,18 @@ describe('PlacesList across groups', () => {
       `/places?groupId=${GROUP}&companyId=${COMPANY}&q=bar`,
     );
     await flush([ONE]);
-    const group = root.querySelector<HTMLSelectElement>(
-      `#${([...root.querySelectorAll('label')].find((l) => l.textContent?.trim() === 'CROSS_GROUP.FILTER.GROUP') as HTMLLabelElement).htmlFor}`,
-    )!;
-    group.value = '';
-    group.dispatchEvent(new Event('change'));
+    root
+      .querySelector<HTMLButtonElement>('button[title="CROSS_GROUP.FILTER.CLEAR_GROUP"]')!
+      .click();
     await view();
     expect(router.url).toBe('/places?q=bar');
     backend()
       .expectOne((r) => r.url === LIST)
       .flush({ data: [], page: { limit: 25, next: null } });
+    backend()
+      .expectOne((r) => r.url === `${API}/v1/groups`)
+      .flush({ data: [], page: { limit: 20, next: null } });
     await view();
-  });
-
-  it('tolerates a row without its group (nothing is chosen when it is opened)', async () => {
-    const { flush, root, view } = await render();
-    const orphan = { ...ONE, groupId: undefined, groupName: undefined };
-    await flush([orphan]);
-    root.querySelector<HTMLAnchorElement>('tbody a')!.click();
-    await view();
-    expect(TestBed.inject(GroupContext).groupId()).toBeNull();
   });
 
   it('puts the chosen dealer in the URL', async () => {
@@ -203,15 +187,6 @@ describe('PlacesList across groups', () => {
     await view();
   });
 
-  it('chooses the group of a row without a name with an empty name', async () => {
-    const { flush, root, view } = await render();
-    await flush([TWO]);
-    root.querySelector<HTMLAnchorElement>(`a[href="/groups/${G2}/places/${TWO.id}"]`)!.click();
-    await view();
-    expect(TestBed.inject(GroupContext).groupId()).toBe(G2);
-    expect(TestBed.inject(GroupContext).groupName()).toBe('');
-  });
-
   it('names the companies when a group is filtered', async () => {
     const { flush, root } = await render(`/places?groupId=${GROUP}`);
     await flush([ONE]);
@@ -220,13 +195,15 @@ describe('PlacesList across groups', () => {
     expect(root.querySelector('tbody tr')?.textContent).toContain('Azienda del gruppo');
   });
 
-  it('opens the place of a group that does not exist without a name', async () => {
+  it('opens the record in its group without changing the working group', async () => {
     const { flush, root, view } = await render();
-    await flush([THREE]);
-    root
-      .querySelector<HTMLAnchorElement>(`a[href="/groups/${THREE.groupId}/places/${THREE.id}"]`)!
-      .click();
+    await flush([ONE, TWO]);
+    const links = [...root.querySelectorAll<HTMLAnchorElement>('tbody a')].map((a) =>
+      a.getAttribute('href'),
+    );
+    expect(links).toContain(`/groups/${GROUP}/places/${ONE.id}`);
+    root.querySelector<HTMLAnchorElement>(`a[href="/groups/${GROUP}/places/${ONE.id}"]`)!.click();
     await view();
-    expect(TestBed.inject(GroupContext).groupName()).toBe('');
+    expect(TestBed.inject(GroupContext).groupId()).toBeNull();
   });
 });

@@ -1,4 +1,7 @@
 <h1>{{ (state.isNew() ? 'USERS.FORM.NEW_TITLE' : 'USERS.FORM.EDIT_TITLE') | t }}</h1>
+@if (groupId(); as ownGroup) {
+  <fc-record-group [groupId]="ownGroup" />
+}
 
 @if (state.failed()) {
   <fc-error-state

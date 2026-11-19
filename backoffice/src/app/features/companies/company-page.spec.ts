@@ -101,10 +101,22 @@ describe('CompanyPage', () => {
       await answerLookups();
     });
 
-    it('asks for the features of the group and takes the group as the working one', async () => {
+    it('asks for the features of the group and leaves the working group alone', async () => {
       const { ensure } = await render();
       expect(ensure).toHaveBeenCalledWith(GROUP);
-      expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
+    });
+
+    it('names the group of the record when it is not the working group, and not when it is', async () => {
+      const { root, view } = await render();
+      expect(root.querySelector('.record-group')?.textContent).toContain('RECORD_GROUP.LABEL');
+      expect(root.querySelector('.record-group a')?.getAttribute('href')).toBe(
+        `/groups/${GROUP}/settings`,
+      );
+      TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Gruppo Esempio' });
+      await view();
+      expect(root.querySelector('.record-group')).toBeNull();
+      sessionStorage.clear();
     });
   });
 
@@ -123,8 +135,9 @@ describe('CompanyPage', () => {
       expect(state.textContent).toContain('COMPANIES.LOAD_ERROR');
       expect(state.textContent).toContain('ERRORS.API.NOT_FOUND');
       expect(state.textContent).toContain('r-1');
+      // No working group: the way back is the cross-group list.
       expect(root.querySelector<HTMLAnchorElement>('p a')?.getAttribute('href')).toBe(
-        `/groups/${GROUP}/companies`,
+        '/companies',
       );
       state.querySelector('button')!.click();
       await view();

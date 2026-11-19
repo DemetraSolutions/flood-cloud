@@ -186,16 +186,22 @@ export class UserFormState {
   );
 
   // Sections that depend on the group.
-  readonly servicesApply = computed(
-    () =>
-      this.groupId() !== undefined &&
-      this.features.enabled('services') &&
-      hasGroupDuties(this.role()),
-  );
-  readonly posApplies = computed(
-    () =>
-      this.groupId() !== undefined && this.features.enabled('cash') && hasGroupDuties(this.role()),
-  );
+  readonly servicesApply = computed(() => {
+    const groupId = this.groupId();
+    return (
+      groupId !== undefined &&
+      this.features.enabledFor(groupId, 'services') &&
+      hasGroupDuties(this.role())
+    );
+  });
+  readonly posApplies = computed(() => {
+    const groupId = this.groupId();
+    return (
+      groupId !== undefined &&
+      this.features.enabledFor(groupId, 'cash') &&
+      hasGroupDuties(this.role())
+    );
+  });
   readonly posGrantsEditable = computed(
     () => this.posApplies() && this.canWrite() && this.canManagePermissions() && !this.isNew(),
   );

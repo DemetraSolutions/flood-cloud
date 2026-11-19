@@ -13,6 +13,12 @@ export type FeaturesStatus = 'idle' | 'loading' | 'ready' | 'error';
 interface Loaded {
   readonly groupId: string;
   readonly flags: FeatureFlags;
+  readonly name: string;
+}
+
+interface Other {
+  readonly flags: FeatureFlags;
+  readonly name: string;
 }
 
 interface Cached extends Loaded {
@@ -31,7 +37,9 @@ function parseFlags(value: unknown): FeatureFlags {
 }
 
 /**
- * The features (modules) turned on for the group the user works on (tasks 4.3.2 and 4.5.2).
+ * The features (modules) turned on for the group the user works on (tasks 4.3.2 and 4.5.2), and
+ * for the group of a record page that is not the working group (`ensure`, `enabledFor`, `nameOf`):
+ * those are kept apart, so that opening a record of another group never changes the menu.
  *
  * Users bound to a group (SA, CA, PA) get them from `GET /v1/me` (`groupFeatures`); PSA and
  * dealers from the detail of the group they work on (`GET /v1/groups/{groupId}`), read again at
@@ -49,6 +57,8 @@ export class GroupFeatures {
 
   private readonly cache = new Map<string, Cached>();
   private readonly current = signal<Loaded | null>(null);
+  /** Features and name of the groups read for record pages that are not the working group. */
+  private readonly others = signal<ReadonlyMap<string, Other>>(new Map());
   private readonly loading = signal(false);
   private readonly failure = signal<ApiError | null>(null);
   private inFlight: { readonly groupId: string; readonly promise: Promise<void> } | null = null;
@@ -82,9 +92,13 @@ export class GroupFeatures {
       untracked(() => {
         if (chooser && groupId !== null) {
           void this.ensure(groupId);
-        } else if (!chooser || this.lastContextId !== null) {
-          // Signed out, or the user went back to "all groups". A page that asked for the
-          // features of its own group before any choice (a deep link) is left alone.
+        } else if (!chooser) {
+          // Signed out: nothing is kept.
+          this.reset();
+          this.others.set(new Map());
+        } else if (this.lastContextId !== null) {
+          // Back to "all groups": the group left stays known to the record pages that show it.
+          this.retire();
           this.reset();
         }
         this.lastContextId = groupId;
@@ -99,6 +113,29 @@ export class GroupFeatures {
   }
 
   /**
+   * Whether a feature is on for the group of a page (from the URL). The working group and the
+   * groups of users bound to a group use the usual state; any other group the one read by
+   * {@link ensure} (`false` until it is read).
+   *
+   * @param groupId Group of the page.
+   * @param feature Feature name.
+   */
+  enabledFor(groupId: string | null, feature: string): boolean {
+    if (!this.groups.canChoose() || groupId === null || groupId === this.groups.groupId()) {
+      return this.enabled(feature);
+    }
+    const flags = this.others().get(groupId)?.flags;
+    return (
+      flags !== undefined && Object.hasOwn(flags, feature) && flags[feature as keyof FeatureFlags]
+    );
+  }
+
+  /** Name of a group read for a page, `null` while unknown (or for the working group). */
+  nameOf(groupId: string): string | null {
+    return this.others().get(groupId)?.name ?? null;
+  }
+
+  /**
    * Makes the features of a group available: users bound to a group have them already;
    * for a PSA or dealer the group is read unless it is the one already loaded. Never rejects: a
    * failure is kept in {@link error}.
@@ -106,7 +143,13 @@ export class GroupFeatures {
    * @param groupId The group the user is heading to.
    */
   ensure(groupId: string): Promise<void> {
-    if (!this.groups.canChoose() || this.current()?.groupId === groupId) {
+    if (!this.groups.canChoose()) {
+      return Promise.resolve();
+    }
+    if (groupId !== this.groups.groupId()) {
+      return this.others().has(groupId) ? Promise.resolve() : this.readOther(groupId);
+    }
+    if (this.current()?.groupId === groupId) {
       return Promise.resolve();
     }
     if (this.inFlight?.groupId === groupId) {
@@ -129,14 +172,16 @@ export class GroupFeatures {
       }
       await this.ensure(id);
     }
-    return this.enabled(feature);
+    return this.enabledFor(id, feature);
   }
 
   /**
    * Reads the features again after the group was changed: from the profile for users bound to
    * a group, from the group (conditional request) for PSA and dealers. Never rejects.
+   *
+   * @param groupId Group that was changed (PSA and dealers); the working group when omitted.
    */
-  async refresh(): Promise<void> {
+  async refresh(groupId?: string): Promise<void> {
     if (!this.groups.canChoose()) {
       try {
         await this.session.loadProfile();
@@ -145,14 +190,27 @@ export class GroupFeatures {
       }
       return;
     }
-    const groupId = this.current()?.groupId ?? this.groups.groupId();
-    if (groupId !== null) {
-      await this.read(groupId);
+    if (groupId !== undefined && groupId !== this.groups.groupId()) {
+      await this.readOther(groupId);
+      return;
+    }
+    const target = this.current()?.groupId ?? this.groups.groupId();
+    if (target !== null) {
+      await this.read(target);
     }
   }
 
   private fixedFlags(): FeatureFlags | null {
     return this.session.me()?.groupFeatures ?? null;
+  }
+
+  /** Keeps the loaded group among the others (it is no longer the working group). */
+  private retire(): void {
+    const loaded = this.current();
+    if (loaded !== null) {
+      const { flags, name } = loaded;
+      this.others.update((map) => new Map(map).set(loaded.groupId, { flags, name }));
+    }
   }
 
   private reset(): void {
@@ -170,10 +228,30 @@ export class GroupFeatures {
     return promise;
   }
 
+  /** Reads a group that is not the working group; a failure is logged and leaves it unknown. */
+  private async readOther(groupId: string): Promise<void> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<ApiData<{ features?: unknown; name?: unknown }>>(
+          `/v1/groups/${encodeURIComponent(groupId)}`,
+        ),
+      );
+      const name = response.data.name;
+      const entry = {
+        flags: parseFlags(response.data.features),
+        name: typeof name === 'string' ? name : '',
+      };
+      this.others.update((map) => new Map(map).set(groupId, entry));
+    } catch (error) {
+      this.describe(error);
+    }
+  }
+
   private async fetch(groupId: string): Promise<void> {
     const request = ++this.requestId;
     const cached = this.cache.get(groupId);
     if (this.current()?.groupId !== groupId) {
+      this.retire();
       this.current.set(null);
     }
     this.loading.set(true);
@@ -186,14 +264,16 @@ export class GroupFeatures {
           ? new HttpHeaders()
           : new HttpHeaders({ 'If-None-Match': cached.etag });
       const response = await firstValueFrom(
-        this.http.get<ApiData<{ features?: unknown }>>(
+        this.http.get<ApiData<{ features?: unknown; name?: unknown }>>(
           `/v1/groups/${encodeURIComponent(groupId)}`,
           { headers, observe: 'response' },
         ),
       );
       const flags = parseFlags(response.body?.data.features);
+      const name = response.body?.data.name;
+      const base = { groupId, flags, name: typeof name === 'string' ? name : '' };
       const etag = response.headers.get('ETag');
-      loaded = etag === null ? { groupId, flags } : { groupId, flags, etag };
+      loaded = etag === null ? base : { ...base, etag };
     } catch (error) {
       if (error instanceof ApiError && error.status === 304 && cached !== undefined) {
         loaded = cached;

@@ -60,7 +60,7 @@
     (sortChange)="onSort($event)"
   >
     <ng-template fcCell="name" let-row>
-      <a [routerLink]="['/groups', row.id, 'settings']" (click)="open(row)">{{ row.name }}</a>
+      <a [routerLink]="['/groups', row.id, 'settings']">{{ row.name }}</a>
     </ng-template>
     <ng-template fcCell="companies" let-row>
       <fc-group-count [count]="row.counts.companies" />

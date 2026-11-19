@@ -29,7 +29,6 @@ import { PlacePerimeter } from './place-perimeter';
     [locked]="outOfPerimeter"
     [viewable]="true"
     lockedNote="CATALOG.CARD_TYPES.LOCKED_NOTE"
-    [adopt]="true"
   >
     <ng-template
       #editor

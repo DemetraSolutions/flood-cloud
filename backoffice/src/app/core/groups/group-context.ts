@@ -64,23 +64,30 @@ export class GroupContext {
   }
 
   /**
-   * Aligns the working group with the one in the URL once its page loaded successfully (so the
-   * selector and the menu follow the page). The name stays unknown unless it was already chosen
-   * or the page knows it.
+   * Refreshes the name of the working group after it was renamed. Nothing happens for any other
+   * group: opening or editing a record never changes the working group.
    *
-   * @param groupId Id of the group of the page.
-   * @param name Name of the group, when the page has it (also refreshes a stale name).
+   * @param groupId Id of the group that was renamed.
+   * @param name Its new name.
    */
-  adopt(groupId: string, name = ''): void {
-    if (!this.canChoose()) {
-      return;
-    }
+  rename(groupId: string, name: string): void {
     const chosen = this.chosen();
-    if (chosen?.id !== groupId) {
-      this.choose({ id: groupId, name });
-    } else if (name !== '' && chosen.name !== name) {
+    if (this.canChoose() && chosen?.id === groupId && name !== '' && chosen.name !== name) {
       this.choose({ id: groupId, name });
     }
+  }
+
+  /**
+   * Route of the list of a resource where the user came from: with no working group a PSA or
+   * dealer comes from the cross-group list, otherwise from the list of the group of the page.
+   *
+   * @param groupId Group of the page.
+   * @param resource The list.
+   */
+  listRoute(groupId: string, resource: 'companies' | 'places' | 'users'): string[] {
+    return this.canChoose() && this.groupId() === null
+      ? [`/${resource}`]
+      : ['/groups', groupId, resource];
   }
 
   /** Forgets the working group ("all groups"), including the stored preference. */

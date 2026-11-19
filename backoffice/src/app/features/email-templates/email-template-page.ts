@@ -1,3 +1,4 @@
+import { RecordGroup } from '../groups/record-group';
 import {
   Component,
   computed,
@@ -94,6 +95,7 @@ export const PLACEHOLDERS = [
 @Component({
   selector: 'fc-email-template-page',
   imports: [
+    RecordGroup,
     Button,
     ConfirmDialog,
     EmailPreview,
@@ -191,7 +193,7 @@ export class EmailTemplatePage {
   // The models a new template can start from, the ones the group has the features for.
   protected readonly modelOptions = computed(() =>
     TEMPLATE_MODELS.filter(
-      (model) => model.feature === null || this.features.enabled(model.feature),
+      (model) => model.feature === null || this.features.enabledFor(this.groupId(), model.feature),
     ).map((model) => ({ value: model.id, label: this.i18n.t(model.labelKey) })),
   );
   protected readonly modelChoice = signal('');
@@ -350,7 +352,11 @@ export class EmailTemplatePage {
     }
     if (hasFieldDetails(error) && error.code === 'VALIDATION_ERROR') {
       const f = this.templateForm;
-      const mapped = serverFieldErrors(this.i18n, error, { name: f.name, text: f.text, html: f.html });
+      const mapped = serverFieldErrors(this.i18n, error, {
+        name: f.name,
+        text: f.text,
+        html: f.html,
+      });
       if (mapped.unmatched) {
         this.failure.set(this.i18n.t('ERRORS.API.VALIDATION_ERROR'));
       }

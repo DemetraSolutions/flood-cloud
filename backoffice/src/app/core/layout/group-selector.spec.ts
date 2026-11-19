@@ -117,42 +117,39 @@ describe('GroupSelector', () => {
     });
 
     it.each([
-      ['/groups/g1/users', ['/users'], undefined],
-      ['/groups/g1/users/u1', ['/users'], undefined],
-      [
-        '/activity-log?groupId=g1',
-        ['/activity-log'],
-        { queryParams: { groupId: null }, queryParamsHandling: 'merge' },
-      ],
-    ])('clearing from %s goes to the cross-group view', async (url, command, extras) => {
+      `/groups/${G1.id}/users?q=ann`,
+      `/groups/${G2.id}/companies/c1`,
+      '/activity-log?groupId=g1',
+      '/profile',
+    ])('clearing from %s always goes home', async (url) => {
       const { root, fixture } = await chosen();
       await view(fixture);
       const router = TestBed.inject(Router);
       vi.spyOn(router, 'url', 'get').mockReturnValue(url);
-      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
       root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
       await view(fixture);
-      expect(navigate).toHaveBeenCalledWith(...(extras ? [command, extras] : [command]));
+      expect(navigateByUrl).toHaveBeenCalledExactlyOnceWith('/');
       expect(TestBed.inject(GroupContext).groupId()).toBeNull();
       expect(sessionStorage.getItem(LAST_GROUP_ID_KEY)).toBeNull();
     });
 
-    it('stays on pages that do not depend on the group', async () => {
+    it('does not navigate when already on the home page', async () => {
       const { root, fixture } = await chosen();
       await view(fixture);
       const router = TestBed.inject(Router);
-      vi.spyOn(router, 'url', 'get').mockReturnValue('/profile');
-      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      vi.spyOn(router, 'url', 'get').mockReturnValue('/?x=1');
+      const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
       root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
       await view(fixture);
-      expect(navigate).not.toHaveBeenCalled();
+      expect(navigateByUrl).not.toHaveBeenCalled();
       expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     });
 
     it('is chosen with a click or the keyboard on the first option', async () => {
       const { allOption, open, key, input, fixture } = await chosen();
       await open([G1]);
-      vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+      vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
       await key('ArrowUp');
       await key('Enter');
       expect(TestBed.inject(GroupContext).groupId()).toBeNull();
@@ -192,9 +189,10 @@ describe('GroupSelector', () => {
     await key('ArrowDown');
     await key('ArrowDown');
     const router = TestBed.inject(Router);
-    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/profile');
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     await key('Enter');
-    expect(navigate).toHaveBeenCalledWith(['/groups', G2.id, 'users']);
+    expect(navigateByUrl).toHaveBeenCalledWith('/');
     expect(TestBed.inject(GroupContext).groupId()).toBe(G2.id);
     expect(sessionStorage.getItem(LAST_GROUP_ID_KEY)).toBe(G2.id);
     expect(input.getAttribute('aria-expanded')).toBe('false');
@@ -239,9 +237,10 @@ describe('GroupSelector', () => {
   it('chooses a group by clicking it', async () => {
     const { options, open } = await render();
     await open([G1, G2]);
-    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    vi.spyOn(TestBed.inject(Router), 'url', 'get').mockReturnValue('/profile');
+    const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     options()[0].click();
-    expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users']);
+    expect(navigateByUrl).toHaveBeenCalledWith('/');
   });
 
   it.each([
@@ -271,93 +270,41 @@ describe('GroupSelector', () => {
     '/groups?to=companies%00',
     '/groups?to=x&to=companies',
     '/users?to=companies',
-  ])('ignores a hostile or missing destination (%s) and opens the users list', async (url) => {
-    const { options, open } = await render();
-    await open([G1, G2]);
-    const router = TestBed.inject(Router);
-    vi.spyOn(router, 'url', 'get').mockReturnValue(url);
-    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
-    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
-    options()[0].click();
-    expect(navigateByUrl).not.toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users']);
-  });
-
-  it.each([
-    ['/users?q=ann&role=SA&cursor=c1&groupId=x', { q: 'ann', role: 'SA' }],
-    [
-      '/users?role=D&status=active&trashed=true&sort=-createdAt&limit=50',
-      {
-        status: 'active',
-        trashed: 'true',
-        sort: '-createdAt',
-        limit: '50',
-      },
-    ],
-    ['/groups/g0/users?q=ann&role=PSA&dealerId=x', { q: 'ann' }],
-  ])(
-    'keeps the filters of the users list on screen when choosing a group (%s)',
-    async (url, expected) => {
-      const { options, open } = await render();
-      await open([G1]);
-      const router = TestBed.inject(Router);
-      vi.spyOn(router, 'url', 'get').mockReturnValue(url);
-      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
-      options()[0].click();
-      expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users'], { queryParams: expected });
-    },
-  );
-
-  it.each([
-    [
-      '/groups/g1/companies?q=ann&status=active&cursor=c1&companyId=x&sort=-name',
-      '/companies',
-      { q: 'ann', status: 'active', sort: '-name' },
-    ],
-    [
-      '/groups/g1/places?q=bar&plan=advanced&country=IT&limit=50&companyId=x&cursor=c',
-      '/places',
-      { q: 'bar', plan: 'advanced', country: 'IT', limit: '50' },
-    ],
-    ['/groups/g1/places', '/places', null],
-    ['/groups/g1/companies/c9?q=ann', '/companies', null],
-    ['/groups/g1/places/p9/devices', '/places', null],
-  ])(
-    'from %s going back to all groups opens the cross-group list %s',
-    async (url, target, filters) => {
-      const { root, fixture } = await render();
-      TestBed.inject(GroupContext).choose(G1);
-      await view(fixture);
-      const router = TestBed.inject(Router);
-      vi.spyOn(router, 'url', 'get').mockReturnValue(url);
-      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
-      root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
-      expect(navigate).toHaveBeenCalledWith(
-        [target],
-        ...(filters === null ? [] : [{ queryParams: filters }]),
-      );
-    },
-  );
-
-  it('keeps the filters of the users list, role included, when going back to all groups', async () => {
-    const { root, fixture } = await render();
-    TestBed.inject(GroupContext).choose(G1);
-    await view(fixture);
-    const router = TestBed.inject(Router);
-    vi.spyOn(router, 'url', 'get').mockReturnValue('/groups/g1/users?q=ann&role=SA&cursor=c1');
-    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
-    root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
-    expect(navigate).toHaveBeenCalledWith(['/users'], { queryParams: { q: 'ann', role: 'SA' } });
-  });
-
-  it('carries nothing over from pages that are not a users list', async () => {
+  ])('ignores a hostile or missing destination (%s) and goes home', async (url) => {
     const { options, open } = await render();
     await open([G1]);
     const router = TestBed.inject(Router);
-    vi.spyOn(router, 'url', 'get').mockReturnValue('/?q=ann');
-    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    vi.spyOn(router, 'url', 'get').mockReturnValue(url);
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     options()[0].click();
-    expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users']);
+    expect(navigateByUrl).toHaveBeenCalledExactlyOnceWith('/');
+  });
+
+  it.each([
+    '/profile',
+    `/groups/${G2.id}/companies/c1?x=1`,
+    '/groups/list?q=a',
+    `/groups/${G1.id}/users?q=ann`,
+  ])('choosing a group from %s always goes home', async (url) => {
+    const { options, open } = await render();
+    await open([G1]);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue(url);
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    options()[0].click();
+    expect(navigateByUrl).toHaveBeenCalledExactlyOnceWith('/');
+    expect(TestBed.inject(GroupContext).groupId()).toBe(G1.id);
+  });
+
+  it('choosing a group while already home only changes the working group', async () => {
+    const { options, open } = await render();
+    await open([G1]);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/');
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    options()[0].click();
+    expect(navigateByUrl).not.toHaveBeenCalled();
+    expect(TestBed.inject(GroupContext).groupId()).toBe(G1.id);
   });
 
   it('marks the working group as selected', async () => {

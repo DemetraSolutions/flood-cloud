@@ -20,7 +20,6 @@ import { PrizeCatalogueEditor } from './prize-catalogue-editor';
     [canWrite]="canWrite()"
     [limit]="max"
     [wide]="true"
-    [adopt]="true"
   >
     <ng-template
       #editor

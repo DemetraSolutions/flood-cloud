@@ -177,11 +177,12 @@ describe('TrashTab', () => {
       await view();
     });
 
-    it('makes the group of the URL the working group once the list is read', async () => {
+    it('does not make the group of the URL the working group', async () => {
       const { flush } = await renderTrash();
-      const adopt = vi.spyOn(TestBed.inject(GroupContext), 'adopt');
+      const choose = vi.spyOn(TestBed.inject(GroupContext), 'choose');
       await flush('companies', []);
-      expect(adopt).toHaveBeenCalledWith(GROUP);
+      expect(choose).not.toHaveBeenCalled();
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     });
   });
 

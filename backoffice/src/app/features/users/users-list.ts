@@ -1,19 +1,9 @@
 import { httpResource } from '@angular/common/http';
-import {
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  linkedSignal,
-  signal,
-  untracked,
-} from '@angular/core';
+import { Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiPage } from '../../core/api/api.types';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { Can } from '../../core/auth/can';
-import { GroupContext } from '../../core/groups/group-context';
 import { formatDate } from '../../core/i18n/format';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { DEFAULT_LANGUAGE } from '../../core/i18n/language';
@@ -85,7 +75,6 @@ export class UsersList {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly session = inject(SessionService);
-  private readonly groups = inject(GroupContext);
   private readonly debouncer = createDebouncer();
   protected readonly i18n = inject(I18nService);
 
@@ -255,15 +244,7 @@ export class UsersList {
       this.session.can('users:delete'),
   );
 
-  constructor() {
-    // The page loaded: the group in the URL becomes the working group of the selector.
-    effect(() => {
-      const groupId = this.groupId();
-      if (this.mode() === 'group' && groupId !== undefined && this.users.hasValue()) {
-        untracked(() => this.groups.adopt(groupId));
-      }
-    });
-  }
+  constructor() {}
 
   protected isSelf(row: UserRecord): boolean {
     return row.id === this.session.me()?.id;

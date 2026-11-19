@@ -1,7 +1,8 @@
-import { Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { GroupContext } from '../../core/groups/group-context';
+import { RecordGroup } from '../groups/record-group';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { apiErrorMessageKey } from '../../core/api/api-error';
-import { GroupContext } from '../../core/groups/group-context';
 import { GroupFeatures } from '../../core/groups/group-features';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { Button } from '../../shared/ui/button/button';
@@ -21,6 +22,7 @@ import { CompanyState } from './company-state';
 @Component({
   selector: 'fc-company-page',
   imports: [
+    RecordGroup,
     Button,
     ConfirmDialog,
     ErrorState,
@@ -39,6 +41,8 @@ export class CompanyPage {
   protected readonly state = inject(CompanyState);
   private readonly features = inject(GroupFeatures);
   private readonly groups = inject(GroupContext);
+  /** Where the back link leads: the cross-group list without a working group, else the group's. */
+  protected readonly backRoute = computed(() => this.groups.listRoute(this.groupId(), 'companies'));
 
   /** Route parameters; the company is absent on the page of a new one. */
   readonly groupId = input.required<string>();
@@ -53,13 +57,6 @@ export class CompanyPage {
     effect(() => {
       const groupId = this.groupId();
       untracked(() => void this.features.ensure(groupId));
-    });
-    // The record loaded: its group becomes the working group of the selector.
-    effect(() => {
-      const company = this.state.company();
-      if (company !== null) {
-        untracked(() => this.groups.adopt(company.groupId));
-      }
     });
   }
 

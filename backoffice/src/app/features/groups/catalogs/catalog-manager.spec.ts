@@ -37,7 +37,6 @@ interface Row {
     [kept]="kept"
     [lockedNote]="lockedNote()"
     [wide]="wide()"
-    [adopt]="adopt()"
     [viewable]="viewable()"
   >
     <ng-template
@@ -66,7 +65,6 @@ class Host {
   readonly limit = signal<number | null>(null);
   readonly lockedNote = signal<string | null>(null);
   readonly wide = signal(false);
-  readonly adopt = signal(false);
   readonly viewable = signal(false);
   readonly columns = [{ key: 'name', header: 'Name', cell: (row: Row) => row.name }];
   readonly idOf = (row: Row) => row.id;
@@ -500,19 +498,11 @@ describe('CatalogManager: deleting', () => {
   });
 
   describe('working group', () => {
-    it('makes the group of the page the working one once it loaded, when asked', async () => {
-      const adopt = vi.spyOn(GroupContext.prototype, 'adopt');
-      const { host, load } = await render();
-      host.adopt.set(true);
-      await load();
-      expect(adopt).toHaveBeenCalledWith('g1');
-    });
-
-    it('leaves the working group alone by default', async () => {
-      const adopt = vi.spyOn(GroupContext.prototype, 'adopt');
+    it('leaves the working group alone', async () => {
+      const choose = vi.spyOn(GroupContext.prototype, 'choose');
       const { load } = await render();
       await load();
-      expect(adopt).not.toHaveBeenCalled();
+      expect(choose).not.toHaveBeenCalled();
     });
   });
 

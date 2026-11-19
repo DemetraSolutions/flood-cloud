@@ -1,7 +1,8 @@
-import { Component, DOCUMENT, effect, inject, input, signal, untracked } from '@angular/core';
+import { GroupContext } from '../../core/groups/group-context';
+import { RecordGroup } from '../groups/record-group';
+import { Component, computed, DOCUMENT, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { apiErrorMessageKey } from '../../core/api/api-error';
-import { GroupContext } from '../../core/groups/group-context';
 import { GroupFeatures } from '../../core/groups/group-features';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
@@ -26,6 +27,7 @@ import { exportSettings, importSettings, MAX_IMPORT_BYTES } from './settings-tra
 @Component({
   selector: 'fc-place-page',
   imports: [
+    RecordGroup,
     ActionsMenu,
     Button,
     ConfirmDialog,
@@ -45,6 +47,8 @@ export class PlacePage {
   protected readonly state = inject(PlaceState);
   private readonly features = inject(GroupFeatures);
   private readonly groups = inject(GroupContext);
+  /** Where the back link leads: the cross-group list without a working group, else the group's. */
+  protected readonly backRoute = computed(() => this.groups.listRoute(this.groupId(), 'places'));
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly document = inject(DOCUMENT);
@@ -62,13 +66,6 @@ export class PlacePage {
     effect(() => {
       const groupId = this.groupId();
       untracked(() => void this.features.ensure(groupId));
-    });
-    // The record loaded: its group becomes the working group of the selector.
-    effect(() => {
-      const place = this.state.place();
-      if (place !== null) {
-        untracked(() => this.groups.adopt(place.groupId));
-      }
     });
   }
 

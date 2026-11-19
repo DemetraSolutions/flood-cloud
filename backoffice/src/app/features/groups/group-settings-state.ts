@@ -67,21 +67,16 @@ export class GroupSettingsState {
   /** Loads the group again (after an action on its state). */
   reload(): void {
     this.resource.reload();
-    void this.features.refresh();
+    void this.features.refresh(this.groupId() ?? undefined);
   }
 
   /**
-   * Takes the group returned by a successful update as the current one, aligns the working
-   * group (the selector shows the new name) and reads the features of the context again.
+   * Takes the group returned by a successful update as the current one, refreshes the name the
+   * selector shows when it is the working group, and reads the features of the group again.
    */
   apply(group: Group): void {
     this.saved.set(group);
-    this.context.adopt(group.id, group.name);
-    void this.features.refresh();
-  }
-
-  /** Aligns the working group with the loaded record (once its page loaded). */
-  adopt(group: Group): void {
-    this.context.adopt(group.id, group.name);
+    this.context.rename(group.id, group.name);
+    void this.features.refresh(group.id);
   }
 }

@@ -558,7 +558,7 @@ describe('UserForm: creation', () => {
     await ctx.type('USERS.FORM.PASSWORD', 'Temp-Password-9');
   }
 
-  it('creates the user with the minimum body, opens its page and adopts the group', async () => {
+  it('creates the user with the minimum body, opens its page and leaves the working group alone', async () => {
     const ctx = await render(NEW, { profile: { role: 'PSA', groupId: null, group: null } });
     sessionStorage.clear();
     const { submit, router, toasts, view } = ctx;
@@ -583,7 +583,7 @@ describe('UserForm: creation', () => {
     await settle();
     expect(toasts()).toEqual(['USERS.FORM.CREATED']);
     expect(router.url).toBe(`/groups/${GROUP}/users/665f1c2e9b1d4a0012ab3499`);
-    expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
+    expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     backend().expectOne(`${LIST}/665f1c2e9b1d4a0012ab3499`).flush({ data: TARGET });
     sessionStorage.clear();
   });

@@ -755,10 +755,10 @@ describe('PlacesList', () => {
       expect(groups.groupId()).toBeNull();
     });
 
-    it('adopts the group after a successful load', async () => {
+    it('does not make the group of the URL the working group', async () => {
       const { load } = await render();
       await load([ONE]);
-      expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     });
   });
 });

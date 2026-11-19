@@ -95,13 +95,11 @@
       @if (row.groupName === null) {
         {{ 'CROSS_GROUP.NO_NAME' | t }}
       } @else {
-        <a [routerLink]="groupRoute(row)" (click)="open(row)">{{
-          row.groupName || ('CROSS_GROUP.NO_NAME' | t)
-        }}</a>
+        <a [routerLink]="groupRoute(row)">{{ row.groupName || ('CROSS_GROUP.NO_NAME' | t) }}</a>
       }
     </ng-template>
     <ng-template fcCell="name" let-row>
-      <a [routerLink]="detailRoute(row)" (click)="open(row)">{{ row.name }}</a>
+      <a [routerLink]="detailRoute(row)">{{ row.name }}</a>
     </ng-template>
     <ng-template fcCell="expirationDate" let-row>
       @if (canRenew() && !row.trashed) {

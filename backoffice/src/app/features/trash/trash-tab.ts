@@ -1,19 +1,8 @@
 import { httpResource } from '@angular/common/http';
-import {
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  linkedSignal,
-  resource,
-  signal,
-  untracked,
-} from '@angular/core';
+import { Component, computed, inject, input, linkedSignal, resource, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiPage } from '../../core/api/api.types';
 import { apiErrorMessageKey } from '../../core/api/api-error';
-import { GroupContext } from '../../core/groups/group-context';
 import { formatDate } from '../../core/i18n/format';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { DEFAULT_LANGUAGE } from '../../core/i18n/language';
@@ -107,7 +96,6 @@ export class TrashTab {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly session = inject(SessionService);
-  private readonly groups = inject(GroupContext);
   private readonly store = inject(ReferenceStore);
   private readonly api = inject(TrashApi);
   private readonly toast = inject(ToastService);
@@ -296,16 +284,6 @@ export class TrashTab {
   protected readonly deleteMessage = computed(() =>
     this.i18n.t('TRASH.DELETE.MESSAGE', { count: this.selectedRows().length }),
   );
-
-  constructor() {
-    // The page loaded: the group in the URL becomes the working group of the selector.
-    effect(() => {
-      const groupId = this.groupId();
-      if (this.items.hasValue()) {
-        untracked(() => this.groups.adopt(groupId));
-      }
-    });
-  }
 
   protected detailRoute(row: TrashRow): string[] {
     return trashRowRoute(this.kind(), this.groupId(), row);

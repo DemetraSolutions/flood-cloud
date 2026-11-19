@@ -507,12 +507,12 @@ describe('CompaniesList', () => {
       sessionStorage.clear();
     });
 
-    it('adopts the group after a successful load', async () => {
+    it('does not make the group of the URL the working group', async () => {
       sessionStorage.clear();
       const { countries, flush } = await render();
       await countries();
       await flush([ONE]);
-      expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
       sessionStorage.clear();
     });
   });

@@ -1,0 +1,56 @@
+<div class="field">
+  <label class="label" [for]="inputId">{{ label() }}</label>
+  <div class="row">
+    <input
+      #field
+      class="control"
+      type="text"
+      role="combobox"
+      autocomplete="off"
+      aria-autocomplete="list"
+      [id]="inputId"
+      [value]="inputValue()"
+      [attr.placeholder]="placeholder()"
+      [attr.aria-expanded]="open()"
+      [attr.aria-controls]="open() ? listId : null"
+      [attr.aria-activedescendant]="activeId()"
+      (focus)="show()"
+      (click)="show()"
+      (input)="onInput($event)"
+      (keydown)="onKeydown($event)"
+    />
+    @if (value() !== '') {
+      <button fc-icon-button icon="close" [label]="clearLabel()" (click)="clear()"></button>
+    }
+  </div>
+  @if (open()) {
+    <div class="popup" (mousedown)="$event.preventDefault()">
+      <ul [id]="listId" role="listbox" [attr.aria-label]="label()">
+        @for (item of items(); track item.value; let i = $index) {
+          <li
+            role="option"
+            [id]="optionId(i)"
+            [class.active]="i === active()"
+            [attr.aria-selected]="item.value === value()"
+            (click)="choose(i)"
+          >
+            {{ item.label }}
+          </li>
+        }
+      </ul>
+      @if (loading()) {
+        <p class="note">{{ 'COMMON.LOADING' | t }}</p>
+      } @else if (failure(); as message) {
+        <p class="note" role="alert">
+          {{ message }}
+          <button type="button" (click)="retry()">{{ 'COMMON.RETRY' | t }}</button>
+        </p>
+      } @else if (showTooShort()) {
+        <p class="note">{{ 'SEARCH_COMBOBOX.MIN_CHARS' | t: { count: minChars() } }}</p>
+      } @else if (items().length === 0) {
+        <p class="note">{{ 'SEARCH_COMBOBOX.EMPTY' | t }}</p>
+      }
+    </div>
+  }
+  <div class="visually-hidden" role="status">{{ announcement() }}</div>
+</div>

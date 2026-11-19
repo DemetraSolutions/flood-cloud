@@ -1,20 +1,9 @@
 import { httpResource } from '@angular/common/http';
-import {
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  linkedSignal,
-  resource,
-  signal,
-  untracked,
-} from '@angular/core';
+import { Component, computed, inject, input, linkedSignal, resource, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiPage } from '../../core/api/api.types';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { Can } from '../../core/auth/can';
-import { GroupContext } from '../../core/groups/group-context';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { Countries } from '../../core/reference/countries';
@@ -89,7 +78,6 @@ export class PlacesList {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly session = inject(SessionService);
-  private readonly groups = inject(GroupContext);
   private readonly countries = inject(Countries);
   private readonly store = inject(ReferenceStore);
   private readonly debouncer = createDebouncer();
@@ -278,11 +266,11 @@ export class PlacesList {
   ]);
   protected readonly rowKey = (row: PlaceListItem): string => row.id;
   protected readonly detailRoute = (row: PlaceListItem): string[] =>
-    placeRoute(this.ownGroupId() ?? row.groupId ?? '', row.id);
+    placeRoute(this.ownGroupId() ?? row.groupId!, row.id);
   /** Route of the group of a row (cross-group list). */
   protected readonly groupRoute = (row: PlaceListItem): string[] => [
     '/groups',
-    row.groupId ?? '',
+    row.groupId!,
     'settings',
   ];
 
@@ -302,20 +290,6 @@ export class PlacesList {
 
   constructor() {
     this.countries.need();
-    // The page loaded: the group in the URL becomes the working group of the selector.
-    effect(() => {
-      const groupId = this.ownGroupId();
-      if (groupId !== undefined && this.places.hasValue()) {
-        untracked(() => this.groups.adopt(groupId));
-      }
-    });
-  }
-
-  /** Opening a place of the cross-group list makes its group the working group. */
-  protected open(row: PlaceListItem): void {
-    if (this.isAll() && row.groupId !== undefined) {
-      this.groups.choose({ id: row.groupId, name: row.groupName ?? '' });
-    }
   }
 
   /** A group change drops the company filter, which belongs to the previous group. */

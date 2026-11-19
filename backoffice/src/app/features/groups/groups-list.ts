@@ -4,7 +4,6 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiPage } from '../../core/api/api.types';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { Can } from '../../core/auth/can';
-import { GroupContext } from '../../core/groups/group-context';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { SessionService } from '../../core/session/session.service';
@@ -69,7 +68,6 @@ export class GroupsList {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly session = inject(SessionService);
-  private readonly context = inject(GroupContext);
   private readonly debouncer = createDebouncer();
   protected readonly i18n = inject(I18nService);
 
@@ -193,14 +191,8 @@ export class GroupsList {
     );
   }
 
-  /** Makes the group the working group (the page of the group adopts it again once loaded). */
-  protected open(row: GroupListItem): void {
-    this.context.choose({ id: row.id, name: row.name });
-  }
-
-  /** Row action: opens the record of the group. */
+  /** Row action: opens the record of the group (the working group does not change). */
   protected openCard(row: GroupListItem): void {
-    this.open(row);
     void this.router.navigate(['/groups', row.id, 'settings']);
   }
 

@@ -406,7 +406,13 @@ export function activeMenuIds(
       const onChooser = link === CHOOSER_PATH ? chooser === item.groupPath : true;
       const lengths = [
         onChooser ? matchLength(link, path, exact) : -1,
+        // The pages of a group of the menu (`/groups/:id/<groupPath>`) belong to the entry
+        // whichever the working group is: a record of another group is opened without
+        // selecting its group.
         ...(item.alsoActiveFor ?? []).map((pattern) => matchLength(pattern, path, false)),
+        ...(item.groupPath === undefined
+          ? []
+          : [matchLength(`/groups/*/${item.groupPath}`, path, false)]),
       ];
       matches.push({ id: item.id, length: Math.max(...lengths) });
     }

@@ -1,3 +1,4 @@
+import { RecordGroup } from '../groups/record-group';
 import {
   afterNextRender,
   Component,
@@ -15,6 +16,7 @@ import { Router, RouterLink } from '@angular/router';
 import { ApiError } from '../../core/api/api-error';
 import { Can } from '../../core/auth/can';
 import { GroupContext } from '../../core/groups/group-context';
+import { GroupFeatures } from '../../core/groups/group-features';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { serverFieldErrors } from '../../shared/forms/form-errors';
 import { Button } from '../../shared/ui/button/button';
@@ -51,6 +53,7 @@ export type UserSection = 'profile' | 'access' | 'scope' | 'permissions' | 'pos'
 @Component({
   selector: 'fc-user-form',
   imports: [
+    RecordGroup,
     Button,
     Can,
     ErrorState,
@@ -73,6 +76,7 @@ export type UserSection = 'profile' | 'access' | 'scope' | 'permissions' | 'pos'
 export class UserForm {
   protected readonly state = inject(UserFormState);
   private readonly api = inject(UsersApi);
+  private readonly features = inject(GroupFeatures);
   private readonly groups = inject(GroupContext);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
@@ -85,7 +89,9 @@ export class UserForm {
 
   protected readonly userForm = this.state.userForm;
   protected readonly listRoute = computed(() =>
-    this.state.area().kind === 'platform' ? ['/users'] : ['/groups', this.groupId(), 'users'],
+    this.state.area().kind === 'platform'
+      ? ['/users']
+      : this.groups.listRoute(this.groupId() as string, 'users'),
   );
   protected readonly failure = signal<string | null>(null);
   protected readonly submitting = computed(() => this.userForm().submitting());
@@ -140,11 +146,12 @@ export class UserForm {
 
   constructor() {
     this.state.attach(this.groupId, this.userId);
-    // The page loaded: the group in the URL becomes the working group of the selector.
+    // Platform administrators and dealers: the modules of the group of the record decide which
+    // sections exist (the working group is not involved).
     effect(() => {
       const groupId = this.groupId();
-      if (groupId !== undefined && this.state.user() !== null) {
-        untracked(() => this.groups.adopt(groupId));
+      if (groupId !== undefined) {
+        untracked(() => void this.features.ensure(groupId));
       }
     });
   }
@@ -206,10 +213,6 @@ export class UserForm {
         this.userForm().reset();
         this.toast.success(this.state.i18n.t(wasNew ? 'USERS.FORM.CREATED' : 'USERS.FORM.SAVED'));
         if (wasNew) {
-          if (this.groupId() !== undefined) {
-            // The backend accepted the creation in this group: it is a real working group.
-            this.groups.adopt(this.groupId() as string);
-          }
           // The record opens with the values the server applied (defaults of the role).
           await this.router.navigate(userRoute(saved));
         } else {

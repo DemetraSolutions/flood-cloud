@@ -113,10 +113,23 @@ describe('PlacePage', () => {
       await answerPlaceLookups();
     });
 
-    it('asks for the features of the group and takes the group as the working one', async () => {
+    it('asks for the features of the group and leaves the working group alone', async () => {
       const { ensure } = await renderPlacePage();
       expect(ensure).toHaveBeenCalledWith(GROUP);
-      expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
+    });
+
+    it('names the group of the record when it is not the working group, and not when it is', async () => {
+      const view = await renderPlacePage();
+      const root = view.root;
+      expect(root.querySelector('.record-group')?.textContent).toContain('RECORD_GROUP.LABEL');
+      expect(root.querySelector('.record-group a')?.getAttribute('href')).toBe(
+        `/groups/${GROUP}/settings`,
+      );
+      TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Gruppo Esempio' });
+      await view.view();
+      expect(root.querySelector('.record-group')).toBeNull();
+      sessionStorage.clear();
     });
 
     it('says so when a lookup could not be read, and keeps the stored values', async () => {
@@ -157,9 +170,8 @@ describe('PlacePage', () => {
       expect(failed.textContent).toContain('PLACES.LOAD_ERROR');
       expect(failed.textContent).toContain('ERRORS.API.NOT_FOUND');
       expect(failed.textContent).toContain('r-1');
-      expect(root.querySelector<HTMLAnchorElement>('p a')?.getAttribute('href')).toBe(
-        `/groups/${GROUP}/places`,
-      );
+      // No working group: the way back is the cross-group list.
+      expect(root.querySelector<HTMLAnchorElement>('p a')?.getAttribute('href')).toBe('/places');
       failed.querySelector('button')!.click();
       await view();
       flushPlace(expectPlace(), fakePlace(), ETAG);

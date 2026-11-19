@@ -215,7 +215,12 @@ export async function renderCompany(
       ...provideApiTesting(),
       {
         provide: GroupFeatures,
-        useValue: { enabled: (name: string) => enabled.has(name), ensure, refresh: vi.fn() },
+        useValue: {
+          enabledFor: (_groupId: string | null, name: string) => enabled.has(name),
+          nameOf: () => null,
+          ensure,
+          refresh: vi.fn(),
+        },
       },
       ...(options.providers ?? []),
       provideRouter(

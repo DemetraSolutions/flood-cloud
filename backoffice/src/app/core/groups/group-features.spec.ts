@@ -158,22 +158,82 @@ describe('GroupFeatures', () => {
     expect(features.enabled('cash')).toBe(false);
   });
 
-  it('does not drop the features a deep link asked for while no group is chosen', async () => {
+  it('reads the group of a record page apart from the working group, with its name', async () => {
     setup();
     const features = psa();
     const pending = features.ensure(A);
     TestBed.tick();
-    await flush(URL_A, { cash: true });
+    backend()
+      .expectOne(URL_A)
+      .flush({ data: { name: 'Alfa', features: { cash: true } } });
     await pending;
     TestBed.tick();
-    expect(features.enabled('cash')).toBe(true);
+    expect(features.enabledFor(A, 'cash')).toBe(true);
+    expect(features.enabledFor(A, 'rooms')).toBe(false);
+    expect(features.nameOf(A)).toBe('Alfa');
+    // The working group (none) and its menu are not affected, and a second read is not made.
+    expect(features.enabled('cash')).toBe(false);
+    expect(features.status()).toBe('idle');
+    await features.ensure(A);
+    expect(features.nameOf(B)).toBeNull();
+    expect(features.enabledFor(B, 'cash')).toBe(false);
+    expect(features.enabledFor(null, 'cash')).toBe(false);
   });
 
-  it('drops the answer of a read made obsolete by another group', async () => {
+  it('keeps the other groups read for pages, and a group that stops being the working one', async () => {
     setup();
     const features = psa();
-    void features.ensure(A);
-    const second = features.ensure(B);
+    const context = TestBed.inject(GroupContext);
+    context.choose({ id: A, name: 'A' });
+    TestBed.tick();
+    backend()
+      .expectOne(URL_A)
+      .flush({ data: { name: 'Alfa', features: { cash: true } } });
+    await settle();
+    expect(features.enabledFor(A, 'cash')).toBe(true);
+    // Another working group: the page of A still knows its features and its name.
+    context.choose({ id: B, name: 'B' });
+    TestBed.tick();
+    backend()
+      .expectOne(`${API}/v1/groups/${B}`)
+      .flush({ data: { features: { rooms: true } } });
+    await settle();
+    expect(features.enabled('cash')).toBe(false);
+    expect(features.enabledFor(A, 'cash')).toBe(true);
+    expect(features.nameOf(A)).toBe('Alfa');
+    expect(features.enabledFor(B, 'rooms')).toBe(true);
+    // Back to "all groups": the group left is kept for the pages that show it.
+    context.clear();
+    TestBed.tick();
+    expect(features.enabledFor(B, 'rooms')).toBe(true);
+    expect(features.nameOf(B)).toBe('');
+  });
+
+  it('leaves a group unknown (and logs) when its read fails, and reads it again on refresh', async () => {
+    setup();
+    const features = psa();
+    const first = features.ensure(A);
+    backend().expectOne(URL_A).error(new ProgressEvent('error'));
+    await first;
+    expect(features.enabledFor(A, 'cash')).toBe(false);
+    expect(features.error()).toBeNull();
+    const second = features.refresh(A);
+    backend()
+      .expectOne(URL_A)
+      .flush({ data: { name: 7, features: { cash: true } } });
+    await second;
+    expect(features.enabledFor(A, 'cash')).toBe(true);
+    expect(features.nameOf(A)).toBe('');
+  });
+
+  it('drops the answer of a read made obsolete by another working group', async () => {
+    setup();
+    const features = psa();
+    const context = TestBed.inject(GroupContext);
+    context.choose({ id: A, name: 'A' });
+    TestBed.tick();
+    context.choose({ id: B, name: 'B' });
+    TestBed.tick();
     backend()
       .expectOne(URL_A)
       .flush(body({ cash: true }));
@@ -181,7 +241,7 @@ describe('GroupFeatures', () => {
     backend()
       .expectOne(`${API}/v1/groups/${B}`)
       .flush(body({ rooms: true }));
-    await second;
+    await settle();
     expect(features.enabled('cash')).toBe(false);
     expect(features.enabled('rooms')).toBe(true);
   });
@@ -205,6 +265,7 @@ describe('GroupFeatures', () => {
     await pending;
     expect(features.flags()).toBeNull();
 
+    expect(features.nameOf(A)).toBeNull();
     signIn({ role: 'D', groupId: null, group: null });
     const next = features.ensure(A);
     const req = backend().expectOne(URL_A);
@@ -215,9 +276,10 @@ describe('GroupFeatures', () => {
     expect(features.enabled('rooms')).toBe(false);
   });
 
-  it('ensure shares the request in flight and skips the group already loaded', async () => {
+  it('ensure shares the request in flight and skips the working group already loaded', async () => {
     setup();
     const features = psa();
+    TestBed.inject(GroupContext).choose({ id: A, name: 'A' });
     const first = features.ensure(A);
     const second = features.ensure(A);
     expect(second).toBe(first);
@@ -240,7 +302,9 @@ describe('GroupFeatures', () => {
     expect(await pending).toBe(true);
     expect(await features.isEnabledFor(null, 'cash')).toBe(false);
     TestBed.inject(GroupContext).choose({ id: A, name: 'A' });
-    expect(await features.isEnabledFor(null, 'cash')).toBe(true);
+    const working = features.isEnabledFor(null, 'cash');
+    await flush(URL_A, { cash: true });
+    expect(await working).toBe(true);
   });
 
   it('isEnabledFor answers for users bound to a group without waiting', async () => {
@@ -271,6 +335,33 @@ describe('GroupFeatures', () => {
     backend().expectOne(`${API}/v1/me`).error(new ProgressEvent('error'));
     await refreshed;
     expect(features.error()?.code).toBe('NETWORK_ERROR');
+  });
+
+  it('refresh reads a group that is not the working one apart', async () => {
+    setup();
+    const features = psa();
+    TestBed.inject(GroupContext).choose({ id: A, name: 'A' });
+    TestBed.tick();
+    await flush(URL_A, { cash: true });
+    const refreshed = features.refresh(B);
+    backend()
+      .expectOne(`${API}/v1/groups/${B}`)
+      .flush({ data: { name: 'Beta', features: { rooms: true } } });
+    await refreshed;
+    expect(features.enabledFor(B, 'rooms')).toBe(true);
+    expect(features.enabled('cash')).toBe(true);
+    const working = features.refresh(A);
+    await flush(URL_A, { cash: false });
+    await working;
+    expect(features.enabled('cash')).toBe(false);
+  });
+
+  it('enabledFor uses the profile for users bound to a group, whatever the group asked', () => {
+    setup();
+    signIn({ role: 'SA', groupFeatures: fakeFeatureFlags(false, { cash: true }) });
+    const features = TestBed.inject(GroupFeatures);
+    expect(features.enabledFor(A, 'cash')).toBe(true);
+    expect(features.enabledFor(null, 'rooms')).toBe(false);
   });
 
   it('refresh without a working group does nothing', async () => {

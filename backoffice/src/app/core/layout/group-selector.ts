@@ -1,6 +1,5 @@
 import { Component, computed, ElementRef, inject, signal } from '@angular/core';
-import { PRIMARY_OUTLET, Router } from '@angular/router';
-import { COMPANIES_LIST_FILTERS, PLACES_LIST_FILTERS, USERS_LIST_FILTERS } from '../auth/guards';
+import { Router } from '@angular/router';
 
 import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { failureMessage } from '../../shared/forms/form-errors';
@@ -15,7 +14,7 @@ import { GroupRef, ReferenceApi } from '../reference/reference-api';
 /**
  * Header combobox (ARIA 1.2 editable combobox with list popup) to choose the working group of
  * a PSA or dealer: search by name (debounced), arrow keys, Enter, Esc, and "load more" as the
- * last option of the cursor-paginated list. Choosing a group remembers it and opens its users.
+ * last option of the cursor-paginated list. Choosing (or clearing) a group remembers it and opens the home page.
  */
 @Component({
   selector: 'fc-group-selector',
@@ -139,84 +138,28 @@ export class GroupSelector {
     }
     this.context.choose({ id: group.id, name: group.name });
     this.close();
+    // From the group chooser of a menu entry the choice leads to that page, otherwise home.
     const target = chooserTarget(this.router.url);
     if (target !== null) {
       void this.router.navigateByUrl(`/groups/${encodeURIComponent(group.id)}/${target}`);
       return;
     }
-    const filters = this.usersFilters(true);
-    void this.router.navigate(
-      ['/groups', group.id, 'users'],
-      ...(filters === null ? [] : [{ queryParams: filters }]),
-    );
+    this.goHome();
   }
 
   /**
-   * Filters of the users list on screen (if the page is one), to carry over to the list of the
-   * new selection: never the cursor or the cross-group `groupId`/`dealerId`, and not a platform
-   * role filter when the target is a group (it has none of those roles).
-   */
-  private usersFilters(toGroup: boolean): Record<string, string> | null {
-    const tree = this.router.parseUrl(this.router.url);
-    const path = tree.root.children[PRIMARY_OUTLET]?.segments.map((s) => s.path).join('/') ?? '';
-    if (!/^(groups\/[^/]+\/)?users$/.test(path)) {
-      return null;
-    }
-    const filters: Record<string, string> = {};
-    for (const name of USERS_LIST_FILTERS) {
-      const value = tree.queryParams[name];
-      const platformRole = name === 'role' && (value === 'PSA' || value === 'D');
-      if (typeof value === 'string' && !(toGroup && platformRole)) {
-        filters[name] = value;
-      }
-    }
-    return Object.keys(filters).length === 0 ? null : filters;
-  }
-
-  /**
-   * Filters of the companies or places list on screen to carry over to the cross-group list:
-   * never the cursor, nor the company filter, which belongs to the group left.
-   */
-  private listFilters(resource: string): Record<string, string> | null {
-    const queryParams = this.router.parseUrl(this.router.url).queryParams;
-    const names = resource === 'places' ? PLACES_LIST_FILTERS : COMPANIES_LIST_FILTERS;
-    const filters: Record<string, string> = {};
-    for (const name of names) {
-      const value = queryParams[name];
-      if (typeof value === 'string') {
-        filters[name] = value;
-      }
-    }
-    return Object.keys(filters).length === 0 ? null : filters;
-  }
-
-  /**
-   * Back to "all groups": forgets the working group and moves to the cross-group view of the
-   * current page (users, activity log); other pages stay where they are.
+   * Back to "all groups": forgets the working group, the preference included, and goes home.
    */
   protected clear(): void {
     this.context.clear();
     this.close();
-    const path = this.router.url.split('?')[0];
-    const resource = /^\/groups\/[^/]+\/(companies|places)(\/|$)/.exec(path)?.[1];
-    if (resource !== undefined) {
-      // The cross-group list of the same resource; its filters follow only from the list itself.
-      const filters = path.endsWith(`/${resource}`) ? this.listFilters(resource) : null;
-      void this.router.navigate(
-        [`/${resource}`],
-        ...(filters === null ? [] : [{ queryParams: filters }]),
-      );
-    } else if (/^\/groups\/[^/]+/.test(path)) {
-      const filters = this.usersFilters(false);
-      void this.router.navigate(
-        ['/users'],
-        ...(filters === null ? [] : [{ queryParams: filters }]),
-      );
-    } else if (path === '/activity-log') {
-      void this.router.navigate(['/activity-log'], {
-        queryParams: { groupId: null },
-        queryParamsHandling: 'merge',
-      });
+    this.goHome();
+  }
+
+  /** Any change of the working group opens the home page (nothing to do when already there). */
+  private goHome(): void {
+    if (this.router.url.split(/[?#]/)[0] !== '/') {
+      void this.router.navigateByUrl('/');
     }
   }
 

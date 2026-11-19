@@ -6,7 +6,7 @@
     (retry)="state.reload()"
   />
   <p>
-    <a [routerLink]="['/groups', groupId(), 'companies']">{{ 'COMPANIES.BACK' | t }}</a>
+    <a [routerLink]="backRoute()">{{ 'COMPANIES.BACK' | t }}</a>
   </p>
 } @else {
   @let company = state.company();
@@ -29,6 +29,7 @@
         </button>
       }
     </header>
+    <fc-record-group [groupId]="groupId()" />
 
     @if (!state.canWrite()) {
       <p class="note">{{ 'COMPANIES.READ_ONLY' | t }}</p>

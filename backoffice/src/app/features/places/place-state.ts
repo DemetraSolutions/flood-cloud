@@ -215,13 +215,14 @@ export class PlaceState {
   );
 
   /** Whether the group has a feature (the interface of the places adapts to the modules of the group). */
-  readonly hasFeature = (name: FeatureName): boolean => this.features.enabled(name);
+  readonly hasFeature = (name: FeatureName): boolean =>
+    this.features.enabledFor(this.groupId(), name);
 
   /** Whether a key of a tab is shown: the legacy rules by role and by the features of the group. */
   readonly isShown = (definition: FieldDef): boolean =>
     isVisible(definition, {
       privileged: this.privileged(),
-      feature: (name) => this.features.enabled(name),
+      feature: (name) => this.features.enabledFor(this.groupId(), name),
     });
 
   /** Whether the store key panel is offered: platform administrators and dealers, on an existing place. */
@@ -239,13 +240,13 @@ export class PlaceState {
         case 'general':
           return true;
         case 'devices':
-          return !secondary && (privileged || this.features.enabled('cash'));
+          return !secondary && (privileged || this.features.enabledFor(this.groupId(), 'cash'));
         case 'printStations':
-          return !secondary && (privileged || this.features.enabled('ordering'));
+          return !secondary && (privileged || this.features.enabledFor(this.groupId(), 'ordering'));
         case 'rooms':
-          return !secondary && (privileged || this.features.enabled('rooms'));
+          return !secondary && (privileged || this.features.enabledFor(this.groupId(), 'rooms'));
         case 'media':
-          return !secondary && (privileged || this.features.enabled('media'));
+          return !secondary && (privileged || this.features.enabledFor(this.groupId(), 'media'));
         default:
           return !secondary;
       }
@@ -258,7 +259,7 @@ export class PlaceState {
       (entry) =>
         this.privileged() ||
         (entry.privileged !== true &&
-          (entry.needs === undefined || this.features.enabled(entry.needs))),
+          (entry.needs === undefined || this.features.enabledFor(this.groupId(), entry.needs))),
     ),
   );
 

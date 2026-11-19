@@ -175,11 +175,11 @@ export class CompanyState {
     COMPANY_SECTIONS.filter((section) => {
       switch (section.id) {
         case 'customerApp':
-          return this.privileged() || this.features.enabled('customersApp');
+          return this.privileged() || this.features.enabledFor(this.groupId(), 'customersApp');
         case 'mealVoucherIssuers':
-          return this.privileged() || this.features.enabled('rooms');
+          return this.privileged() || this.features.enabledFor(this.groupId(), 'rooms');
         case 'media':
-          return this.features.enabled('media');
+          return this.features.enabledFor(this.groupId(), 'media');
         default:
           return true;
       }

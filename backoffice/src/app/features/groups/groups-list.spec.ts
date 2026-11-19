@@ -442,25 +442,24 @@ describe('GroupsList', () => {
       expect(onlyTrash.rowButtons(0)).toHaveLength(2);
     });
 
-    it('opens the record: the group becomes the working group and the page opens', async () => {
+    it('opens the record without making the group the working group', async () => {
       const { flush, flushDealers, rowButtons, view, router } = await render();
       await flushDealers();
       await flush([ONE]);
       rowButtons(0)[0].click();
       await view();
       expect(router.url).toBe(`/groups/${ONE.id}/settings`);
-      expect(TestBed.inject(GroupContext).groupId()).toBe(ONE.id);
-      expect(TestBed.inject(GroupContext).groupName()).toBe(ONE.name);
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     });
 
-    it('makes the group the working group when its link is followed', async () => {
+    it('does not make the group the working group when its link is followed', async () => {
       const { flush, flushDealers, root, view, router } = await render();
       await flushDealers();
       await flush([ONE]);
       root.querySelector<HTMLAnchorElement>('tbody a')!.click();
       await view();
       expect(router.url).toBe(`/groups/${ONE.id}/settings`);
-      expect(TestBed.inject(GroupContext).groupId()).toBe(ONE.id);
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
     });
 
     it.each([

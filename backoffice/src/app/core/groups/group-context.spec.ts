@@ -85,41 +85,48 @@ describe('GroupContext', () => {
     expect(context.groupId()).toBeNull();
   });
 
-  it('adopts the group of the URL for a PSA, keeping the name of a group already chosen', () => {
+  it('renames the working group, and only that one', () => {
     const context = create();
     signIn({ role: 'PSA', groupId: null, group: null });
-    context.adopt(ID);
-    expect(context.groupId()).toBe(ID);
-    expect(context.groupName()).toBe('');
-    expect(sessionStorage.getItem(LAST_GROUP_ID_KEY)).toBe(ID);
+    context.rename(ID, 'Alfa');
+    expect(context.groupId()).toBeNull();
     context.choose({ id: ID, name: 'Alfa' });
-    context.adopt(ID);
+    context.rename(ID, 'Alfa');
+    context.rename(ID, '');
     expect(context.groupName()).toBe('Alfa');
-  });
-
-  it('adopts the name the page knows, refreshing a stale one', () => {
-    const context = create();
-    signIn({ role: 'PSA', groupId: null, group: null });
-    context.adopt(ID, 'Alfa');
+    context.rename('665f1c2e9b1d4a0012ab34ff', 'Altro');
     expect(context.groupName()).toBe('Alfa');
-    context.adopt(ID, 'Alfa');
-    context.adopt(ID, 'Beta');
+    context.rename(ID, 'Beta');
     expect(context.groupName()).toBe('Beta');
   });
 
-  it('does not adopt anything for a user bound to a group', () => {
+  it('never renames the group of a user bound to a group', () => {
     const context = create();
     signIn({ role: 'SA' });
-    context.adopt(ID);
-    expect(context.groupId()).toBe('665f1c2e9b1d4a0012ab34a1');
+    context.rename(ID, 'Altro');
+    expect(context.groupName()).not.toBe('Altro');
     expect(sessionStorage.getItem(LAST_GROUP_ID_KEY)).toBeNull();
   });
 
-  it('ignores a group id that is not an object id, whether chosen or adopted', () => {
+  it('routes back to the cross-group list only for a PSA or dealer with no working group', () => {
+    const context = create();
+    signIn({ role: 'PSA', groupId: null, group: null });
+    expect(context.listRoute(ID, 'companies')).toEqual(['/companies']);
+    expect(context.listRoute(ID, 'users')).toEqual(['/users']);
+    context.choose({ id: ID, name: 'Alfa' });
+    expect(context.listRoute('665f1c2e9b1d4a0012ab34ff', 'places')).toEqual([
+      '/groups',
+      '665f1c2e9b1d4a0012ab34ff',
+      'places',
+    ]);
+    signIn({ role: 'SA' });
+    expect(context.listRoute(ID, 'places')).toEqual(['/groups', ID, 'places']);
+  });
+
+  it('ignores a group id that is not an object id, when chosen', () => {
     const context = create();
     signIn({ role: 'PSA', groupId: null, group: null });
     context.choose({ id: '../../x', name: 'Bad' });
-    context.adopt('not-an-id');
     expect(context.groupId()).toBeNull();
     expect(sessionStorage.getItem(LAST_GROUP_ID_KEY)).toBeNull();
   });

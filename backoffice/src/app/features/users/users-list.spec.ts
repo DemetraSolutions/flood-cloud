@@ -385,11 +385,11 @@ describe('UsersList', () => {
       sessionStorage.clear();
     });
 
-    it('is adopted after a successful load, and not in the cross-group list', async () => {
+    it('is never made the working group by opening a list, of a group or of all groups', async () => {
       sessionStorage.clear();
       const group = await render(undefined, { role: 'PSA', groupId: null, group: null });
       await group.flush([ONE]);
-      expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
+      expect(TestBed.inject(GroupContext).groupId()).toBeNull();
       sessionStorage.clear();
       document.body.replaceChildren();
       TestBed.resetTestingModule();

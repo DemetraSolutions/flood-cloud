@@ -30,7 +30,6 @@ import { PromotionEditor } from './promotion-editor';
     [viewable]="true"
     lockedNote="CATALOG.PROMOTIONS.LOCKED_NOTE"
     [wide]="true"
-    [adopt]="true"
   >
     <ng-template
       #editor

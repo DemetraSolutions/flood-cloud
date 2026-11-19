@@ -17,6 +17,7 @@
     </h1>
     <a [routerLink]="listRoute()">{{ 'EMAIL_TEMPLATES.FORM.BACK' | t }}</a>
   </header>
+  <fc-record-group [groupId]="groupId()" />
 
   @if (template(); as current) {
     <p class="meta">

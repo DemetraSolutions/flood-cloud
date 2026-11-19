@@ -154,12 +154,10 @@ describe('GroupSettings', () => {
     expect(root.textContent).not.toContain('general section');
   });
 
-  it('makes the group the working group of the platform administrator', async () => {
+  it('does not make the group the working group of the platform administrator', async () => {
     const { load } = await render();
     await load();
-    const context = TestBed.inject(GroupContext);
-    expect(context.groupId()).toBe(GROUP.id);
-    expect(context.groupName()).toBe(GROUP.name);
+    expect(TestBed.inject(GroupContext).groupId()).toBeNull();
   });
 
   describe('state of the group', () => {

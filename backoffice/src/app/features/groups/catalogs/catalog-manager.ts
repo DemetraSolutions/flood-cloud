@@ -4,16 +4,13 @@ import {
   Component,
   computed,
   contentChild,
-  effect,
   inject,
   input,
   signal,
   TemplateRef,
-  untracked,
 } from '@angular/core';
 import { ApiData } from '../../../core/api/api.types';
 import { ApiError, apiErrorMessageKey } from '../../../core/api/api-error';
-import { GroupContext } from '../../../core/groups/group-context';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { TPipe } from '../../../core/i18n/t-pipe';
 import { ActionsMenu } from '../../../shared/ui/actions-menu/actions-menu';
@@ -89,7 +86,6 @@ export interface EditorContext<T> {
 export class CatalogManager<T> {
   private readonly api = inject(CatalogsApi);
   private readonly toast = inject(ToastService);
-  private readonly groups = inject(GroupContext);
   protected readonly i18n = inject(I18nService);
 
   /** Group the catalog belongs to. */
@@ -131,8 +127,6 @@ export class CatalogManager<T> {
    * reading only, with the explanation.
    */
   readonly viewable = input(false);
-  /** Whether the page lives outside the group record: the group of the page becomes the working one. */
-  readonly adopt = input(false);
 
   /** The form of the editor: `<ng-template #editor let-item let-error="error" …>`. */
   protected readonly editor = contentChild.required<TemplateRef<EditorContext<T>>>('editor');
@@ -156,13 +150,6 @@ export class CatalogManager<T> {
   protected readonly showLockedNote = computed(
     () => this.lockedNote() !== null && this.rows().some((row) => this.locked()(row)),
   );
-  // The page loaded: the group in the URL becomes the working group of the selector and the menu.
-  private readonly adoptGroup = effect(() => {
-    const groupId = this.groupId();
-    if (this.adopt() && this.resource.hasValue()) {
-      untracked(() => this.groups.adopt(groupId));
-    }
-  });
 
   protected readonly canCreate = computed(() => this.canWrite() && this.allowCreate());
 

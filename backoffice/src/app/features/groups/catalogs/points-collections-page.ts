@@ -20,7 +20,6 @@ import { PointsCollectionEditor } from './points-collection-editor';
     [nameOf]="nameOf"
     [canWrite]="canWrite()"
     [limit]="max"
-    [adopt]="true"
   >
     <ng-template
       #editor

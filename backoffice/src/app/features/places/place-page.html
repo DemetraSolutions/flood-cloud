@@ -6,7 +6,7 @@
     (retry)="state.reload()"
   />
   <p>
-    <a [routerLink]="['/groups', groupId(), 'places']">{{ 'PLACES.BACK' | t }}</a>
+    <a [routerLink]="backRoute()">{{ 'PLACES.BACK' | t }}</a>
   </p>
 } @else {
   @let place = state.place();
@@ -53,6 +53,7 @@
         />
       }
     </header>
+    <fc-record-group [groupId]="groupId()" />
 
     @if (!state.canWrite()) {
       <p class="note">{{ 'PLACES.READ_ONLY' | t }}</p>

@@ -81,11 +81,12 @@ async function render(url = '/companies', profile: Partial<Profile> = {}) {
     const request = backend().expectOne((r) => r.url === LIST);
     request.flush({ data, page: { limit: 25, next: null } });
     backend().expectOne(`${API}/v1/countries`).flush(COUNTRIES);
-    backend()
-      .expectOne((r) => r.url === `${API}/v1/groups`)
-      .flush({ data: [{ id: GROUP, name: 'Gruppo Uno' }], page: { limit: 100, next: null } });
     for (const dealers of backend().match((r) => r.url === `${API}/v1/dealers`)) {
       dealers.flush({ data: [], page: { limit: 200, next: null } });
+    }
+    await view();
+    for (const read of backend().match((r) => /\/v1\/groups\/[0-9a-f]{24}$/.test(r.url))) {
+      read.flush({ data: { name: 'Gruppo Uno' } });
     }
     await view();
     return request;
@@ -121,27 +122,6 @@ describe('CompaniesList across groups', () => {
     expect(groupCells).toEqual(['Gruppo Uno', 'CROSS_GROUP.NO_NAME', 'CROSS_GROUP.NO_NAME']);
   });
 
-  it('opens the company in its group and makes that group the working group', async () => {
-    const { flush, root, view } = await render();
-    await flush([ONE]);
-    const link = root.querySelector<HTMLAnchorElement>(
-      `a[href="/groups/${GROUP}/companies/${COMPANY}"]`,
-    )!;
-    expect(link.textContent).toBe('Alfa Srl');
-    link.click();
-    await view();
-    expect(TestBed.inject(GroupContext).groupId()).toBe(GROUP);
-    expect(TestBed.inject(GroupContext).groupName()).toBe('Gruppo Uno');
-  });
-
-  it('chooses the group of a row without a name with an empty name', async () => {
-    const { flush, root, view } = await render();
-    await flush([TWO]);
-    root.querySelector<HTMLAnchorElement>(`a[href="/groups/${G2}/companies/${TWO.id}"]`)!.click();
-    await view();
-    expect(TestBed.inject(GroupContext).groupId()).toBe(G2);
-  });
-
   it('does not offer to create, trash or delete, and tells to choose a group when creating is allowed', async () => {
     const { flush, root } = await render();
     await flush([ONE]);
@@ -170,46 +150,49 @@ describe('CompaniesList across groups', () => {
     expect(request.request.params.has('dealerId')).toBe(false);
   });
 
-  it('puts the chosen group and dealer in the URL and clears them', async () => {
+  it('searches the groups on the server, puts the chosen one in the URL and clears it', async () => {
     const { flush, root, view, router } = await render();
     await flush([ONE]);
-    const select = (label: string) =>
-      root.querySelector<HTMLSelectElement>(
-        `#${([...root.querySelectorAll('label')].find((l) => l.textContent?.trim() === label) as HTMLLabelElement).htmlFor}`,
-      )!;
-    select('CROSS_GROUP.FILTER.GROUP').value = GROUP;
-    select('CROSS_GROUP.FILTER.GROUP').dispatchEvent(new Event('change'));
+    const input = root.querySelector<HTMLInputElement>('input[role=combobox]')!;
+    input.dispatchEvent(new Event('focus'));
+    await view();
+    backend()
+      .expectOne((r) => r.url === `${API}/v1/groups`)
+      .flush({ data: [{ id: GROUP, name: 'Gruppo Uno' }], page: { limit: 20, next: null } });
+    await view();
+    root.querySelector<HTMLElement>('[role=option]')!.click();
     await view();
     expect(router.url).toBe(`/companies?groupId=${GROUP}`);
     backend()
       .expectOne((r) => r.url === LIST)
       .flush({ data: [], page: { limit: 25, next: null } });
     await view();
-    select('CROSS_GROUP.FILTER.GROUP').value = '';
-    select('CROSS_GROUP.FILTER.GROUP').dispatchEvent(new Event('change'));
+    expect(input.value).toBe('Gruppo Uno');
+    root
+      .querySelector<HTMLButtonElement>('button[title="CROSS_GROUP.FILTER.CLEAR_GROUP"]')!
+      .click();
     await view();
     expect(router.url).toBe('/companies');
     backend()
       .expectOne((r) => r.url === LIST)
       .flush({ data: [], page: { limit: 25, next: null } });
-  });
-
-  it('tolerates a row without its group (nothing is chosen when it is opened)', async () => {
-    const { flush, root, view } = await render();
-    const orphan = { ...ONE, groupId: undefined, groupName: undefined };
-    await flush([orphan]);
-    root.querySelector<HTMLAnchorElement>('tbody a')!.click();
+    backend()
+      .expectOne((r) => r.url === `${API}/v1/groups`)
+      .flush({ data: [], page: { limit: 20, next: null } });
     await view();
-    expect(TestBed.inject(GroupContext).groupId()).toBeNull();
   });
 
-  it('opens the company of a group that does not exist without a name', async () => {
+  it('opens the record in its group without changing the working group', async () => {
     const { flush, root, view } = await render();
-    await flush([THREE]);
+    await flush([ONE, TWO]);
+    const links = [...root.querySelectorAll<HTMLAnchorElement>('tbody a')].map((a) =>
+      a.getAttribute('href'),
+    );
+    expect(links).toContain(`/groups/${GROUP}/companies/${ONE.id}`);
     root
-      .querySelector<HTMLAnchorElement>(`a[href="/groups/${THREE.groupId}/companies/${THREE.id}"]`)!
+      .querySelector<HTMLAnchorElement>(`a[href="/groups/${GROUP}/companies/${ONE.id}"]`)!
       .click();
     await view();
-    expect(TestBed.inject(GroupContext).groupName()).toBe('');
+    expect(TestBed.inject(GroupContext).groupId()).toBeNull();
   });
 });

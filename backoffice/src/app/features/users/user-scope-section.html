@@ -28,7 +28,7 @@
       />
     }
   }
-  <ng-container *fcFeature="'services'">
+  <ng-container *fcFeature="'services'; group: state.groupId() ?? null">
     @if (dutiesRole() && state.groupId() !== undefined) {
       <fc-reference-picker
         [formField]="form.serviceIds"
