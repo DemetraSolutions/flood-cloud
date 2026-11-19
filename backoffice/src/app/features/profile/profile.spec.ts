@@ -56,6 +56,7 @@ describe('toProfileModel', () => {
       email: '',
       phone: '',
       language: LANGUAGE_OF_PROFILE,
+      theme: 'system',
       avatar: '',
     });
     expect(model.pos.options).toEqual(posModelOf(fakePos()).options);
@@ -70,6 +71,7 @@ describe('toProfileModel', () => {
       email: '',
       phone: '',
       language: '',
+      theme: '',
       avatar: '',
       pos: { options: blankPos().options },
     });
@@ -108,6 +110,10 @@ describe('buildProfilePatch', () => {
 
   it('includes the language when it changed', () => {
     expect(buildProfilePatch({ ...same, language: 'en' }, profile)).toEqual({ language: 'en' });
+  });
+
+  it('includes the theme when it changed', () => {
+    expect(buildProfilePatch({ ...same, theme: 'dark' }, profile)).toEqual({ theme: 'dark' });
   });
 
   it('sends a new avatar, and null when it was removed', () => {
@@ -273,6 +279,17 @@ describe('ProfilePage', () => {
     expect(save().disabled).toBe(true);
   });
 
+  it('offers the three themes and saves a change, applying it at once', async () => {
+    const { fixture, save } = await render();
+    const select = findControl(fixture, 'PROFILE.THEME') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.value)).toEqual(['system', 'light', 'dark']);
+    expect(select.value).toBe('system');
+    await typeInto(fixture, 'PROFILE.THEME', 'dark');
+    select.dispatchEvent(new Event('blur'));
+    expect(save().disabled).toBe(false);
+    expect(errorOf(fixture, 'PROFILE.THEME')).toBe('');
+  });
+
   it('labels each field with the right autocomplete and type', async () => {
     const { fixture } = await render();
     expect(findControl(fixture, FIRST).getAttribute('autocomplete')).toBe('given-name');
@@ -282,6 +299,17 @@ describe('ProfilePage', () => {
   });
 
   describe('saving', () => {
+    it('sends the theme and applies it right after the save', async () => {
+      const { fixture } = await render();
+      await typeInto(fixture, 'PROFILE.THEME', 'dark');
+      await submitForm(fixture);
+      const patch = backend().expectOne(`${API}/v1/me`);
+      expect(patch.request.body).toEqual({ theme: 'dark' });
+      patch.flush({ data: fakeProfile({ theme: 'dark' }) });
+      await settle();
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    });
+
     it('patches only the changed fields and refreshes the session profile', async () => {
       const { fixture, save, value } = await render();
       await typeInto(fixture, FIRST, 'Luigi');
@@ -499,10 +527,12 @@ describe('ProfilePage', () => {
         { field: 'firstName', issue: 'maxLength' },
         { field: 'lastName', issue: 'maxLength' },
         { field: 'phone', issue: 'pattern' },
+        { field: 'theme', issue: 'enum' },
       ]);
       expect(errorOf(fixture, FIRST)).toBe('FORM.ISSUE.MAX_LENGTH');
       expect(errorOf(fixture, LAST)).toBe('FORM.ISSUE.MAX_LENGTH');
       expect(errorOf(fixture, PHONE)).toBe('FORM.ISSUE.PATTERN');
+      expect(errorOf(fixture, 'PROFILE.THEME')).toBe('FORM.ISSUE.ENUM');
     });
 
     it('puts a 422 on the avatar and on the quick discount of the preferences', async () => {

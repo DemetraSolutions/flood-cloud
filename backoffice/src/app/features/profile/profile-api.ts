@@ -11,6 +11,7 @@ export interface ProfilePatch {
   email?: string | null;
   phone?: string | null;
   language?: string;
+  theme?: string;
   avatar?: string | null;
   /** The user's own point-of-sale preferences (never permissions or price lists). */
   pos?: { options: Record<string, unknown> };

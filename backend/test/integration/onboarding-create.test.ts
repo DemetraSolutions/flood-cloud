@@ -133,7 +133,7 @@ describe('POST /v1/groups: the customer', () => {
     const cash = (permissions['apps'] as { cash: { status: boolean; options: { priceLists: Document } } }).cash;
     assert.equal(cash.status, true);
     assert.deepEqual(cash.options.priceLists, { [priceListId!]: { status: true, selected: true } });
-    assert.deepEqual(user['settings'], { language: 'it', hiddenInStats: false });
+    assert.deepEqual(user['settings'], { language: 'it', theme: 'system', hiddenInStats: false });
     assert.deepEqual(user['shiftTime'], { status: false, weeksGeneric: [], daySpecial: {} });
     assert.equal(typeof user['password'], 'string');
     const credentials = (await common().collection('userCredentials').findOne({ _id: userId }))!;

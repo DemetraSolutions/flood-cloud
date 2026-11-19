@@ -52,7 +52,7 @@ const EMPTY_SUMMARY: ActivationsSummary = {
 };
 
 /**
- * The activations of the month (`/tools/activations`): what Flood invoices each dealer for an
+ * The activations of the month (`/activations`): what Flood invoices each dealer for an
  * invoice month, that is the activations of the month before and the instalment of the renewals
  * of the year. A closed month is read from its closure, an open one is computed live. A
  * dealer sees its own row only. Platform administrators freeze the renewal base of the year and

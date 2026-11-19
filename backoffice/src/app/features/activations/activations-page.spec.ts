@@ -68,7 +68,7 @@ function summary(
 const closedRows = () => [row({ status: 'closed' }), { ...NONE_ROW, status: 'closed' as const }];
 
 async function render(
-  url = '/tools/activations?month=2026-06',
+  url = '/activations?month=2026-06',
   profile: Partial<Profile> = {},
   withApi = true,
 ) {
@@ -79,7 +79,7 @@ async function render(
       ...(withApi ? [] : [{ provide: AppConfig, useValue: { apiBaseUrl: signal(null) } }]),
       provideRouter(
         [
-          { path: 'tools/activations', component: ActivationsPage },
+          { path: 'activations', component: ActivationsPage },
           { path: '**', children: [] },
         ],
         withComponentInputBinding(),
@@ -163,14 +163,14 @@ describe('ActivationsPage', () => {
     });
 
     it('explains January as the invoice of the December activations', async () => {
-      const { root, flush } = await render('/tools/activations?month=2027-01');
+      const { root, flush } = await render('/activations?month=2027-01');
       await flush();
       expect(root.querySelector('.explanation')?.textContent).toContain(
         '"activity":"dicembre 2026","month":"gennaio","year":2027',
       );
     });
 
-    it.each(['/tools/activations', '/tools/activations?month=garbage'])(
+    it.each(['/activations', '/activations?month=garbage'])(
       'starts from the current month when the URL has none or a wrong one (%s)',
       async (url) => {
         const { request, view } = await render(url);
@@ -231,8 +231,8 @@ describe('ActivationsPage', () => {
       await flush();
       const links = [...root.querySelectorAll('tbody a')].map((a) => a.getAttribute('href'));
       expect(links).toEqual([
-        '/tools/activations/665f1c2e9b1d4a0012ab34d1?month=2026-06',
-        '/tools/activations/none?month=2026-06',
+        '/activations/665f1c2e9b1d4a0012ab34d1?month=2026-06',
+        '/activations/none?month=2026-06',
       ]);
     });
 
@@ -257,7 +257,7 @@ describe('ActivationsPage', () => {
     });
 
     it('reports an unexpected failure generically', async () => {
-      const { root, view } = await render('/tools/activations?month=2026-06', {}, false);
+      const { root, view } = await render('/activations?month=2026-06', {}, false);
       await view();
       expect(root.querySelector('fc-error-state')?.textContent).toContain('ERRORS.GENERIC.MESSAGE');
     });
@@ -295,7 +295,7 @@ describe('ActivationsPage', () => {
     });
 
     it('falls back to the invoices on a wrong tab', async () => {
-      const { root, flush } = await render('/tools/activations?month=2026-06&tab=bad');
+      const { root, flush } = await render('/activations?month=2026-06&tab=bad');
       await flush();
       expect(root.querySelector('#activations-panel-invoices')).not.toBeNull();
     });
@@ -308,11 +308,11 @@ describe('ActivationsPage', () => {
       monthField().value = '2026-7';
       monthField().dispatchEvent(new Event('input'));
       await view();
-      expect(router.url).toBe('/tools/activations?month=2026-06');
+      expect(router.url).toBe('/activations?month=2026-06');
       monthField().value = '2026-07';
       monthField().dispatchEvent(new Event('input'));
       await view();
-      expect(router.url).toBe('/tools/activations?month=2026-07');
+      expect(router.url).toBe('/activations?month=2026-07');
       const req = request();
       expect(req.request.params.get('month')).toBe('2026-07');
       req.flush(summary());
@@ -322,7 +322,7 @@ describe('ActivationsPage', () => {
 
   describe('a dealer', () => {
     it('sees the page without the actions of the platform administrator', async () => {
-      const { root, flush } = await render('/tools/activations?month=2026-06', {
+      const { root, flush } = await render('/activations?month=2026-06', {
         role: 'D',
         permissions: ['activations:read'],
       });
@@ -454,9 +454,7 @@ describe('ActivationsPage', () => {
     });
 
     it('takes the year of the base from the summary', async () => {
-      const { view, flush, button, dialogButton } = await render(
-        '/tools/activations?month=2027-01',
-      );
+      const { view, flush, button, dialogButton } = await render('/activations?month=2027-01');
       await flush({ ...summary([row()], false), renewalBase: { year: 2027, frozen: false } });
       button('ACTIVATIONS.ACTION.FREEZE.LABEL {"year":2027}').click();
       await view();

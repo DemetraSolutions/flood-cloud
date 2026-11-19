@@ -1,3 +1,9 @@
+@if (hasList()) {
+  <p>
+    <a routerLink="/groups/list">{{ 'GROUP_SETTINGS.BACK' | t }}</a>
+  </p>
+}
+
 @if (state.loadFailed()) {
   <fc-error-state
     [title]="'GROUP_SETTINGS.LOAD_ERROR' | t"

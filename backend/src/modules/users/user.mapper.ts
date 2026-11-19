@@ -9,6 +9,7 @@ import { posDocument, posSetPaths, readPos } from './pos.mapper.ts';
 import { readShiftTime, shiftTimeSetPaths, toLegacyShiftTime } from './shift-time.ts';
 import { INVALID_ROLE } from './user.types.ts';
 import type {
+  UserTheme,
   LegacyUserDocument,
   LegacyUserUpdate,
   MappedUser,
@@ -27,6 +28,14 @@ export const OWNED_PERMISSION_MODULES: readonly string[] = LEGACY_MODULES;
 
 /** Language of a user without one. */
 export const DEFAULT_LANGUAGE = 'it';
+
+/** Colour themes of the backoffice a user can choose (`settings.theme`). */
+export const USER_THEMES = ['light', 'dark', 'system'] as const;
+
+/** Theme of a user without a valid one. */
+export const DEFAULT_THEME: UserTheme = 'system';
+
+const readTheme = (value: unknown): UserTheme => USER_THEMES.find((theme) => theme === value) ?? DEFAULT_THEME;
 
 /** Format of a personal value encrypted by the legacy platform: `<ciphertext hex, 32 hex per block>$<iv hex, 32 characters>`. */
 const LEGACY_ENCRYPTED = /^([0-9a-f]{32})+\$[0-9a-f]{32}$/;
@@ -217,6 +226,7 @@ export function fromLegacy(document: LegacyUserDocument, options: { readonly sum
     trashed: trash === true,
     trashedAt: readDate(raw['trashDate']),
     language: nonEmptyString(settings['language']) ?? DEFAULT_LANGUAGE,
+    theme: readTheme(settings['theme']),
     hiddenInStats: typeof hiddenInStats === 'boolean' ? hiddenInStats : leftoverHidden === true,
     description: readDescription(raw['description'], anomalies),
     ...(options.summary === true ? {} : { avatar: shownAvatar }),
@@ -241,7 +251,7 @@ function toObjectId(id: string): ObjectId {
  * Translates domain changes into a legacy update (`doc/Tasks.md` 3.1.3). Only `$set` and `$unset`
  * of fields the backend owns are produced, never a replacement document, and `updateDate` is always
  * set. The legacy field names are `name`, `surname`, `telephone`, `settings.language`,
- * `settings.hiddenInStats`, `status` and `trash` (booleans), `userName`; the scope follows D-08
+ * `settings.theme`, `settings.hiddenInStats`, `status` and `trash` (booleans), `userName`; the scope follows D-08
  * (`companyId` = first company or `null`, `placeId` = first place or `null`, `placesId` = all places);
  * the matrix is written with targeted `permissions.<module>.r|w` and `permissions.status`, the POS with one path per value
  * (`permissions.apps.cash.sub.discount`…) and the shifts with `shiftTime.status|weeksGeneric|daySpecial`, so the keys of those objects that the
@@ -304,6 +314,9 @@ export function toLegacyUpdate(changes: UserChanges, now: Date = new Date()): Le
   }
   if (changes.language !== undefined) {
     set['settings.language'] = changes.language;
+  }
+  if (changes.theme !== undefined) {
+    set['settings.theme'] = changes.theme;
   }
   if (changes.hiddenInStats !== undefined) {
     set['settings.hiddenInStats'] = changes.hiddenInStats;
@@ -391,7 +404,7 @@ export function toLegacyDocument(user: NewUser, now: Date): Record<string, unkno
     placesId: user.placeIds.map(toObjectId),
     servicesId: user.serviceIds.map(toObjectId),
     permissions,
-    settings: { language: user.language, hiddenInStats: user.hiddenInStats },
+    settings: { language: user.language, theme: user.theme, hiddenInStats: user.hiddenInStats },
     shiftTime: toLegacyShiftTime(user.shiftTime),
     status: user.status === 'active',
     trash: false,
@@ -430,6 +443,7 @@ export function toResponse(user: User): UserResponse {
     trashed: user.trashed,
     trashedAt: user.trashedAt === null ? null : user.trashedAt.toISOString(),
     language: user.language,
+    theme: user.theme,
     hiddenInStats: user.hiddenInStats,
     description: user.description,
     ...(user.avatar === undefined ? {} : { avatar: user.avatar }),

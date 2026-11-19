@@ -5,13 +5,15 @@ import { sendData } from '../../shared/http/envelope.ts';
 import { sendRevalidatedPage } from '../../shared/http/etag.ts';
 import { entityTag } from '../../shared/http/if-match.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
-import type { CompaniesQuery } from './companies.schemas.ts';
+import type { AllCompaniesQuery, CompaniesQuery } from './companies.schemas.ts';
 import type { CompanyResult, CompaniesService } from './companies.service.ts';
 import type { CompanyCreation, CompanyPatch } from './company.types.ts';
 
 /** HTTP handlers of the company routes. */
 export interface CompaniesController {
   list: RequestHandler;
+  /** `GET /companies`, the list across groups. */
+  listAll: RequestHandler;
   /** `GET …/companies/e-invoicing-hubs`. */
   hubs: RequestHandler;
   get: RequestHandler;
@@ -47,6 +49,10 @@ export function createCompaniesController(service: CompaniesService): CompaniesC
   return {
     list: async (req, res) => {
       const { items, page } = await service.list(res.locals.auth!, res.locals.groupAccess!, inputOf<CompaniesQuery>(res, 'query'));
+      sendRevalidatedPage(req, res, items, page);
+    },
+    listAll: async (req, res) => {
+      const { items, page } = await service.listAll(res.locals.auth!, inputOf<AllCompaniesQuery>(res, 'query'));
       sendRevalidatedPage(req, res, items, page);
     },
     hubs: async (_req, res) => {

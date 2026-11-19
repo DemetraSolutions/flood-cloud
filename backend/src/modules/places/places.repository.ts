@@ -3,6 +3,8 @@ import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
 import type { ListPage, ListParams } from '../../shared/http/list.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
+import { readCrossGroupPage } from '../../shared/security/scope/cross-group.ts';
+import type { CrossGroupFilters, CrossGroupPage } from '../../shared/security/scope/cross-group.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import { groupMirror } from '../../shared/security/scope/group-mirror.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
@@ -22,6 +24,16 @@ export interface PlacesRepository extends Pick<CompaniesRepository, 'findCountry
    * @param params Validated list parameters.
    */
   list(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
+  /**
+   * A page of the places of every group of the caller's perimeter (read from the copies in `common.places`), with the names of the groups of the page: the platform reads every group, a dealer his groups.
+   *
+   * @param principal The authenticated caller (the platform or a dealer).
+   * @param groups The group filters of the request.
+   * @param filter Resource filter of the request.
+   * @param params Validated list parameters.
+   * @throws {AppError} `FORBIDDEN` for any other caller, `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+   */
+  listAll(principal: AuthPrincipal, groups: CrossGroupFilters, filter: Filter<Document>, params: ListParams): Promise<CrossGroupPage>;
   /**
    * The ids of the places of a verified group that are in the trash, inside the caller's perimeter, in `_id` order, at most `limit`.
    *
@@ -88,6 +100,8 @@ export function createPlacesRepository(databases: Databases, companies: Pick<Com
         ),
         params,
       ),
+
+    listAll: (principal, groups, filter, params) => readCrossGroupPage(databases, principal, { name: 'places', config: PLACES_LIST, projection: PLACE_SUMMARY_PROJECTION }, groups, filter, params),
 
     trashedIds: async (principal, access, limit, after) =>
       (await groupMirror(principal, access, databases, 'places').find(withScope(placesScopeFilter(principal.scope), { trash: true, ...(after === null ? {} : { _id: { $gt: after } }) }), { projection: { _id: 1 }, sort: { _id: 1 }, limit })).map((document) => document['_id'] as ObjectId),

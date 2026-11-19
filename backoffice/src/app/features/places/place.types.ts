@@ -16,6 +16,12 @@ export interface PlaceListItem {
   readonly country: string | null;
   /** ISO instant, `null` for none. */
   readonly expirationDate: string | null;
+  /** Group of the place: only in the cross-group list (`GET /v1/places`). */
+  readonly groupId?: string;
+  /** Name of that group: `''` without a text name, `null` when the group does not exist (cross-group list only). */
+  readonly groupName?: string | null;
+  /** ISO instant the place was trashed, `null` otherwise (cross-group list). */
+  readonly trashedAt?: string | null;
 }
 
 /** Postal address of a place. */

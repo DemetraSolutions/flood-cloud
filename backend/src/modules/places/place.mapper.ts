@@ -5,7 +5,7 @@ import { flag, instant, isPlain, nonEmptyOrNull, optionalText, readLeaves, statu
 import type { Codec, Leaf } from '../companies/company.mapper.ts';
 import { LIST_LEAVES } from './place-lists.mapper.ts';
 import { SETTING_LEAVES } from './place-settings.mapper.ts';
-import type { Place, PlacePriceList, PlaceSummary, SpecialDays, WeekHours } from './place.types.ts';
+import type { CrossGroupPlace, Place, PlacePriceList, PlaceSummary, SpecialDays, WeekHours } from './place.types.ts';
 
 /** A key of the special days of the document: `YYYY-MM-DD`. Any other key of the stored map is one the backend keeps untouched and never returns. */
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
@@ -148,4 +148,15 @@ export function toPlaceSummary(document: Document): PlaceSummary {
     country: stringOrNull(document['countryCode']),
     expirationDate: instant.read(document['expirationDate']) as string | null,
   };
+}
+
+/**
+ * Maps a document of the copies (read with the list projection and `groupId`) to an item of the list across groups: the compact item with its group.
+ *
+ * @param document The projected place, with its `groupId`.
+ * @param groupNames Names of the groups of the page by hexadecimal id.
+ */
+export function toCrossGroupPlace(document: Document, groupNames: ReadonlyMap<string, string>): CrossGroupPlace {
+  const groupId = (document['groupId'] as ObjectId).toHexString();
+  return { ...toPlaceSummary(document), groupId, groupName: groupNames.get(groupId) ?? null };
 }

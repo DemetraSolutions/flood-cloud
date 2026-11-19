@@ -55,7 +55,7 @@ const DASH = '—';
 type QueryChange = Record<string, string | null>;
 
 /**
- * The statement of a dealer for an invoice month (`/tools/activations/:dealerId`): two tabs, the
+ * The statement of a dealer for an invoice month (`/activations/:dealerId`): two tabs, the
  * activations of the month before and the instalment of the renewals. The lines are grouped by
  * group and company; each place shows its activation date, plan, the items of its monthly fee
  * as chips, the fee, the months invoiced, the amount, the projection to 12 months and the

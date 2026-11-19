@@ -45,11 +45,60 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 afterEach(() => {
+  localStorage.clear();
+  document.documentElement.removeAttribute('data-theme');
   backend().verify();
   vi.restoreAllMocks();
 });
 
+describe('SessionService language', () => {
+  const profileIn = (language: string) => ({ ...fakeProfile(), language });
+
+  it('switches the dictionary and saves the preference when the profile language differs', () => {
+    const { session } = setup();
+    const i18n = TestBed.inject(I18nService);
+    vi.spyOn(i18n, 'language').mockReturnValue('it');
+    const select = vi.spyOn(i18n, 'select').mockResolvedValue();
+    session.setProfile(profileIn('it'));
+    expect(select).not.toHaveBeenCalled();
+    session.setProfile(profileIn('xx'));
+    expect(select).not.toHaveBeenCalled();
+    vi.spyOn(i18n, 'language').mockReturnValue('en' as never);
+    session.setProfile(profileIn('it'));
+    expect(select).toHaveBeenCalledWith('it');
+  });
+
+  it('does nothing while no dictionary is loaded', () => {
+    const { session } = setup();
+    const select = vi.spyOn(TestBed.inject(I18nService), 'select').mockResolvedValue();
+    session.setProfile(profileIn('it'));
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it('logs and notifies the user when the dictionary cannot be loaded', async () => {
+    const { session } = setup();
+    const i18n = TestBed.inject(I18nService);
+    vi.spyOn(i18n, 'language').mockReturnValue('en' as never);
+    const failure = new Error('network');
+    vi.spyOn(i18n, 'select').mockRejectedValue(failure);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    session.setProfile(profileIn('it'));
+    await settle();
+    expect(log).toHaveBeenCalledWith(failure);
+    expect(TestBed.inject(ToastService).toasts().length).toBe(1);
+  });
+});
+
 describe('SessionService', () => {
+  it('applies the theme of the profile, and keeps the current one when it is not valid', async () => {
+    const { session } = await signedIn(fakeProfile({ theme: 'dark' }));
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    session.setProfile({ ...fakeProfile(), theme: 'neon' as never });
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    session.setProfile(fakeProfile({ theme: 'system' }));
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
   it('starts unknown, without user, permissions or token', () => {
     const { session } = setup();
     expect(session.status()).toBe('unknown');

@@ -23,6 +23,21 @@ export interface MenuItem {
    * PSA or dealer has not chosen a group.
    */
   readonly groupPath?: string;
+  /**
+   * Cross-group list a PSA or dealer with no working group goes to, instead of the group chooser
+   * that `route` is.
+   */
+  readonly allRoute?: string;
+  /**
+   * Whether the entry (and its children) is shown only while a working group is selected. PSA and
+   * dealers must pick one; SA, CA and PA always have theirs.
+   */
+  readonly requiresGroup?: true;
+  /**
+   * Extra path patterns (`*` stands for one segment) on which the entry is the active one, for
+   * pages that belong to it without sitting under its own link.
+   */
+  readonly alsoActiveFor?: readonly string[];
   /** Feature (company/store module) that must be enabled to see the entry. */
   readonly feature?: string;
   /** Whether the entry links to its first visible child (a group whose children are open to different roles): `route` is then only the fallback. */
@@ -59,18 +74,11 @@ export const MENU: readonly MenuItem[] = [
   },
   {
     id: 'groups',
+    // The record of a group is reached from the list, so the list stays the active entry.
+    alsoActiveFor: ['/groups/*/settings'],
     labelKey: 'MENU.GROUPS',
     icon: 'building',
     route: '/groups/list',
-    permission: 'groups:read',
-    roles: ['PSA', 'D'],
-  },
-  {
-    id: 'group-settings',
-    labelKey: 'MENU.GROUP_SETTINGS',
-    icon: 'settings',
-    route: '/groups',
-    groupPath: 'settings',
     permission: 'groups:read',
     roles: ['PSA', 'D'],
   },
@@ -89,6 +97,8 @@ export const MENU: readonly MenuItem[] = [
     icon: 'building',
     route: '/groups',
     groupPath: 'companies',
+    allRoute: '/companies',
+    alsoActiveFor: ['/companies'],
     permission: 'companies:read',
   },
   {
@@ -97,10 +107,13 @@ export const MENU: readonly MenuItem[] = [
     icon: 'store',
     route: '/groups',
     groupPath: 'places',
+    allRoute: '/places',
+    alsoActiveFor: ['/places'],
     permission: 'places:read',
   },
   {
     id: 'fidelity',
+    requiresGroup: true,
     labelKey: 'MENU.FIDELITY',
     icon: 'card',
     route: '/groups',
@@ -134,6 +147,7 @@ export const MENU: readonly MenuItem[] = [
   },
   {
     id: 'products',
+    requiresGroup: true,
     labelKey: 'MENU.PRODUCTS',
     icon: 'tag',
     route: '/groups',
@@ -151,6 +165,7 @@ export const MENU: readonly MenuItem[] = [
   },
   {
     id: 'promotions',
+    requiresGroup: true,
     labelKey: 'MENU.PROMOTIONS',
     icon: 'tag',
     route: '/groups',
@@ -158,9 +173,18 @@ export const MENU: readonly MenuItem[] = [
     permission: 'products:read',
   },
   {
+    id: 'activations',
+    labelKey: 'MENU.ACTIVATIONS',
+    icon: 'log',
+    route: '/activations',
+    permission: 'activations:read',
+    roles: ['PSA', 'D'],
+  },
+  {
     id: 'tools',
     labelKey: 'MENU.TOOLS',
-    icon: 'settings',
+    // Not 'settings': that icon belongs to the "Impostazioni" entry shown to the same role.
+    icon: 'more',
     route: '/tools/new-customer',
     linksToFirstChild: true,
     children: [
@@ -188,35 +212,11 @@ export const MENU: readonly MenuItem[] = [
         roles: ['PSA', 'D'],
       },
       {
-        id: 'activations',
-        labelKey: 'MENU.ACTIVATIONS',
-        icon: 'card',
-        route: '/tools/activations',
-        permission: 'activations:read',
-        roles: ['PSA', 'D'],
-      },
-      {
-        id: 'price-list',
-        labelKey: 'MENU.PRICE_LIST',
-        icon: 'tag',
-        route: '/tools/price-list',
-        permission: 'activations:manage',
-        roles: ['PSA'],
-      },
-      {
         id: 'tobaccos',
         labelKey: 'MENU.TOBACCOS',
         icon: 'tag',
         route: '/tools/tobaccos',
         permission: 'tobaccos:read',
-        roles: ['PSA'],
-      },
-      {
-        id: 'countries',
-        labelKey: 'MENU.COUNTRIES',
-        icon: 'settings',
-        route: '/settings/countries',
-        permission: 'countries:manage',
         roles: ['PSA'],
       },
       {
@@ -227,6 +227,31 @@ export const MENU: readonly MenuItem[] = [
         groupPath: 'email-templates',
         permission: 'places:read',
         feature: 'email',
+      },
+    ],
+  },
+  {
+    id: 'settings',
+    labelKey: 'MENU.SETTINGS',
+    icon: 'settings',
+    route: '/settings/price-list',
+    linksToFirstChild: true,
+    children: [
+      {
+        id: 'price-list',
+        labelKey: 'MENU.PRICE_LIST',
+        icon: 'tag',
+        route: '/settings/price-list',
+        permission: 'activations:manage',
+        roles: ['PSA'],
+      },
+      {
+        id: 'countries',
+        labelKey: 'MENU.COUNTRIES',
+        icon: 'settings',
+        route: '/settings/countries',
+        permission: 'countries:manage',
+        roles: ['PSA'],
       },
     ],
   },
@@ -261,13 +286,14 @@ export const MENU_ITEMS = new InjectionToken<readonly MenuItem[]>('MENU_ITEMS', 
 });
 
 /**
- * Filters the menu by permission, role and enabled feature. Pure: the predicates come from the caller.
+ * Filters the menu by permission, role, enabled feature and working group. Pure: the predicates come from the caller.
  * A group whose children are all hidden is hidden too.
  *
  * @param items Menu configuration.
  * @param can Whether the current user holds a permission.
  * @param hasFeature Whether a feature is enabled for the current context.
  * @param role Role of the current user (if known), for entries limited to some roles.
+ * @param hasGroup Whether a working group is selected (entries with `requiresGroup` need it).
  * @returns The visible entries (new objects where children were filtered).
  */
 export function visibleMenu(
@@ -275,6 +301,7 @@ export function visibleMenu(
   can: (permission: string) => boolean,
   hasFeature: (feature: string) => boolean,
   role?: Role,
+  hasGroup = true,
 ): MenuItem[] {
   const result: MenuItem[] = [];
   for (const item of items) {
@@ -282,7 +309,8 @@ export function visibleMenu(
       (item.permission === undefined || can(item.permission)) &&
       (item.anyPermission === undefined || item.anyPermission.some(can)) &&
       (item.roles === undefined || (role !== undefined && item.roles.includes(role))) &&
-      (item.feature === undefined || hasFeature(item.feature));
+      (item.feature === undefined || hasFeature(item.feature)) &&
+      (item.requiresGroup === undefined || hasGroup);
     if (!allowed) {
       continue;
     }
@@ -290,7 +318,7 @@ export function visibleMenu(
       result.push(item);
       continue;
     }
-    const children = visibleMenu(item.children, can, hasFeature, role);
+    const children = visibleMenu(item.children, can, hasFeature, role, hasGroup);
     if (children.length > 0) {
       result.push({
         ...item,
@@ -300,4 +328,110 @@ export function visibleMenu(
     }
   }
   return result;
+}
+
+/** Path of the group chooser, the fallback link of the group pages while no group is selected. */
+const CHOOSER_PATH = '/groups';
+
+/** Pages of a working group the menu can point to (`groupPath` values): the only valid `to`. */
+export const GROUP_TARGETS: ReadonlySet<string> = new Set(
+  MENU.flatMap((item) => [item, ...(item.children ?? [])]).flatMap((item) =>
+    item.groupPath === undefined ? [] : [item.groupPath],
+  ),
+);
+
+/**
+ * Page the user wanted when they landed on the group chooser (`/groups?to=companies`), or `null`
+ * when the URL is not the chooser or `to` is not exactly one of {@link GROUP_TARGETS}.
+ */
+export function chooserTarget(url: string): string | null {
+  const [location = '', query = ''] = url.split('#')[0]!.split('?');
+  if (segmentsOf(location).join('/') !== 'groups') {
+    return null;
+  }
+  const to = new URLSearchParams(query).get('to');
+  return to !== null && GROUP_TARGETS.has(to) ? to : null;
+}
+
+/** Segments of a path without query string, fragment or empty parts. */
+function segmentsOf(path: string): string[] {
+  return path
+    .split(/[?#]/)[0]!
+    .split('/')
+    .filter((part) => part !== '');
+}
+
+/**
+ * Length (in segments) of the pattern when it matches the start of the path, `-1` otherwise. A
+ * `*` segment matches any one segment. With `exact` the whole path must match.
+ */
+function matchLength(pattern: string, path: string[], exact: boolean): number {
+  const parts = segmentsOf(pattern);
+  const fits =
+    parts.length <= path.length &&
+    (!exact || parts.length === path.length) &&
+    parts.every((part, index) => part === '*' || part === path[index]);
+  return fits ? parts.length : -1;
+}
+
+/**
+ * Ids of the leaf entries to show as the current page for a URL: the entries whose link (or
+ * `alsoActiveFor` pattern) matches the longest start of the path. The most specific match wins,
+ * so two unrelated entries are never active together. Entries with children never are (see
+ * {@link activeParentIds}). The home link and the `/groups` chooser, which is also the fallback of
+ * every group page while no group is selected, match only their own page.
+ *
+ * @param items Visible entries (children included are looked at).
+ * @param linkOf Router link of an entry, as rendered.
+ * @param url Current URL.
+ */
+export function activeMenuIds(
+  items: readonly MenuItem[],
+  linkOf: (item: MenuItem) => string,
+  url: string,
+): Set<string> {
+  const path = segmentsOf(url);
+  const chooser = chooserTarget(url);
+  const matches: { id: string; length: number }[] = [];
+  const visit = (entries: readonly MenuItem[]): void => {
+    for (const item of entries) {
+      if (item.children !== undefined) {
+        // A parent is never the current page, even when it links to its first child.
+        visit(item.children);
+        continue;
+      }
+      const link = linkOf(item);
+      const exact = link === '/' || link === CHOOSER_PATH;
+      // On the chooser the entry that sent the user there is the only active one.
+      const onChooser = link === CHOOSER_PATH ? chooser === item.groupPath : true;
+      const lengths = [
+        onChooser ? matchLength(link, path, exact) : -1,
+        ...(item.alsoActiveFor ?? []).map((pattern) => matchLength(pattern, path, false)),
+      ];
+      matches.push({ id: item.id, length: Math.max(...lengths) });
+    }
+  };
+  visit(items);
+  const best = Math.max(0, ...matches.map((match) => match.length));
+  return new Set(
+    matches.filter((match) => match.length >= 0 && match.length === best).map((m) => m.id),
+  );
+}
+
+/**
+ * Ids of the entries with children that contain an active entry: shown with a lighter "has an
+ * active child" state, the same whichever child is the active one.
+ *
+ * @param items Visible entries.
+ * @param active Ids returned by {@link activeMenuIds}.
+ */
+export function activeParentIds(
+  items: readonly MenuItem[],
+  active: ReadonlySet<string>,
+): Set<string> {
+  return new Set(
+    items
+      .filter((item) => item.children?.some((child) => active.has(child.id)))
+      .map((item) => item.id),
+  );
 }

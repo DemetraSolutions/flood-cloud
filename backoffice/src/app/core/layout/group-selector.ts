@@ -1,11 +1,13 @@
 import { Component, computed, ElementRef, inject, signal } from '@angular/core';
 import { PRIMARY_OUTLET, Router } from '@angular/router';
-import { USERS_LIST_FILTERS } from '../auth/guards';
+import { COMPANIES_LIST_FILTERS, PLACES_LIST_FILTERS, USERS_LIST_FILTERS } from '../auth/guards';
+
 import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { failureMessage } from '../../shared/forms/form-errors';
 import { uniqueId } from '../../shared/ui/unique-id';
 import { createDebouncer } from '../../shared/util/debouncer';
 import { GroupContext } from '../groups/group-context';
+import { chooserTarget } from './menu';
 import { I18nService } from '../i18n/i18n.service';
 import { TPipe } from '../i18n/t-pipe';
 import { GroupRef, ReferenceApi } from '../reference/reference-api';
@@ -137,6 +139,11 @@ export class GroupSelector {
     }
     this.context.choose({ id: group.id, name: group.name });
     this.close();
+    const target = chooserTarget(this.router.url);
+    if (target !== null) {
+      void this.router.navigateByUrl(`/groups/${encodeURIComponent(group.id)}/${target}`);
+      return;
+    }
     const filters = this.usersFilters(true);
     void this.router.navigate(
       ['/groups', group.id, 'users'],
@@ -167,6 +174,23 @@ export class GroupSelector {
   }
 
   /**
+   * Filters of the companies or places list on screen to carry over to the cross-group list:
+   * never the cursor, nor the company filter, which belongs to the group left.
+   */
+  private listFilters(resource: string): Record<string, string> | null {
+    const queryParams = this.router.parseUrl(this.router.url).queryParams;
+    const names = resource === 'places' ? PLACES_LIST_FILTERS : COMPANIES_LIST_FILTERS;
+    const filters: Record<string, string> = {};
+    for (const name of names) {
+      const value = queryParams[name];
+      if (typeof value === 'string') {
+        filters[name] = value;
+      }
+    }
+    return Object.keys(filters).length === 0 ? null : filters;
+  }
+
+  /**
    * Back to "all groups": forgets the working group and moves to the cross-group view of the
    * current page (users, activity log); other pages stay where they are.
    */
@@ -174,7 +198,15 @@ export class GroupSelector {
     this.context.clear();
     this.close();
     const path = this.router.url.split('?')[0];
-    if (/^\/groups\/[^/]+/.test(path)) {
+    const resource = /^\/groups\/[^/]+\/(companies|places)(\/|$)/.exec(path)?.[1];
+    if (resource !== undefined) {
+      // The cross-group list of the same resource; its filters follow only from the list itself.
+      const filters = path.endsWith(`/${resource}`) ? this.listFilters(resource) : null;
+      void this.router.navigate(
+        [`/${resource}`],
+        ...(filters === null ? [] : [{ queryParams: filters }]),
+      );
+    } else if (/^\/groups\/[^/]+/.test(path)) {
       const filters = this.usersFilters(false);
       void this.router.navigate(
         ['/users'],

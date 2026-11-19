@@ -8,12 +8,14 @@ import { inputOf } from '../../shared/validation/middleware.ts';
 import { SETTING_BLOCKS } from '../../shared/legacy-write/place-settings.ts';
 import { LIST_SEGMENTS } from './place-lists.schemas.ts';
 import type { PlaceCreation, PlacePatch } from './place.types.ts';
-import type { PlacesQuery } from './places.schemas.ts';
+import type { AllPlacesQuery, PlacesQuery } from './places.schemas.ts';
 import type { PlaceResult, PlacesService } from './places.service.ts';
 
 /** HTTP handlers of the place routes. */
 export interface PlacesController {
   list: RequestHandler;
+  /** `GET /places`, the list across groups. */
+  listAll: RequestHandler;
   get: RequestHandler;
   create: RequestHandler;
   update: RequestHandler;
@@ -54,6 +56,10 @@ export function createPlacesController(service: PlacesService): PlacesController
   return {
     list: async (req, res) => {
       const { items, page } = await service.list(res.locals.auth!, res.locals.groupAccess!, inputOf<PlacesQuery>(res, 'query'));
+      sendRevalidatedPage(req, res, items, page);
+    },
+    listAll: async (req, res) => {
+      const { items, page } = await service.listAll(res.locals.auth!, inputOf<AllPlacesQuery>(res, 'query'));
       sendRevalidatedPage(req, res, items, page);
     },
     get: async (_req, res) => {

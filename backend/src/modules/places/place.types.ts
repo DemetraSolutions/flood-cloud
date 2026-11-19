@@ -315,6 +315,13 @@ export interface PlaceSummary {
   readonly expirationDate: string | null;
 }
 
+/** A place of the list across groups: the compact item plus the group it belongs to. */
+export interface CrossGroupPlace extends PlaceSummary {
+  readonly groupId: string;
+  /** Name of the group, `null` when the group is missing. */
+  readonly groupName: string | null;
+}
+
 /** What a request can write of a place: everything of {@link Place} but the read-only fields, with the address as a whole object. */
 export type PlaceWritable = Omit<Place, 'id' | 'groupId' | 'trashed' | 'trashedAt' | 'createdAt' | 'updatedAt'>;
 

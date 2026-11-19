@@ -59,6 +59,9 @@ const PAIRS: [string, string, number][] = [
   ['--color-on-primary', '--color-primary', 4.5],
   ['--color-on-primary', '--color-primary-hover', 4.5],
   ['--color-on-primary-soft', '--color-primary-soft', 4.5],
+  // Menu entry with the active child: accent text on the plain navigation background.
+  ['--color-on-primary-soft', '--color-surface', 4.5],
+  ['--color-on-primary-soft', '--color-surface-muted', 4.5],
   ['--color-success', '--color-surface', 4.5],
   ['--color-on-success-soft', '--color-success-soft', 4.5],
   ['--color-warning', '--color-surface', 4.5],

@@ -6,6 +6,8 @@ import { ApiData } from '../api/api.types';
 import { ApiError } from '../api/api-error';
 import { safeReturnUrl } from '../auth/return-url';
 import { I18nService } from '../i18n/i18n.service';
+import { isSupportedLanguage, Language } from '../i18n/language';
+import { isThemeChoice, ThemeService } from '../theme/theme.service';
 import { ToastService } from '../../shared/ui/toast/toast.service';
 import { Profile, SessionStatus, TokenPair } from './session.types';
 import { clearStoredSession, readStoredSession, writeStoredSession } from './session-storage';
@@ -56,6 +58,7 @@ export class SessionService {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly i18n = inject(I18nService);
+  private readonly theme = inject(ThemeService);
 
   private readonly accessToken = signal<string | null>(null);
   private refreshToken: string | null = null;
@@ -142,14 +145,36 @@ export class SessionService {
     }
   }
 
+  /** Switches the dictionary (and the saved preference); a failure is logged and shown, never lost. */
+  private async applyLanguage(language: Language): Promise<void> {
+    try {
+      await this.i18n.select(language);
+    } catch (error) {
+      console.error(error);
+      this.toast.error(this.i18n.t('ERRORS.GENERIC.MESSAGE'));
+    }
+  }
+
   /** Loads (or reloads) `GET /v1/me`; the status follows `passwordChangeRequired`. */
   async loadProfile(): Promise<void> {
     const response = await firstValueFrom(this.http.get<ApiData<Profile>>('/v1/me'));
     this.setProfile(response.data);
   }
 
-  /** Replaces the current profile (e.g. with the response of `PATCH /v1/me`). */
+  /**
+   * Replaces the current profile (e.g. with the response of `PATCH /v1/me`) and applies its
+   * theme and language: the server values always win over the ones remembered in this browser.
+   */
   setProfile(profile: Profile): void {
+    // The dictionary is always loaded before a session exists (startup order), so `null` only
+    // means "nothing to switch yet".
+    const current = this.i18n.language();
+    if (isSupportedLanguage(profile.language) && current !== null && profile.language !== current) {
+      void this.applyLanguage(profile.language);
+    }
+    if (isThemeChoice(profile.theme)) {
+      this.theme.select(profile.theme);
+    }
     this.meState.set(profile);
     this.statusState.set(
       profile.passwordChangeRequired ? 'passwordChangeRequired' : 'authenticated',

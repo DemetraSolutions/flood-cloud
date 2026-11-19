@@ -167,6 +167,14 @@ describe('PATCH /v1/groups/{groupId}/users/{userId}', () => {
     assert.deepEqual((await stored(id))['settings'], { language: 'it', hiddenInStats: true });
   });
 
+  it('changes the theme of a user, keeping the other settings, and refuses an unknown one', async () => {
+    const id = await freshPa({ settings: { language: 'it', hiddenInStats: true, custom: 'KEEP' } });
+    const reply = await as.call(g0().sa, 'PATCH', path(id), { theme: 'dark' });
+    assert.deepEqual([reply.status, reply.body.data.theme], [200, 'dark']);
+    assert.deepEqual((await stored(id))['settings'], { language: 'it', hiddenInStats: true, custom: 'KEEP', theme: 'dark' });
+    assert.equal((await as.call(g0().sa, 'PATCH', path(id), { theme: 'blue' })).status, 422);
+  });
+
   it('changes only the right to manage permissions, touching nothing else of the matrix', async () => {
     const id = await freshPa();
     const from = mark();

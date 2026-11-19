@@ -191,6 +191,13 @@ export interface CompanySummary {
   readonly trashedAt: string | null;
 }
 
+/** A company of the list across groups: the compact item plus the group it belongs to. */
+export interface CrossGroupCompany extends CompanySummary {
+  readonly groupId: string;
+  /** Name of the group, `null` when the group is missing. */
+  readonly groupName: string | null;
+}
+
 /** A bank account in a request: the id is the one the company already has, or absent for a new account; empty codes are `null`. */
 export interface BankAccountInput {
   readonly id?: string;

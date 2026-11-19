@@ -78,6 +78,13 @@
         [error]="error(profileForm.language)"
         (blurred)="profileForm.language().markAsTouched()"
       />
+      <fc-select
+        [formField]="profileForm.theme"
+        [label]="'PROFILE.THEME' | t"
+        [options]="themes"
+        [error]="error(profileForm.theme)"
+        (blurred)="profileForm.theme().markAsTouched()"
+      />
       @if (showPos()) {
         <section aria-labelledby="pos-heading">
           <h3 id="pos-heading">{{ 'PROFILE.POS_PREFERENCES' | t }}</h3>

@@ -58,7 +58,7 @@ function detail(data: DetailLine[], next: string | null = null, anomalies = 0): 
 }
 
 async function render(
-  url = '/tools/activations?from=2026-05&to=2026-06',
+  url = '/activations?from=2026-05&to=2026-06',
   profile: Partial<Profile> = {},
   withApi = true,
 ) {
@@ -68,7 +68,7 @@ async function render(
       ...(withApi ? [] : [{ provide: AppConfig, useValue: { apiBaseUrl: signal(null) } }]),
       provideRouter(
         [
-          { path: 'tools/activations', component: ActivationsDetail },
+          { path: 'activations', component: ActivationsDetail },
           { path: '**', children: [] },
         ],
         withComponentInputBinding(),
@@ -158,7 +158,7 @@ describe('ActivationsDetail', () => {
     });
 
     it('starts from the current month for both months', async () => {
-      const { request, view, root } = await render('/tools/activations');
+      const { request, view, root } = await render('/activations');
       const req = request();
       expect(req.request.params.get('from')).toBe(currentMonth());
       expect(req.request.params.get('to')).toBe(currentMonth());
@@ -234,7 +234,7 @@ describe('ActivationsDetail', () => {
     });
 
     it('shows no dealer and no links to a user who cannot open them', async () => {
-      const { root, flush } = await render('/tools/activations?from=2026-05&to=2026-06', {
+      const { root, flush } = await render('/activations?from=2026-05&to=2026-06', {
         role: 'D',
         permissions: ['activations:read'],
       });
@@ -275,7 +275,7 @@ describe('ActivationsDetail', () => {
     });
 
     it('reports an unexpected failure generically', async () => {
-      const { root, view } = await render('/tools/activations?from=2026-05&to=2026-06', {}, false);
+      const { root, view } = await render('/activations?from=2026-05&to=2026-06', {}, false);
       await view();
       expect(root.querySelector('fc-error-state')?.textContent).toContain('ERRORS.GENERIC.MESSAGE');
     });
@@ -306,7 +306,7 @@ describe('ActivationsDetail', () => {
     });
 
     it('does not read a wrong period of the URL', async () => {
-      const { root, view } = await render('/tools/activations?from=bad&to=2026-06');
+      const { root, view } = await render('/activations?from=bad&to=2026-06');
       await view();
       backend().expectNone((r) => r.url === LINES);
       expect(root.textContent).toContain('ACTIVATIONS.DETAIL.ERROR.MONTH');
@@ -342,7 +342,7 @@ describe('ActivationsDetail', () => {
     });
 
     it('drops a wrong dealer of the URL, and a dealer never sends one', async () => {
-      const first = await render('/tools/activations?from=2026-05&to=2026-06&dealerId=bad');
+      const first = await render('/activations?from=2026-05&to=2026-06&dealerId=bad');
       const req = first.request();
       expect(req.request.params.has('dealerId')).toBe(false);
       req.flush(detail([]));
@@ -351,7 +351,7 @@ describe('ActivationsDetail', () => {
 
     it('never sends the dealer of a dealer user', async () => {
       const { request, view } = await render(
-        `/tools/activations?from=2026-05&to=2026-06&dealerId=${DEALER}`,
+        `/activations?from=2026-05&to=2026-06&dealerId=${DEALER}`,
         { role: 'D', permissions: ['activations:read'] },
       );
       const req = request();
@@ -388,7 +388,7 @@ describe('ActivationsDetail', () => {
     });
 
     it('falls back to the default page size when the URL has a wrong one', async () => {
-      const { request, view } = await render('/tools/activations?from=2026-05&to=2026-06&limit=7');
+      const { request, view } = await render('/activations?from=2026-05&to=2026-06&limit=7');
       const req = request();
       expect(req.request.params.get('limit')).toBe('50');
       req.flush(detail([]));
@@ -425,7 +425,7 @@ describe('ActivationsDetail', () => {
 
     it('downloads the lines of the period with the dealer, whatever the page', async () => {
       const { flush, button, view, root } = await render(
-        `/tools/activations?from=2026-05&to=2026-06&dealerId=${DEALER}&cursor=c1&limit=25`,
+        `/activations?from=2026-05&to=2026-06&dealerId=${DEALER}&cursor=c1&limit=25`,
       );
       await flush();
       button('ACTIVATIONS.DOWNLOAD').click();

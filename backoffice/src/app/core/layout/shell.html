@@ -20,8 +20,6 @@
     @if (showNav() && groups.canChoose()) {
       <fc-group-selector />
     }
-    <fc-theme-selector />
-    <fc-language-selector />
     <fc-user-menu />
   </div>
 </header>
@@ -46,9 +44,10 @@
           <li>
             <a
               [routerLink]="link(item)"
-              routerLinkActive="active"
-              ariaCurrentWhenActive="page"
-              [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+              [queryParams]="queryOf(item)"
+              [class.active]="activeIds().has(item.id)"
+              [class.has-active]="activeParents().has(item.id)"
+              [attr.aria-current]="activeIds().has(item.id) ? 'page' : null"
             >
               <fc-icon [name]="item.icon" />
               {{ item.labelKey | t }}
@@ -59,8 +58,9 @@
                   <li>
                     <a
                       [routerLink]="link(child)"
-                      routerLinkActive="active"
-                      ariaCurrentWhenActive="page"
+                      [queryParams]="queryOf(child)"
+                      [class.active]="activeIds().has(child.id)"
+                      [attr.aria-current]="activeIds().has(child.id) ? 'page' : null"
                     >
                       <fc-icon [name]="child.icon" />
                       {{ child.labelKey | t }}

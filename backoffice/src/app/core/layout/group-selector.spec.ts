@@ -245,6 +245,45 @@ describe('GroupSelector', () => {
   });
 
   it.each([
+    ['/groups?to=companies', '/groups/G1/companies'],
+    ['/groups?to=fidelity/card-types', '/groups/G1/fidelity/card-types'],
+  ])('from the chooser %s it goes to the page the user wanted', async (url, expected) => {
+    const { options, open } = await render();
+    await open([G1, G2]);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue(url);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    options()[0].click();
+    expect(navigateByUrl).toHaveBeenCalledWith(expected.replace('G1', encodeURIComponent(G1.id)));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/groups',
+    '/groups?to=',
+    '/groups?to=evil',
+    '/groups?to=//evil.example',
+    '/groups?to=https://evil.example',
+    '/groups?to=companies/../../x',
+    '/groups?to=..%2Fusers',
+    '/groups?to=Companies',
+    '/groups?to=companies%00',
+    '/groups?to=x&to=companies',
+    '/users?to=companies',
+  ])('ignores a hostile or missing destination (%s) and opens the users list', async (url) => {
+    const { options, open } = await render();
+    await open([G1, G2]);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue(url);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    options()[0].click();
+    expect(navigateByUrl).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users']);
+  });
+
+  it.each([
     ['/users?q=ann&role=SA&cursor=c1&groupId=x', { q: 'ann', role: 'SA' }],
     [
       '/users?role=D&status=active&trashed=true&sort=-createdAt&limit=50',
@@ -266,6 +305,37 @@ describe('GroupSelector', () => {
       const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
       options()[0].click();
       expect(navigate).toHaveBeenCalledWith(['/groups', G1.id, 'users'], { queryParams: expected });
+    },
+  );
+
+  it.each([
+    [
+      '/groups/g1/companies?q=ann&status=active&cursor=c1&companyId=x&sort=-name',
+      '/companies',
+      { q: 'ann', status: 'active', sort: '-name' },
+    ],
+    [
+      '/groups/g1/places?q=bar&plan=advanced&country=IT&limit=50&companyId=x&cursor=c',
+      '/places',
+      { q: 'bar', plan: 'advanced', country: 'IT', limit: '50' },
+    ],
+    ['/groups/g1/places', '/places', null],
+    ['/groups/g1/companies/c9?q=ann', '/companies', null],
+    ['/groups/g1/places/p9/devices', '/places', null],
+  ])(
+    'from %s going back to all groups opens the cross-group list %s',
+    async (url, target, filters) => {
+      const { root, fixture } = await render();
+      TestBed.inject(GroupContext).choose(G1);
+      await view(fixture);
+      const router = TestBed.inject(Router);
+      vi.spyOn(router, 'url', 'get').mockReturnValue(url);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      root.querySelector<HTMLButtonElement>('button[aria-label]')!.click();
+      expect(navigate).toHaveBeenCalledWith(
+        [target],
+        ...(filters === null ? [] : [{ queryParams: filters }]),
+      );
     },
   );
 

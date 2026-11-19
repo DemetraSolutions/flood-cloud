@@ -8,6 +8,8 @@ import {
   passwordChangeAllowed,
   permission,
   role,
+  companiesLanding,
+  placesLanding,
   usersLanding,
 } from './core/auth/guards';
 import { Shell } from './core/layout/shell';
@@ -206,6 +208,14 @@ const companyTabs: Routes = [
  * inputs; the server checks the group and the company against the perimeter of the user.
  */
 const companyRoutes: Routes = [
+  // The companies of every group in the scope of a PSA or dealer (no working group).
+  {
+    path: 'companies',
+    canMatch: [role('PSA', 'D'), permission('companies:read'), companiesLanding],
+    title: 'COMPANIES.TITLE',
+    data: { scope: 'all' },
+    loadComponent: () => import('./features/companies/companies-list').then((m) => m.CompaniesList),
+  },
   {
     path: 'groups/:groupId/companies',
     canMatch: [permission('companies:read')],
@@ -406,6 +416,14 @@ const placeTabs: Routes = [
  * tab is hidden by the features of the group (the interface does).
  */
 const placeRoutes: Routes = [
+  // The places of every group in the scope of a PSA or dealer (no working group).
+  {
+    path: 'places',
+    canMatch: [role('PSA', 'D'), permission('places:read'), placesLanding],
+    title: 'PLACES.TITLE',
+    data: { scope: 'all' },
+    loadComponent: () => import('./features/places/places-list').then((m) => m.PlacesList),
+  },
   {
     path: 'groups/:groupId/places',
     canMatch: [permission('places:read')],
@@ -588,22 +606,30 @@ export const routes: Routes = [
                 (m) => m.ErrorDocumentsPage,
               ),
           },
+          { path: 'tools/price-list', pathMatch: 'full', redirectTo: 'settings/price-list' },
+          // Old addresses of the activations (bookmarks); the query parameters are kept.
+          { path: 'tools/activations', pathMatch: 'full', redirectTo: 'activations' },
           {
-            path: 'tools/activations',
+            path: 'tools/activations/:dealerId',
+            pathMatch: 'full',
+            redirectTo: 'activations/:dealerId',
+          },
+          {
+            path: 'activations',
             canMatch: [permission('activations:read')],
             title: 'ACTIVATIONS.TITLE',
             loadComponent: () =>
               import('./features/activations/activations-page').then((m) => m.ActivationsPage),
           },
           {
-            path: 'tools/activations/:dealerId',
+            path: 'activations/:dealerId',
             canMatch: [permission('activations:read')],
             title: 'ACTIVATIONS.STATEMENT.PAGE_TITLE',
             loadComponent: () =>
               import('./features/activations/statement-page').then((m) => m.StatementPage),
           },
           {
-            path: 'tools/price-list',
+            path: 'settings/price-list',
             canMatch: [role('PSA'), permission('activations:manage')],
             title: 'PRICE_LIST.TITLE',
             loadComponent: () =>

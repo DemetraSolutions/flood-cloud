@@ -65,6 +65,7 @@ describe('fromLegacy: a regular document', () => {
       trashed: false,
       trashedAt: null,
       language: 'it',
+      theme: 'system',
       hiddenInStats: false,
       description: 'Fixture user 005',
       avatar: null,
@@ -107,6 +108,17 @@ describe('fromLegacy: a regular document', () => {
     assert.equal(read(doc(1, { role: 'E', permissions: { status: true } })).user.permissions.canManagePermissions, false);
     assert.equal(read(doc(1, { role: 'API', permissions: { status: true } })).user.permissions.canManagePermissions, false);
     assert.equal(read(doc(1, { role: 'SA', permissions: { status: true } })).user.permissions.canManagePermissions, true);
+  });
+
+  it('reads the theme from settings.theme: each value, and system when it is missing or not one of the three', () => {
+    for (const theme of ['light', 'dark', 'system']) {
+      assert.equal(read(doc(1, { settings: { theme } })).user.theme, theme);
+    }
+    for (const settings of [undefined, null, 'x', [], {}, { theme: '' }, { theme: 'blue' }, { theme: 5 }, { theme: null }]) {
+      const { user, anomalies } = read(doc(1, { settings }));
+      assert.equal(user.theme, 'system');
+      assert.deepEqual(anomalies, []);
+    }
   });
 
   it('reads language and hiddenInStats from settings, with defaults', () => {
@@ -338,7 +350,7 @@ describe('toLegacyUpdate', () => {
 
   it('translates the profile fields to the legacy names', () => {
     const update = toLegacyUpdate(
-      { username: 'new-name', firstName: 'Ann', lastName: 'Lee', email: 'ann@example.test', phone: '+39 06', language: 'en', hiddenInStats: true, status: 'disabled', trashed: true, role: 'PA', groupId: group.toHexString(), dealerId: dealer.toHexString() },
+      { username: 'new-name', firstName: 'Ann', lastName: 'Lee', email: 'ann@example.test', phone: '+39 06', language: 'en', theme: 'light', hiddenInStats: true, status: 'disabled', trashed: true, role: 'PA', groupId: group.toHexString(), dealerId: dealer.toHexString() },
       NOW,
     );
     assert.deepEqual(update, {
@@ -349,6 +361,7 @@ describe('toLegacyUpdate', () => {
         email: 'ann@example.test',
         telephone: '+39 06',
         'settings.language': 'en',
+        'settings.theme': 'light',
         'settings.hiddenInStats': true,
         status: false,
         trash: true,
@@ -417,7 +430,7 @@ describe('toLegacyUpdate', () => {
   it('only produces fields the registry says the backend owns, for every kind of change', () => {
     const everything: UserChanges = {
       username: 'u', firstName: 'a', lastName: 'b', email: 'e@x.it', phone: '1', role: 'SA', groupId: group.toHexString(), dealerId: dealer.toHexString(),
-      companyIds: [company.toHexString()], placeIds: [place.toHexString()], status: 'active', trashed: false, language: 'it', hiddenInStats: false,
+      companyIds: [company.toHexString()], placeIds: [place.toHexString()], status: 'active', trashed: false, language: 'it', theme: 'dark', hiddenInStats: false,
       permissions: { status: true, modules: Object.fromEntries(OWNED_PERMISSION_MODULES.map((module) => [module, module === 'logs' ? { r: true } : { r: true, w: true }])) },
       description: 'd', avatar: null, pin: '1234', serviceIds: [fixtureId('user', 9).toHexString()],
       pos: applyPosPatch(emptyPos(), { enabled: true, grants: { discount: true, discountMaxPercentage: 5, servicePercentage: null, automaticCash: { glory: { deposit: true } } }, options: { darkMode: true, side: 'sx', priceLists: [{ priceListId: 'a1', enabled: true, isDefault: true }], defaultPriceListId: 'a1' } }),
@@ -438,7 +451,7 @@ describe('toLegacyUpdate', () => {
     const document = doc(7, { role: 'PA', groupId: group, dealerId: dealer, companyId: company, placeId: place, placesId: [place], email: '', insertDate: new Date('2024-01-01T00:00:00.000Z') });
     const before = read(document).user;
     const changes: UserChanges = {
-      firstName: 'Changed', email: 'new@example.test', phone: null, status: 'disabled', trashed: true, language: 'en', hiddenInStats: true,
+      firstName: 'Changed', email: 'new@example.test', phone: null, status: 'disabled', trashed: true, language: 'en', theme: 'light', hiddenInStats: true,
       placeIds: [place2.toHexString(), place.toHexString()], companyIds: [],
       permissions: { status: false, modules: { users: { r: true, w: false }, places: { w: true } } },
     };
@@ -454,6 +467,7 @@ describe('toLegacyUpdate', () => {
       trashed: true,
       trashedAt: NOW,
       language: 'en',
+      theme: 'light',
       hiddenInStats: true,
       placeIds: [place2.toHexString(), place.toHexString()],
       companyIds: [],
@@ -477,7 +491,7 @@ describe('toResponse', () => {
     const response = toResponse(user);
     assert.deepEqual(Object.keys(response).sort(), [
       'avatar', 'companyIds', 'createdAt', 'dealerId', 'description', 'email', 'firstName', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'serviceIds',
-      'shiftTime', 'status', 'trashed', 'trashedAt', 'updatedAt', 'username',
+      'shiftTime', 'status', 'theme', 'trashed', 'trashedAt', 'updatedAt', 'username',
     ]);
     // Read for a list, the picture is not loaded and not shown.
     assert.equal('avatar' in toResponse(fromLegacy(doc(3) as LegacyUserDocument, { summary: true }).user), false);
@@ -521,6 +535,7 @@ describe('toLegacyDocument', () => {
     placeIds: [place.toHexString(), place2.toHexString()],
     status: 'active' as const,
     language: 'it',
+    theme: 'dark' as const,
     hiddenInStats: false,
     description: null,
     avatar: null,
@@ -547,7 +562,7 @@ describe('toLegacyDocument', () => {
       ['a'.repeat(128), 'CA', group, dealer, company, place, [place, place2], [fixtureId('user', 5)]],
     );
     assert.deepEqual([document['settings'], document['shiftTime'], document['status'], document['trash'], document['tokens'], document['insertDate'], document['updateDate']], [
-      { language: 'it', hiddenInStats: false },
+      { language: 'it', theme: 'dark', hiddenInStats: false },
       { status: false, weeksGeneric: [], daySpecial: {} },
       true,
       false,

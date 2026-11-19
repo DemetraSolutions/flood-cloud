@@ -14,6 +14,9 @@ export type UserRole = Role | typeof INVALID_ROLE;
 /** Whether a user may sign in. */
 export type UserStatus = 'active' | 'disabled';
 
+/** Colour theme of the backoffice a user chose: `system` follows the operating system. */
+export type UserTheme = 'light' | 'dark' | 'system';
+
 /** The user's own permission matrix in the domain: every module of the legacy matrix, plus the right to manage other matrices. */
 export interface UserPermissions {
   /** Legacy `permissions.status`: may manage other users' matrix. */
@@ -48,6 +51,8 @@ export interface User {
   /** When the user went to the trash; `null` when he is not there, or the legacy trashed him (informational only). */
   readonly trashedAt: Date | null;
   readonly language: string;
+  /** `settings.theme`: the colour theme of the backoffice; `system` when missing or not one of the three values. */
+  readonly theme: UserTheme;
   /** `settings.hiddenInStats`; when that is missing, the leftover `permissions.hiddenInStats`. */
   readonly hiddenInStats: boolean;
   /** Free notes (`description`). */
@@ -130,7 +135,7 @@ export type LegacyUserDocument = {
   readonly servicesId?: readonly ObjectId[] | null;
   /** `status`, the `{ r, w }` flags of each module and `apps.cash`; read defensively. */
   readonly permissions?: Readonly<Record<string, unknown>> | null;
-  readonly settings?: { readonly language?: string; readonly hiddenInStats?: boolean } | null;
+  readonly settings?: { readonly language?: string; readonly theme?: string; readonly hiddenInStats?: boolean } | null;
   /** `status`, `weeksGeneric` and `daySpecial` (older documents: `ststus` and `weekGeneric`); a number or `null` in irregular documents. */
   readonly shiftTime?: Readonly<Record<string, unknown>> | number | null;
   readonly status?: boolean;
@@ -181,6 +186,7 @@ export interface UserChanges {
   readonly status?: UserStatus;
   readonly trashed?: boolean;
   readonly language?: string;
+  readonly theme?: UserTheme;
   readonly hiddenInStats?: boolean;
   readonly description?: string | null;
   /** The picture as a data URL (already validated); `null` removes it. */
@@ -217,6 +223,7 @@ export interface NewUser {
   readonly placeIds: readonly string[];
   readonly status: UserStatus;
   readonly language: string;
+  readonly theme: UserTheme;
   readonly hiddenInStats: boolean;
   readonly description: string | null;
   readonly avatar: string | null;
@@ -274,6 +281,7 @@ export interface UserResponse {
   /** When the user went to the trash (ISO 8601), `null` when unknown. */
   readonly trashedAt: string | null;
   readonly language: string;
+  readonly theme: UserTheme;
   readonly hiddenInStats: boolean;
   readonly description: string | null;
   /** The picture; present on the detail of a user, absent from the lists (use `hasAvatar`). */

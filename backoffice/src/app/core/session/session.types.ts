@@ -1,6 +1,7 @@
 import { UserPos } from '../users/pos.catalog';
 import { ShiftTime } from '../users/shift-time';
 import { FeatureFlags } from '../groups/feature-catalog';
+import { ThemeChoice } from '../theme/theme.service';
 
 /** Role codes of a backoffice user (`doc/Security-Model.md`). */
 export type Role = 'PSA' | 'D' | 'SA' | 'CA' | 'PA' | 'E';
@@ -32,6 +33,8 @@ export interface Profile {
   readonly dealerId: string | null;
   readonly status: string;
   readonly language: string;
+  /** Theme preference saved in the database (`system` when never chosen). */
+  readonly theme: ThemeChoice;
   readonly description: string | null;
   /** Data URL of the avatar (`null` for none, or when a legacy image cannot be shown). */
   readonly avatar: string | null;

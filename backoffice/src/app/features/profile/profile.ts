@@ -18,6 +18,7 @@ import { ApiError } from '../../core/api/api-error';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { SUPPORTED_LANGUAGES } from '../../core/i18n/language';
 import { TPipe } from '../../core/i18n/t-pipe';
+import { THEME_CHOICES } from '../../core/theme/theme.service';
 import { SessionService } from '../../core/session/session.service';
 import { Profile, Role, ScopeSummary } from '../../core/session/session.types';
 import { AvatarField } from '../../shared/ui/avatar-field/avatar-field';
@@ -48,6 +49,7 @@ export interface ProfileModel {
   email: string;
   phone: string;
   language: string;
+  theme: string;
   /** Data URL of the avatar, `''` for none. */
   avatar: string;
   /** The user's own point-of-sale preferences. */
@@ -74,6 +76,7 @@ export function toProfileModel(profile: Profile | null): ProfileModel {
       email: '',
       phone: '',
       language: '',
+      theme: '',
       avatar: '',
       pos: { options: blankPos().options },
     };
@@ -84,6 +87,7 @@ export function toProfileModel(profile: Profile | null): ProfileModel {
     email: profile.email ?? '',
     phone: profile.phone ?? '',
     language: profile.language,
+    theme: profile.theme,
     avatar: profile.avatar ?? '',
     pos: { options: posModelOf(profile.pos).options },
   };
@@ -106,6 +110,9 @@ export function buildProfilePatch(model: ProfileModel, profile: Profile | null):
   }
   if (model.language !== profile.language) {
     patch.language = model.language;
+  }
+  if (model.theme !== profile.theme) {
+    patch.theme = model.theme;
   }
   if (model.avatar !== (profile.avatar ?? '')) {
     patch.avatar = model.avatar === '' ? null : model.avatar;
@@ -163,6 +170,11 @@ export class ProfilePage {
   protected readonly languages = SUPPORTED_LANGUAGES.map((language) => ({
     value: language,
     label: this.i18n.t(`LANGUAGE.NAME.${language.toUpperCase()}`),
+  }));
+
+  protected readonly themes = THEME_CHOICES.map((choice) => ({
+    value: choice,
+    label: this.i18n.t(`THEME.${choice.toUpperCase()}`),
   }));
 
   protected readonly showPos = computed(() => hasPosPreferences(this.session.me()));

@@ -1,5 +1,6 @@
 import { listQueryShape } from '../../shared/http/list.ts';
 import { SUPPORTED_LANGUAGES } from '../me/me.schemas.ts';
+import { USER_THEMES } from './user.mapper.ts';
 import { array, boolean, email, enumOf, nullable, object, objectId, optional, personName, phone, string } from '../../shared/validation/schema.ts';
 import type { Infer } from '../../shared/validation/schema.ts';
 import { MAX_SERVICE_IDS, avatarSchema, descriptionSchema, pinSchema, posSchema, shiftTimeSchema } from './user-fields.schemas.ts';
@@ -87,6 +88,7 @@ export const createGroupUserBody = object({
   email: optional(nullable(email())),
   phone: optional(nullable(phone())),
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
+  theme: optional(enumOf(USER_THEMES)),
   companyIds: optional(scopeIds()),
   placeIds: optional(scopeIds()),
   status: optional(enumOf(['active', 'disabled'] as const)),
@@ -108,6 +110,7 @@ export const createPlatformUserBody = object({
   email: optional(nullable(email())),
   phone: optional(nullable(phone())),
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
+  theme: optional(enumOf(USER_THEMES)),
   status: optional(enumOf(['active', 'disabled'] as const)),
   permissions: optional(permissionsSchema()),
   ...dataFields(),
@@ -125,6 +128,7 @@ export const patchGroupUserBody = object({
   email: optional(nullable(email())),
   phone: optional(nullable(phone())),
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
+  theme: optional(enumOf(USER_THEMES)),
   companyIds: optional(scopeIds()),
   placeIds: optional(scopeIds()),
   status: optional(enumOf(['active', 'disabled'] as const)),
@@ -145,6 +149,7 @@ export const patchPlatformUserBody = object({
   email: optional(nullable(email())),
   phone: optional(nullable(phone())),
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
+  theme: optional(enumOf(USER_THEMES)),
   status: optional(enumOf(['active', 'disabled'] as const)),
   permissions: optional(permissionsSchema()),
   ...dataFields(),

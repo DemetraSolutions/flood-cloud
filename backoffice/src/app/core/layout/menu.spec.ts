@@ -1,5 +1,13 @@
 import { Role } from '../session/session.types';
-import { MENU, MenuItem, visibleMenu } from './menu';
+import {
+  activeMenuIds,
+  activeParentIds,
+  chooserTarget,
+  GROUP_TARGETS,
+  MENU,
+  MenuItem,
+  visibleMenu,
+} from './menu';
 
 const allowAll = (): boolean => true;
 
@@ -202,29 +210,31 @@ describe('visibleMenu', () => {
     });
   });
 
-  it('shows "Strumenti › Attivazioni" to platform administrators and dealers, and "Listino" to platform administrators only', () => {
+  it('shows "Attivazioni" before "Strumenti" to platform administrators and dealers, and "Listino" under Strumenti to platform administrators only', () => {
+    const top = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role).map((i) => i.id);
     const children = (role: Role | undefined, permission: string) =>
       visibleMenu(MENU, (p) => p === permission, allowAll, role)
         .find((i) => i.id === 'tools')
         ?.children?.map((i) => i.id);
-    expect(children('PSA', 'activations:read')).toEqual(['activations']);
-    expect(children('D', 'activations:read')).toEqual(['activations']);
-    expect(children('PSA', 'activations:manage')).toEqual(['price-list']);
+    expect(top('PSA', 'activations:read')).toEqual(['home', 'activations', 'releases']);
+    expect(top('D', 'activations:read')).toEqual(['home', 'activations', 'releases']);
     for (const role of ['SA', 'CA', 'PA', 'E', undefined] as const) {
-      expect(children(role, 'activations:read')).toBeUndefined();
+      expect(top(role, 'activations:read')).not.toContain('activations');
     }
-    for (const role of ['D', 'SA', undefined] as const) {
-      expect(children(role, 'activations:manage')).toBeUndefined();
-    }
-    const tools = MENU.find((i) => i.id === 'tools')?.children;
-    expect(tools?.find((i) => i.id === 'activations')).toMatchObject({
-      route: '/tools/activations',
+    expect(children('PSA', 'activations:read')).toBeUndefined();
+    expect(children('PSA', 'activations:manage')).toBeUndefined();
+    const order = MENU.map((i) => i.id);
+    expect(order.indexOf('activations')).toBe(order.indexOf('tools') - 1);
+    expect(MENU.find((i) => i.id === 'activations')).toMatchObject({
+      route: '/activations',
       labelKey: 'MENU.ACTIVATIONS',
       permission: 'activations:read',
       roles: ['PSA', 'D'],
     });
+    const tools = MENU.find((i) => i.id === 'settings')?.children;
     expect(tools?.find((i) => i.id === 'price-list')).toMatchObject({
-      route: '/tools/price-list',
+      route: '/settings/price-list',
       labelKey: 'MENU.PRICE_LIST',
       permission: 'activations:manage',
       roles: ['PSA'],
@@ -251,17 +261,29 @@ describe('visibleMenu', () => {
     });
   });
 
-  it('shows "Strumenti › Gestione stati" only to platform administrators with countries:manage', () => {
-    const children = (role: Role | undefined, permission: string) =>
-      visibleMenu(MENU, (p) => p === permission, allowAll, role)
-        .find((i) => i.id === 'tools')
-        ?.children?.map((i) => i.id);
-    expect(children('PSA', 'countries:manage')).toEqual(['countries']);
+  it('shows "Impostazioni" right after "Strumenti", with "Listino" and "Gestione stati" for platform administrators only, linking to the first visible one', () => {
+    const settings = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role).find((i) => i.id === 'settings');
+    expect(settings('PSA', 'activations:manage')?.children?.map((i) => i.id)).toEqual([
+      'price-list',
+    ]);
+    expect(settings('PSA', 'activations:manage')?.route).toBe('/settings/price-list');
+    expect(settings('PSA', 'countries:manage')?.children?.map((i) => i.id)).toEqual(['countries']);
+    expect(settings('PSA', 'countries:manage')?.route).toBe('/settings/countries');
+    expect(settings('PSA', 'places:read')).toBeUndefined();
     for (const role of ['D', 'SA', 'CA', 'PA', 'E', undefined] as const) {
-      expect(children(role, 'countries:manage')).toBeUndefined();
+      expect(settings(role, 'countries:manage')).toBeUndefined();
+      expect(settings(role, 'activations:manage')).toBeUndefined();
     }
+    const order = MENU.map((i) => i.id);
+    expect(order.indexOf('settings')).toBe(order.indexOf('tools') + 1);
+    expect(MENU.find((i) => i.id === 'settings')).toMatchObject({
+      labelKey: 'MENU.SETTINGS',
+      icon: 'settings',
+    });
+    expect(MENU.find((i) => i.id === 'tools')?.icon).not.toBe('settings');
     expect(
-      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'countries'),
+      MENU.find((i) => i.id === 'settings')?.children?.find((i) => i.id === 'countries'),
     ).toMatchObject({
       route: '/settings/countries',
       labelKey: 'MENU.COUNTRIES',
@@ -270,7 +292,7 @@ describe('visibleMenu', () => {
     });
   });
 
-  it('shows "Release" after the tools and only to platform administrators and dealers', () => {
+  it('shows "Release" after the settings and only to platform administrators and dealers', () => {
     const idsOf = (role: Role | undefined) => ids(visibleMenu(MENU, allowAll, allowAll, role));
     expect(idsOf('PSA')).toContain('releases');
     expect(idsOf('D')).toContain('releases');
@@ -278,7 +300,7 @@ describe('visibleMenu', () => {
       expect(idsOf(role)).not.toContain('releases');
     }
     const order = MENU.map((item) => item.id);
-    expect(order.indexOf('releases')).toBe(order.indexOf('tools') + 1);
+    expect(order.indexOf('releases')).toBe(order.indexOf('settings') + 1);
     expect(MENU.find((i) => i.id === 'releases')).toMatchObject({
       route: '/releases',
       labelKey: 'MENU.RELEASES',
@@ -303,22 +325,215 @@ describe('visibleMenu', () => {
     );
   });
 
-  it('offers the groups to PSA and dealers and the group record to PSA, dealers and SA, with their own labels', () => {
+  it('offers the groups to PSA and dealers and the group record to the SA only, with their own labels', () => {
     const labelOf = (role: 'PSA' | 'D' | 'SA' | 'CA') =>
       Object.fromEntries(
         visibleMenu(MENU, allowAll, allowAll, role).map((i) => [i.id, i.labelKey]),
       );
-    expect(labelOf('PSA')).toMatchObject({
-      groups: 'MENU.GROUPS',
-      'group-settings': 'MENU.GROUP_SETTINGS',
-    });
-    expect(labelOf('D')).toMatchObject({
-      groups: 'MENU.GROUPS',
-      'group-settings': 'MENU.GROUP_SETTINGS',
-    });
+    expect(labelOf('PSA')).toMatchObject({ groups: 'MENU.GROUPS' });
+    expect(labelOf('D')).toMatchObject({ groups: 'MENU.GROUPS' });
+    expect(labelOf('PSA')).not.toHaveProperty('group-settings');
+    expect(labelOf('D')).not.toHaveProperty('group-settings');
     expect(labelOf('SA')).toMatchObject({ 'account-group': 'MENU.ACCOUNT_GROUP' });
     expect(labelOf('SA')).not.toHaveProperty('groups');
     expect(labelOf('CA')).not.toHaveProperty('account-group');
-    expect(labelOf('CA')).not.toHaveProperty('group-settings');
+  });
+
+  describe('entries that need a working group', () => {
+    const GROUP_ONLY = ['fidelity', 'products', 'promotions'];
+    const idsFor = (role: Role, hasGroup: boolean) =>
+      ids(visibleMenu(MENU, allowAll, allowAll, role, hasGroup));
+
+    it('flags exactly Fidelity, Prodotti and Promozioni', () => {
+      expect(MENU.filter((i) => i.requiresGroup).map((i) => i.id)).toEqual(GROUP_ONLY);
+    });
+
+    it.each(['PSA', 'D'] as const)('hides them from %s without a working group', (role) => {
+      for (const id of GROUP_ONLY) {
+        expect(idsFor(role, false)).not.toContain(id);
+        expect(idsFor(role, true)).toContain(id);
+      }
+      // The group-scoped entries that are not flagged stay as they were.
+      expect(idsFor(role, false)).toEqual(expect.arrayContaining(['users', 'companies', 'trash']));
+    });
+
+    it.each(['SA', 'CA', 'PA'] as const)('shows them to %s, who always has a group', (role) => {
+      for (const id of GROUP_ONLY) {
+        expect(idsFor(role, true)).toContain(id);
+      }
+    });
+
+    it('hides the children together with their parent', () => {
+      const all = visibleMenu(MENU, allowAll, allowAll, 'PSA', false).flatMap((i) => [
+        i.id,
+        ...(i.children ?? []).map((c) => c.id),
+      ]);
+      expect(all).not.toContain('card-types');
+      expect(all).not.toContain('product-favorites');
+    });
+
+    it('shows everything when the group is not specified (default)', () => {
+      expect(ids(visibleMenu(MENU, allowAll, allowAll, 'PSA'))).toContain('fidelity');
+    });
+  });
+
+  describe('active entry', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a2';
+    const linkFor = (hasGroup: boolean) => (item: MenuItem) => {
+      if (item.groupPath === undefined) {
+        return item.route;
+      }
+      return hasGroup ? `/groups/${GROUP}/${item.groupPath}` : (item.allRoute ?? item.route);
+    };
+    const activeFor = (role: Role, hasGroup: boolean, url: string) => {
+      const menu = visibleMenu(MENU, allowAll, allowAll, role, hasGroup);
+      return [...activeMenuIds(menu, linkFor(hasGroup), url)];
+    };
+
+    it('highlights only the groups list on /groups/list without a working group', () => {
+      expect(activeFor('PSA', false, '/groups/list')).toEqual(['groups']);
+      expect(activeFor('D', false, '/groups/list?q=a')).toEqual(['groups']);
+    });
+
+    it('keeps the group record with the list for PSA and dealers, and with the account entry for SA', () => {
+      expect(activeFor('PSA', true, `/groups/${GROUP}/settings`)).toEqual(['groups']);
+      expect(activeFor('D', true, `/groups/${GROUP}/settings/taxes`)).toEqual(['groups']);
+      expect(activeFor('SA', true, `/groups/${GROUP}/settings`)).toEqual(['account-group']);
+    });
+
+    it('on the chooser only the entry that sent the user there is active', () => {
+      expect(activeFor('PSA', false, '/groups?to=trash')).toEqual(['trash']);
+      expect(activeFor('PSA', false, '/groups?to=fidelity/card-types').sort()).toEqual([]);
+      expect(activeFor('D', false, '/groups?to=email-templates')).toEqual(['email-templates']);
+    });
+
+    it('without a group Aziende and Punti vendita are the cross-group lists, not the chooser', () => {
+      expect(activeFor('PSA', false, '/companies')).toEqual(['companies']);
+      expect(activeFor('D', false, '/places?groupId=x')).toEqual(['places']);
+      expect(activeFor('PSA', false, '/groups?to=companies')).toEqual([]);
+      expect(activeFor('PSA', false, '/groups?to=places')).toEqual([]);
+      expect(MENU.find((i) => i.id === 'companies')).toMatchObject({ allRoute: '/companies' });
+      expect(MENU.find((i) => i.id === 'places')).toMatchObject({ allRoute: '/places' });
+    });
+
+    it('with a group the cross-group lists still belong to Aziende and Punti vendita', () => {
+      expect(activeFor('PSA', true, '/companies')).toEqual(['companies']);
+      expect(activeFor('PSA', true, '/places')).toEqual(['places']);
+    });
+
+    it('on the chooser nothing is active without a valid destination, nor on group pages', () => {
+      for (const url of ['/groups', '/groups?to=evil', '/groups?to=//x', '/groups?to=']) {
+        expect(activeFor('PSA', false, url)).toEqual([]);
+      }
+      expect(activeFor('PSA', false, `/groups/${GROUP}/companies`)).toEqual([]);
+    });
+
+    it('accepts as destination only the page paths of the menu', () => {
+      expect([...GROUP_TARGETS]).toEqual(
+        expect.arrayContaining(['users', 'companies', 'places', 'trash', 'promotions']),
+      );
+      expect(chooserTarget('/groups?to=companies')).toBe('companies');
+      expect(chooserTarget('/groups/?to=places#x')).toBe('places');
+      for (const url of [
+        '/groups',
+        '/groups?to=evil',
+        '/groups?to=companies/..',
+        '/groups?to=%2F%2Fevil',
+        '/groups?to=x&to=companies',
+        '/groups/list?to=companies',
+        '/users?to=companies',
+        '/?to=companies',
+      ]) {
+        expect(chooserTarget(url), url).toBeNull();
+      }
+    });
+
+    it.each([
+      ['companies', 'companies'],
+      ['places', 'places'],
+      ['places/abc', 'places'],
+      ['users', 'users'],
+      ['trash', 'trash'],
+      ['promotions', 'promotions'],
+      ['fidelity/points-collections', 'points-collections'],
+      ['email-templates', 'email-templates'],
+    ])('with a group, /groups/:id/%s highlights only %s', (path, id) => {
+      expect(activeFor('PSA', true, `/groups/${GROUP}/${path}`)).toEqual([id]);
+    });
+
+    it('never makes a parent the current page, even when it shares the link of its first child', () => {
+      expect(activeFor('PSA', true, `/groups/${GROUP}/product-favorites`)).toEqual([
+        'product-favorites',
+      ]);
+      expect(activeFor('PSA', true, `/groups/${GROUP}/fidelity/card-types`)).toEqual([
+        'card-types',
+      ]);
+      expect(activeFor('PSA', true, `/groups/${GROUP}/fidelity/prize-catalogues`)).toEqual([
+        'prize-catalogues',
+      ]);
+    });
+
+    it('marks the parent the same way for every one of its children', () => {
+      for (const role of ['PSA', 'D', 'SA', 'CA', 'PA'] as const) {
+        for (const hasGroup of [false, true]) {
+          const menu = visibleMenu(MENU, allowAll, allowAll, role, hasGroup);
+          const link = linkFor(hasGroup);
+          for (const parent of menu.filter((item) => item.children !== undefined)) {
+            for (const child of parent.children!) {
+              const active = activeMenuIds(menu, link, `${link(child)}/x`);
+              const parents = activeParentIds(menu, active);
+              const label = `${role} ${hasGroup} ${parent.id} > ${child.id}`;
+              // Skip children that cannot be told apart from a sibling sharing their link.
+              if (active.has(child.id)) {
+                expect([...parents], label).toEqual([parent.id]);
+                expect(active.has(parent.id), label).toBe(false);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    it('marks no parent when nothing inside it is current', () => {
+      const menu = visibleMenu(MENU, allowAll, allowAll, 'PSA', true);
+      const active = activeMenuIds(menu, linkFor(true), '/profile');
+      expect([...activeParentIds(menu, active)]).toEqual([]);
+    });
+
+    it('matches whole segments, the home link only on the home page, and tolerates the fragment', () => {
+      expect(activeFor('PSA', false, '/')).toEqual(['home']);
+      expect(activeFor('PSA', false, '/profile#top')).toEqual(['profile']);
+      expect(activeFor('PSA', false, '/profiles')).toEqual([]);
+      expect(activeFor('PSA', false, '/unknown')).toEqual([]);
+    });
+
+    it('never highlights two leaf entries together, on any page of the menu', () => {
+      const roles: Role[] = ['PSA', 'D', 'SA', 'CA', 'PA', 'E'];
+      const known = [
+        '/groups',
+        '/groups/list',
+        `/groups/${GROUP}/settings`,
+        `/groups/${GROUP}/settings/features`,
+        '/users/new',
+        '/platform/users/new',
+        '/activations/abc',
+      ];
+      for (const role of roles) {
+        for (const hasGroup of [false, true]) {
+          const menu = visibleMenu(MENU, allowAll, allowAll, role, hasGroup);
+          const link = linkFor(hasGroup);
+          const flat = menu.flatMap((item) => [item, ...(item.children ?? [])]);
+          const urls = [...known, ...flat.flatMap((item) => [link(item), `${link(item)}/x/y`])];
+          for (const url of urls) {
+            const active = activeMenuIds(menu, link, url);
+            const leaves = flat.filter(
+              (item) => item.children === undefined && active.has(item.id),
+            );
+            const links = new Set(leaves.map((item) => link(item)));
+            expect(links.size, `${role} ${hasGroup} ${url}`).toBeLessThanOrEqual(1);
+          }
+        }
+      }
+    });
   });
 });

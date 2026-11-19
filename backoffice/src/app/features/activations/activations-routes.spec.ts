@@ -35,23 +35,33 @@ function matches(path: string, role: 'PSA' | 'D' | 'SA', permissions: string[]):
 
 describe('activations routes', () => {
   it.each([
-    ['tools/activations', 'ACTIVATIONS.TITLE', ActivationsPage],
-    ['tools/activations/:dealerId', 'ACTIVATIONS.STATEMENT.PAGE_TITLE', StatementPage],
-    ['tools/price-list', 'PRICE_LIST.TITLE', PriceListPage],
+    ['activations', 'ACTIVATIONS.TITLE', ActivationsPage],
+    ['activations/:dealerId', 'ACTIVATIONS.STATEMENT.PAGE_TITLE', StatementPage],
+    ['settings/price-list', 'PRICE_LIST.TITLE', PriceListPage],
   ])('%s is titled and lazy', async (path, title, component) => {
     const found = route(path);
     expect(found.title).toBe(title);
     expect(await found.loadComponent?.()).toBe(component);
   });
 
-  it.each(['tools/activations', 'tools/activations/:dealerId'])(
+  it.each([
+    ['tools/activations', 'activations'],
+    ['tools/activations/:dealerId', 'activations/:dealerId'],
+    ['tools/price-list', 'settings/price-list'],
+  ])('the old address %s redirects to %s keeping the query', (from, to) => {
+    const found = route(from);
+    expect(found.redirectTo).toBe(to);
+    expect(found.pathMatch).toBe('full');
+  });
+
+  it.each(['activations', 'activations/:dealerId'])(
     '%s is for who holds activations:read',
     (path) => {
       expect(matches(path, 'D', ['activations:read'])).toBe(true);
     },
   );
 
-  it.each(['tools/activations', 'tools/activations/:dealerId'])(
+  it.each(['activations', 'activations/:dealerId'])(
     '%s does not match without activations:read',
     (path) => {
       expect(matches(path, 'PSA', ['places:read'])).toBe(false);
@@ -59,8 +69,8 @@ describe('activations routes', () => {
   );
 
   it('the price list is for platform administrators with activations:manage', () => {
-    expect(matches('tools/price-list', 'PSA', ['activations:manage'])).toBe(true);
-    expect(matches('tools/price-list', 'PSA', ['activations:read'])).toBe(false);
-    expect(matches('tools/price-list', 'D', ['activations:manage'])).toBe(false);
+    expect(matches('settings/price-list', 'PSA', ['activations:manage'])).toBe(true);
+    expect(matches('settings/price-list', 'PSA', ['activations:read'])).toBe(false);
+    expect(matches('settings/price-list', 'D', ['activations:manage'])).toBe(false);
   });
 });

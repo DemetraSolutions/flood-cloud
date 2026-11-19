@@ -103,7 +103,7 @@ export async function readDealerIds(common: Db): Promise<Set<string>> {
 export async function profileUsers(common: Db, tenancy: TenancyIndex): Promise<UsersProfile> {
   const users = common.collection('users');
   const fields = createFieldProfiler({
-    enums: ['role', 'settings.language'],
+    enums: ['role', 'settings.language', 'settings.theme'],
     booleans: ['status', 'trash', 'permissions.status', 'permissions.*.r', 'permissions.*.w', 'permissions.apps.cash.status'],
   });
   const password = emptyPasswordProfile();

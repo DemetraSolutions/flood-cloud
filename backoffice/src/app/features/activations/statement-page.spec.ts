@@ -57,14 +57,14 @@ function statement(
   };
 }
 
-async function render(url = `/tools/activations/${DEALER}?month=2026-06`, withApi = true) {
+async function render(url = `/activations/${DEALER}?month=2026-06`, withApi = true) {
   TestBed.configureTestingModule({
     providers: [
       ...provideApiTesting(),
       ...(withApi ? [] : [{ provide: AppConfig, useValue: { apiBaseUrl: signal(null) } }]),
       provideRouter(
         [
-          { path: 'tools/activations/:dealerId', component: StatementPage },
+          { path: 'activations/:dealerId', component: StatementPage },
           { path: '**', children: [] },
         ],
         withComponentInputBinding(),
@@ -124,7 +124,7 @@ describe('StatementPage', () => {
 
     it('starts from the current month and the activations when the URL has wrong values', async () => {
       const { statementRequest, view } = await render(
-        `/tools/activations/${DEALER}?month=bad&section=bad&limit=7`,
+        `/activations/${DEALER}?month=bad&section=bad&limit=7`,
       );
       const req = statementRequest();
       expect(req.request.params.get('month')).toBe(currentMonth());
@@ -149,7 +149,7 @@ describe('StatementPage', () => {
       expect(text('.totals')).toContain('3');
       expect(text('.totals')).toContain('630,00 €');
       expect(text('.totals')).toContain('1080,00 €');
-      expect(root.querySelector('a[href^="/tools/activations?month=2026-06"]')).not.toBeNull();
+      expect(root.querySelector('a[href^="/activations?month=2026-06"]')).not.toBeNull();
     });
 
     it('shows a closed month', async () => {
@@ -299,7 +299,7 @@ describe('StatementPage', () => {
     });
 
     it('reports an unexpected failure generically', async () => {
-      const { root, view } = await render(`/tools/activations/${DEALER}?month=2026-06`, false);
+      const { root, view } = await render(`/activations/${DEALER}?month=2026-06`, false);
       await view();
       expect(root.querySelector('fc-error-state')?.textContent).toContain('ERRORS.GENERIC.MESSAGE');
     });
@@ -388,7 +388,7 @@ describe('StatementPage', () => {
 
     it('downloads the lines of the tab, whatever the page', async () => {
       const { flush, button, view, root } = await render(
-        `/tools/activations/${DEALER}?month=2026-06&section=renewals&cursor=c1&limit=25`,
+        `/activations/${DEALER}?month=2026-06&section=renewals&cursor=c1&limit=25`,
       );
       await flush();
       button('ACTIVATIONS.DOWNLOAD').click();

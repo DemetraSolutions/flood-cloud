@@ -154,6 +154,7 @@ Fuori dalle superfici API, per le sonde di GKE.
       "status": "active",
       "trashed": false,
       "language": "it",
+      "theme": "system",
       "hiddenInStats": false,
       "description": null,
       "avatar": null,
@@ -188,6 +189,7 @@ Fuori dalle superfici API, per le sonde di GKE.
   | `email` | stringa o `null` | indirizzo di sintassi ordinaria (ASCII, un solo `@`, dominio con punto), massimo 254 caratteri, salvato in minuscolo; `null` azzera |
   | `phone` | stringa o `null` | cifre, spazi, `+`, `-`, `(`, `)` con almeno una cifra, massimo 32 caratteri; `null` azzera |
   | `language` | stringa | `it` (unico valore supportato) |
+  | `theme` | stringa | tema colori del backoffice: `light`, `dark` o `system` (segue il sistema operativo); altro valore: `422` sul campo `theme`. Salvato in `settings.theme`; se manca o non è valido nel documento, `GET /v1/me` restituisce `system`. Lo cambia solo l'utente stesso; stesse regole e stesso evento di registro della lingua |
   | `avatar` | stringa o `null` | data URL di un'immagine PNG, JPEG o WebP, al massimo 200 KB di dati; `null` la rimuove. Stesse regole di "Gestione utenti" |
   | `pos.options` | oggetto | le preferenze di interfaccia della cassa (stesse chiavi e valori di `pos.options` in "Gestione utenti", **senza** `priceLists` e `defaultPriceListId`, che si cambiano dalla scheda dell'utente). `pos.enabled` e `pos.grants` non sono ammessi: sono permessi |
   Un campo assente non viene modificato.
@@ -297,6 +299,7 @@ Rappresentazione di un utente, comune a tutte le route di questa sezione (il cam
   "status": "active",
   "trashed": false,
   "language": "it",
+  "theme": "system",
   "hiddenInStats": false,
   "description": "Referente di sala",
   "avatar": "data:image/png;base64,iVBORw0KGgo…",
@@ -414,6 +417,7 @@ Le richieste di creazione e modifica accettano `permissions` come `{ "modules": 
   | `email` | stringa o `null` | no | sintassi ordinaria, max 254, salvata in minuscolo |
   | `phone` | stringa o `null` | no | cifre, spazi, `+-()`, max 32 |
   | `language` | stringa | no | `it` |
+  | `theme` | stringa | no | `light`, `dark` o `system` (default) |
   | `companyIds`, `placeIds` | array di id | secondo il ruolo | max 100 elementi, vedi perimetro |
   | `status` | stringa | no | `active` (default) o `disabled` |
   | `permissions` | oggetto | no | default del ruolo, limitato a quanto possiede il chiamante |
@@ -433,7 +437,7 @@ Le richieste di creazione e modifica accettano `permissions` come `{ "modules": 
 
 ### PATCH /v1/groups/{groupId}/users/{userId}
 - **Autenticazione e permesso:** Bearer backoffice, `users:update`
-- **Body** (JSON Merge Patch, massimo 512 KB, almeno un campo): gli stessi campi della creazione tranne `password`, tutti opzionali (`username`, `role`, `firstName`, `lastName`, `email`, `phone`, `language`, `companyIds`, `placeIds`, `status`, `permissions`, `description`, `avatar`, `pin`, `hiddenInStats`, `serviceIds`, `pos`, `shiftTime`). I flag di `permissions` e di `pos` inviati sostituiscono quelli salvati, gli altri restano; le scritture sono per singolo valore, quindi le informazioni dell'utente che il sistema non gestisce restano intatte. Un `pin` inviato è sempre scritto. Il perimetro è verificato solo se cambia perimetro o ruolo. Disabilitare un utente (`status: "disabled"`) richiede di possedere almeno i permessi che l'utente ha.
+- **Body** (JSON Merge Patch, massimo 512 KB, almeno un campo): gli stessi campi della creazione tranne `password`, tutti opzionali (`username`, `role`, `firstName`, `lastName`, `email`, `phone`, `language`, `theme`, `companyIds`, `placeIds`, `status`, `permissions`, `description`, `avatar`, `pin`, `hiddenInStats`, `serviceIds`, `pos`, `shiftTime`). I flag di `permissions` e di `pos` inviati sostituiscono quelli salvati, gli altri restano; le scritture sono per singolo valore, quindi le informazioni dell'utente che il sistema non gestisce restano intatte. Un `pin` inviato è sempre scritto. Il perimetro è verificato solo se cambia perimetro o ruolo. Disabilitare un utente (`status: "disabled"`) richiede di possedere almeno i permessi che l'utente ha.
 - **Risposta:** `200` con l'utente aggiornato (invariato se nessun valore cambia)
 - **Errori:** comuni; `403 FORBIDDEN` (se stesso, rango, perimetro, permessi non posseduti); `404`; `409 CONFLICT` (`username`/`taken`); `422`
 
@@ -587,6 +591,18 @@ Mapping dei nomi: `vatNumber` = `code`, `fiscalCode` = `code2` (`''` e `null` si
 - **Errori:** comuni; `422` per parametri non validi
 - **Cache:** `ETag` debole e `304` con `If-None-Match` (vedi "Liste")
 
+### GET /v1/companies
+- **Autenticazione e permesso:** Bearer backoffice, `companies:read` (rotta di piattaforma, senza gruppo nel percorso)
+- **Ruoli:** **PSA** (tutti i gruppi, compresi quelli nel cestino e i demo) e **D** (i gruppi del suo perimetro, cioè i gruppi disponibili del dealer); ogni altro ruolo, e la chiave di negozio, `403 FORBIDDEN`. Il perimetro lo calcola sempre il server dal chiamante: `groupId` e `dealerId` lo possono solo restringere.
+- **Query:** come l'elenco del gruppo (`limit`, `cursor`, `sort`: `name`, `-name`; `q` su nome e partita IVA; `trashed`, `status`, `country`, `province`), **senza `ids`**, con `limit` da 1 a **100** (default 50) e in più `groupId` (24 caratteri esadecimali; un gruppo fuori dal perimetro dà una lista **vuota**, non un errore) e `dealerId` (24 caratteri esadecimali, solo il PSA: un D riceve `403 FORBIDDEN`; restringe ai gruppi di quel dealer, in qualunque stato). Un parametro sconosciuto, un valore non valido o un parametro ripetuto è `422`. Le aziende nel cestino seguono `trashed` come nell'elenco del gruppo.
+- **Risposta:** `200`; le stesse voci dell'elenco del gruppo, più `groupId` e `groupName` (il nome del gruppo, cercato solo per i gruppi della pagina; `""` se il gruppo non ha un nome, `null` se il gruppo non esiste). Ordine, cursore e `page` come nell'elenco del gruppo. Letta dalle copie nel database common, mai le credenziali.
+  ```json
+  { "data": [ { "id": "665f1c2e9b1d4a0012ab34b2", "name": "Azienda Esempio Srl", "vatNumber": "01114601006", "city": "Milano", "province": "MI", "country": "IT", "status": "active", "trashed": false, "trashedAt": null, "groupId": "665f1c2e9b1d4a0012ab3400", "groupName": "Gruppo Esempio" } ], "page": { "limit": 50, "next": null } }
+  ```
+- **Errori:** comuni; `403 FORBIDDEN`; `422` (`cursor`/`format` per un cursore non valido per l'ordinamento); `503 SERVICE_UNAVAILABLE` se la lettura supera il tempo massimo
+- **Cache:** `ETag` debole e `304` con `If-None-Match` (vedi "Liste")
+- **Dettaglio e scritture** restano sulle rotte del gruppo (`/v1/groups/{groupId}/companies/{companyId}`…). La lettura non è registrata nel log delle attività (come `GET /v1/users` e la diagnostica).
+
 ### POST /v1/groups/{groupId}/companies
 - **Autenticazione e permesso:** Bearer backoffice, `companies:create`
 - **Ruoli:** PSA, D e SA (CA e PA `403`); il gruppo viene dal percorso
@@ -703,6 +719,18 @@ Mapping dei nomi: `address.street/postcode/city/province/country` = `address/pos
   `id`, `name`, `companyId` e `trashed` sono i campi che usa `ReferenceStore` del backoffice, invariati.
 - **Errori:** comuni; `404 NOT_FOUND` (gruppo); `422` per parametri non validi (`cursor`/`format` per un cursore non valido per l'ordinamento)
 - **Cache:** `ETag` debole e `304` con `If-None-Match` (vedi "Liste")
+
+### GET /v1/places
+- **Autenticazione e permesso:** Bearer backoffice, `places:read` (rotta di piattaforma, senza gruppo nel percorso)
+- **Ruoli:** **PSA** (tutti i gruppi, compresi quelli nel cestino e i demo) e **D** (i gruppi del suo perimetro); ogni altro ruolo, e la chiave di negozio, `403 FORBIDDEN`. Il perimetro lo calcola sempre il server: `groupId` e `dealerId` lo possono solo restringere.
+- **Query:** come l'elenco del gruppo (`limit`, `cursor`, `sort`: `name`, `-name`, `expirationDate`, `-expirationDate`; `q` su nome e città; `trashed`, `companyId`, `status`, `plan`, `country`, `province`), **senza `ids`**, con `limit` da 1 a **100** (default 50) e in più `groupId` e `dealerId` (solo il PSA; un D riceve `403 FORBIDDEN`), con le stesse regole di `GET /v1/companies`. Un `groupId` o un `companyId` fuori dal perimetro dà una lista **vuota**. Un parametro sconosciuto o non valido è `422`.
+- **Risposta:** `200`; le stesse voci dell'elenco del gruppo, più `groupId` e `groupName` (come `GET /v1/companies`). Il nome dell'azienda non c'è (come nell'elenco del gruppo). Letta dalle copie nel database common, mai le integrazioni, i dispositivi o altre credenziali.
+  ```json
+  { "data": [ { "id": "665f1c2e9b1d4a0012ab34b3", "name": "Bar Roma", "companyId": "665f1c2e9b1d4a0012ab34b2", "trashed": false, "trashedAt": null, "plan": "advanced", "status": "active", "city": "Milano", "province": "MI", "country": "IT", "expirationDate": "2030-01-01T00:00:00.000Z", "groupId": "665f1c2e9b1d4a0012ab3400", "groupName": "Gruppo Esempio" } ], "page": { "limit": 50, "next": null } }
+  ```
+- **Errori:** comuni; `403 FORBIDDEN`; `422`; `503 SERVICE_UNAVAILABLE`
+- **Cache:** `ETag` debole e `304` con `If-None-Match` (vedi "Liste")
+- **Dettaglio e scritture** restano sulle rotte del gruppo (`/v1/groups/{groupId}/places/{placeId}`…).
 
 ### POST /v1/groups/{groupId}/places
 - **Autenticazione e permesso:** Bearer backoffice, `places:create`

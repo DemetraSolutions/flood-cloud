@@ -6,6 +6,7 @@ import { requireIfMatch } from '../../shared/http/if-match.ts';
 import { validateBody, validateParams, validateQuery } from '../../shared/validation/middleware.ts';
 import {
   COMPANIES_BODY_LIMIT,
+  allCompaniesQuery,
   companiesQuery,
   companyParams,
   createCompanyBody,
@@ -22,7 +23,7 @@ import type { CompaniesController } from './companies.controller.ts';
 /**
  * The company routes (`doc/Tasks.md` area 6), all on a group: the group is verified against the caller's perimeter before the permission, and the service applies the
  * perimeter of the company (a CA reaches only his own). The compact list is the one the backoffice's reference store reads. Every write of an existing company needs `If-Match`.
- * Deleting a company from the trash has its own permission, `companies:delete` (same roles and ceilings as `companies:trash`: PSA, D and SA, never CA or PA).
+ * `GET /companies` is the list across groups of the PSA and the dealers (the scope is theirs, computed by the server). Deleting a company from the trash has its own permission, `companies:delete` (same roles and ceilings as `companies:trash`: PSA, D and SA, never CA or PA).
  *
  * The creation is idempotent: it needs the `Idempotency-Key` header (`shared/http/idempotency.ts`).
  *
@@ -43,6 +44,8 @@ export function createCompaniesRoutes(controller: CompaniesController, idempoten
       handler,
     });
   return [
+    // Across groups: a platform route (no group in the path); the service lets only the PSA and the dealers through and applies their perimeter.
+    defineRoute({ method: 'GET', path: '/companies', auth: { kind: 'user', permission: 'companies:read' }, middleware: [validateQuery(allCompaniesQuery)], handler: controller.listAll }),
     defineRoute({ method: 'GET', path: '/groups/:groupId/companies', auth: group('companies:read'), middleware: [validateQuery(companiesQuery)], handler: controller.list }),
     // Before the routes of one company: `e-invoicing-hubs` is not a company id.
     defineRoute({ method: 'GET', path: '/groups/:groupId/companies/e-invoicing-hubs', auth: group('companies:update'), handler: controller.hubs }),

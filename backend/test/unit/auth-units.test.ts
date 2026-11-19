@@ -51,6 +51,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   trashed: false,
   trashedAt: null,
   language: 'it',
+  theme: 'system',
   hiddenInStats: false,
   description: null,
   hasAvatar: false,

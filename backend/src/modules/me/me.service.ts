@@ -111,12 +111,13 @@ export interface MeServiceDeps {
 }
 
 /** The fields `PATCH /v1/me` can change, as recorded in the activity log: the picture only as whether there is one and a short fingerprint of it. */
-const editable = (user: Pick<User, 'firstName' | 'lastName' | 'email' | 'phone' | 'language' | 'hasAvatar' | 'avatar'> & { readonly pos: Pick<User['pos'], 'options'> }) => ({
+const editable = (user: Pick<User, 'firstName' | 'lastName' | 'email' | 'phone' | 'language' | 'theme' | 'hasAvatar' | 'avatar'> & { readonly pos: Pick<User['pos'], 'options'> }) => ({
   firstName: user.firstName,
   lastName: user.lastName,
   email: user.email,
   phone: user.phone,
   language: user.language,
+  theme: user.theme,
   hasAvatar: user.hasAvatar,
   avatarHash: user.avatar === undefined || user.avatar === null ? null : avatarFingerprint(user.avatar),
   posOptions: user.pos.options,

@@ -11,6 +11,12 @@ export interface CompanyListItem {
   readonly country: string | null;
   readonly status: CompanyStatus;
   readonly trashed: boolean;
+  /** Group of the company: only in the cross-group list (`GET /v1/companies`). */
+  readonly groupId?: string;
+  /** ISO instant the company was trashed, `null` otherwise (cross-group list). */
+  readonly trashedAt?: string | null;
+  /** Name of that group: `''` without a text name, `null` when the group does not exist (cross-group list only). */
+  readonly groupName?: string | null;
 }
 
 /** Postal address of a company. */

@@ -4,6 +4,8 @@ import type { Databases } from '../../../db/databases.ts';
 import { AppError } from '../../http/errors.ts';
 import { LIST_MAX_TIME_MS, MAX_LIMIT } from '../../http/list.ts';
 import { codeVariants } from '../../validation/code-variants.ts';
+import { bounded, MAX_TIME_EXPIRED } from './bounded.ts';
+import { MAX_DEALER_GROUPS } from './dealer-groups.repository.ts';
 import { assertVerifiedGroupAccess } from './group-access.ts';
 import { assertCountedGroups, countByGroupPipeline, countsByGroup } from './group-counts.ts';
 import type { TrashCount } from './group-counts.ts';
@@ -173,13 +175,16 @@ function assertFilter(filter: unknown, name: MirrorCollection): asserts filter i
   }
 }
 
+/** No extra projectable field. */
+const NO_FIELDS: ReadonlySet<string> = new Set();
+
 /** Throws unless a projection is inclusion-only and names allowlisted fields (and, when computed keys are admitted, `__` keys). */
-function assertProjection(projection: unknown, name: MirrorCollection, computed: boolean): asserts projection is MirrorProjection {
+function assertProjection(projection: unknown, name: MirrorCollection, computed: boolean, extra: ReadonlySet<string> = NO_FIELDS): asserts projection is MirrorProjection {
   if (!isContainer(projection)) {
     throw new Error('A read of the copies needs a projection');
   }
   const entries = Object.entries(projection);
-  const allowed = ([field]: [string, unknown]): boolean => MIRROR_FIELDS[name].has(field.split('.', 1)[0]!) || MIRROR_LEAVES[name].has(field) || (computed && field.startsWith(COMPUTED_PREFIX));
+  const allowed = ([field]: [string, unknown]): boolean => extra.has(field) || MIRROR_FIELDS[name].has(field.split('.', 1)[0]!) || MIRROR_LEAVES[name].has(field) || (computed && field.startsWith(COMPUTED_PREFIX));
   if (entries.length === 0 || entries.some((entry) => entry[1] !== 1 || !allowed(entry))) {
     throw new Error('A read of the copies needs an allowlist projection (inclusion of allowed fields only)');
   }
@@ -191,7 +196,7 @@ function assertSort(sort: unknown, name: MirrorCollection): void {
   }
 }
 
-function assertPipeline(pipeline: unknown, name: MirrorCollection): asserts pipeline is readonly Document[] {
+function assertPipeline(pipeline: unknown, name: MirrorCollection, extra: ReadonlySet<string> = NO_FIELDS): asserts pipeline is readonly Document[] {
   if (!Array.isArray(pipeline) || pipeline.length === 0) {
     throw new Error('A read of the copies needs a pipeline');
   }
@@ -226,7 +231,7 @@ function assertPipeline(pipeline: unknown, name: MirrorCollection): asserts pipe
         if (!last) {
           throw new Error('Only the final stage may be a $project');
         }
-        assertProjection(body, name, true);
+        assertProjection(body, name, true, extra);
     }
   });
   const final = pipeline[pipeline.length - 1] as Document;
@@ -334,6 +339,48 @@ export async function countMirrorByGroups(databases: Databases, name: MirrorColl
   return countsByGroup(groupIds, rows);
 }
 
+/** The groups a cross-group list reads: every group (the platform), or exactly the listed ones (a dealer, or a filter). */
+export type MirrorListGroups = { readonly kind: 'all' } | { readonly kind: 'include'; readonly ids: readonly ObjectId[] };
+
+/** Most groups one cross-group list names: the cap on the groups of a dealer, so the group set of a read is bounded like the others. */
+export const MAX_LIST_GROUPS = MAX_DEALER_GROUPS;
+
+/** The one field a cross-group list adds to the allowlist of the projection: the group each document belongs to. */
+const LIST_EXTRA_FIELDS: ReadonlySet<string> = new Set(['groupId']);
+
+/** The condition of a cross-group list on the group: a real `ObjectId` (never an array) that is one of the listed groups, or any. */
+function listGroupsCondition(groups: MirrorListGroups): Filter<Document> {
+  const notArray: Filter<Document> = { groupId: { $not: { $type: 'array' } } };
+  return groups.kind === 'all' ? { $and: [{ groupId: { $type: 'objectId' } }, notArray] } : { $and: [{ groupId: { $in: [...groups.ids] } }, notArray] };
+}
+
+/**
+ * Reads a page of the copies of several groups at once (the cross-group lists of companies and places): the only multi-group read of the copies that returns registry data. The group
+ * condition is built here from the groups the caller resolved from the caller's verified scope (never from the client), prepended to the pipeline; the pipeline passes the same checks as
+ * {@link GroupMirror.aggregate} (read stages only, allowlisted fields, a `$limit` before the final allowlist projection), and the projection may also name `groupId`. A read that
+ * exceeds its time limit is a `503`.
+ *
+ * @param databases Database accessor.
+ * @param name `companies` or `places`.
+ * @param groups Every group, or the listed ones (a non-empty list of at most {@link MAX_LIST_GROUPS} `ObjectId`s).
+ * @param pipeline The stages of the list (see {@link GroupMirror.aggregate}).
+ * @returns The documents, as the pipeline cuts them.
+ * @throws {Error} If `name` is not a copy collection, the groups are not valid, or the pipeline is not allowed.
+ * @throws {AppError} `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+ */
+export async function readMirrorList(databases: Databases, name: MirrorCollection, groups: MirrorListGroups, pipeline: readonly Document[]): Promise<Document[]> {
+  if (!MIRROR_COLLECTIONS.includes(name)) {
+    throw new Error('Not a copy collection');
+  }
+  if (groups.kind === 'include' && (groups.ids.length === 0 || groups.ids.length > MAX_LIST_GROUPS || groups.ids.some((id: unknown) => !(id instanceof ObjectId)))) {
+    throw new Error(`A cross-group read needs between 1 and ${MAX_LIST_GROUPS} group ids`);
+  }
+  assertPipeline(pipeline, name, LIST_EXTRA_FIELDS);
+  // Literal names: the collection registry check requires every collection name to be a string literal.
+  const collection = name === 'companies' ? databases.common().collection('companies') : databases.common().collection('places');
+  return bounded(() => collection.aggregate([{ $match: listGroupsCondition(groups) }, ...pipeline], { maxTimeMS: LIST_MAX_TIME_MS }).toArray());
+}
+
 /**
  * Reads a page of device rows from the copies of the places of several groups (the diagnostics): the only multi-group read of the places that returns data of the places. The pipeline is
  * built by {@link deviceRowsPipeline}, so nothing but the allowed fields of the devices leaves the database, and the groups and the perimeter must come from the caller's verified scope.
@@ -391,15 +438,6 @@ export async function trashedCompanyIds(databases: Databases, groups: GroupSelec
 
 /** Most places (or companies) a read of the activations returns in one batch. */
 export const ACTIVATION_BATCH_MAX = 1000;
-
-/** Runs a read, answering `503` when it exceeds its time limit: the answer is unknown, never an empty one. */
-async function bounded<T>(read: () => Promise<T>): Promise<T> {
-  try {
-    return await read();
-  } catch (error) {
-    throw error instanceof MongoServerError && error.code === MAX_TIME_EXPIRED ? new AppError('SERVICE_UNAVAILABLE') : error;
-  }
-}
 
 /**
  * Reads a batch of the places activated in a window from the copies, for the activations (the billing of the dealers): the places not in the trash of the given groups, by `_id`, after a position. The filter is built here
@@ -525,9 +563,6 @@ export interface CountryUsage {
 
 /** The format of a country code and of an area code, the only values {@link readCountryUsage} accepts. */
 const COUNTRY_CODE_FORMAT = /^[A-Z]{2}$/;
-
-/** MongoDB's `MaxTimeMSExpired` error code. */
-const MAX_TIME_EXPIRED = 50;
 
 /**
  * Finds the companies and the places, of any group and trashed ones included, that name a country (`countryCode`) or a province of it (`countryAreaCode`) in the copies of the common database: the deletion

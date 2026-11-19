@@ -37,7 +37,7 @@ import { applyPosPatch, diffPos } from './pos.mapper.ts';
 import type { Pos } from './pos.catalog.ts';
 import { applyShiftTime, diffShiftTime, emptyShiftTime, shiftTimeIssues } from './shift-time.ts';
 import { applyPermissions, changeViewOf, permissionChanges, scopeReferenceIssues, scopeShapeIssues, storedChangeView, violationError } from './user-access.ts';
-import { DEFAULT_LANGUAGE, OWNED_PERMISSION_MODULES, fromLegacy, toLegacyDocument, toLegacyUpdate, toResponse } from './user.mapper.ts';
+import { DEFAULT_LANGUAGE, DEFAULT_THEME, OWNED_PERMISSION_MODULES, fromLegacy, toLegacyDocument, toLegacyUpdate, toResponse } from './user.mapper.ts';
 import type { LegacyUserDocument, User, UserChanges, UserResponse } from './user.types.ts';
 import { USERS_LIST } from './users.list.ts';
 import type { UsersRepository } from './users.repository.ts';
@@ -263,6 +263,7 @@ function snapshot(user: User): Record<string, unknown> {
     status: user.status,
     trashed: user.trashed,
     language: user.language,
+    theme: user.theme,
     hiddenInStats: user.hiddenInStats,
     description: user.description,
     hasAvatar: user.hasAvatar,
@@ -547,6 +548,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
           placeIds: hexes(placeIds),
           status: body.status ?? 'active',
           language: body.language ?? DEFAULT_LANGUAGE,
+          theme: body.theme ?? DEFAULT_THEME,
           hiddenInStats: body.hiddenInStats ?? false,
           description: body.description ?? null,
           avatar: body.avatar ?? null,
@@ -641,6 +643,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
           placeIds: [],
           status: 'active',
           language: DEFAULT_LANGUAGE,
+          theme: DEFAULT_THEME,
           hiddenInStats: false,
           description: null,
           avatar: null,
@@ -736,6 +739,7 @@ export function createUsersService(deps: UsersServiceDeps): UsersService {
         ...(differs(patch.email, before.email) ? { email: patch.email } : {}),
         ...(differs(patch.phone, before.phone) ? { phone: patch.phone } : {}),
         ...(differs(patch.language, before.language) ? { language: patch.language } : {}),
+        ...(differs(patch.theme, before.theme) ? { theme: patch.theme } : {}),
         ...(differs(patch.role, before.role as Role) ? { role: patch.role } : {}),
         ...(differs(patch.status, before.status) ? { status: patch.status } : {}),
         ...(scopeChanged ? { companyIds: hexes(companyIds), placeIds: hexes(placeIds) } : {}),

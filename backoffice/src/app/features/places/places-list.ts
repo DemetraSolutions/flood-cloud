@@ -33,6 +33,7 @@ import { StatusBadge } from '../../shared/ui/status-badge/status-badge';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { createDebouncer } from '../../shared/util/debouncer';
 import { apiErrorOf } from '../profile/sessions';
+import { CrossGroupFilterChange, CrossGroupFilters } from '../groups/cross-group-filters';
 import { loadAll } from './lookup-loader';
 import { PlaceActionResult, PlaceActions } from './place-actions';
 import { PlaceRenewal } from './place-renewal';
@@ -51,7 +52,10 @@ const OBJECT_ID = /^[0-9a-f]{24}$/;
 type QueryChange = Record<string, string | null>;
 
 /**
- * Places of a group (`/groups/:groupId/places`): search, company, status, plan, trash, country and
+ * Places of a group (`/groups/:groupId/places`) or, for a PSA or dealer with no working group,
+ * of every group in their scope (`/places`, route data `scope: 'all'`: `groupId` and `dealerId`
+ * are then query filters, rows show their group and open the place in it, and nothing is
+ * created, renewed or changed from here). Search, company, status, plan, trash, country and
  * province filters, the sort and the cursor pagination live in the URL, so a view can be shared
  * and survives a reload. Platform administrators and dealers renew the expiration date in the
  * row; rows offer trash, restore, delete (from the trash only) and duplicate according to the
@@ -65,6 +69,7 @@ type QueryChange = Record<string, string | null>;
     Can,
     CellTemplate,
     Checkbox,
+    CrossGroupFilters,
     CursorPaginator,
     DataTable,
     ErrorState,
@@ -90,8 +95,13 @@ export class PlacesList {
   private readonly debouncer = createDebouncer();
   protected readonly i18n = inject(I18nService);
 
-  /** Route parameter and query parameters (bound by the router). */
-  readonly groupId = input.required<string>();
+  /** Route parameter of the group list; in the cross-group list it is the `groupId` query filter. */
+  readonly groupId = input<string>();
+  /** Dealer filter (cross-group list, platform administrator only). */
+  readonly dealerId = input<string>();
+  /** Route data: `all` for the cross-group list (`/places`). */
+  readonly scope = input<string>();
+  /** Query parameters (bound by the router). */
   readonly q = input<string>();
   readonly companyId = input<string>();
   readonly status = input<string>();
@@ -102,6 +112,28 @@ export class PlacesList {
   readonly sort = input<string>();
   readonly limit = input<string>();
   readonly cursor = input<string>();
+
+  /** `group` (path parameter) or `all` (the cross-group list of PSA and dealers). */
+  protected readonly isAll = computed(() => this.scope() === 'all');
+  /** Group of the list: the path parameter, `undefined` in the cross-group list. */
+  protected readonly ownGroupId = computed(() => (this.isAll() ? undefined : this.groupId()));
+  /** Group the row actions work on (none in the cross-group list, where there are no actions). */
+  protected readonly actionGroup = computed(() => this.ownGroupId() ?? '');
+  /** Group filter of the cross-group list (valid ids only). */
+  protected readonly groupFilter = computed(() => {
+    const value = this.groupId();
+    return this.isAll() && OBJECT_ID.test(value ?? '') ? value : undefined;
+  });
+  protected readonly dealerFilter = computed(() => {
+    const value = this.dealerId();
+    return this.isAll() && this.session.me()?.role === 'PSA' && OBJECT_ID.test(value ?? '')
+      ? value
+      : undefined;
+  });
+  /** A user who may create places is told to choose a group first (creation needs one). */
+  protected readonly chooseGroupHint = computed(
+    () => this.isAll() && this.session.can('places:create'),
+  );
 
   protected readonly sortValue = computed(() => {
     const value = this.sort() ?? '';
@@ -135,7 +167,8 @@ export class PlacesList {
 
   /** The companies of the group the user can see: the filter and the name of the company of a row. */
   private readonly companiesResource = resource({
-    params: () => (this.session.can('companies:read') ? this.groupId() : undefined),
+    params: () =>
+      this.session.can('companies:read') ? (this.ownGroupId() ?? this.groupFilter()) : undefined,
     loader: ({ params }) => loadAll(this.store, params, 'companies'),
   });
   protected readonly companies = computed(() =>
@@ -168,13 +201,19 @@ export class PlacesList {
       country: COUNTRY.test(country ?? '') ? country : undefined,
       province: PROVINCE.test(province ?? '') ? province : undefined,
       cursor: this.cursor(),
+      groupId: this.groupFilter(),
+      dealerId: this.dealerFilter(),
     };
     for (const [name, value] of Object.entries(filters)) {
       if (value) {
         params[name] = value;
       }
     }
-    return { url: `/v1/groups/${encodeURIComponent(this.groupId())}/places`, params };
+    const own = this.ownGroupId();
+    return {
+      url: own === undefined ? '/v1/places' : `/v1/groups/${encodeURIComponent(own)}/places`,
+      params,
+    };
   });
 
   protected readonly rows = computed(() =>
@@ -189,16 +228,35 @@ export class PlacesList {
     return this.i18n.t(error === null ? 'ERRORS.GENERIC.MESSAGE' : apiErrorMessageKey(error));
   });
   protected readonly showTrashed = computed(() => this.trashed() === 'true');
-  protected readonly newRoute = computed(() => ['/groups', this.groupId(), 'places', 'new']);
+  /** Where "new place" leads: the form of the group; none in the cross-group list. */
+  protected readonly newRoute = computed(() => {
+    const own = this.ownGroupId();
+    return own === undefined ? null : ['/groups', own, 'places', 'new'];
+  });
 
   protected readonly columns = computed<TableColumn<PlaceListItem>[]>(() => [
+    ...(this.isAll()
+      ? [
+          {
+            key: 'groupName',
+            header: this.i18n.t('CROSS_GROUP.COLUMN.GROUP'),
+            hideNarrow: true,
+          },
+        ]
+      : []),
     { key: 'name', header: this.i18n.t('PLACES.COLUMN.NAME'), sortable: true },
-    {
-      key: 'company',
-      header: this.i18n.t('PLACES.COLUMN.COMPANY'),
-      hideNarrow: true,
-      cell: (row) => this.companyName(row),
-    },
+    // The cross-group list has no company names: the column is there only when a group is
+    // filtered, so that the companies of that group can name them.
+    ...(!this.isAll() || this.groupFilter() !== undefined
+      ? [
+          {
+            key: 'company',
+            header: this.i18n.t('PLACES.COLUMN.COMPANY'),
+            hideNarrow: true,
+            cell: (row: PlaceListItem) => this.companyName(row),
+          },
+        ]
+      : []),
     {
       key: 'city',
       header: this.i18n.t('PLACES.COLUMN.CITY'),
@@ -220,29 +278,51 @@ export class PlacesList {
   ]);
   protected readonly rowKey = (row: PlaceListItem): string => row.id;
   protected readonly detailRoute = (row: PlaceListItem): string[] =>
-    placeRoute(this.groupId(), row.id);
+    placeRoute(this.ownGroupId() ?? row.groupId ?? '', row.id);
+  /** Route of the group of a row (cross-group list). */
+  protected readonly groupRoute = (row: PlaceListItem): string[] => [
+    '/groups',
+    row.groupId ?? '',
+    'settings',
+  ];
 
   /** Whether the user may renew the expiration date in the list (platform administrators and dealers). */
   protected readonly canRenew = computed(() => {
     const role = this.session.me()?.role;
-    return this.session.can('places:update') && (role === 'PSA' || role === 'D');
+    return !this.isAll() && this.session.can('places:update') && (role === 'PSA' || role === 'D');
   });
   /** Whether the user may do anything to a row (otherwise the actions menu is not offered). */
   protected readonly canAct = computed(
     () =>
-      this.session.can('places:trash') ||
-      this.session.can('places:delete') ||
-      this.session.can('places:create'),
+      !this.isAll() &&
+      (this.session.can('places:trash') ||
+        this.session.can('places:delete') ||
+        this.session.can('places:create')),
   );
 
   constructor() {
     this.countries.need();
     // The page loaded: the group in the URL becomes the working group of the selector.
     effect(() => {
-      const groupId = this.groupId();
-      if (this.places.hasValue()) {
+      const groupId = this.ownGroupId();
+      if (groupId !== undefined && this.places.hasValue()) {
         untracked(() => this.groups.adopt(groupId));
       }
+    });
+  }
+
+  /** Opening a place of the cross-group list makes its group the working group. */
+  protected open(row: PlaceListItem): void {
+    if (this.isAll() && row.groupId !== undefined) {
+      this.groups.choose({ id: row.groupId, name: row.groupName ?? '' });
+    }
+  }
+
+  /** A group change drops the company filter, which belongs to the previous group. */
+  protected onCrossGroup(change: CrossGroupFilterChange): void {
+    this.change({
+      [change.name]: change.value === '' ? null : change.value,
+      ...(change.name === 'groupId' ? { companyId: null } : {}),
     });
   }
 
@@ -303,7 +383,7 @@ export class PlacesList {
     if (result.copyId === null) {
       this.places.reload();
     } else {
-      void this.router.navigate(placeRoute(this.groupId(), result.copyId));
+      void this.router.navigate(placeRoute(this.actionGroup(), result.copyId));
     }
   }
 

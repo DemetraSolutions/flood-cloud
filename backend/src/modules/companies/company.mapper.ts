@@ -2,7 +2,7 @@ import { Double, Int32, Long, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { canonicalJson } from '../../shared/http/etag.ts';
 import { ECOMMERCE_FLAGS } from '../../shared/legacy-write/company-paths.ts';
-import type { Company, CompanySummary, MediaLogo } from './company.types.ts';
+import type { Company, CompanySummary, CrossGroupCompany, MediaLogo } from './company.types.ts';
 
 /** How the value of one key of the stored document becomes a value of the domain and back. */
 export interface Codec {
@@ -347,6 +347,17 @@ export function toCompanySummary(document: Document): CompanySummary {
     trashed: document['trash'] === true,
     trashedAt: instant.read(document['trashDate']) as string | null,
   };
+}
+
+/**
+ * Maps a document of the copies (read with the list projection and `groupId`) to an item of the list across groups: the compact item with its group.
+ *
+ * @param document The projected company, with its `groupId`.
+ * @param groupNames Names of the groups of the page by hexadecimal id.
+ */
+export function toCrossGroupCompany(document: Document, groupNames: ReadonlyMap<string, string>): CrossGroupCompany {
+  const groupId = (document['groupId'] as ObjectId).toHexString();
+  return { ...toCompanySummary(document), groupId, groupName: groupNames.get(groupId) ?? null };
 }
 
 /** The fields the list reads from the copies, the only ones ever loaded for it. */

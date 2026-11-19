@@ -16,6 +16,7 @@ import { WEEK_DAYS } from '../../shared/legacy-write/place-paths.ts';
 import { SETTING_FIELDS } from '../../shared/legacy-write/place-settings.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal, ScopeHolder } from '../../shared/security/scope/principal.ts';
+import { assertCrossGroupAccess } from '../../shared/security/scope/cross-group.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
 import { settleItem } from '../../shared/trash/trash.ts';
 import type { TrashItemOutcome, VersionCheck } from '../../shared/trash/trash.ts';
@@ -30,12 +31,12 @@ import type { MediaService } from '../media/media.service.ts';
 import type { StoreKeysService } from '../store-keys/store-keys.service.ts';
 import { applyListRules } from './place-lists.rules.ts';
 import { applySettingsRules } from './place-settings.rules.ts';
-import { PLACE_LEAVES, toPlace, toPlaceSummary } from './place.mapper.ts';
-import type { Place, PlaceCreation, PlacePatch, PlacePriceList, PlaceSummary } from './place.types.ts';
+import { PLACE_LEAVES, toCrossGroupPlace, toPlace, toPlaceSummary } from './place.mapper.ts';
+import type { CrossGroupPlace, Place, PlaceCreation, PlacePatch, PlacePriceList, PlaceSummary } from './place.types.ts';
 import { PLACES_LIST } from './places.list.ts';
 import type { PlacesRepository } from './places.repository.ts';
 import { PLANS } from './places.schemas.ts';
-import type { PlacesQuery } from './places.schemas.ts';
+import type { AllPlacesQuery, PlacesQuery } from './places.schemas.ts';
 
 /** A place with the version of its stored document: the `ETag` of the response and the `If-Match` of the next write. */
 export interface PlaceResult {
@@ -46,6 +47,12 @@ export interface PlaceResult {
 /** A page of the list of the places. */
 export interface PlacesListing {
   readonly items: readonly PlaceSummary[];
+  readonly page: PageInfo;
+}
+
+/** A page of the list across groups. */
+export interface AllPlacesListing {
+  readonly items: readonly CrossGroupPlace[];
   readonly page: PageInfo;
 }
 
@@ -61,6 +68,16 @@ export interface PlacesService {
    * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit the sort.
    */
   list(principal: AuthPrincipal, access: GroupAccess, query: PlacesQuery): Promise<PlacesListing>;
+  /**
+   * Lists the places of every group of the caller's perimeter, from the copies in the common database: the platform (PSA) reads every group, trashed and demo ones included, a dealer the
+   * groups of his scope; each item carries its group and the name of the group. The perimeter is always the server's: `groupId` and `dealerId` only narrow it (a group outside it gives an empty page).
+   *
+   * @param principal The authenticated caller.
+   * @param query Validated query.
+   * @throws {AppError} `FORBIDDEN` for any role but the PSA and the dealers, and for a dealer that sends `dealerId`; `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit the sort;
+   *   `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+   */
+  listAll(principal: AuthPrincipal, query: AllPlacesQuery): Promise<AllPlacesListing>;
   /**
    * Reads one place from the document of the group database (so the version is the one `If-Match` expects). A place that does not exist, is of another group or is outside the
    * perimeter of the caller is one and the same `404`. The caller may also be the server of the place itself (a store key: its perimeter is its own place).
@@ -560,30 +577,42 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
     await revokeKey(principal, access, placeId, 'placeDeleted', client);
   };
 
+  /** The conditions of a list request on the copies: the trash, the company, the status, the plan, the country and the province. */
+  const listConditions = (query: Pick<PlacesQuery, 'trashed' | 'companyId' | 'status' | 'plan' | 'country' | 'province'>): Filter<Document>[] => {
+    const conditions: Filter<Document>[] = [query.trashed === 'true' ? { trash: true } : { trash: { $ne: true } }];
+    if (query.companyId !== undefined) {
+      conditions.push({ companyId: query.companyId });
+    }
+    if (query.status !== undefined) {
+      conditions.push({ status: query.status === 'active' ? true : { $ne: true } });
+    }
+    if (query.plan !== undefined) {
+      conditions.push({ plan: query.plan });
+    }
+    if (query.country !== undefined) {
+      conditions.push({ countryCode: query.country });
+    }
+    if (query.province !== undefined) {
+      conditions.push({ countryAreaCode: query.province });
+    }
+    return conditions;
+  };
+
   return {
     list: async (principal, access, query) => {
-      const conditions: Filter<Document>[] = [query.trashed === 'true' ? { trash: true } : { trash: { $ne: true } }];
-      if (query.companyId !== undefined) {
-        conditions.push({ companyId: query.companyId });
-      }
+      const conditions = listConditions(query);
       const ids = parseIds(query.ids);
       if (ids !== null) {
         conditions.push({ _id: { $in: ids } });
       }
-      if (query.status !== undefined) {
-        conditions.push({ status: query.status === 'active' ? true : { $ne: true } });
-      }
-      if (query.plan !== undefined) {
-        conditions.push({ plan: query.plan });
-      }
-      if (query.country !== undefined) {
-        conditions.push({ countryCode: query.country });
-      }
-      if (query.province !== undefined) {
-        conditions.push({ countryAreaCode: query.province });
-      }
       const { items, page } = await repository.list(principal, access, { $and: conditions }, listParamsOf(query, PLACES_LIST));
       return { items: items.map(toPlaceSummary), page };
+    },
+
+    listAll: async (principal, query) => {
+      assertCrossGroupAccess(principal, query);
+      const { items, page, groupNames } = await repository.listAll(principal, query, { $and: listConditions(query) }, listParamsOf(query, PLACES_LIST));
+      return { items: items.map((document) => toCrossGroupPlace(document, groupNames)), page };
     },
 
     get: (principal, access, placeId) => reload(readerFor(principal, access), access, placeId, principal),

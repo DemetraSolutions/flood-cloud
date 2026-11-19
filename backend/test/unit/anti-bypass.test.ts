@@ -9,6 +9,14 @@ import { isPublicPermission } from '../../src/shared/security/rbac/public-permis
 
 const SRC = fileURLToPath(new URL('../../src', import.meta.url));
 
+/** Whether a source text imports or re-exports a symbol of a module (by base name): a named import or export, a default or namespace import, `export *`, or a dynamic `import()` of the module. */
+function reaches(text: string, base: string, symbol: string): boolean {
+  const from = `from\\s*['"][^'"]*/${base}\\.ts['"]`;
+  const statements = [...text.matchAll(new RegExp(`(?:import|export)\\s+(?:type\\s+)?([^;'"]*?)\\s*${from}`, 'g'))];
+  const named = statements.some((match) => !/^\{[^}]*\}$/.test(match[1]!) || new RegExp(`\\b${symbol}\\b`).test(match[1]!));
+  return named || new RegExp(`import\\(\\s*['"][^'"]*/${base}\\.ts['"]`).test(text);
+}
+
 /** Every `.ts` file under a directory, recursively. */
 async function filesUnder(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -211,15 +219,66 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.ok(!/places: new Set\(\[[^\]]*(?:appointment|roomsSettings)/.test(fields));
     });
 
-    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups the three fixed reads of the diagnostics and the fixed read of the places that use a template and the fixed read of the companies and places that use a country', async () => {
+    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups, the cross-group list of the copies, the three fixed reads of the diagnostics and the fixed read of the places that use a template and the fixed read of the companies and places that use a country', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
-      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readCountryUsage']);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorList', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readCountryUsage']);
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
       // The diagnostics (T1) add two more, each running a pipeline made by `mirror-devices.ts` (the whole of what leaves the copies: an allowlist of the fields of a device).
       assert.equal([...text.matchAll(/deviceRowsPipeline\(|deviceCountPipeline\(/g)].length, 2);
-      assert.equal([...text.matchAll(/\.aggregate\(/g)].length, 4);
+      // The cross-group list of the companies and places adds a third one (`readMirrorList`), after the same checks as the per-group read.
+      assert.equal([...text.matchAll(/\.aggregate\(/g)].length, 5);
+    });
+
+    /** The files (but the module itself) that import or re-export a symbol of a module. */
+    const importersOf = async (symbol: string, module: string): Promise<string[]> => {
+      const base = module.split('/').pop()!.replace(/\.ts$/, '');
+      const found: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        if (posix(file) !== module && reaches(await readFile(file, 'utf8'), base, symbol)) {
+          found.push(posix(file));
+        }
+      }
+      return found;
+    };
+
+    it('imports the cross-group list of the copies only in the scope layer, which builds the groups from the verified scope and never from the client', async () => {
+      assert.deepEqual(await importersOf('readMirrorList', MIRROR), ['shared/security/scope/cross-group.ts']);
+      const cross = await readFile(join(SRC, 'shared/security/scope/cross-group.ts'), 'utf8');
+      // The groups come from the scope of the principal, and the check of the role comes first.
+      assert.match(cross, /assertCrossGroupAccess\(principal, filters\);\n  const \{ scope \} = principal;/);
+      assert.match(cross, /scope\.groupIds/);
+    });
+
+    it('lets only the two repositories read a cross-group page, each with its own constant projection, and nobody else resolve the groups', async () => {
+      const CROSS = 'shared/security/scope/cross-group.ts';
+      assert.deepEqual((await importersOf('readCrossGroupPage', CROSS)).sort(), ['modules/companies/companies.repository.ts', 'modules/places/places.repository.ts']);
+      // The groups are resolved inside the scope layer by the reader itself: no module outside it imports `resolveCrossGroups`.
+      assert.deepEqual(await importersOf('resolveCrossGroups', CROSS), []);
+      const companies = await readFile(join(SRC, 'modules/companies/companies.repository.ts'), 'utf8');
+      const places = await readFile(join(SRC, 'modules/places/places.repository.ts'), 'utf8');
+      assert.match(companies, /readCrossGroupPage\(databases, principal, \{ name: 'companies', config: COMPANIES_LIST, projection: COMPANY_SUMMARY_PROJECTION \}, groups, filter, params\)/);
+      assert.match(places, /readCrossGroupPage\(databases, principal, \{ name: 'places', config: PLACES_LIST, projection: PLACE_SUMMARY_PROJECTION \}, groups, filter, params\)/);
+    });
+
+    it('finds every way of reaching a symbol of a module: named, namespace, re-export, default and dynamic', () => {
+      const reached = (text: string): boolean => reaches(text, 'cross-group', 'readCrossGroupPage');
+      for (const text of [
+        "import { readCrossGroupPage } from './cross-group.ts';",
+        "import type { A, readCrossGroupPage as r } from '../scope/cross-group.ts';",
+        "import * as cross from '../scope/cross-group.ts';",
+        "export * from './cross-group.ts';",
+        "export * as cross from './cross-group.ts';",
+        "export { readCrossGroupPage } from './cross-group.ts';",
+        "import cross from './cross-group.ts';",
+        "const cross = await import('./cross-group.ts');",
+      ]) {
+        assert.ok(reached(text), text);
+      }
+      for (const text of ["import { other } from './cross-group.ts';", "import { readCrossGroupPage } from './elsewhere.ts';", 'const text = 1;']) {
+        assert.ok(!reached(text), text);
+      }
     });
 
     it('imports the read of the companies and places that use a country only in the countries repository, which passes it nothing but codes', async () => {

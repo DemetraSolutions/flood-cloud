@@ -75,6 +75,7 @@ export const USERS_OWNED_FIELDS: readonly string[] = Object.freeze([
   'email',
   'telephone',
   'settings.language',
+  'settings.theme',
   'settings.hiddenInStats',
   'status',
   'trash',

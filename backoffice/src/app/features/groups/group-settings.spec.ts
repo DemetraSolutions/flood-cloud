@@ -110,6 +110,20 @@ describe('GroupSettings', () => {
   });
 
   it.each([
+    ['PSA', true],
+    ['D', true],
+    ['SA', false],
+  ] as const)('links back to the groups list only for PSA and dealers (%s)', async (role, shown) => {
+    const { root, load } = await render({ role });
+    await load();
+    const back = root.querySelector<HTMLAnchorElement>('p > a');
+    expect(back?.getAttribute('href') ?? null).toBe(shown ? '/groups/list' : null);
+    if (shown) {
+      expect(back?.textContent).toBe('GROUP_SETTINGS.BACK');
+    }
+  });
+
+  it.each([
     ['PSA', ['groups:read', 'groups:update'], false],
     ['SA', ['groups:read'], false],
     ['D', ['groups:read', 'groups:update', 'apiKeys:read'], true],

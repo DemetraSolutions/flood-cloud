@@ -55,7 +55,7 @@ type QueryChange = Record<string, string | null>;
 
 /**
  * The detail of all the activations of a period (tab "Dettaglio attivazioni" of
- * `/tools/activations`): every place activated between two months, with the items that make up
+ * `/activations`): every place activated between two months, with the items that make up
  * its monthly fee, the months invoiced, the amount and the projection to 12 months. It is an
  * analysis computed live from the current data and prices, not an invoice. Period (both months
  * default to the current one) and dealer (platform administrators) live in the URL; a wrong

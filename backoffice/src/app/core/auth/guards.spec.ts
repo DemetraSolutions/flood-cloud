@@ -7,10 +7,12 @@ import {
   anonymousOnly,
   anyPermission,
   authenticated,
+  companiesLanding,
   feature,
   groupLanding,
   passwordChangeAllowed,
   permission,
+  placesLanding,
   role,
   usersLanding,
 } from './guards';
@@ -209,6 +211,50 @@ describe('feature', () => {
     const req = backend().expectOne(`/v1/groups/${GROUP}`);
     req.flush({ data: { features: fakeFeatureFlags(false, { rooms: true }) } });
     expect(await result).toBe(true);
+    sessionStorage.clear();
+  });
+});
+
+describe('companiesLanding and placesLanding', () => {
+  const GROUP = '665f1c2e9b1d4a0012ab34a2';
+
+  it.each([companiesLanding, placesLanding])(
+    'show the cross-group list when no group is chosen',
+    (guard) => {
+      sessionStorage.clear();
+      signIn({ role: 'PSA', groupId: null, group: null });
+      expect(run(guard)).toBe(true);
+    },
+  );
+
+  it.each([
+    [
+      companiesLanding,
+      'companies',
+      '/companies?q=ann&status=active&country=IT&plan=x&cursor=c1&groupId=x&dealerId=y&companyId=z',
+      'q=ann&status=active&country=IT',
+    ],
+    [
+      placesLanding,
+      'places',
+      '/places?q=bar&plan=advanced&sort=-name&cursor=c1&groupId=x&dealerId=y&companyId=z',
+      'q=bar&sort=-name&plan=advanced',
+    ],
+  ])(
+    'redirect to the list of the chosen group keeping its filters (%#)',
+    (guard, page, url, query) => {
+      signIn({ role: 'D' });
+      TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Alfa' });
+      navigatingTo(url);
+      expect(serialized(run(guard))).toBe(`/groups/${GROUP}/${page}?${query}`);
+      sessionStorage.clear();
+    },
+  );
+
+  it('redirect without filters outside a navigation', () => {
+    signIn({ role: 'PSA' });
+    TestBed.inject(GroupContext).choose({ id: GROUP, name: 'Alfa' });
+    expect(serialized(run(placesLanding))).toBe(`/groups/${GROUP}/places`);
     sessionStorage.clear();
   });
 });

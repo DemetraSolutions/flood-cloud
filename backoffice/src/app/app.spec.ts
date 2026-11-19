@@ -170,6 +170,10 @@ describe('routes', () => {
       ['/platform/users/u1', psa(), '⟦USERS.FORM.EDIT_TITLE⟧'],
       ['/groups', psa(), '⟦GROUP_CHOOSER.TITLE⟧'],
       ['/groups/list', psa(['groups:read']), '⟦GROUPS.TITLE⟧'],
+      ['/companies', psa(['companies:read']), '⟦COMPANIES.TITLE⟧'],
+      ['/companies', { ...psa(['companies:read']), role: 'D' as const }, '⟦COMPANIES.TITLE⟧'],
+      ['/places', psa(['places:read']), '⟦PLACES.TITLE⟧'],
+      ['/places', { ...psa(['places:read']), role: 'D' as const }, '⟦PLACES.TITLE⟧'],
       ['/groups/list', { ...psa(['groups:read']), role: 'D' as const }, '⟦GROUPS.TITLE⟧'],
       ['/activity-log', sa(['activityLog:read', 'profile:read']), '⟦ACTIVITY.TITLE⟧'],
       ['/tools/tobaccos', psa(['tobaccos:read']), '⟦TOBACCOS.TITLE⟧'],
@@ -182,6 +186,22 @@ describe('routes', () => {
     it('redirects the old platform list to the one list, keeping the filters', async () => {
       await go('/platform/users?role=D&q=ann', psa());
       expect(location()).toBe('/users?role=D&q=ann');
+    });
+
+    it.each([
+      ['/tools/activations?month=2026-05', '/activations?month=2026-05'],
+      [
+        '/tools/activations/d1?month=2026-05&section=renewals',
+        '/activations/d1?month=2026-05&section=renewals',
+      ],
+    ])('redirects the old activations address %s keeping the query', async (from, to) => {
+      await go(from, psa([...READ, 'activations:read']));
+      expect(location()).toBe(to);
+    });
+
+    it('redirects the old price list address to the settings', async () => {
+      await go('/tools/price-list', psa([...READ, 'activations:manage']));
+      expect(location()).toBe('/settings/price-list');
     });
 
     it('opens the list of the chosen group when a PSA goes to the cross-group list', async () => {
@@ -310,6 +330,10 @@ describe('routes', () => {
       ['/platform/users', { ...psa([]) }],
       ['/activity-log', sa()],
       ['/groups/list', psa([])],
+      ['/companies', psa([])],
+      ['/companies', sa(['companies:read'])],
+      ['/places', psa([])],
+      ['/places', sa(['places:read'])],
       ['/groups/list', sa(['groups:read'])],
       [`/groups/${GROUP}/settings`, sa([])],
       [`/groups/${GROUP}/settings/public-api`, sa(['groups:read'])],

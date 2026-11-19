@@ -4,7 +4,7 @@ import { idempotent } from '../../shared/http/idempotency.ts';
 import type { IdempotencyStore } from '../../shared/http/idempotency.ts';
 import { requireIfMatch } from '../../shared/http/if-match.ts';
 import { validateBody, validateParams, validateQuery } from '../../shared/validation/middleware.ts';
-import { PLACES_BODY_LIMIT, PLACES_LARGE_BODY_LIMIT, createPlaceBody, patchPlaceBody, placeParams, placesQuery, putLicenseBody, putOpeningHoursBody } from './places.schemas.ts';
+import { PLACES_BODY_LIMIT, PLACES_LARGE_BODY_LIMIT, allPlacesQuery, createPlaceBody, patchPlaceBody, placeParams, placesQuery, putLicenseBody, putOpeningHoursBody } from './places.schemas.ts';
 import { SETTING_BLOCKS } from '../../shared/legacy-write/place-settings.ts';
 import { required } from '../companies/companies.schemas.ts';
 import { LIST_SEGMENTS, listBlockSchema } from './place-lists.schemas.ts';
@@ -35,6 +35,8 @@ export function createPlacesRoutes(controller: PlacesController, idempotency: Id
       handler,
     });
   return [
+    // Across groups: a platform route (no group in the path); the service lets only the PSA and the dealers through and applies their perimeter.
+    defineRoute({ method: 'GET', path: '/places', auth: { kind: 'user', permission: 'places:read' }, middleware: [validateQuery(allPlacesQuery)], handler: controller.listAll }),
     defineRoute({ method: 'GET', path: '/groups/:groupId/places', auth: group('places:read'), middleware: [validateQuery(placesQuery)], handler: controller.list }),
     defineRoute({ method: 'POST', path: '/groups/:groupId/places', auth: group('places:create'), bodyLimit: PLACES_BODY_LIMIT, middleware: [validateBody(createPlaceBody)], handler: idempotent(idempotency, controller.create) }),
     // The one route a store key may call here: its own place (the server of a point of sale reads its place through the same route the backoffice does).

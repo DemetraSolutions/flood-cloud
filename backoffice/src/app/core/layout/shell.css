@@ -51,11 +51,6 @@ header {
   inline-size: 16rem;
 }
 
-.tools fc-theme-selector,
-.tools fc-language-selector {
-  inline-size: 10rem;
-}
-
 .menu-toggle {
   align-self: center;
 }
@@ -97,6 +92,11 @@ nav a {
 
 nav a:hover {
   background: var(--color-surface-muted);
+}
+
+nav a.has-active {
+  color: var(--color-on-primary-soft);
+  font-weight: var(--font-weight-bold);
 }
 
 nav a.active {
@@ -151,11 +151,6 @@ main:focus {
 
   .tools fc-group-selector {
     inline-size: 16rem;
-  }
-
-  .tools fc-theme-selector,
-  .tools fc-language-selector {
-    inline-size: 6.5rem;
   }
 
   nav {

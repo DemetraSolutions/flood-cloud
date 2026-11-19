@@ -95,7 +95,7 @@ describe('POST /v1/groups/{groupId}/users: a new user', () => {
       assert.equal(document['status'], true);
       assert.equal(document['trash'], false);
       assert.deepEqual(document['tokens'], []);
-      assert.deepEqual(document['settings'], { language: 'it', hiddenInStats: false });
+      assert.deepEqual(document['settings'], { language: 'it', theme: 'system', hiddenInStats: false });
       assert.ok((document['groupId'] as ObjectId).equals(g0().groupId));
       assert.ok((document['dealerId'] as ObjectId).equals(office.cluster.dealerA));
       assert.ok(document['insertDate'] instanceof Date && document['updateDate'] instanceof Date);
@@ -142,6 +142,13 @@ describe('POST /v1/groups/{groupId}/users: a new user', () => {
     assert.equal(reply.body.data.status, 'disabled');
     assert.equal((await stored(idOf(reply)))['status'], false);
     assert.equal((await office.login(username, PASSWORD)).status, 401);
+  });
+
+  it('stores the chosen theme, system when none is given, and refuses an unknown one', async () => {
+    const chosen = await as.call(g0().sa, 'POST', path(), body({ role: 'PA', theme: 'light' }));
+    assert.deepEqual([chosen.body.data.theme, ((await stored(idOf(chosen)))['settings'] as Document)['theme']], ['light', 'light']);
+    assert.equal((await as.call(g0().sa, 'POST', path(), body({ role: 'PA' }))).body.data.theme, 'system');
+    assert.equal((await as.call(g0().sa, 'POST', path(), body({ role: 'PA', theme: 'blue' }))).status, 422);
   });
 
   it('removes duplicates from the scope lists and keeps the order of the first appearance', async () => {

@@ -55,8 +55,7 @@ describe('Shell', () => {
     expect(root.querySelector('nav')?.getAttribute('aria-label')).toBe('[LAYOUT.MAIN_NAV]');
     expect(root.querySelector('main')?.id).toBe('main');
     expect(root.querySelector('main h1')).not.toBeNull();
-    expect(root.querySelector('fc-theme-selector select')).not.toBeNull();
-    expect(root.querySelector('fc-language-selector select')).not.toBeNull();
+    expect(root.querySelector('fc-theme-selector')).toBeNull();
   });
 
   it('moves the focus to the main content from the skip link without navigating', async () => {
@@ -120,6 +119,32 @@ describe('Shell', () => {
     expect([...links].map((l) => l.getAttribute('href'))).toEqual(['/g', '/page']);
     expect(links[1].getAttribute('aria-current')).toBe('page');
     expect(links[1].classList.contains('active')).toBe(true);
+    // The parent is never the current page: it only shows that a child is.
+    expect(links[0].classList.contains('active')).toBe(false);
+    expect(links[0].hasAttribute('aria-current')).toBe(false);
+    expect(links[0].classList.contains('has-active')).toBe(true);
+    expect(links[1].classList.contains('has-active')).toBe(false);
+  });
+
+  it('marks the parent the same way when the current page is not its first child', async () => {
+    const { root } = await render([
+      {
+        id: 'g',
+        labelKey: 'G',
+        icon: 'home',
+        route: '/other',
+        children: [
+          { id: 'a', labelKey: 'A', icon: 'home', route: '/other' },
+          { id: 'c', labelKey: 'C', icon: 'home', route: '/page' },
+        ],
+      },
+    ]);
+    const links = root.querySelectorAll<HTMLAnchorElement>('nav a');
+    expect(links[0].classList.contains('has-active')).toBe(true);
+    expect(links[0].classList.contains('active')).toBe(false);
+    expect(links[1].classList.contains('active')).toBe(false);
+    expect(links[2].classList.contains('active')).toBe(true);
+    expect(root.querySelectorAll('nav [aria-current]').length).toBe(1);
   });
 
   it('hides the entries whose feature the working group does not have', async () => {
@@ -158,6 +183,29 @@ describe('Shell', () => {
       expect(root.querySelector('fc-group-selector')).toBeNull();
     });
 
+    it('links an entry with a cross-group list to it, instead of the chooser, until a group is chosen', async () => {
+      sessionStorage.clear();
+      const { root, harness } = await render(
+        [
+          {
+            id: 'c',
+            labelKey: 'C',
+            icon: 'building',
+            route: '/groups',
+            groupPath: 'companies',
+            allRoute: '/companies',
+            permission: 'users:read',
+          },
+        ],
+        { role: 'PSA', groupId: null, group: null, permissions: ['users:read'] },
+      );
+      expect(hrefs(root)).toEqual(['/companies']);
+      TestBed.inject(GroupContext).choose({ id: '665f1c2e9b1d4a0012ab34a2', name: 'Alfa' });
+      harness.detectChanges();
+      expect(hrefs(root)).toEqual(['/groups/665f1c2e9b1d4a0012ab34a2/companies']);
+      sessionStorage.clear();
+    });
+
     it('offers the selector to a PSA and links to the chooser until a group is chosen', async () => {
       sessionStorage.clear();
       const { root, harness } = await render(usersMenu, {
@@ -167,11 +215,58 @@ describe('Shell', () => {
         permissions: ['users:read'],
       });
       expect(root.querySelector('header fc-group-selector')).not.toBeNull();
-      expect(hrefs(root)).toEqual(['/', '/groups']);
+      expect(hrefs(root)).toEqual(['/', '/groups?to=users']);
       TestBed.inject(GroupContext).choose({ id: '665f1c2e9b1d4a0012ab34a2', name: 'Alfa' });
       harness.detectChanges();
       expect(hrefs(root)).toEqual(['/', '/groups/665f1c2e9b1d4a0012ab34a2/users']);
       sessionStorage.clear();
+    });
+
+    it('shows the entries that need a group only while a group is selected, for PSA and dealers', async () => {
+      sessionStorage.clear();
+      const needsGroup: readonly MenuItem[] = [
+        { id: 'home', labelKey: 'H', icon: 'home', route: '/' },
+        {
+          id: 'promotions',
+          labelKey: 'P',
+          icon: 'tag',
+          route: '/groups',
+          groupPath: 'promotions',
+          requiresGroup: true,
+        },
+      ];
+      const { root, harness } = await render(needsGroup, {
+        role: 'D',
+        groupId: null,
+        group: null,
+        permissions: [],
+      });
+      expect(hrefs(root)).toEqual(['/']);
+      const context = TestBed.inject(GroupContext);
+      context.choose({ id: '665f1c2e9b1d4a0012ab34a2', name: 'Alfa' });
+      harness.detectChanges();
+      expect(hrefs(root)).toEqual(['/', '/groups/665f1c2e9b1d4a0012ab34a2/promotions']);
+      context.clear();
+      harness.detectChanges();
+      expect(hrefs(root)).toEqual(['/']);
+      sessionStorage.clear();
+    });
+
+    it('always shows them to a user who has a group of their own', async () => {
+      const { root } = await render(
+        [
+          {
+            id: 'f',
+            labelKey: 'F',
+            icon: 'card',
+            route: '/groups',
+            groupPath: 'x',
+            requiresGroup: true,
+          },
+        ],
+        { role: 'CA' },
+      );
+      expect(hrefs(root)).toEqual(['/groups/665f1c2e9b1d4a0012ab34a1/x']);
     });
 
     it('links children of a group entry as well', async () => {

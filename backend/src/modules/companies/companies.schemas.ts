@@ -1,4 +1,5 @@
 import { listQueryShape } from '../../shared/http/list.ts';
+import { CROSS_GROUP_MAX_LIMIT, crossGroupShape } from '../../shared/http/cross-group-query.ts';
 import { ECOMMERCE_FLAGS } from '../../shared/legacy-write/company-paths.ts';
 import { MAX_INVOICE_NUMBER } from '../../shared/legacy-write/fields.ts';
 import { array, boolean, email, enumOf, integer, isoDate, nullable, number, object, objectId, optional, record, refine, string, transform } from '../../shared/validation/schema.ts';
@@ -300,21 +301,34 @@ export const putMediaBody = mediaSchema(required);
 
 const trashed = () => optional(enumOf(['true', 'false'] as const));
 
+/** The filters of a list but `trashed`, which the list of a group puts before `ids`. */
+const rest = <T extends { trashed: unknown }>({ trashed: _trashed, ...others }: T): Omit<T, 'trashed'> => others;
+
+/** The filters of the company lists (the group list and the one across groups). */
+const companyFilters = {
+  trashed: trashed(),
+  status: optional(enumOf(['active', 'disabled'] as const)),
+  country: optional(string({ min: 2, max: 2, pattern: /^[A-Z]{2}$/ })),
+  province: optional(string({ min: 1, max: 10, trim: true })),
+};
+
 /**
  * Query of `GET /v1/groups/{groupId}/companies`: the standard list parameters (the search `q` looks in the name and the VAT number), the `trashed`
  * filter, `ids` (1-100 comma-separated ObjectIds), `status`, `country` (ISO alpha-2) and `province`.
  */
-export const companiesQuery = object({
-  ...listQueryShape(COMPANIES_LIST),
-  trashed: trashed(),
-  ids: lookupIds,
-  status: optional(enumOf(['active', 'disabled'] as const)),
-  country: optional(string({ min: 2, max: 2, pattern: /^[A-Z]{2}$/ })),
-  province: optional(string({ min: 1, max: 10, trim: true })),
-});
+export const companiesQuery = object({ ...listQueryShape(COMPANIES_LIST), trashed: companyFilters.trashed, ids: lookupIds, ...rest(companyFilters) });
 
 /** Validated query of the company list. */
 export type CompaniesQuery = Infer<typeof companiesQuery>;
+
+/**
+ * Query of `GET /v1/companies`, the list across groups of the PSA and the dealers: the parameters of the group list (but `ids`), a page of at most {@link CROSS_GROUP_MAX_LIMIT}, and the
+ * filters `groupId` and `dealerId` (the PSA's alone; the service answers `403` to a dealer that sends it).
+ */
+export const allCompaniesQuery = object({ ...crossGroupShape(COMPANIES_LIST), ...companyFilters });
+
+/** Validated query of the list of the companies across groups. */
+export type AllCompaniesQuery = Infer<typeof allCompaniesQuery>;
 
 /** Path parameters of the routes on one company; the group was already verified by the route. */
 export const companyParams = object({ companyId: objectId() }, { allowUnknown: true });

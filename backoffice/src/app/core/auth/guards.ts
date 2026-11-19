@@ -149,3 +149,43 @@ export const usersLanding: CanMatchFn = (): boolean | UrlTree => {
   );
   return router.createUrlTree(['/groups', groupId, 'users'], { queryParams });
 };
+
+/** Query parameters of the companies list that follow the working group (the others belong to the previous view). */
+export const COMPANIES_LIST_FILTERS = [
+  'q',
+  'status',
+  'trashed',
+  'country',
+  'province',
+  'sort',
+  'limit',
+] as const;
+
+/** Same for the places list (`plan` too; never the company, which belongs to a group). */
+export const PLACES_LIST_FILTERS = [...COMPANIES_LIST_FILTERS, 'plan'] as const;
+
+/**
+ * Landing of a cross-group list: with a working group chosen the list is that group's, so it
+ * redirects to the group list keeping the given filters of the URL (never the cursor, nor
+ * `groupId`/`dealerId`, which belong to the cross-group view).
+ */
+function crossGroupLanding(page: string, filters: readonly string[]): CanMatchFn {
+  return (): boolean | UrlTree => {
+    const groupId = inject(GroupContext).groupId();
+    if (groupId === null) {
+      return true;
+    }
+    const router = inject(Router);
+    const params = router.getCurrentNavigation()?.extractedUrl.queryParams ?? {};
+    const queryParams = Object.fromEntries(
+      filters.filter((name) => params[name] !== undefined).map((name) => [name, params[name]]),
+    );
+    return router.createUrlTree(['/groups', groupId, page], { queryParams });
+  };
+}
+
+/** Cross-group list of companies (`/companies`): the group's list when a group is chosen. */
+export const companiesLanding: CanMatchFn = crossGroupLanding('companies', COMPANIES_LIST_FILTERS);
+
+/** Cross-group list of places (`/places`): the group's list when a group is chosen. */
+export const placesLanding: CanMatchFn = crossGroupLanding('places', PLACES_LIST_FILTERS);

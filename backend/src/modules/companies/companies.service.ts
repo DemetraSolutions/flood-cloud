@@ -14,17 +14,18 @@ import type { CompaniesPlacesWriter, WriteOutcome } from '../../shared/legacy-wr
 import type { NewCompanyFields } from '../../shared/legacy-write/fields.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { assertCrossGroupAccess } from '../../shared/security/scope/cross-group.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
 import { settleItem } from '../../shared/trash/trash.ts';
 import type { TrashItemOutcome, VersionCheck } from '../../shared/trash/trash.ts';
 import { parseIds } from '../group-lookup/lookup.schemas.ts';
 import type { MediaService } from '../media/media.service.ts';
 import { addressProblem } from './address.ts';
-import type { CompaniesQuery } from './companies.schemas.ts';
+import type { AllCompaniesQuery, CompaniesQuery } from './companies.schemas.ts';
 import { COMPANIES_LIST } from './companies.list.ts';
 import type { CompaniesRepository, GroupLists } from './companies.repository.ts';
-import { leafWrites, setValueAt, toCompany, toCompanySummary, valueAt } from './company.mapper.ts';
-import type { Company, CompanyCreation, CompanyPatch, CompanySummary, ImageReference, MediaLogo } from './company.types.ts';
+import { leafWrites, setValueAt, toCompany, toCompanySummary, toCrossGroupCompany, valueAt } from './company.mapper.ts';
+import type { Company, CompanyCreation, CompanyPatch, CompanySummary, CrossGroupCompany, ImageReference, MediaLogo } from './company.types.ts';
 import { ARUBA_HUB, HUB, mayChooseHub } from './hubs.ts';
 import { PRINTABLE_ASCII, isValidItalianFiscalCode, isValidItalianVatNumber } from './validators.ts';
 
@@ -47,6 +48,12 @@ export interface CompaniesListing {
   readonly page: PageInfo;
 }
 
+/** A page of the list across groups. */
+export interface AllCompaniesListing {
+  readonly items: readonly CrossGroupCompany[];
+  readonly page: PageInfo;
+}
+
 /** The management of the companies of a group (`doc/Tasks.md` area 6): the list, the detail, the creation, the modification by blocks, the trash and the deletion. */
 export interface CompaniesService {
   /**
@@ -58,6 +65,16 @@ export interface CompaniesService {
    * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit the sort.
    */
   list(principal: AuthPrincipal, access: GroupAccess, query: CompaniesQuery): Promise<CompaniesListing>;
+  /**
+   * Lists the companies of every group of the caller's perimeter, from the copies in the common database: the platform (PSA) reads every group, trashed and demo ones included, a dealer the
+   * groups of his scope; each item carries its group and the name of the group. The perimeter is always the server's: `groupId` and `dealerId` only narrow it (a group outside it gives an empty page).
+   *
+   * @param principal The authenticated caller.
+   * @param query Validated query.
+   * @throws {AppError} `FORBIDDEN` for any role but the PSA and the dealers, and for a dealer that sends `dealerId`; `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit the sort;
+   *   `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+   */
+  listAll(principal: AuthPrincipal, query: AllCompaniesQuery): Promise<AllCompaniesListing>;
   /**
    * Reads one company, from the document of the group database (so the version is the one `If-Match` expects). A company that does not exist, is of another group
    * or outside the perimeter (a CA reaches only his own) is one and the same `404`.
@@ -412,24 +429,36 @@ export function createCompaniesService(deps: CompaniesServiceDeps): CompaniesSer
     await recordDataChange(activityLog, { ...context(principal, access, client, companyId), action: 'company.deleted', before: undefined, after: undefined });
   };
 
+  /** The conditions of a list request on the copies: the trash, the status, the country and the province. */
+  const listConditions = (query: Pick<CompaniesQuery, 'trashed' | 'status' | 'country' | 'province'>): Filter<Document>[] => {
+    const conditions: Filter<Document>[] = [query.trashed === 'true' ? { trash: true } : { trash: { $ne: true } }];
+    if (query.status !== undefined) {
+      conditions.push({ status: query.status === 'active' ? true : { $ne: true } });
+    }
+    if (query.country !== undefined) {
+      conditions.push({ countryCode: query.country });
+    }
+    if (query.province !== undefined) {
+      conditions.push({ countryAreaCode: query.province });
+    }
+    return conditions;
+  };
+
   return {
     list: async (principal, access, query) => {
-      const conditions: Filter<Document>[] = [query.trashed === 'true' ? { trash: true } : { trash: { $ne: true } }];
+      const conditions = listConditions(query);
       const ids = parseIds(query.ids);
       if (ids !== null) {
         conditions.push({ _id: { $in: ids } });
       }
-      if (query.status !== undefined) {
-        conditions.push({ status: query.status === 'active' ? true : { $ne: true } });
-      }
-      if (query.country !== undefined) {
-        conditions.push({ countryCode: query.country });
-      }
-      if (query.province !== undefined) {
-        conditions.push({ countryAreaCode: query.province });
-      }
       const { items, page } = await repository.list(principal, access, { $and: conditions }, listParamsOf(query, COMPANIES_LIST));
       return { items: items.map(toCompanySummary), page };
+    },
+
+    listAll: async (principal, query) => {
+      assertCrossGroupAccess(principal, query);
+      const { items, page, groupNames } = await repository.listAll(principal, query, { $and: listConditions(query) }, listParamsOf(query, COMPANIES_LIST));
+      return { items: items.map((document) => toCrossGroupCompany(document, groupNames)), page };
     },
 
     hubs: async (principal) => {

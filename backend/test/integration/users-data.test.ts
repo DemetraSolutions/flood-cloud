@@ -108,7 +108,7 @@ describe('POST: the complete legacy document of every role', () => {
       const document = await stored(idOf(reply));
       assert.deepEqual(document['permissions'], expectedPermissions(role, await groupPriceLists()));
       assert.deepEqual([document['avatar'], document['pin'], document['description'], document['servicesId'], document['name'], document['surname'], document['email'], document['telephone']], [null, null, null, [], null, null, null, null]);
-      assert.deepEqual(document['settings'], { language: 'it', hiddenInStats: false });
+      assert.deepEqual(document['settings'], { language: 'it', theme: 'system', hiddenInStats: false });
       assert.deepEqual(document['shiftTime'], { status: false, weeksGeneric: [], daySpecial: {} });
       assert.deepEqual(reply.body.data.pos.options.priceLists.length, 1);
       assert.deepEqual(reply.body.data.pos.options.priceLists[0].isDefault, true);

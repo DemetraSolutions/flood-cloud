@@ -53,6 +53,7 @@ const USER_PROJECTION: Projection = Object.freeze({
   trash: 1,
   trashDate: 1,
   'settings.language': 1,
+  'settings.theme': 1,
   'settings.hiddenInStats': 1,
   'permissions.status': 1,
   'permissions.hiddenInStats': 1,

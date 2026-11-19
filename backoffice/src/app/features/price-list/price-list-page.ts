@@ -43,7 +43,7 @@ function toModel(list: PriceList | undefined): PriceFormModel {
 }
 
 /**
- * The price list (`/tools/price-list`, platform administrators): the monthly fee of each plan
+ * The price list (`/settings/price-list`, platform administrators): the monthly fee of each plan
  * (keys can be added and removed) and of each service, typed in euro and sent in cents. Saving
  * presents the version read in `If-Match`; a stale version (`412`) asks to reload and the fields
  * the backend refuses (`422`) show their message.

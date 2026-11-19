@@ -53,7 +53,7 @@ Realizzata come **lettura e scrittura compatibile con il legacy** (passo 3A): il
 | `placeId`, `placesId` | `placeIds` | unione in lettura; in scrittura `placeId` = primo, `placesId` = tutti (D-08) |
 | `status`, `trash` | `status` (`active`/`disabled`), `trashed` | booleani legacy |
 | `trashDate` | `trashedAt` | data del cestino, scritta e tolta con `trash` (passo P2); assente se cestinato dal legacy |
-| `settings.language`, `settings.hiddenInStats` | `language`, `hiddenInStats` | in lettura, se manca `settings.hiddenInStats`, vale il residuo `permissions.hiddenInStats` |
+| `settings.language`, `settings.theme`, `settings.hiddenInStats` | `language`, `theme`, `hiddenInStats` | `theme` è `light`, `dark` o `system`: se manca o non è valido, in lettura vale `system` (il legacy ignora la chiave). In lettura, se manca `settings.hiddenInStats`, vale il residuo `permissions.hiddenInStats` |
 | `description` | `description` | testo libero fino a 1000 caratteri; `null` lo svuota |
 | `permissions.<modulo>.{r,w}`, `permissions.status` | `permissions.modules`, `canManagePermissions` | D-06; tutti i 13 moduli (`logs` solo `r`); PSA e D mostrano i valori effettivi, tutto vero (D-28); `permissions.apps.cash` ⇄ `pos` (sotto) |
 | `password` | — | hash legacy HMAC-SHA512 (D-04); al cambio password scritto se la coesistenza è attiva, rimosso se è spenta |

@@ -1,3 +1,4 @@
+import { crossGroupShape, CROSS_GROUP_MAX_LIMIT } from '../../shared/http/cross-group-query.ts';
 import { listQueryShape } from '../../shared/http/list.ts';
 import { MAX_DAY_SLOTS, MAX_SPECIAL_DAYS } from '../../shared/legacy-write/fields.ts';
 import { MAX_TABLES } from '../../shared/legacy-write/place-lists.ts';
@@ -140,23 +141,36 @@ export const putOpeningHoursBody = openingHoursSchema(required);
 
 const trashed = () => optional(enumOf(['true', 'false'] as const));
 
-/**
- * Query of `GET /v1/groups/{groupId}/places`: the standard list parameters (the search `q` looks in the name and the city), the `trashed` filter, `companyId`, `ids` (1-100
- * comma-separated ObjectIds), `status`, `plan` (the plan as stored), `country` (ISO alpha-2) and `province`.
- */
-export const placesQuery = object({
-  ...listQueryShape(PLACES_LIST),
+/** The filters of a list but `trashed` and `companyId`, which the list of a group puts before `ids`. */
+const rest = <T extends { trashed: unknown; companyId: unknown }>({ trashed: _trashed, companyId: _companyId, ...others }: T): Omit<T, 'trashed' | 'companyId'> => others;
+
+/** The filters of the place lists (the group list and the one across groups). */
+const placeFilters = {
   trashed: trashed(),
   companyId: optional(objectId()),
-  ids: lookupIds,
   status: optional(enumOf(['active', 'disabled'] as const)),
   plan: optional(string({ min: 1, max: 30, trim: true, pattern: /^[A-Za-z0-9_-]+$/ })),
   country: optional(string({ min: 2, max: 2, pattern: /^[A-Z]{2}$/ })),
   province: optional(string({ min: 1, max: 10, trim: true })),
-});
+};
+
+/**
+ * Query of `GET /v1/groups/{groupId}/places`: the standard list parameters (the search `q` looks in the name and the city), the `trashed` filter, `companyId`, `ids` (1-100
+ * comma-separated ObjectIds), `status`, `plan` (the plan as stored), `country` (ISO alpha-2) and `province`.
+ */
+export const placesQuery = object({ ...listQueryShape(PLACES_LIST), trashed: placeFilters.trashed, companyId: placeFilters.companyId, ids: lookupIds, ...rest(placeFilters) });
 
 /** Validated query of the place list. */
 export type PlacesQuery = Infer<typeof placesQuery>;
+
+/**
+ * Query of `GET /v1/places`, the list across groups of the PSA and the dealers: the parameters of the group list (but `ids`), a page of at most {@link CROSS_GROUP_MAX_LIMIT}, and the
+ * filters `groupId` and `dealerId` (the PSA's alone; the service answers `403` to a dealer that sends it).
+ */
+export const allPlacesQuery = object({ ...crossGroupShape(PLACES_LIST), ...placeFilters });
+
+/** Validated query of the list of the places across groups. */
+export type AllPlacesQuery = Infer<typeof allPlacesQuery>;
 
 /** Path parameters of the routes on one place; the group was already verified by the route. */
 export const placeParams = object({ placeId: objectId() }, { allowUnknown: true });

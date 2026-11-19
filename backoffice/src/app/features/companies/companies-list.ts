@@ -32,6 +32,7 @@ import { TextField } from '../../shared/ui/text-field/text-field';
 import { createDebouncer } from '../../shared/util/debouncer';
 import { apiErrorOf } from '../profile/sessions';
 import { CompanyActions } from './company-actions';
+import { CrossGroupFilterChange, CrossGroupFilters } from '../groups/cross-group-filters';
 import { CompanyListItem, companyRoute } from './company.types';
 
 /** Page sizes offered by the list. */
@@ -40,12 +41,16 @@ const DEFAULT_LIMIT = 25;
 const SORT_KEYS = ['name'] as const;
 const COUNTRY = /^[A-Z]{2}$/;
 const PROVINCE = /^.{1,10}$/;
+const OBJECT_ID = /^[0-9a-f]{24}$/;
 
 /** Query parameters of the list as kept in the URL (`null` removes one). */
 type QueryChange = Record<string, string | null>;
 
 /**
- * Companies of a group (`/groups/:groupId/companies`): search, status, trash, country and
+ * Companies of a group (`/groups/:groupId/companies`) or, for a PSA or dealer with no working
+ * group, of every group in their scope (`/companies`, route data `scope: 'all'`: `groupId` and
+ * `dealerId` are then query filters, rows show their group and open the company in it, and
+ * nothing is created or changed from here). Search, status, trash, country and
  * province filters and cursor pagination live in the URL, so a view can be shared and survives
  * a reload. Rows offer trash, restore and delete (from the trash only) according to the
  * permissions of the user.
@@ -59,6 +64,7 @@ type QueryChange = Record<string, string | null>;
     CellTemplate,
     Checkbox,
     CompanyActions,
+    CrossGroupFilters,
     CursorPaginator,
     DataTable,
     ErrorState,
@@ -81,8 +87,13 @@ export class CompaniesList {
   private readonly debouncer = createDebouncer();
   protected readonly i18n = inject(I18nService);
 
-  /** Route parameter and query parameters (bound by the router). */
-  readonly groupId = input.required<string>();
+  /** Route parameter of the group list; in the cross-group list it is the `groupId` query filter. */
+  readonly groupId = input<string>();
+  /** Dealer filter (cross-group list, platform administrator only). */
+  readonly dealerId = input<string>();
+  /** Route data: `all` for the cross-group list (`/companies`). */
+  readonly scope = input<string>();
+  /** Query parameters (bound by the router). */
   readonly q = input<string>();
   readonly status = input<string>();
   readonly trashed = input<string>();
@@ -91,6 +102,28 @@ export class CompaniesList {
   readonly sort = input<string>();
   readonly limit = input<string>();
   readonly cursor = input<string>();
+
+  /** `group` (path parameter) or `all` (the cross-group list of PSA and dealers). */
+  protected readonly isAll = computed(() => this.scope() === 'all');
+  /** Group of the list: the path parameter, `undefined` in the cross-group list. */
+  protected readonly ownGroupId = computed(() => (this.isAll() ? undefined : this.groupId()));
+  /** Group the row actions work on (none in the cross-group list, where there are no actions). */
+  protected readonly actionGroup = computed(() => this.ownGroupId() ?? '');
+  /** Group filter of the cross-group list (valid ids only). */
+  protected readonly groupFilter = computed(() => {
+    const value = this.groupId();
+    return this.isAll() && OBJECT_ID.test(value ?? '') ? value : undefined;
+  });
+  protected readonly dealerFilter = computed(() => {
+    const value = this.dealerId();
+    return this.isAll() && this.session.me()?.role === 'PSA' && OBJECT_ID.test(value ?? '')
+      ? value
+      : undefined;
+  });
+  /** A user who may create companies is told to choose a group first (creation needs one). */
+  protected readonly chooseGroupHint = computed(
+    () => this.isAll() && this.session.can('companies:create'),
+  );
 
   protected readonly sortValue = computed(() => {
     const value = this.sort() ?? '';
@@ -138,13 +171,19 @@ export class CompaniesList {
       country: COUNTRY.test(country ?? '') ? country : undefined,
       province: PROVINCE.test(province ?? '') ? province : undefined,
       cursor: this.cursor(),
+      groupId: this.groupFilter(),
+      dealerId: this.dealerFilter(),
     };
     for (const [name, value] of Object.entries(filters)) {
       if (value) {
         params[name] = value;
       }
     }
-    return { url: `/v1/groups/${encodeURIComponent(this.groupId())}/companies`, params };
+    const own = this.ownGroupId();
+    return {
+      url: own === undefined ? '/v1/companies' : `/v1/groups/${encodeURIComponent(own)}/companies`,
+      params,
+    };
   });
 
   protected readonly rows = computed(() =>
@@ -159,9 +198,22 @@ export class CompaniesList {
     return this.i18n.t(error === null ? 'ERRORS.GENERIC.MESSAGE' : apiErrorMessageKey(error));
   });
   protected readonly showTrashed = computed(() => this.trashed() === 'true');
-  protected readonly newRoute = computed(() => ['/groups', this.groupId(), 'companies', 'new']);
+  /** Where "new company" leads: the form of the group; none in the cross-group list. */
+  protected readonly newRoute = computed(() => {
+    const own = this.ownGroupId();
+    return own === undefined ? null : ['/groups', own, 'companies', 'new'];
+  });
 
   protected readonly columns = computed<TableColumn<CompanyListItem>[]>(() => [
+    ...(this.isAll()
+      ? [
+          {
+            key: 'groupName',
+            header: this.i18n.t('CROSS_GROUP.COLUMN.GROUP'),
+            hideNarrow: true,
+          },
+        ]
+      : []),
     { key: 'name', header: this.i18n.t('COMPANIES.COLUMN.NAME'), sortable: true },
     {
       key: 'vatNumber',
@@ -190,22 +242,41 @@ export class CompaniesList {
   ]);
   protected readonly rowKey = (row: CompanyListItem): string => row.id;
   protected readonly detailRoute = (row: CompanyListItem): string[] =>
-    companyRoute(this.groupId(), row.id);
+    companyRoute(this.ownGroupId() ?? row.groupId ?? '', row.id);
+  /** Route of the group of a row (cross-group list). */
+  protected readonly groupRoute = (row: CompanyListItem): string[] => [
+    '/groups',
+    row.groupId ?? '',
+    'settings',
+  ];
 
   /** Whether the user may do anything to a row (otherwise the actions menu is not offered). */
   protected readonly canAct = computed(
-    () => this.session.can('companies:trash') || this.session.can('companies:delete'),
+    () =>
+      !this.isAll() &&
+      (this.session.can('companies:trash') || this.session.can('companies:delete')),
   );
 
   constructor() {
     this.countries.need();
     // The page loaded: the group in the URL becomes the working group of the selector.
     effect(() => {
-      const groupId = this.groupId();
-      if (this.companies.hasValue()) {
+      const groupId = this.ownGroupId();
+      if (groupId !== undefined && this.companies.hasValue()) {
         untracked(() => this.groups.adopt(groupId));
       }
     });
+  }
+
+  /** Opening a company of the cross-group list makes its group the working group. */
+  protected open(row: CompanyListItem): void {
+    if (this.isAll() && row.groupId !== undefined) {
+      this.groups.choose({ id: row.groupId, name: row.groupName ?? '' });
+    }
+  }
+
+  protected onCrossGroup(change: CrossGroupFilterChange): void {
+    this.change({ [change.name]: change.value === '' ? null : change.value });
   }
 
   protected rowLabel(key: string, row: CompanyListItem): string {

@@ -70,6 +70,11 @@ export class GroupSettings {
       (section) => !('permission' in section) || this.session.can(section.permission),
     ),
   );
+  /** PSA and dealers reach the record from the groups list; an SA has no list to go back to. */
+  protected readonly hasList = computed(() => {
+    const role = this.session.me()?.role;
+    return role === 'PSA' || role === 'D';
+  });
   protected readonly errorMessage = computed(() => {
     const error = this.state.loadError();
     return this.i18n.t(error === null ? 'ERRORS.GENERIC.MESSAGE' : apiErrorMessageKey(error));

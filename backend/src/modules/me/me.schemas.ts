@@ -1,5 +1,6 @@
 import { email, enumOf, nullable, object, objectId, optional, personName, phone, string } from '../../shared/validation/schema.ts';
 import type { Infer } from '../../shared/validation/schema.ts';
+import { USER_THEMES } from '../users/user.mapper.ts';
 import { avatarSchema, personalPosSchema, pinSchema } from '../users/user-fields.schemas.ts';
 
 /** Interface languages the platform supports; only Italian for now (`doc/Tasks.md` 3.1). */
@@ -18,6 +19,7 @@ export const patchMeBody = object({
   email: optional(nullable(email())),
   phone: optional(nullable(phone())),
   language: optional(enumOf(SUPPORTED_LANGUAGES)),
+  theme: optional(enumOf(USER_THEMES)),
   avatar: optional(nullable(avatarSchema())),
   pos: optional(personalPosSchema()),
 });

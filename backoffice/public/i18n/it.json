@@ -39,7 +39,6 @@
     "ACTIVITY_LOG": "Registro attività",
     "DEALERS": "Dealer",
     "GROUPS": "Gruppi",
-    "GROUP_SETTINGS": "Scheda gruppo",
     "ACCOUNT_GROUP": "Account › Gruppo",
     "FIDELITY": "Fidelity",
     "CARD_TYPES": "Tipi di carta",
@@ -51,6 +50,7 @@
     "COMPANIES": "Aziende",
     "PLACES": "Punti vendita",
     "TOOLS": "Strumenti",
+    "SETTINGS": "Impostazioni",
     "TRASH": "Cestino",
     "NEW_CUSTOMER": "Nuovo cliente",
     "DIAGNOSTICS": "Diagnostica",
@@ -63,13 +63,11 @@
     "PRICE_LIST": "Listino"
   },
   "THEME": {
-    "LABEL": "Tema",
-    "SYSTEM": "Sistema",
+    "SYSTEM": "Automatico (segue il sistema)",
     "LIGHT": "Chiaro",
     "DARK": "Scuro"
   },
   "LANGUAGE": {
-    "LABEL": "Lingua",
     "NAME": {
       "IT": "Italiano"
     }
@@ -188,6 +186,7 @@
     "EMAIL": "Email",
     "PHONE": "Telefono",
     "LANGUAGE": "Lingua",
+    "THEME": "Tema",
     "CHANGE_PASSWORD": "Cambia password",
     "SESSIONS": "Sessioni attive",
     "SAVED": "Profilo aggiornato.",
@@ -1144,6 +1143,7 @@
   },
   "GROUP_SETTINGS": {
     "LOAD_ERROR": "Impossibile caricare il gruppo",
+    "BACK": "Torna ai gruppi",
     "SECTIONS": "Sezioni del gruppo",
     "SECTION": {
       "GENERAL": "Generale",
@@ -1650,8 +1650,21 @@
   "TAB_LIST": {
     "ERRORS": "{count} errori"
   },
+  "CROSS_GROUP": {
+    "FILTER": {
+      "GROUP": "Gruppo",
+      "ALL_GROUPS": "Tutti i gruppi",
+      "DEALER": "Rivenditore",
+      "ALL_DEALERS": "Tutti i rivenditori"
+    },
+    "COLUMN": {
+      "GROUP": "Gruppo"
+    },
+    "NO_NAME": "—"
+  },
   "COMPANIES": {
     "TITLE": "Aziende",
+    "CHOOSE_GROUP_TO_CREATE": "Scegli un gruppo con il selettore in alto per creare un’azienda.",
     "NEW": "Nuova azienda",
     "NEW_TITLE": "Nuova azienda",
     "CREATE": "Crea azienda",
@@ -1913,6 +1926,7 @@
   },
   "PLACES": {
     "TITLE": "Punti vendita",
+    "CHOOSE_GROUP_TO_CREATE": "Scegli un gruppo con il selettore in alto per creare un punto vendita.",
     "NEW": "Nuovo punto vendita",
     "NEW_TITLE": "Nuovo punto vendita",
     "CREATE": "Crea punto vendita",

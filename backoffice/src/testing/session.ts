@@ -17,6 +17,7 @@ export function fakeProfile(overrides: Partial<Profile> = {}): Profile {
     dealerId: null,
     status: 'active',
     language: 'it',
+    theme: 'system',
     description: null,
     avatar: null,
     hasAvatar: false,

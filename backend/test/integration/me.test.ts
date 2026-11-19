@@ -72,7 +72,7 @@ describe('GET /v1/me', () => {
     }
     const profile = await profileOf(response);
     assert.deepEqual(Object.keys(profile).sort(), [
-      'avatar', 'canManagePermissions', 'companyIds', 'createdAt', 'dealer', 'dealerId', 'description', 'email', 'firstName', 'group', 'groupFeatures', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'scope', 'serviceIds', 'shiftTime', 'status', 'trashed', 'trashedAt', 'updatedAt', 'username',
+      'avatar', 'canManagePermissions', 'companyIds', 'createdAt', 'dealer', 'dealerId', 'description', 'email', 'firstName', 'group', 'groupFeatures', 'groupId', 'hasAvatar', 'hiddenInStats', 'id', 'language', 'lastName', 'passwordChangeRequired', 'permissions', 'phone', 'pinSet', 'placeIds', 'pos', 'role', 'scope', 'serviceIds', 'shiftTime', 'status', 'theme', 'trashed', 'trashedAt', 'updatedAt', 'username',
     ]);
     assert.equal(profile['id'], id.toHexString());
     assert.equal(profile['username'], name);
@@ -139,6 +139,35 @@ describe('PATCH /v1/me', () => {
       ['email', 'firstName', 'lastName', 'phone'],
     );
     assert.ok(!JSON.stringify(event).includes('KEEP-PIN'));
+  });
+
+  it('reads the theme as system by default, from settings.theme, and changes only it, keeping the other settings and logging the change', async () => {
+    const { id, name } = await addUser({ settings: { language: 'it', hiddenInStats: true, custom: 'KEEP' } });
+    const own = await office.tokens(name);
+    assert.equal((await profileOf(await office.call('GET', '/me', own.accessToken)))['theme'], 'system');
+    for (const theme of ['dark', 'light', 'system']) {
+      const mark = since();
+      const patched = await profileOf(await office.call('PATCH', '/me', own.accessToken, { theme }));
+      assert.equal(patched['theme'], theme);
+      assert.equal((await profileOf(await office.call('GET', '/me', own.accessToken)))['theme'], theme);
+      assert.deepEqual((await users().findOne({ _id: id }))?.['settings'], { language: 'it', hiddenInStats: true, custom: 'KEEP', theme });
+      const events = logged(mark);
+      assert.equal(events.length, 1);
+      assert.deepEqual(events[0]?.changes?.map((change) => change.field), ['theme']);
+    }
+  });
+
+  it('reads an invalid stored theme as system', async () => {
+    const { name } = await addUser({ settings: { language: 'it', theme: 'blue' } });
+    assert.equal((await profileOf(await office.call('GET', '/me', (await office.tokens(name)).accessToken)))['theme'], 'system');
+  });
+
+  it('rejects a theme that is not one of the three values', async () => {
+    const { name } = await addUser();
+    const own = await office.tokens(name);
+    const patch = async (body: unknown) => errorOf(await office.call('PATCH', '/me', own.accessToken, body));
+    assert.deepEqual(await patch({ theme: 'blue' }), [422, 'VALIDATION_ERROR', [{ field: 'theme', issue: 'enum' }]]);
+    assert.deepEqual(await patch({ theme: null }), [422, 'VALIDATION_ERROR', [{ field: 'theme', issue: 'type' }]]);
   });
 
   it('clears a personal field with null', async () => {
