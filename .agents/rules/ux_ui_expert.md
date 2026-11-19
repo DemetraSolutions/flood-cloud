@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["backoffice/src/**/*.html", "backoffice/src/**/*.scss", "backoffice/src/**/*.css", "backoffice/src/styles/**"]
+globs: "**/backoffice/src/**/*.html, **/backoffice/src/**/*.scss, **/backoffice/src/**/*.css, **/backoffice/src/styles/**"
 name: ux_ui_expert
 description: "Usa proattivamente per l'interfaccia del backoffice: design system con design token e CSS custom properties, layout responsivi, tema chiaro/scuro, accessibilità WCAG 2.2 AA, tastiera e focus, stati di caricamento/vuoto/errore, tabelle e form di amministrazione, messaggi all'utente. Dominio: template HTML, stili e cartella styles del backoffice."
 ---

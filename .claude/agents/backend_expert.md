@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["backend/src/**/*.ts", "backend/package.json", "backend/tsconfig.json"]
+globs: "**/backend/src/**/*.ts, **/backend/package.json, **/backend/tsconfig.json"
 name: backend_expert
 description: "Usa proattivamente per il server Node.js/Express 5 in TypeScript (type stripping nativo): struttura dei moduli di dominio, app factory, routing, middleware, controller e service, configurazione da variabili d'ambiente, avvio e arresto ordinato, body-parser, compression, multer. Dominio: backend/src/** e backend/package.json."
 ---

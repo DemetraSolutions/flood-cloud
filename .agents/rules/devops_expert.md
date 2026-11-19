@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["**/Dockerfile", "**/.dockerignore", "docker-compose*.yml", ".github/**", "deploy/**", "**/.env.example", "**/nginx*.conf"]
+globs: "**/Dockerfile, **/.dockerignore, **/docker-compose*.yml, **/.github/**, **/deploy/**, **/.env.example, **/nginx*.conf"
 name: devops_expert
 description: "Usa proattivamente per ambiente e rilascio del monorepo backend/ + backoffice/: Dockerfile multi-stage (Node LTS per il backend, server statico per il backoffice), docker compose locale con MongoDB, pipeline GitHub Actions separate per cartella con filtri sui percorsi, deploy su Kubernetes GKE (un Deployment e un Service per componente), test con coverage al 100%, npm audit, secret scanning, gestione dei segreti e .env.example."
 ---

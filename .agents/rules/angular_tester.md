@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["backoffice/src/**/*.spec.ts", "backoffice/src/testing/**"]
+globs: "**/backoffice/src/**/*.spec.ts, **/backoffice/src/testing/**"
 name: angular_tester
 description: "Usa proattivamente per i test del backoffice Angular 22: Vitest con @angular/build:unit-test, TestBed in modalità zoneless, test di componenti con signal input e output, httpResource e HttpTestingController, guard e interceptor funzionali, Signal Forms, accessibilità, soglie di copertura al 100%. Dominio: file *.spec.ts e utility di test del backoffice."
 ---

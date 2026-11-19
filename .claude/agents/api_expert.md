@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["backend/src/**/*.routes.ts", "backend/src/**/*.schemas.ts", "backend/src/**/*.mapper.ts", "doc/API.md", "doc/Public-API.md"]
+globs: "**/backend/src/**/*.routes.ts, **/backend/src/**/*.schemas.ts, **/backend/src/**/*.mapper.ts, **/doc/API.md, **/doc/Public-API.md"
 name: api_expert
 description: "Usa proattivamente per il contratto delle API REST: risorse, URL e metodi HTTP corretti, superfici /v1 /public/v1, schemi di validazione, codici di stato, envelope ed errori, filtri e paginazione a cursore, idempotenza, ETag, mapper di risposta, riferimento doc/API.md e documentazione pubblica doc/Public-API.md. Dominio: file *.routes.ts, *.schemas.ts, *.mapper.ts del backend, doc/API.md e doc/Public-API.md."
 ---

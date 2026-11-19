@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["backend/src/**/*.repository.ts", "backend/src/db/**", "backend/src/modules/**/indexes.ts"]
+globs: "**/backend/src/**/*.repository.ts, **/backend/src/db/**, **/backend/src/modules/**/indexes.ts"
 name: db_expert
 description: "Usa proattivamente per MongoDB con il driver ufficiale Node.js: modellazione documenti, repository con contesto di tenant, indici (univoci, TTL, composti), validazione $jsonSchema, paginazione a cursore, transazioni, aggregazioni server-side. Dominio: repository, backend/src/db e definizioni degli indici."
 ---

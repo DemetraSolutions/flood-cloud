@@ -24,7 +24,7 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 
 **Frontmatter condiviso** di `.agents/rules/`:
 - `trigger` + `globs`: usati da Antigravity; `trigger: glob` attiva la regola sui file del dominio, `model_decision` per gli agenti trasversali (`security_expert`, `legacy_analyst`).
-- I percorsi nei `globs` partono dalla radice del repository (`backend/…`, `backoffice/…`); dentro regole e skill del backend, `src/` e `test/` sono relativi a `backend/`.
+- `globs` deve essere una **singola stringa separata da virgole** (mai un array YAML) con pattern prefissati da `**/` rispetto alla radice del repository (`**/backend/…`, `**/backoffice/…`), perché Antigravity li confronta con i percorsi assoluti; dentro regole e skill del backend, `src/` e `test/` sono relativi a `backend/`.
 - `name`: identificativo del sottoagente per Claude Code.
 - `description`: usata da entrambi per decidere l'attivazione; specifica, orientata al dominio, con la formula "Usa proattivamente".
 

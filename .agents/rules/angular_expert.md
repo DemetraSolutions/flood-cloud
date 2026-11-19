@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: ["backoffice/src/**/*.ts", "backoffice/angular.json", "backoffice/package.json", "backoffice/tsconfig*.json"]
+globs: "**/backoffice/src/**/*.ts, **/backoffice/angular.json, **/backoffice/package.json, **/backoffice/tsconfig*.json"
 name: angular_expert
 description: "Usa proattivamente per il backoffice Angular 22: architettura della SPA, componenti standalone con signal input/output/model, signals (computed, linkedSignal, effect, resource, httpResource), change detection zoneless e OnPush, inject() e @Service, routing lazy con guard funzionali, interceptor funzionali, Signal Forms, struttura per feature. Dominio: backoffice/src/**/*.ts e configurazione del progetto Angular."
 ---
