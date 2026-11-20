@@ -87,7 +87,11 @@ function defaultValue(definition: FieldDef): unknown {
     case 'duration':
       return definition.def ?? null;
     case 'select':
-      return definition.nullable === true ? null : (definition.values as string[])[0];
+      return definition.nullable === true
+        ? null
+        : definition.numeric === true
+          ? Number((definition.values as string[])[0])
+          : (definition.values as string[])[0];
     default:
       return null;
   }
@@ -157,6 +161,9 @@ export const DEVICE_1: PlaceDevice = {
   orderingPrintSingleProduct: false,
   orderingPrintSingleProductTables: false,
   printStations: [STATION_ID],
+  multisafepayAppStatus: false,
+  multisafepayQrStatus: false,
+  multisafepayTerminals: [],
 };
 
 /** The external display linked to the desk. */
@@ -249,6 +256,8 @@ export function fakePlace(overrides: Partial<PlaceRecord> = {}): PlaceRecord {
     },
   ];
   blocks.tables['tipValues'] = [{ type: 'p', value: 10 }];
+  blocks.tables['discountReasons'] = ['Cortesia', 'Cliente abituale'];
+  blocks.tables['deleteReasons'] = ['Errore'];
   blocks.reservations['timeBlocks'] = [{ weekDays: [1, 2], start: '12:00', end: '14:00' }];
   setAt(blocks.delivery, 'takeAway.shippingCosts', [{ taxed: 2.5, toKm: 5 }]);
   blocks.delivery['minAmount'] = { EUR: 10 };

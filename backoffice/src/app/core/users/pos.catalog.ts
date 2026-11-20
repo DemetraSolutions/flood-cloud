@@ -7,6 +7,10 @@
 /** Groups of POS grants by area, in display order; every flag of the API appears exactly once. */
 export const POS_GRANT_GROUPS = [
   {
+    id: 'APPS',
+    flags: ['cashEnabled', 'handheldEnabled'],
+  },
+  {
     id: 'SALE',
     flags: [
       'discount',
@@ -46,6 +50,7 @@ export const POS_GRANT_GROUPS = [
       'roomsRoomsPrices',
       'roomsTablePrices',
       'roomsOnlyHigherSeatsQuantity',
+      'handheldWallet',
       'tableEngage',
       'tableMerge',
       'tableSplit',
@@ -75,8 +80,14 @@ export const POS_GRANT_GROUPS = [
 /** A boolean POS grant. */
 export type PosFlag = (typeof POS_GRANT_GROUPS)[number]['flags'][number];
 
-/** Every boolean POS grant (44), in display order. */
+/** Every boolean POS grant (47), in display order. */
 export const POS_FLAGS: readonly PosFlag[] = POS_GRANT_GROUPS.flatMap((group) => group.flags);
+
+/**
+ * The grants that are on when the API has no value (a user created before they existed): the
+ * app switches `cashEnabled` and `handheldEnabled` are on for everyone unless turned off.
+ */
+export const POS_GRANTS_ON_BY_DEFAULT: readonly PosFlag[] = ['cashEnabled', 'handheldEnabled'];
 
 /** Automatic cash devices and the flags of each (`pos.grants.automaticCash.<device>.<flag>`). */
 export const AUTOMATIC_CASH = {
@@ -101,7 +112,7 @@ export type AutomaticCashDevice = keyof typeof AUTOMATIC_CASH;
 /** The devices, in display order. */
 export const AUTOMATIC_CASH_DEVICES = Object.keys(AUTOMATIC_CASH) as AutomaticCashDevice[];
 
-/** Groups of the boolean interface preferences, in display order (31 in total). */
+/** Groups of the boolean interface preferences, in display order (34 in total). */
 export const POS_OPTION_GROUPS = [
   {
     id: 'COUNTER',
@@ -127,6 +138,8 @@ export const POS_OPTION_GROUPS = [
     flags: [
       'productsPagination',
       'productsShortName',
+      'productsUppercase',
+      'productsBold',
       'reducedProducts',
       'reducedProductsTable',
       'enlargedCategories',
@@ -147,6 +160,10 @@ export const POS_OPTION_GROUPS = [
     ],
   },
   {
+    id: 'RESTAURANT',
+    flags: ['roomsLegend'],
+  },
+  {
     id: 'DELIVERY',
     flags: [
       'deliveryTakeawayCompletedDefault',
@@ -159,7 +176,7 @@ export const POS_OPTION_GROUPS = [
 /** A boolean interface preference. */
 export type PosBooleanOption = (typeof POS_OPTION_GROUPS)[number]['flags'][number];
 
-/** Every boolean preference (31), in display order. */
+/** Every boolean preference (34), in display order. */
 export const POS_BOOLEAN_OPTIONS: readonly PosBooleanOption[] = POS_OPTION_GROUPS.flatMap(
   (group) => group.flags,
 );
@@ -181,6 +198,12 @@ export const POS_CHOICES = {
   roomsTablesColumns: ['', '4', '5', '6', '8'],
   roomsTablesColumnsHandheld: ['', '2', '3', '4'],
   roomsGridZoomHandheld: ['1', '1.5', '2', '2.5', '3'],
+  productsColorStyle: ['line', 'fill'],
+  handheldTextZoom: ['85', '90', '95', '100', '105', '110', '115', '120', '125'],
+  handheldCategoriesLayout: ['scroll', 'slidein', 'list'],
+  handheldCategoriesRows: ['1', '2'],
+  handheldProductsColumns: ['1', '2', '3', '4'],
+  handheldMenuPosition: ['bottom', 'top'],
 } as const;
 
 /** A choice preference. */
@@ -188,6 +211,31 @@ export type PosChoice = keyof typeof POS_CHOICES;
 
 /** The choice preferences, in display order. */
 export const POS_CHOICE_NAMES = Object.keys(POS_CHOICES) as PosChoice[];
+
+/** The choices of the "Palmare 2.0" group (shown for groups with rooms). */
+export const POS_HANDHELD_CHOICES = [
+  'handheldTextZoom',
+  'handheldCategoriesLayout',
+  'handheldCategoriesRows',
+  'handheldProductsColumns',
+  'handheldMenuPosition',
+] as const satisfies readonly PosChoice[];
+
+/** The choices of the general "Scelte" group: all but the product colour and the handheld ones. */
+export const POS_GENERAL_CHOICES: readonly PosChoice[] = POS_CHOICE_NAMES.filter(
+  (name) =>
+    name !== 'productsColorStyle' && !(POS_HANDHELD_CHOICES as readonly string[]).includes(name),
+);
+
+/** Defaults of the choices that always have a value (what the API returns when none was set). */
+export const POS_CHOICE_DEFAULTS = {
+  productsColorStyle: 'line',
+  handheldTextZoom: '100',
+  handheldCategoriesLayout: 'scroll',
+  handheldCategoriesRows: '2',
+  handheldProductsColumns: '2',
+  handheldMenuPosition: 'bottom',
+} as const;
 
 /** A price list a user can use on the POS. */
 export interface PosPriceList {
@@ -222,6 +270,12 @@ export type PosOptions = Record<PosBooleanOption, boolean> & {
   roomsTablesColumns: number | null;
   roomsTablesColumnsHandheld: number | null;
   roomsGridZoomHandheld: number;
+  productsColorStyle: string;
+  handheldTextZoom: number;
+  handheldCategoriesLayout: string;
+  handheldCategoriesRows: number;
+  handheldProductsColumns: number;
+  handheldMenuPosition: string;
   quickDiscount: number | null;
   defaultPriceListId: string | null;
   priceLists: PosPriceList[];

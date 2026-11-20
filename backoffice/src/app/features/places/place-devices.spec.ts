@@ -81,6 +81,9 @@ const NEW_DEVICE = {
   orderingPrintSingleProduct: false,
   orderingPrintSingleProductTables: false,
   printStations: [] as string[],
+  multisafepayAppStatus: false,
+  multisafepayQrStatus: false,
+  multisafepayTerminals: [] as { terminalId: string; name: string }[],
 };
 const CA = { role: 'CA' as const, groupId: GROUP };
 
@@ -537,5 +540,152 @@ describe('PlaceDevices', () => {
     const view = await renderPlace({ path: 'devices' });
     await submitTab(view);
     await view.blurAll();
+  });
+
+  describe('MultiSafepay', () => {
+    const idLabel = (n: number) => L('MULTISAFEPAY_TERMINAL_ID') + ` {"number":${n}}`;
+    const nameLabel = (n: number) => L('MULTISAFEPAY_TERMINAL_NAME') + ` {"number":${n}}`;
+    const withTerminals = (terminals: { terminalId: string; name: string }[]) =>
+      withDevices([{ ...DEVICE_1, multisafepayTerminals: terminals }, DEVICE_2]);
+
+    it('is in the form of every device type', async () => {
+      const view = await renderPlace({ path: 'devices' });
+      const desk = await open(view, 0);
+      expect(desk.textContent).toContain(L('MULTISAFEPAY'));
+      expect(box(desk, L('MULTISAFEPAY_APP')).checked).toBe(false);
+      expect(box(desk, L('MULTISAFEPAY_QR')).checked).toBe(false);
+      const display = await open(view, 1);
+      expect(display.textContent).toContain(L('MULTISAFEPAY'));
+    });
+
+    it('sends the switches and the terminals trimmed, replacing the whole list', async () => {
+      const view = await renderPlace({ path: 'devices' });
+      const card = await open(view, 0);
+      await tick(view, card, L('MULTISAFEPAY_APP'), true);
+      await tick(view, card, L('MULTISAFEPAY_QR'), true);
+      await clickIn(view, card, L('MULTISAFEPAY_ADD_TERMINAL'));
+      await typeWithin(view, card, idLabel(1), 'T-1');
+      await typeWithin(view, card, nameLabel(1), ' Sala ');
+      await clickIn(view, card, L('MULTISAFEPAY_ADD_TERMINAL'));
+      await typeWithin(view, card, idLabel(2), 'T_2');
+      await typeWithin(view, card, nameLabel(2), 'Bar');
+      await savePut(view, 'devices', {
+        items: [
+          {
+            ...stored(DEVICE_1),
+            multisafepayAppStatus: true,
+            multisafepayQrStatus: true,
+            multisafepayTerminals: [
+              { terminalId: 'T-1', name: 'Sala' },
+              { terminalId: 'T_2', name: 'Bar' },
+            ],
+          },
+          stored(DEVICE_2),
+        ],
+      });
+    });
+
+    it('shows the stored terminals and removes one', async () => {
+      const view = await renderPlace({
+        path: 'devices',
+        place: withTerminals([
+          { terminalId: 'A', name: 'Uno' },
+          { terminalId: 'B', name: 'Due' },
+        ]),
+      });
+      const card = await open(view, 0);
+      expect(box(card, idLabel(2)).value).toBe('B');
+      expect(box(card, nameLabel(1)).value).toBe('Uno');
+      (
+        [...card.querySelectorAll('button')].find((b) =>
+          b.getAttribute('aria-label')?.startsWith(L('MULTISAFEPAY_REMOVE_TERMINAL')),
+        ) as HTMLButtonElement
+      ).click();
+      await view.view();
+      expect(box(cards(view)[0], idLabel(1)).value).toBe('B');
+    });
+
+    it('checks the id, the name and the duplicates, and stops at 20 terminals', async () => {
+      const view = await renderPlace({
+        path: 'devices',
+        place: withTerminals([
+          { terminalId: 'A', name: 'Uno' },
+          { terminalId: 'A', name: 'Due' },
+        ]),
+      });
+      const card = cards(view)[0];
+      box(card, idLabel(2)).dispatchEvent(new Event('blur'));
+      await view.view();
+      expect(card.textContent).toContain('FORM.ISSUE.INCORRECT');
+      await typeWithin(view, card, idLabel(2), 'no spaces!');
+      box(card, idLabel(2)).dispatchEvent(new Event('blur'));
+      await view.view();
+      expect(card.textContent).toContain('FORM.ISSUE.PATTERN');
+      await typeWithin(view, card, nameLabel(2), '');
+      box(card, nameLabel(2)).dispatchEvent(new Event('blur'));
+      await view.view();
+      expect(card.textContent).toContain('FORM.ISSUE.REQUIRED');
+      await typeWithin(view, card, nameLabel(2), 'x'.repeat(101));
+      box(card, nameLabel(2)).dispatchEvent(new Event('blur'));
+      await view.view();
+      expect(card.textContent).toContain('FORM.ISSUE.MAX_LENGTH');
+    });
+
+    it('disables adding at 20 terminals', async () => {
+      const many = Array.from({ length: 20 }, (_, index) => ({
+        terminalId: `T${index}`,
+        name: `N${index}`,
+      }));
+      const view = await renderPlace({ path: 'devices', place: withTerminals(many) });
+      const card = await open(view, 0);
+      const add = [...card.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === L('MULTISAFEPAY_ADD_TERMINAL'),
+      ) as HTMLButtonElement;
+      expect(add.disabled).toBe(true);
+    });
+
+    it('puts the 422 of a terminal on its field', async () => {
+      const view = await renderPlace({
+        path: 'devices',
+        place: withTerminals([{ terminalId: 'A', name: 'Uno' }]),
+      });
+      const card = await open(view, 0);
+      await typeWithin(view, card, nameLabel(1), 'Nuovo');
+      await failSave(view, [
+        { field: 'devices.items.0.multisafepayTerminals.0.terminalId', issue: 'incorrect' },
+        { field: 'devices.items.0.multisafepayTerminals', issue: 'tooMany' },
+      ]);
+      expect(cards(view)[0].textContent).toContain('FORM.ISSUE.INCORRECT');
+      expect(cards(view)[0].textContent).toContain('FORM.ISSUE.TOO_MANY');
+    });
+
+    it('does not offer to change the terminals of a device that cannot be edited', async () => {
+      const view = await renderPlace({
+        path: 'devices',
+        place: withDevices(
+          [{ ...DEVICE_1, multisafepayTerminals: [{ terminalId: 'A', name: 'Uno' }] }, DEVICE_2],
+          'advanced',
+          false,
+        ),
+      });
+      await clickIn(view, cards(view)[0], 'PLACES.DEVICES.SHOW');
+      const card = cards(view)[0];
+      expect(
+        [...card.querySelectorAll('button')].some(
+          (b) => b.textContent?.trim() === L('MULTISAFEPAY_ADD_TERMINAL'),
+        ),
+      ).toBe(false);
+      expect(box(card, idLabel(1)).disabled).toBe(true);
+    });
+
+    it('copies the terminals with the device', async () => {
+      const view = await renderPlace({
+        path: 'devices',
+        place: withTerminals([{ terminalId: 'A', name: 'Uno' }]),
+      });
+      await clickIn(view, cards(view)[0], 'PLACES.DEVICES.COPY');
+      const copy = cards(view)[2];
+      expect(box(copy, idLabel(1)).value).toBe('A');
+    });
   });
 });

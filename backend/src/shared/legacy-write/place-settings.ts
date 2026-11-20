@@ -17,12 +17,13 @@ export type WholeName =
   | 'kioskCategories'
   | 'languageTexts'
   | 'tshCategoriesMap'
-  | 'tshCategories';
+  | 'tshCategories'
+  | 'reasons';
 
 /** How the value of a settings key is read, validated and written. */
 export type SettingKind =
-  /** A switch: `true` or `false`. */
-  | { readonly t: 'flag' }
+  /** A switch: `true` or `false`; with `def: true` a stored value that is not `false` (a missing key too) reads as `true`, as the legacy form does. */
+  | { readonly t: 'flag'; readonly def?: true }
   /** A text, `null` when empty (`value || null`); `pattern` is the form it must have (checked where the value changes). */
   | { readonly t: 'text'; readonly max: number; readonly pattern?: RegExp }
   /** A text that is `''` when empty, in the domain too (the media names, the address of the Connector); `url` is a web address (always checked), `pattern` the form it must have (checked where the value changes). */
@@ -33,6 +34,8 @@ export type SettingKind =
   | { readonly t: 'secretFlag' }
   /** One of a closed list; `def` is the value of the form when it is empty (`null` for none). */
   | { readonly t: 'enum'; readonly values: readonly string[]; readonly def: string | null }
+  /** One of a closed list of whole numbers; `def` is the value when the stored one is missing or not in the list. */
+  | { readonly t: 'intOf'; readonly values: readonly number[]; readonly def: number }
   /** A font size `R-C` with R and C from 1 to 3. */
   | { readonly t: 'font'; readonly def: string }
   /** A color `#rrggbb`. */
@@ -67,6 +70,8 @@ export interface SettingField {
 }
 
 const FLAG: SettingKind = { t: 'flag' };
+/** A switch that is on when the document has no value for it. */
+const FLAG_ON: SettingKind = { t: 'flag', def: true };
 const TEXT: SettingKind = { t: 'text', max: 200 };
 const TIME: SettingKind = { t: 'time' };
 const ID: SettingKind = { t: 'id' };
@@ -167,6 +172,11 @@ const TABLES: SettingField[] = block('tables', 'roomsSettings', [
   ['resetDeskNumber', INT],
   ['resetRoomsNumber', INT],
   ['resetDeliveryNumber', INT],
+  ['tableIdleMinutes', { t: 'intOf', values: [15, 20, 30], def: 30 }],
+  ['variantsPerRow', FLAG_ON],
+  ['discountReasons', whole('reasons')],
+  ['deleteReasons', whole('reasons')],
+  ['reasonsFreeText', FLAG_ON],
   ['tipValues', whole('tipValues')],
   ['tableGroups', whole('tableGroups')],
 ]);
@@ -313,6 +323,12 @@ const INTEGRATION_ENTRIES: ReadonlyArray<readonly [string, SettingKind]> = [
   ['satispay.activationCode', secretOf(32, /^[A-Za-z0-9]+$/)],
   ['satispay.keyId', secretOf()],
   ['satispay.type', enumOf('checkin qrcode', 'checkin')],
+  ['multisafepay.status', FLAG],
+  ['multisafepay.terminalGroupId', { t: 'text', max: 64, pattern: /^[A-Za-z0-9_-]{1,64}$/ }],
+  ['multisafepay.terminalGroupApiKey', secretOf()],
+  ['multisafepay.websiteApiKey', secretOf()],
+  ['multisafepay.qrSecondsActive', { t: 'int', def: 600, min: 60, max: 31_536_000 }],
+  ['multisafepay.qrStatus', FLAG],
   ['qodeup.status', FLAG],
   ['qodeup.apiKey', secretOf()],
   ['tomatoai.status', FLAG],
@@ -337,12 +353,15 @@ const INTEGRATION_ENTRIES: ReadonlyArray<readonly [string, SettingKind]> = [
  * categories come from (`tsh.tshCategories`) is read only: it is data of the provider, which this backend does not fetch.
  */
 /** The keys of the integrations that receive payments: whoever holds them is paid, so they are the dealers'. */
-const PAYMENT_KEYS: ReadonlySet<string> = new Set(['floodPay.stripe.publicKey', 'floodPay.stripe.privateKey', 'floodPay.stripe.webhookPrivateKey', 'dojo.apiKey', 'satispay.activationCode', 'satispay.keyId', 'qodeup.apiKey']);
+const PAYMENT_KEYS: ReadonlySet<string> = new Set(['floodPay.stripe.publicKey', 'floodPay.stripe.privateKey', 'floodPay.stripe.webhookPrivateKey', 'dojo.apiKey', 'satispay.activationCode', 'satispay.keyId', 'qodeup.apiKey', 'multisafepay.terminalGroupApiKey', 'multisafepay.websiteApiKey']);
+
+/** Keys of the integrations, besides the `status` switches, that only a PSA or a dealer changes (the QR switch of MultiSafepay, as the QR and tap-to-pay switches of Flood Pay). */
+const RESERVED_KEYS: ReadonlySet<string> = new Set(['multisafepay.qrStatus']);
 
 const INTEGRATIONS: SettingField[] = [
   ...INTEGRATION_ENTRIES.flatMap(([key, kind]): SettingField[] => {
     const domain = `integrations.${key}`;
-    const field: SettingField = { domain, legacy: domain, kind, ...(key.endsWith('.status') ? { reserved: true as const } : {}), ...(PAYMENT_KEYS.has(key) ? { payment: true as const } : {}) };
+    const field: SettingField = { domain, legacy: domain, kind, ...(key.endsWith('.status') || RESERVED_KEYS.has(key) ? { reserved: true as const } : {}), ...(PAYMENT_KEYS.has(key) ? { payment: true as const } : {}) };
     return kind.t === 'secret' ? [field, { domain: `${domain}Set`, legacy: domain, kind: { t: 'secretFlag' }, readOnly: true }] : [field];
   }),
   { domain: 'integrations.tsh.categories', legacy: 'integrations.tsh.tshCategories', kind: whole('tshCategories'), readOnly: true },

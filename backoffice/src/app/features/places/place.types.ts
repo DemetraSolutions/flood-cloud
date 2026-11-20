@@ -194,6 +194,12 @@ export interface PlaceDevice {
   readonly orderingPrintSingleProduct: boolean;
   readonly orderingPrintSingleProductTables: boolean;
   readonly printStations: readonly string[];
+  /** MultiSafepay App-to-App is on for the device. */
+  readonly multisafepayAppStatus: boolean;
+  /** MultiSafepay QR Code is on for the device. */
+  readonly multisafepayQrStatus: boolean;
+  /** The MultiSafepay terminals of the device (replaced as a whole on a write). */
+  readonly multisafepayTerminals: readonly { readonly terminalId: string; readonly name: string }[];
 }
 
 /** A print station of the place. */

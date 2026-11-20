@@ -1,6 +1,6 @@
 import { AppError } from '../../shared/http/errors.ts';
 import type { Role } from '../../shared/security/rbac/permissions.ts';
-import { AUTOMATIC_CASH_DEVICES, defaultPos, emptyPos } from './pos.catalog.ts';
+import { AUTOMATIC_CASH_DEVICES, defaultPos, offPos } from './pos.catalog.ts';
 import type { Pos, PosGrantsPatch, PosPatch } from './pos.catalog.ts';
 import { diffPos } from './pos.mapper.ts';
 
@@ -130,7 +130,7 @@ export async function posAccessError(actor: PosActor, role: Role, before: Pos | 
     return null;
   }
   // From nothing for a creation, so that the default flags and the ones the request adds are all held by the actor.
-  const patch = permissionPart(diffPos(before ?? emptyPos(), after)) ?? {};
+  const patch = permissionPart(diffPos(before ?? offPos(), after)) ?? {};
   const refused = notHeld(actorPos, patch, after, before === null);
   return refused.length === 0 ? null : new AppError('FORBIDDEN', { details: refused.map((field) => ({ field, issue: 'notAllowed' })) });
 }

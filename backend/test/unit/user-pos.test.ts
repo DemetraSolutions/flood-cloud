@@ -5,7 +5,7 @@ import { createGroupOptionsReader, defaultPriceLists, optionReferenceIssues, ref
 import type { GroupOptionLists } from '../../src/modules/users/group-options.ts';
 import { inheritedPos, isPosLimited, posAccessError } from '../../src/modules/users/pos-access.ts';
 import type { PosActor } from '../../src/modules/users/pos-access.ts';
-import { POS_FLAGS, POS_GRANT_KEYS, POS_LEGACY_KEY, POS_OWNED_FIELDS, defaultPos, emptyPos } from '../../src/modules/users/pos.catalog.ts';
+import { POS_FLAGS, POS_GRANT_KEYS, POS_LEGACY_KEY, POS_OWNED_FIELDS, defaultPos, emptyPos, offPos } from '../../src/modules/users/pos.catalog.ts';
 import type { Pos } from '../../src/modules/users/pos.catalog.ts';
 import { applyPosPatch, diffPos, posDocument, posSetPaths, readPos } from '../../src/modules/users/pos.mapper.ts';
 import type { UserAnomaly } from '../../src/modules/users/user.types.ts';
@@ -42,12 +42,14 @@ describe('the POS catalog', () => {
   it('starts every role as the legacy form does', () => {
     for (const role of ['PSA', 'D'] as const) {
       assert.equal(defaultPos(role).enabled, false);
-      assert.equal(POS_FLAGS.some((flag) => defaultPos(role).grants[flag]), false);
+      // Only the two grants that are on when the document has no value for them.
+      assert.deepEqual(POS_FLAGS.filter((flag) => defaultPos(role).grants[flag]).sort(), ['cashEnabled', 'handheldEnabled']);
     }
     for (const role of ['SA', 'CA', 'PA', 'E'] as const) {
       const pos = defaultPos(role);
       assert.equal(pos.enabled, true);
-      assert.deepEqual(POS_FLAGS.filter((flag) => pos.grants[flag]).sort(), ['discount', 'freeSale', 'invoices', 'priceChange']);
+      assert.deepEqual(POS_FLAGS.filter((flag) => pos.grants[flag]).sort(), ['cashEnabled', 'discount', 'freeSale', 'handheldEnabled', 'invoices', 'priceChange']);
+      assert.equal(pos.grants.handheldWallet, false);
     }
     assert.deepEqual(emptyPos().options.template, 'material-whitepurple-light');
   });
@@ -194,7 +196,10 @@ describe('who may give which POS permission', () => {
     assert.deepEqual(inheritedPos(null, 'PA'), defaultPos('PA'));
     const holder = pos('CA', { grants: { freeSale: false, discountMaxPercentage: 30 } });
     const given = inheritedPos(holder, 'PA');
-    assert.deepEqual(POS_FLAGS.filter((flag) => given.grants[flag]).sort(), ['discount', 'invoices', 'priceChange']);
+    assert.deepEqual(POS_FLAGS.filter((flag) => given.grants[flag]).sort(), ['cashEnabled', 'discount', 'handheldEnabled', 'invoices', 'priceChange']);
+    // A creator who does not hold the grants that are on by default does not give them either.
+    const without = pos('CA', { grants: { cashEnabled: false, handheldEnabled: false } });
+    assert.deepEqual(POS_FLAGS.filter((flag) => inheritedPos(without, 'PA').grants[flag]).sort(), ['discount', 'freeSale', 'invoices', 'priceChange']);
     assert.deepEqual([given.enabled, given.grants.discountMaxPercentage], [true, 30]);
     assert.equal(inheritedPos(applyPosPatch(holder, { enabled: false }), 'PA').enabled, false);
     assert.equal(inheritedPos(holder, 'D').enabled, false);
@@ -257,6 +262,8 @@ describe('who may give which POS permission', () => {
   it('lets a manager who holds less switch everything off, which is a change from the default but gives nothing', async () => {
     const holder = pos('CA', { grants: { rider: true } });
     assert.equal(await posAccessError(actorOf('CA', holder), 'PA', null, emptyPos()), null);
+    // Even the grants that are on by default: a creation that turns everything off is a change from the default, and gives nothing.
+    assert.equal(await posAccessError(actorOf('CA', holder), 'PA', null, offPos()), null);
   });
 
   it('checks a creation from nothing: the default flags and the ones the request adds', async () => {
@@ -272,6 +279,79 @@ describe('who may give which POS permission', () => {
     assert.equal(await posAccessError(actor, 'PA', null, applyPosPatch(started, { grants: { discountMaxPercentage: 10 } })), null);
     // A request that clears everything is a change from the default, allowed to a manager.
     assert.equal(await posAccessError(actor, 'PA', null, applyPosPatch(started, { enabled: false, grants: { discount: false, priceChange: false, invoices: false } })), null);
+  });
+});
+
+describe('the grants and the preferences of the handheld 2.0', () => {
+  it('reads the cash and handheld switches as on when the document has none, off only when it says false', () => {
+    const missing = read(cash({ sub: {} })).pos.grants;
+    assert.deepEqual([missing.cashEnabled, missing.handheldEnabled, missing.handheldWallet], [true, true, false]);
+    const absent = readPos({ apps: { cash: { status: true, sub: {}, options: {} } } }, []).grants;
+    assert.deepEqual([absent.cashEnabled, absent.handheldEnabled, absent.handheldWallet], [true, true, false]);
+    const off = read(cash({ sub: { cashEnabled: false, handheldEnabled: false, handheldWallet: true } }));
+    assert.deepEqual([off.pos.grants.cashEnabled, off.pos.grants.handheldEnabled, off.pos.grants.handheldWallet, off.anomalies], [false, false, true, []]);
+    const junk = read(cash({ sub: { cashEnabled: 'no', handheldEnabled: null, handheldWallet: 1 } }));
+    assert.deepEqual([junk.pos.grants.cashEnabled, junk.pos.grants.handheldEnabled, junk.pos.grants.handheldWallet], [true, true, false]);
+    assert.deepEqual(junk.anomalies.map((anomaly) => anomaly.field), ['permissions.apps.cash.sub.cashEnabled', 'permissions.apps.cash.sub.handheldWallet']);
+  });
+
+  it('reads the preferences with the legacy defaults when absent or wrong', () => {
+    const none = read(cash({ options: { productsColorStyle: undefined, handheldTextZoom: undefined } }));
+    assert.deepEqual(
+      [none.pos.options.productsColorStyle, none.pos.options.productsUppercase, none.pos.options.productsBold, none.pos.options.roomsLegend, none.pos.options.handheldTextZoom, none.pos.options.handheldCategoriesLayout, none.pos.options.handheldCategoriesRows, none.pos.options.handheldProductsColumns, none.pos.options.handheldMenuPosition],
+      ['line', false, false, false, 100, 'scroll', 2, 2, 'bottom'],
+    );
+    const set = read(cash({ options: { productsColorStyle: 'fill', productsUppercase: true, productsBold: true, roomsLegend: true, handheldTextZoom: 85, handheldCategoriesLayout: 'list', handheldCategoriesRows: 1, handheldProductsColumns: 4, handheldMenuPosition: 'top' } }));
+    assert.deepEqual(set.anomalies, []);
+    assert.deepEqual(
+      [set.pos.options.productsColorStyle, set.pos.options.productsUppercase, set.pos.options.productsBold, set.pos.options.roomsLegend, set.pos.options.handheldTextZoom, set.pos.options.handheldCategoriesLayout, set.pos.options.handheldCategoriesRows, set.pos.options.handheldProductsColumns, set.pos.options.handheldMenuPosition],
+      ['fill', true, true, true, 85, 'list', 1, 4, 'top'],
+    );
+    const junk = read(cash({ options: { productsColorStyle: 'x', handheldTextZoom: 87, handheldCategoriesLayout: 'grid', handheldCategoriesRows: 3, handheldProductsColumns: '2', handheldMenuPosition: 'left', roomsLegend: 'yes' } }));
+    assert.deepEqual(
+      [junk.pos.options.productsColorStyle, junk.pos.options.handheldTextZoom, junk.pos.options.handheldCategoriesLayout, junk.pos.options.handheldCategoriesRows, junk.pos.options.handheldProductsColumns, junk.pos.options.handheldMenuPosition, junk.pos.options.roomsLegend],
+      ['line', 100, 'scroll', 2, 2, 'bottom', false],
+    );
+    assert.equal(junk.anomalies.length, 7);
+  });
+
+  it('writes them on their legacy paths, as numbers and texts, and keeps the keys it does not own', () => {
+    const base = defaultPos('SA');
+    const next = applyPosPatch(base, { grants: { cashEnabled: false, handheldWallet: true }, options: { handheldTextZoom: 115, productsColorStyle: 'fill', roomsLegend: true } });
+    assert.deepEqual(posSetPaths(diffPos(base, next)!), {
+      'permissions.apps.cash.sub.cashEnabled': false,
+      'permissions.apps.cash.sub.handheldWallet': true,
+      'permissions.apps.cash.options.productsColorStyle': 'fill',
+      'permissions.apps.cash.options.handheldTextZoom': 115,
+      'permissions.apps.cash.options.roomsLegend': true,
+    });
+    const document = posDocument(defaultPos('E')) as { sub: Record<string, unknown>; options: Record<string, unknown> };
+    assert.deepEqual([document.sub['cashEnabled'], document.sub['handheldEnabled'], document.sub['handheldWallet']], [true, true, false]);
+    assert.deepEqual(
+      [document.options['productsColorStyle'], document.options['productsUppercase'], document.options['productsBold'], document.options['roomsLegend'], document.options['handheldTextZoom'], document.options['handheldCategoriesLayout'], document.options['handheldCategoriesRows'], document.options['handheldProductsColumns'], document.options['handheldMenuPosition']],
+      ['line', false, false, false, 100, 'scroll', 2, 2, 'bottom'],
+    );
+  });
+
+  it('owns the new paths', () => {
+    for (const key of ['sub.cashEnabled', 'sub.handheldEnabled', 'sub.handheldWallet', 'options.productsColorStyle', 'options.productsUppercase', 'options.productsBold', 'options.roomsLegend', 'options.handheldTextZoom', 'options.handheldCategoriesLayout', 'options.handheldCategoriesRows', 'options.handheldProductsColumns', 'options.handheldMenuPosition']) {
+      assert.ok(POS_OWNED_FIELDS.includes(`permissions.apps.cash.${key}`), key);
+    }
+  });
+
+  it('judges the new grants like the others: a limited creator cannot give what he does not hold, even from the default', async () => {
+    const holder = pos('CA', { grants: { cashEnabled: false } });
+    const actor = actorOf('CA', holder);
+    const before = pos('PA', { grants: { cashEnabled: false } });
+    assert.deepEqual(refused(await posAccessError(actor, 'PA', before, applyPosPatch(before, { grants: { cashEnabled: true, handheldWallet: true } }))), ['FORBIDDEN', ['pos.grants.cashEnabled:notAllowed', 'pos.grants.handheldWallet:notAllowed']]);
+    // A creation: the switch the default has on, and a request that sets it on, are judged against what the creator holds.
+    const started = inheritedPos(holder, 'PA');
+    assert.equal(started.grants.cashEnabled, false);
+    assert.equal(await posAccessError(actor, 'PA', null, started), null);
+    assert.deepEqual(refused(await posAccessError(actor, 'PA', null, applyPosPatch(started, { grants: { cashEnabled: true } }))), ['FORBIDDEN', ['pos.grants.cashEnabled:notAllowed']]);
+    // Whoever cannot manage permissions cannot change them; the preferences stay free.
+    assert.deepEqual(refused(await posAccessError(actorOf('SA', emptyPos(), false), 'PA', before, applyPosPatch(before, { grants: { handheldEnabled: false } }))), ['FORBIDDEN', undefined]);
+    assert.equal(await posAccessError(actorOf('SA', emptyPos(), false), 'PA', before, applyPosPatch(before, { options: { handheldTextZoom: 120, productsColorStyle: 'fill' } })), null);
   });
 });
 

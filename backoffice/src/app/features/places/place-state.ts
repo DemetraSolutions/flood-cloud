@@ -16,10 +16,12 @@ import {
   FieldTree,
   form,
   maxLength,
+  pattern,
   ReadonlyFieldTree,
   required,
   submit,
   TreeValidationResult,
+  validate,
 } from '@angular/forms/signals';
 import { Router } from '@angular/router';
 import { ApiData } from '../../core/api/api.types';
@@ -316,6 +318,43 @@ export class PlaceState {
       applyEach(room.tables, (table) => required(table.name));
     });
     applyEach(path.storages.items, (storage) => required(storage.name));
+    for (const list of [path.tables.discountReasons, path.tables.deleteReasons]) {
+      applyEach(list, (reason) => {
+        required(reason);
+        maxLength(reason, 100);
+        validate(reason, ({ value }) =>
+          value().includes(';') ? { kind: 'semicolon' } : undefined,
+        );
+      });
+    }
+    validate(path.integrations.f['multisafepay.terminalGroupId'], ({ value }) =>
+      /^[A-Za-z0-9_-]{0,64}$/.test(value() as string) ? undefined : { kind: 'pattern' },
+    );
+    validate(path.integrations.f['multisafepay.qrSecondsActive'], ({ value }) => {
+      const seconds = value() as string;
+      if (seconds === '') {
+        return undefined;
+      }
+      return Number(seconds) < 60
+        ? { kind: 'minimum' }
+        : Number(seconds) > 31_536_000
+          ? { kind: 'maximum' }
+          : undefined;
+    });
+    applyEach(path.devices.items, (device) => {
+      applyEach(device.multisafepayTerminals, (terminal) => {
+        required(terminal.terminalId);
+        pattern(terminal.terminalId, /^[A-Za-z0-9_-]{1,64}$/);
+        validate(terminal.terminalId, ({ value, valueOf }) =>
+          valueOf(device.multisafepayTerminals).filter((other) => other.terminalId === value())
+            .length > 1
+            ? { kind: 'incorrect' }
+            : undefined,
+        );
+        required(terminal.name);
+        maxLength(terminal.name, 100);
+      });
+    });
     disabled(path, { when: () => !this.canWrite() });
     disabled(path.devices, { when: () => !this.model().devices.editable });
     disabled(path.printStations.stations, {

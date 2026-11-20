@@ -152,7 +152,7 @@ describe('place mapper: the table of keys', () => {
     assert.ok(flags.every((leaf) => leaf.readOnly === true && leaf.codec.write(true, undefined) === true));
     // The credentials are write-only leaves: never in a representation.
     const secrets = PLACE_LEAVES.filter((leaf) => leaf.writeOnly === true);
-    assert.equal(secrets.length, 17);
+    assert.equal(secrets.length, 19);
     assert.ok(secrets.every((leaf) => leaf.legacy.startsWith('integrations.') && PLACE_LEAVES.some((flag) => flag.legacy === leaf.legacy && flag.domain === `${leaf.domain}Set`)));
     assert.equal(new Set(PLACE_LEAVES.map((leaf) => leaf.domain)).size, PLACE_LEAVES.length);
   });

@@ -89,6 +89,7 @@ export const LEGACY_SUB_FLAGS: readonly string[] = [
   'deleteTableProductReasonNotSent', 'deleteTableProductReasonSent', 'tablePrebillingActions', 'roomsTableViewQuickTotals', 'roomsRoomsViewPrices', 'roomsTableViewPrices',
   'roomsOnlyHigherSeatsQunatity', 'editQuantitySentWeightProduct', 'advancedReport', 'advancedReportPin', 'reworkSale', 'sentProducts', 'notSentProducts', 'lockProducts',
   'tableEngage', 'tableMerge', 'tableSepare', 'tableClose', 'checkoutPartition', 'checkoutSeparation', 'moveProducts', 'unlockTable', 'resendProducts', 'searchProducts', 'rider',
+  'cashEnabled', 'handheldEnabled', 'handheldWallet',
 ];
 
 /** The flags of each automatic cash device, as the legacy names them. */
@@ -106,7 +107,7 @@ export const LEGACY_BOOLEAN_OPTIONS: readonly string[] = [
   'deskPrintOrderDefault', 'deliveryTakeawayCompletedDefault', 'deliveryTakeawayShowOrderDetailOnSave', 'deliveryTakeawayShowProduction', 'reducedProducts', 'reducedProductsTable',
   'reducedTables', 'enlargedCategories', 'tableCartPriority', 'sendOrderRemainButton', 'viewTableStatus', 'viewTableUser', 'viewTableCustomer', 'viewTableStartDate',
   'genericProductPriceFocus', 'roomsGridActive', 'roomsGridActionbarOpened', 'removeFiltersProductSelect', 'removeFiltersOnSearch', 'darkMode', 'departmentsDialog',
-  'skipFiscalReceiptTypeRequest',
+  'skipFiscalReceiptTypeRequest', 'productsUppercase', 'productsBold', 'roomsLegend',
 ];
 
 /** The thirteen modules of the legacy matrix; `logs` has only the read flag. */
@@ -129,7 +130,7 @@ export function legacyPermissions(overrides: { status?: boolean; modules?: Recor
       cash: {
         status: overrides.cashStatus ?? true,
         sub: {
-          ...Object.fromEntries(LEGACY_SUB_FLAGS.map((key) => [key, false])),
+          ...Object.fromEntries(LEGACY_SUB_FLAGS.map((key) => [key, key === 'cashEnabled' || key === 'handheldEnabled'])),
           discountMaxPercentage: null,
           service: null,
           automaticCash: Object.fromEntries(Object.entries(LEGACY_AUTOMATIC_CASH).map(([device, keys]) => [device, Object.fromEntries(keys.map((key) => [key, false]))])),
@@ -148,6 +149,12 @@ export function legacyPermissions(overrides: { status?: boolean; modules?: Recor
           roomsTablesColumns: null,
           roomsTablesColumnsHandheld: null,
           roomsGridZoomHandheld: 2,
+          productsColorStyle: 'line',
+          handheldTextZoom: 100,
+          handheldCategoriesLayout: 'scroll',
+          handheldCategoriesRows: 2,
+          handheldProductsColumns: 2,
+          handheldMenuPosition: 'bottom',
           quickDiscount: null,
           priceLists: {},
           service: null,

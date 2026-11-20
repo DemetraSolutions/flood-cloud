@@ -231,6 +231,70 @@
             </fieldset>
           }
 
+          <fieldset>
+            <legend>{{ 'PLACES.DEVICES.MULTISAFEPAY' | t }}</legend>
+            <div class="checks">
+              <fc-checkbox
+                [formField]="f.multisafepayAppStatus"
+                [label]="'PLACES.DEVICES.MULTISAFEPAY_APP' | t"
+                [error]="state.fieldError(f.multisafepayAppStatus)"
+              />
+              <fc-checkbox
+                [formField]="f.multisafepayQrStatus"
+                [label]="'PLACES.DEVICES.MULTISAFEPAY_QR' | t"
+                [error]="state.fieldError(f.multisafepayQrStatus)"
+              />
+            </div>
+            <fieldset>
+              <legend>{{ 'PLACES.DEVICES.MULTISAFEPAY_TERMINALS' | t }}</legend>
+              @if (state.fieldError(f.multisafepayTerminals); as problem) {
+                <p class="problem" role="alert">{{ problem }}</p>
+              }
+              @for (terminal of terminalsOf(i); track $index; let t = $index) {
+                <div class="row">
+                  <div class="grid">
+                    <fc-text-field
+                      [formField]="terminal.terminalId"
+                      [label]="terminalLabel('MULTISAFEPAY_TERMINAL_ID', t)"
+                      [error]="state.fieldError(terminal.terminalId)"
+                      (blurred)="terminal.terminalId().markAsTouched()"
+                    />
+                    <fc-text-field
+                      [formField]="terminal.name"
+                      [label]="terminalLabel('MULTISAFEPAY_TERMINAL_NAME', t)"
+                      [error]="state.fieldError(terminal.name)"
+                      (blurred)="terminal.name().markAsTouched()"
+                    />
+                  </div>
+                  @if (editable()) {
+                    <div class="row-actions">
+                      <button
+                        fc-button
+                        variant="ghost"
+                        [attr.aria-label]="terminalLabel('MULTISAFEPAY_REMOVE_TERMINAL', t)"
+                        (click)="removeTerminal(i, t)"
+                      >
+                        {{ 'PLACES.REMOVE' | t }}
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+              @if (editable()) {
+                <div>
+                  <button
+                    fc-button
+                    variant="secondary"
+                    [disabled]="device.multisafepayTerminals.length >= maxTerminals"
+                    (click)="addTerminal(i)"
+                  >
+                    {{ 'PLACES.DEVICES.MULTISAFEPAY_ADD_TERMINAL' | t }}
+                  </button>
+                </div>
+              }
+            </fieldset>
+          </fieldset>
+
           @if (shows(device, 'externalDisplay')) {
             <fieldset>
               <legend>{{ 'PLACES.DEVICES.DISPLAY' | t }}</legend>

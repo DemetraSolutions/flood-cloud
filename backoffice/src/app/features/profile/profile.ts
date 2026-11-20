@@ -179,6 +179,8 @@ export class ProfilePage {
     label: this.i18n.t(`THEME.${choice.toUpperCase()}`),
   }));
 
+  /** Whether the group of the user has the rooms feature (room and handheld preferences). */
+  protected readonly hasRooms = computed(() => this.session.me()?.groupFeatures?.rooms === true);
   protected readonly showPos = computed(() => hasPosPreferences(this.session.me()));
   protected readonly initials = computed(() => {
     const me = this.session.me();

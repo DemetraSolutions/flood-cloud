@@ -213,7 +213,10 @@ describe('dictionaries', () => {
     }
     for (const name of POS_CHOICE_NAMES) {
       expected.push(`USERS.POS.CHOICE.${posKey(name)}`);
-      const numeric = name.startsWith('rooms');
+      const numeric =
+        name.startsWith('rooms') ||
+        name === 'handheldTextZoom' ||
+        name === 'handheldCategoriesRows';
       for (const value of POS_CHOICES[name].filter((item) => item !== '' && !numeric)) {
         expected.push(
           `USERS.POS.CHOICE_VALUE.${posKey(name)}.${value.toUpperCase().replace(/-/g, '_')}`,

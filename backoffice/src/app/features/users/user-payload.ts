@@ -140,6 +140,9 @@ function optionBody(name: string, value: string): string | number | null {
     case 'quickDiscount':
       return value === '' ? null : Number(value);
     case 'roomsGridZoomHandheld':
+    case 'handheldTextZoom':
+    case 'handheldCategoriesRows':
+    case 'handheldProductsColumns':
       return Number(value);
     default:
       return value;

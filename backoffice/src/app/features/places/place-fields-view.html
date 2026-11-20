@@ -20,6 +20,7 @@
             <fc-credential-field
               [credential]="secretField(definition.key)"
               [label]="label(definition)"
+              [error]="state.fieldError(secretField(definition.key).value)"
               [locked]="definition.privilegedOnly === true && !state.isPrivileged()"
             />
           }

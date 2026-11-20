@@ -55,7 +55,16 @@ export const POS_GRANT_KEYS = Object.freeze([
   ['resendProducts', 'resendProducts'],
   ['searchProducts', 'searchProducts'],
   ['rider', 'rider'],
+  ['cashEnabled', 'cashEnabled'],
+  ['handheldEnabled', 'handheldEnabled'],
+  ['handheldWallet', 'handheldWallet'],
 ] as const);
+
+/**
+ * The grants that are on when the document has no value for them (the legacy form reads them with `!== false`): the user may use the cash desk (`cashEnabled`) and the handheld
+ * (`handheldEnabled`) unless the document says otherwise. Every other grant is off when missing.
+ */
+export const POS_GRANTS_ON_BY_DEFAULT = Object.freeze(['cashEnabled', 'handheldEnabled'] as const);
 
 /** A boolean grant of the POS, by its domain name. */
 export type PosFlag = (typeof POS_GRANT_KEYS)[number][0];
@@ -114,6 +123,18 @@ export const POS_FONT_SIZES = ['s', 'm', 'l'] as const;
 export const POS_TABLE_COLUMNS = [4, 5, 6, 8] as const;
 /** Columns of the table grid on a handheld. */
 export const POS_HANDHELD_COLUMNS = [2, 3, 4] as const;
+/** How the color of a product is shown: a colored line or a colored background. */
+export const POS_COLOR_STYLES = ['line', 'fill'] as const;
+/** Text zoom of the handheld in percent, in steps of 5. */
+export const POS_TEXT_ZOOMS = [85, 90, 95, 100, 105, 110, 115, 120, 125] as const;
+/** Layouts of the categories on the handheld: scrolling, slide-in or list. */
+export const POS_CATEGORIES_LAYOUTS = ['scroll', 'slidein', 'list'] as const;
+/** Rows of categories on the handheld. */
+export const POS_CATEGORIES_ROWS = [1, 2] as const;
+/** Columns of products on the handheld. */
+export const POS_PRODUCTS_COLUMNS = [1, 2, 3, 4] as const;
+/** Position of the order menu on the handheld. */
+export const POS_MENU_POSITIONS = ['bottom', 'top'] as const;
 /** Zoom levels of the room map on a handheld. */
 export const POS_GRID_ZOOMS = [1, 1.5, 2, 2.5, 3] as const;
 
@@ -150,6 +171,9 @@ export const POS_BOOLEAN_OPTIONS = Object.freeze([
   'darkMode',
   'departmentsDialog',
   'skipFiscalReceiptTypeRequest',
+  'productsUppercase',
+  'productsBold',
+  'roomsLegend',
 ] as const);
 
 /** A boolean preference of the POS. */
@@ -175,6 +199,12 @@ export type PosOptions = { readonly [O in PosBooleanOption]: boolean } & {
   readonly roomsTablesColumns: (typeof POS_TABLE_COLUMNS)[number] | null;
   readonly roomsTablesColumnsHandheld: (typeof POS_HANDHELD_COLUMNS)[number] | null;
   readonly roomsGridZoomHandheld: (typeof POS_GRID_ZOOMS)[number];
+  readonly productsColorStyle: (typeof POS_COLOR_STYLES)[number];
+  readonly handheldTextZoom: (typeof POS_TEXT_ZOOMS)[number];
+  readonly handheldCategoriesLayout: (typeof POS_CATEGORIES_LAYOUTS)[number];
+  readonly handheldCategoriesRows: (typeof POS_CATEGORIES_ROWS)[number];
+  readonly handheldProductsColumns: (typeof POS_PRODUCTS_COLUMNS)[number];
+  readonly handheldMenuPosition: (typeof POS_MENU_POSITIONS)[number];
   /** Quick discount button, 0 to 100; `null` for none. */
   readonly quickDiscount: number | null;
   /** The price list the POS last started with (the POS writes it); `null` for none. */
@@ -222,7 +252,7 @@ export function isOneOf<const T extends readonly unknown[]>(list: T, value: unkn
 /** Grants that a user of each role starts with in the legacy form: the app and these four (`discount`, `priceChange`, `invoices`, `freeSale`) for everybody but PSA and D. */
 const STARTING_GRANTS: readonly PosFlag[] = ['discount', 'priceChange', 'invoices', 'freeSale'];
 
-/** All grants off. */
+/** Every grant off, the two that are on by default too: the baseline of a creation, from which everything a new user holds is judged. */
 function offGrants(): PosGrants {
   const flags = Object.fromEntries(POS_FLAGS.map((flag) => [flag, false])) as { [F in PosFlag]: boolean };
   const automaticCash = Object.fromEntries(
@@ -246,15 +276,27 @@ export function defaultOptions(): PosOptions {
     roomsTablesColumns: null,
     roomsTablesColumnsHandheld: null,
     roomsGridZoomHandheld: 2,
+    productsColorStyle: 'line',
+    handheldTextZoom: 100,
+    handheldCategoriesLayout: 'scroll',
+    handheldCategoriesRows: 2,
+    handheldProductsColumns: 2,
+    handheldMenuPosition: 'bottom',
     quickDiscount: null,
     defaultPriceListId: null,
     priceLists: [],
   };
 }
 
-/** A POS with everything off and the default preferences: what a user without any POS data has. */
-export function emptyPos(): Pos {
+/** A POS with everything off, the grants that are on by default included, and the default preferences: the baseline against which what a new user holds is judged. */
+export function offPos(): Pos {
   return { enabled: false, grants: offGrants(), options: defaultOptions() };
+}
+
+/** A POS with the app off, no permission but the ones that are on by default (`cashEnabled`, `handheldEnabled`) and the default preferences: what a user without any POS data has. */
+export function emptyPos(): Pos {
+  const base = offPos();
+  return { ...base, grants: { ...base.grants, ...Object.fromEntries(POS_GRANTS_ON_BY_DEFAULT.map((flag) => [flag, true])) } };
 }
 
 /**
@@ -286,7 +328,7 @@ export const POS_OWNED_FIELDS: readonly string[] = Object.freeze([
   `${POS_ROOT}.sub.${SERVICE_PERCENTAGE_KEY}`,
   ...AUTOMATIC_CASH_DEVICES.flatMap((device) => AUTOMATIC_CASH[device].map((key) => `${POS_ROOT}.sub.automaticCash.${device}.${key}`)),
   ...POS_BOOLEAN_OPTIONS.map((option) => `${POS_ROOT}.options.${option}`),
-  ...['favoritesId', 'side', 'sideRooms', 'virtualKeyboard', 'template', 'productsFontSize', 'productsShortNameFontSize', 'roomsTablesColumns', 'roomsTablesColumnsHandheld', 'roomsGridZoomHandheld', 'quickDiscount', 'defaultPriceListId'].map(
+  ...['favoritesId', 'side', 'sideRooms', 'virtualKeyboard', 'template', 'productsFontSize', 'productsShortNameFontSize', 'roomsTablesColumns', 'roomsTablesColumnsHandheld', 'roomsGridZoomHandheld', 'productsColorStyle', 'handheldTextZoom', 'handheldCategoriesLayout', 'handheldCategoriesRows', 'handheldProductsColumns', 'handheldMenuPosition', 'quickDiscount', 'defaultPriceListId'].map(
     (option) => `${POS_ROOT}.options.${option}`,
   ),
   POS_PRICE_LISTS_PATH,

@@ -13,6 +13,8 @@ export function fakePos(overrides: Partial<UserPos> = {}): UserPos {
     enabled: true,
     grants: {
       ...(Object.fromEntries(POS_FLAGS.map((flag) => [flag, false])) as Record<string, boolean>),
+      cashEnabled: true,
+      handheldEnabled: true,
       discountMaxPercentage: null,
       servicePercentage: null,
       automaticCash: Object.fromEntries(
@@ -37,6 +39,12 @@ export function fakePos(overrides: Partial<UserPos> = {}): UserPos {
       roomsTablesColumns: null,
       roomsTablesColumnsHandheld: null,
       roomsGridZoomHandheld: 2,
+      productsColorStyle: 'line',
+      handheldTextZoom: 100,
+      handheldCategoriesLayout: 'scroll',
+      handheldCategoriesRows: 2,
+      handheldProductsColumns: 2,
+      handheldMenuPosition: 'bottom',
       quickDiscount: null,
       defaultPriceListId: null,
       priceLists: [],

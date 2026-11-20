@@ -42,6 +42,20 @@ describe('what the activations read of the copies', () => {
     await assert.rejects(mirror.find({}, { projection: { name: 1 }, limit: 1, sort: { 'integrations.floodPay.apiKey': 1 } }), /sort/);
   });
 
+  it('does not let the MultiSafepay credentials, nor the other new fields of a place, be read through the copies, and keeps the provider out of the activations', async () => {
+    const cursor = { sort: () => cursor, toArray: async () => [] };
+    const mirror = trustedGroupMirror(new ObjectId(), { common: () => ({ collection: () => ({ find: () => cursor }) }) } as never, 'places');
+    const hidden = ['integrations.multisafepay', 'integrations.multisafepay.terminalGroupApiKey', 'integrations.multisafepay.websiteApiKey', 'integrations.multisafepay.status', 'devices.multisafepayTerminals', 'roomsSettings.discountReasons', 'roomsSettings.tableIdleMinutes'];
+    for (const field of hidden) {
+      await assert.rejects(mirror.find({}, { projection: { [field]: 1 } as never, limit: 1 }), /allowlist projection/, field);
+      await assert.rejects(mirror.find({ [field]: 'x' }, { projection: { name: 1 }, limit: 1 }), /not readable/, field);
+      await assert.rejects(mirror.find({}, { projection: { name: 1 }, limit: 1, sort: { [field]: 1 } }), /sort/, field);
+    }
+    await assert.rejects(mirror.find({ $expr: { $eq: ['$integrations.multisafepay.websiteApiKey', 'x'] } }, { projection: { name: 1 }, limit: 1 }), /Reference to a field/);
+    assert.ok(!ACTIVATION_PROVIDERS.includes('multisafepay'));
+    assert.ok(![...Object.keys(ACTIVATION_PLACE_PROJECTION)].some((field) => /multisafepay/i.test(field)));
+  });
+
   it('reads the groups with a projection that holds no key, host or setting of a group but the two switches', () => {
     assert.deepEqual(Object.keys(GROUP_PROJECTION).sort(), ['dealerId', 'name', 'settings.integrations.statmanager.status', 'settings.tobaccosGamesMonopoly', 'status']);
   });

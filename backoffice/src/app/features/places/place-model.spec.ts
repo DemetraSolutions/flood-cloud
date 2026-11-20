@@ -464,6 +464,22 @@ describe('blockBody', () => {
     expect(body['exits']).toBe(false);
   });
 
+  it('reads and writes the rooms settings and the reasons', () => {
+    const model = modelOf();
+    expect(model.tables.discountReasons).toEqual(['Cortesia', 'Cliente abituale']);
+    expect(model.tables.deleteReasons).toEqual(['Errore']);
+    expect(model.tables.f['tableIdleMinutes']).toBe('15');
+    model.tables.discountReasons.push('  Amico ');
+    model.tables.f['tableIdleMinutes'] = '30';
+    const body = blockBody(model, 'tables', record) as Record<string, unknown>;
+    expect(body['discountReasons']).toEqual(['Cortesia', 'Cliente abituale', 'Amico']);
+    expect(body['deleteReasons']).toEqual(['Errore']);
+    expect(body['tableIdleMinutes']).toBe(30);
+    expect(toModel(null).tables.discountReasons).toEqual([]);
+    const junk = toModel({ ...record, tables: { discountReasons: ['a', 3, null] } });
+    expect(junk.tables.discountReasons).toEqual(['a']);
+  });
+
   it('writes the reservation time blocks and the durations in milliseconds', () => {
     const model = modelOf();
     model.reservations.f['step'] = '30';
@@ -589,7 +605,11 @@ describe('new rows', () => {
       automaticCashUsername: { set: false, value: '', clear: false },
       printStations: [],
     });
-    expect(newPrintStation()).toMatchObject({ id: '', driver: 'EPSON-EPOS-PRINT', pulseNumber: '' });
+    expect(newPrintStation()).toMatchObject({
+      id: '',
+      driver: 'EPSON-EPOS-PRINT',
+      pulseNumber: '',
+    });
     expect(newProductionCenter()).toEqual({ id: '', withoutId: false, name: '', capacity: '' });
     expect(newTable('T9', '4')).toMatchObject({
       id: '',
@@ -699,7 +719,9 @@ describe('the lists of the place', () => {
           editable: true,
         },
         printStations: {
-          stations: [{ id: 's', withoutId: true, name: 1, pulseNumber: 'x', summaryCategoriesIds: 'no' }],
+          stations: [
+            { id: 's', withoutId: true, name: 1, pulseNumber: 'x', summaryCategoriesIds: 'no' },
+          ],
           productionCenters: [{ id: 'c', withoutId: true, capacity: 'x' }],
           stationsEditable: true,
           productionCentersEditable: true,
@@ -710,7 +732,9 @@ describe('the lists of the place', () => {
               ...ROOM,
               withoutId: true,
               view: 'x',
-              tables: [{ id: 't', withoutId: true, view: { w: 'x', h: 3, x: 'y', y: 2, shape: 'oval' } }],
+              tables: [
+                { id: 't', withoutId: true, view: { w: 'x', h: 3, x: 'y', y: 2, shape: 'oval' } },
+              ],
             },
             { ...ROOM, view: { type: 'other', status: 'x', h: 'x', w: 4 } },
           ],
@@ -732,7 +756,10 @@ describe('the lists of the place', () => {
       pulseNumber: '',
       summaryCategoriesIds: [],
     });
-    expect(model.printStations.productionCenters[0]).toMatchObject({ withoutId: true, capacity: '' });
+    expect(model.printStations.productionCenters[0]).toMatchObject({
+      withoutId: true,
+      capacity: '',
+    });
     expect(model.rooms.items[0]).toMatchObject({
       withoutId: true,
       view: { type: '', status: false, h: 8, w: 8 },
@@ -768,15 +795,66 @@ describe('the lists of the place', () => {
     expect(body.items[2]).not.toHaveProperty('automaticCashUsername');
   });
 
+  it('reads and writes the MultiSafepay settings of a device, trimming the terminals', () => {
+    const stored = fakePlace({
+      devices: {
+        editable: true,
+        items: [
+          {
+            ...DEVICE_1,
+            multisafepayAppStatus: true,
+            multisafepayQrStatus: true,
+            multisafepayTerminals: [{ terminalId: 'T1', name: 'Sala' }],
+          },
+        ],
+      },
+    });
+    const model = toModel(stored);
+    expect(model.devices.items[0]).toMatchObject({
+      multisafepayAppStatus: true,
+      multisafepayQrStatus: true,
+      multisafepayTerminals: [{ terminalId: 'T1', name: 'Sala' }],
+    });
+    model.devices.items[0].multisafepayTerminals.push({ terminalId: ' T2 ', name: ' Bar ' });
+    const body = blockBody(model, 'devices', stored) as { items: Record<string, unknown>[] };
+    expect(body.items[0]).toMatchObject({
+      multisafepayAppStatus: true,
+      multisafepayQrStatus: true,
+      multisafepayTerminals: [
+        { terminalId: 'T1', name: 'Sala' },
+        { terminalId: 'T2', name: 'Bar' },
+      ],
+    });
+    expect(newDevice()).toMatchObject({
+      multisafepayAppStatus: false,
+      multisafepayQrStatus: false,
+      multisafepayTerminals: [],
+    });
+    const bare = { ...DEVICE_1 } as Record<string, unknown>;
+    delete bare['multisafepayTerminals'];
+    expect(
+      toModel({ ...stored, devices: { editable: true, items: [bare as never] } }).devices.items[0]
+        .multisafepayTerminals,
+    ).toEqual([]);
+  });
+
   it('writes the print stations and the production centers, omitting the locked lists', () => {
     const model = modelOf();
     model.printStations.stations.push({ ...newPrintStation(), name: 'Bar', pulseNumber: '2' });
-    model.printStations.productionCenters.push({ ...newProductionCenter(), name: 'Pizza', capacity: '3' });
+    model.printStations.productionCenters.push({
+      ...newProductionCenter(),
+      name: 'Pizza',
+      capacity: '3',
+    });
     const body = blockBody(model, 'printStations', fakePlace()) as {
       stations: Record<string, unknown>[];
       productionCenters: Record<string, unknown>[];
     };
-    expect(body.stations[0]).toMatchObject({ id: STATION.id, pulseNumber: 1, pulseNumberSecondary: null });
+    expect(body.stations[0]).toMatchObject({
+      id: STATION.id,
+      pulseNumber: 1,
+      pulseNumberSecondary: null,
+    });
     expect(body.stations[1]).toMatchObject({ name: 'Bar', pulseNumber: 2 });
     expect(body.stations[1]).not.toHaveProperty('id');
     expect(body.productionCenters).toEqual([
@@ -852,7 +930,9 @@ describe('integrations and dealer settings', () => {
     expect(model.integrations.secrets['tsh.id'].set).toBe(false);
     expect(model.integrations.secrets['tsh.secret'].set).toBe(true);
     expect(secretKeys(model)).toContain('plateform.password');
-    expect(Object.values(model.integrations.secrets).every((secret) => secret.value === '')).toBe(true);
+    expect(Object.values(model.integrations.secrets).every((secret) => secret.value === '')).toBe(
+      true,
+    );
   });
 
   it('has no credential set for a new place', () => {

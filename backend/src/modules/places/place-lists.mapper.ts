@@ -12,6 +12,13 @@ export type DomainItem = Record<string, unknown>;
 const wholeNumber = (value: unknown): number | null => ((n) => (n !== null && Number.isInteger(n) ? n : null))(numberOf(value));
 const textsOf = (value: unknown): string[] => (Array.isArray(value) ? (value as unknown[]).filter((item): item is string => typeof item === 'string') : []);
 
+/** The terminals of a stored device: the entries with a text `terminalId`, each cut to `{ terminalId, name }` (an empty or missing name is the `terminalId`, as the legacy form saves it). */
+const terminalsOf = (value: unknown): Array<{ terminalId: string; name: string }> =>
+  (Array.isArray(value) ? (value as unknown[]) : []).flatMap((entry) => {
+    const terminalId = isPlain(entry) ? entry['terminalId'] : undefined;
+    return typeof terminalId === 'string' && terminalId !== '' ? [{ terminalId, name: typeof (entry as Document)['name'] === 'string' && (entry as Document)['name'] !== '' ? ((entry as Document)['name'] as string) : terminalId }] : [];
+  });
+
 /**
  * The value a key of the domain has when the document has none (what a new item takes for a key the request leaves out).
  *
@@ -31,6 +38,7 @@ export function defaultOf(kind: ItemFieldKind): unknown {
     case 'num':
       return null;
     case 'refs':
+    case 'terminals':
     case 'list':
       return [];
     case 'object':
@@ -54,6 +62,8 @@ function readValue(kind: ItemFieldKind, stored: unknown): unknown {
       return numberOf(stored);
     case 'refs':
       return textsOf(stored);
+    case 'terminals':
+      return terminalsOf(stored);
     case 'object':
       return readFields(kind.fields, isPlain(stored) ? stored : {});
     case 'list':

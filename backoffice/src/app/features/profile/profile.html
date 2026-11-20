@@ -102,7 +102,11 @@
       @if (showPos()) {
         <section aria-labelledby="pos-heading">
           <h3 id="pos-heading">{{ 'PROFILE.POS_PREFERENCES' | t }}</h3>
-          <fc-pos-options-fields [options]="options" [favorites]="favorites()" />
+          <fc-pos-options-fields
+            [options]="options"
+            [favorites]="favorites()"
+            [rooms]="hasRooms()"
+          />
         </section>
       }
     </form>

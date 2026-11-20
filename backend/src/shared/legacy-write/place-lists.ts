@@ -30,6 +30,8 @@ export type ItemFieldKind =
   | { readonly t: 'secret'; readonly max: number }
   /** An object of keys written one by one; every key the document has besides them is kept. */
   | { readonly t: 'object'; readonly fields: Readonly<Record<string, ItemFieldKind>> }
+  /** The terminals of a MultiSafepay device: a list of `{ terminalId, name }` without ids, written as a whole (the legacy shape); at most `max`, `terminalId` unique in the list. */
+  | { readonly t: 'terminals'; readonly max: number }
   /** A list of items with their own id. */
   | { readonly t: 'list'; readonly item: ItemDef; readonly max: number };
 
@@ -63,6 +65,9 @@ const REF: ItemFieldKind = { t: 'ref' };
 const enumOf = (values: readonly string[], def = ''): ItemFieldKind => ({ t: 'enum', values, def });
 const int = (min: number, max: number, def: number | null = null): ItemFieldKind => ({ t: 'int', min, max, def });
 const secret = (max: number): ItemFieldKind => ({ t: 'secret', max });
+
+/** Most MultiSafepay terminals of a device. */
+export const MAX_MULTISAFEPAY_TERMINALS = 20;
 
 /** The kinds of device of the old backoffice (`name="device-type"`). */
 export const DEVICE_TYPES = Object.freeze(['desk', 'handheld', 'ordering', 'room-handheld', 'selfordering', 'waiting-list', 'external-display', 'kiosk', 'tgm'] as const);
@@ -142,6 +147,9 @@ export const PLACE_LISTS = Object.freeze({
       posProtocol17port: text(10),
       posProtocol17terminalId: text(64),
       posDojoTerminalId: text(64),
+      multisafepayAppStatus: FLAG,
+      multisafepayQrStatus: FLAG,
+      multisafepayTerminals: { t: 'terminals', max: MAX_MULTISAFEPAY_TERMINALS },
       externalDisplayId: REF,
       secondaryCompanyPrinterId: REF,
       favoritesId: REF,

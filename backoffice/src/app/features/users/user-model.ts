@@ -4,7 +4,9 @@ import {
   AUTOMATIC_CASH_DEVICES,
   AutomaticCashGrants,
   POS_BOOLEAN_OPTIONS,
+  POS_CHOICE_DEFAULTS,
   POS_FLAGS,
+  POS_GRANTS_ON_BY_DEFAULT,
   PosBooleanOption,
   PosFlag,
   PosPriceList,
@@ -32,6 +34,12 @@ export type PosOptionsModel = Record<PosBooleanOption, boolean> & {
   roomsTablesColumns: string;
   roomsTablesColumnsHandheld: string;
   roomsGridZoomHandheld: string;
+  productsColorStyle: string;
+  handheldTextZoom: string;
+  handheldCategoriesLayout: string;
+  handheldCategoriesRows: string;
+  handheldProductsColumns: string;
+  handheldMenuPosition: string;
   quickDiscount: string;
   defaultPriceListId: string;
   priceLists: PosPriceList[];
@@ -86,6 +94,8 @@ export function blankPos(): PosModel {
     enabled: false,
     grants: {
       ...falseFlags(POS_FLAGS),
+      // The apps are on for a user unless turned off (what the server gives a new user).
+      ...Object.fromEntries(POS_GRANTS_ON_BY_DEFAULT.map((flag) => [flag, true])),
       discountMaxPercentage: '',
       servicePercentage: '',
       automaticCash: emptyAutomaticCash(),
@@ -102,6 +112,7 @@ export function blankPos(): PosModel {
       roomsTablesColumns: '',
       roomsTablesColumnsHandheld: '',
       roomsGridZoomHandheld: '',
+      ...POS_CHOICE_DEFAULTS,
       quickDiscount: '',
       defaultPriceListId: '',
       priceLists: [],
@@ -117,7 +128,9 @@ export function posModelOf(pos: UserPos): PosModel {
   const blank = blankPos();
   const grants = { ...blank.grants, automaticCash: emptyAutomaticCash() } as PosGrantsModel;
   for (const flag of POS_FLAGS) {
-    grants[flag] = pos.grants[flag] === true;
+    grants[flag] = POS_GRANTS_ON_BY_DEFAULT.includes(flag)
+      ? pos.grants[flag] !== false
+      : pos.grants[flag] === true;
   }
   grants.discountMaxPercentage = text(pos.grants.discountMaxPercentage);
   grants.servicePercentage = text(pos.grants.servicePercentage);
@@ -141,6 +154,12 @@ export function posModelOf(pos: UserPos): PosModel {
   options.roomsTablesColumns = text(pos.options.roomsTablesColumns);
   options.roomsTablesColumnsHandheld = text(pos.options.roomsTablesColumnsHandheld);
   options.roomsGridZoomHandheld = text(pos.options.roomsGridZoomHandheld);
+  options.productsColorStyle = text(pos.options.productsColorStyle);
+  options.handheldTextZoom = text(pos.options.handheldTextZoom);
+  options.handheldCategoriesLayout = text(pos.options.handheldCategoriesLayout);
+  options.handheldCategoriesRows = text(pos.options.handheldCategoriesRows);
+  options.handheldProductsColumns = text(pos.options.handheldProductsColumns);
+  options.handheldMenuPosition = text(pos.options.handheldMenuPosition);
   options.quickDiscount = text(pos.options.quickDiscount);
   options.defaultPriceListId = text(pos.options.defaultPriceListId);
   options.priceLists = pos.options.priceLists.map((list) => ({ ...list }));

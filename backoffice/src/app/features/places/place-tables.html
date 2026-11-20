@@ -9,4 +9,20 @@
     (add)="add()"
     (remove)="remove($event)"
   />
+  <fc-reasons-editor
+    [reasons]="state.form.tables.discountReasons"
+    [legend]="'PLACES.TABLES.DISCOUNT_REASONS' | t"
+    [addLabel]="'PLACES.TABLES.ADD_REASON' | t"
+    [max]="maxReasons"
+    (add)="addReason('discountReasons')"
+    (remove)="removeReason('discountReasons', $event)"
+  />
+  <fc-reasons-editor
+    [reasons]="state.form.tables.deleteReasons"
+    [legend]="'PLACES.TABLES.DELETE_REASONS' | t"
+    [addLabel]="'PLACES.TABLES.ADD_REASON' | t"
+    [max]="maxReasons"
+    (add)="addReason('deleteReasons')"
+    (remove)="removeReason('deleteReasons', $event)"
+  />
 </form>

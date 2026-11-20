@@ -31,6 +31,7 @@ export const FIELD_ISSUES = [
   'sameAsUsername',
   'invalidCharacters',
   'mismatch',
+  'semicolon',
 ] as const;
 
 /** Name of a known field issue. */

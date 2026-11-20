@@ -57,6 +57,8 @@ export interface FieldDef {
   readonly noneKey?: string;
   /** Only platform administrators and dealers may change the key. */
   readonly reserved?: boolean;
+  /** A `select` whose values are whole numbers (the API holds numbers, the form text). */
+  readonly numeric?: boolean;
   /** A payment credential: only platform administrators and dealers may set or remove it (the others see whether it is set). */
   readonly privilegedOnly?: boolean;
 }
@@ -478,6 +480,15 @@ export const FIELDS: Readonly<Record<SettingsBlockName, readonly FieldDef[]>> = 
     { key: 'resetRoomsNumber', type: 'int', group: 'GENERAL' },
     { key: 'resetDeliveryNumber', type: 'int', group: 'GENERAL' },
     { key: 'roomsGridHandhelds', type: 'flag', group: 'GENERAL' },
+    {
+      key: 'tableIdleMinutes',
+      type: 'select',
+      group: 'ROOMS',
+      values: ['15', '20', '30'],
+      numeric: true,
+    },
+    { key: 'variantsPerRow', type: 'flag', group: 'ROOMS' },
+    { key: 'reasonsFreeText', type: 'flag', group: 'REASONS' },
     { key: 'tableGroups.status', type: 'flag', group: 'TABLE_GROUPS' },
     { key: 'tableGroups.name', type: 'flag', group: 'TABLE_GROUPS' },
     { key: 'tableGroups.autoCreateFirst', type: 'flag', group: 'TABLE_GROUPS' },
@@ -691,6 +702,22 @@ export const FIELDS: Readonly<Record<SettingsBlockName, readonly FieldDef[]>> = 
     { key: 'satispay.activationCode', type: 'secret', group: 'SATISPAY', privilegedOnly: true },
     { key: 'satispay.type', type: 'select', group: 'SATISPAY', values: ['checkin', 'qrcode'] },
     { key: 'satispay.keyId', type: 'secret', group: 'SATISPAY', privilegedOnly: true },
+    { key: 'multisafepay.status', type: 'flag', group: 'MULTISAFEPAY', reserved: true },
+    { key: 'multisafepay.terminalGroupId', type: 'text', group: 'MULTISAFEPAY' },
+    {
+      key: 'multisafepay.terminalGroupApiKey',
+      type: 'secret',
+      group: 'MULTISAFEPAY',
+      privilegedOnly: true,
+    },
+    {
+      key: 'multisafepay.websiteApiKey',
+      type: 'secret',
+      group: 'MULTISAFEPAY',
+      privilegedOnly: true,
+    },
+    { key: 'multisafepay.qrStatus', type: 'flag', group: 'MULTISAFEPAY', reserved: true },
+    { key: 'multisafepay.qrSecondsActive', type: 'int', group: 'MULTISAFEPAY', def: 600 },
     { key: 'qodeup.status', type: 'flag', group: 'QODEUP', reserved: true },
     { key: 'qodeup.apiKey', type: 'secret', group: 'QODEUP', privilegedOnly: true },
     { key: 'bizerba.status', type: 'flag', group: 'BIZERBA', reserved: true },
@@ -848,6 +875,14 @@ export function toFieldValue(definition: FieldDef, raw: unknown): FieldValue {
       return typeof raw === 'number' ? String(raw) : '';
     case 'duration':
       return typeof raw === 'number' ? String(raw / MINUTE) : '';
+    case 'select':
+      return definition.numeric === true
+        ? typeof raw === 'number'
+          ? String(raw)
+          : ''
+        : typeof raw === 'string'
+          ? raw
+          : '';
     default:
       return typeof raw === 'string' ? raw : '';
   }
@@ -874,6 +909,8 @@ export function toBodyValue(definition: FieldDef, value: FieldValue): unknown {
       return text === '' ? (definition.def ?? null) : Number(text);
     case 'duration':
       return text === '' ? (definition.def ?? null) : Math.round(Number(text) * MINUTE);
+    case 'select':
+      return text === '' ? null : definition.numeric === true ? Number(text) : text;
     default:
       return text === '' ? null : text;
   }

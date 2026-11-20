@@ -52,6 +52,8 @@ const SECRETS: ReadonlyArray<readonly [string, string]> = [
   ['tsh.secret', 'fake-tsh-secret'],
   ['phlex.username', 'fake-phlex-user'],
   ['phlex.password', 'fake-phlex-pass'],
+  ['multisafepay.terminalGroupApiKey', 'fake-msp-group-key'],
+  ['multisafepay.websiteApiKey', 'fake-msp-site-key'],
 ];
 const nested = (dotted: string, value: unknown): Record<string, unknown> => dotted.split('.').reduceRight<unknown>((inner, key) => ({ [key]: inner }), value) as Record<string, unknown>;
 /** Lays a tree over another, key by key. */
@@ -280,6 +282,7 @@ describe('PUT …/integrations: the credentials of the payments', () => {
       [{ floodPay: { stripe: { webhookPrivateKey: 'whsec_fakewebhooksecret123', publicKey: 'pk_test_abc' } } }, ['integrations.floodPay.stripe.publicKey', 'integrations.floodPay.stripe.webhookPrivateKey']], // gitleaks:allow (fake test value)
       [{ satispay: { activationCode: 'ABC123', keyId: 'fake-satispay-key-id' } }, ['integrations.satispay.activationCode', 'integrations.satispay.keyId']],
       [{ qodeup: { apiKey: 'fake-qodeup-key-1' } }, ['integrations.qodeup.apiKey']],
+      [{ multisafepay: { terminalGroupApiKey: 'fake-msp-group-key', websiteApiKey: 'fake-msp-site-key' } }, ['integrations.multisafepay.terminalGroupApiKey', 'integrations.multisafepay.websiteApiKey']],
     ];
     for (const actor of [sa(), ca()]) {
       for (const [integrations, fields] of attempts) {

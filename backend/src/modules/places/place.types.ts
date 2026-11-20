@@ -103,6 +103,12 @@ export interface PlaceDevice {
   readonly posProtocol17port: string;
   readonly posProtocol17terminalId: string;
   readonly posDojoTerminalId: string;
+  /** MultiSafepay App-to-App payment on the device. */
+  readonly multisafepayAppStatus: boolean;
+  /** MultiSafepay QR Code payment on the device. */
+  readonly multisafepayQrStatus: boolean;
+  /** The MultiSafepay terminals of the device (at most 20, `terminalId` unique): `terminalId` 1 to 64 of `[A-Za-z0-9_-]`, `name` 1 to 100 characters. The list is written as a whole. */
+  readonly multisafepayTerminals: ReadonlyArray<{ readonly terminalId: string; readonly name: string }>;
   /** The id of a device of type `external-display` of the place, `''` for none. */
   readonly externalDisplayId: string;
   /** The id of a device of type `tgm` of the place, `''` for none. */

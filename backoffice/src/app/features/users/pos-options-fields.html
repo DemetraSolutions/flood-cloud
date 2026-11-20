@@ -6,7 +6,36 @@
         @for (flag of group.flags; track flag) {
           <fc-checkbox [formField]="options()[flag]" [label]="optionLabel(flag)" />
         }
+        @if (group.id === 'PRODUCTS') {
+          <fc-select
+            [formField]="options().productsColorStyle"
+            [label]="choiceLabel('productsColorStyle')"
+            [options]="choiceOptions('productsColorStyle')"
+            [error]="error(options().productsColorStyle)"
+          />
+        }
       </div>
+    </fieldset>
+  }
+  @if (rooms()) {
+    <fieldset>
+      <legend>{{ 'USERS.POS.OPTION_GROUP.RESTAURANT' | t }}</legend>
+      <div class="grid">
+        <fc-checkbox [formField]="options().roomsLegend" [label]="optionLabel('roomsLegend')" />
+      </div>
+      <fieldset>
+        <legend>{{ 'USERS.POS.OPTION_GROUP.HANDHELD' | t }}</legend>
+        <div class="grid">
+          @for (name of handheldChoices; track name) {
+            <fc-select
+              [formField]="options()[name]"
+              [label]="choiceLabel(name)"
+              [options]="choiceOptions(name)"
+              [error]="error(options()[name])"
+            />
+          }
+        </div>
+      </fieldset>
     </fieldset>
   }
   <fieldset>

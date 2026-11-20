@@ -129,6 +129,11 @@ const WHOLE: Readonly<Record<WholeName, Codec>> = {
     read: (value) => list(value).flatMap((category) => (typeof category['id'] === 'string' && typeof category['name'] === 'string' ? [{ id: category['id'], name: category['name'] }] : [])),
     write: (value) => value,
   },
+  // The reasons of a discount or of a deletion: texts, in the order the user gave them.
+  reasons: {
+    read: (value) => (Array.isArray(value) ? (value as unknown[]).filter((item): item is string => typeof item === 'string') : []),
+    write: (value) => value,
+  },
   // The texts by language: a write sets the languages of the request and keeps the others the document has.
   languageTexts: {
     read: (value) => Object.fromEntries(Object.entries(isPlain(value) ? value : {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
@@ -140,7 +145,7 @@ const WHOLE: Readonly<Record<WholeName, Codec>> = {
 export function codecOf(kind: SettingKind): Codec {
   switch (kind.t) {
     case 'flag':
-      return flag;
+      return kind.def === true ? { read: (value) => value !== false, write: (value) => value } : flag;
     case 'text':
       return { read: nonEmptyOrNull, write: (value) => value };
     case 'plain':
@@ -152,6 +157,8 @@ export function codecOf(kind: SettingKind): Codec {
       return { read: (value) => typeof value === 'string' && value !== '', write: (value) => value };
     case 'enum':
       return { read: (value) => (typeof value === 'string' && kind.values.includes(value) ? value : kind.def), write: (value) => value ?? kind.def };
+    case 'intOf':
+      return { read: (value) => ((n) => (n !== null && kind.values.includes(n) ? n : kind.def))(numberOf(value)), write: (value) => value };
     case 'font':
       return { read: (value) => (typeof value === 'string' && FONT.test(value) ? value : kind.def), write: (value) => value };
     case 'color':

@@ -3,7 +3,8 @@ import { FieldTree, FormField } from '@angular/forms/signals';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import {
-  POS_CHOICE_NAMES,
+  POS_GENERAL_CHOICES,
+  POS_HANDHELD_CHOICES,
   POS_CHOICES,
   POS_OPTION_GROUPS,
   PosChoice,
@@ -40,9 +41,13 @@ export class PosOptionsFields {
   readonly options = input.required<FieldTree<PosOptionsModel>>();
   /** Favorites lists of the group; `null` when the user cannot read them. */
   readonly favorites = input<readonly FavoritesChoice[] | null>(null);
+  /** Whether the group has the rooms feature: only then the room and handheld options are offered. */
+  readonly rooms = input(false);
 
-  protected readonly groups = POS_OPTION_GROUPS;
-  protected readonly choices = POS_CHOICE_NAMES;
+  /** The groups of checkboxes; the restaurant group has its own block (rooms only). */
+  protected readonly groups = POS_OPTION_GROUPS.filter((group) => group.id !== 'RESTAURANT');
+  protected readonly choices = POS_GENERAL_CHOICES;
+  protected readonly handheldChoices = POS_HANDHELD_CHOICES;
 
   protected readonly favoriteOptions = computed(() =>
     (this.favorites() ?? []).map((list) => ({ value: list.id, label: list.name })),
@@ -71,7 +76,13 @@ export class PosOptionsFields {
     if (name === 'roomsGridZoomHandheld') {
       return `${value}x`;
     }
+    if (name === 'handheldTextZoom') {
+      return `${value} %`;
+    }
     if (name === 'roomsTablesColumns' || name === 'roomsTablesColumnsHandheld') {
+      return value;
+    }
+    if (name === 'handheldCategoriesRows') {
       return value;
     }
     return this.i18n.t(

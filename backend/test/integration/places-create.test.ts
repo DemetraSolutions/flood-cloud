@@ -88,7 +88,7 @@ describe('POST /v1/groups/{groupId}/places', () => {
     assert.deepEqual((document['openingTime'] as Document)['daySpecial'], {});
     // No credential and no value of the integrations is invented: every switch off and every secret empty.
     const integrations = document['integrations'] as Record<string, Document>;
-    assert.equal(Object.keys(integrations).length, 16);
+    assert.equal(Object.keys(integrations).length, 17);
     assert.ok(Object.values(integrations).every((integration) => integration['status'] === false));
     assert.deepEqual([integrations['dojo'], integrations['plateform']], [{ status: false, apiKey: null }, { status: false, username: null, password: null }]);
     assert.equal(integrations['floodPay']!['stripe'] !== undefined && JSON.stringify(integrations['floodPay']!['stripe']), JSON.stringify({ publicKey: null, privateKey: null, webhookPrivateKey: null }));

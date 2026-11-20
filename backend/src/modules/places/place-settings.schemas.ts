@@ -1,6 +1,6 @@
 import { SETTING_BLOCKS } from '../../shared/legacy-write/place-settings.ts';
 import type { SettingField, SettingKind, WholeName } from '../../shared/legacy-write/place-settings.ts';
-import { array, boolean, enumOf, integer, nullable, number, object, optional, record, string } from '../../shared/validation/schema.ts';
+import { array, boolean, enumOf, integer, nullable, number, object, optional, personName, record, refine, string, transform } from '../../shared/validation/schema.ts';
 import type { Schema } from '../../shared/validation/schema.ts';
 import { emptyAsNull, fileNameText, logoValue, urlText } from '../companies/companies.schemas.ts';
 import type { Part } from '../companies/companies.schemas.ts';
@@ -10,6 +10,16 @@ export const MAX_SETTING_ITEMS = 500;
 const MAX_PAYMENT_TYPES = 50;
 const MAX_LANGUAGES = 20;
 const MAX_PRICE_LISTS = 50;
+
+/** Most reasons of a list and the longest reason. */
+export const MAX_REASONS = 50;
+export const MAX_REASON_LENGTH = 100;
+
+/** The indexes of the reasons that repeat an earlier one, compared without the case. */
+const duplicatedReasons = (reasons: readonly string[]): string[] => {
+  const seen = new Set<string>();
+  return reasons.flatMap((reason, index) => (seen.size === seen.add(reason.toLowerCase()).size ? [String(index)] : []));
+};
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const id = () => string({ min: 1, max: 64, pattern: ID });
@@ -66,6 +76,9 @@ function wholeSchema(name: WholeName): Schema<unknown> {
       return record(string({ max: 64, pattern: ID }), { max: MAX_SETTING_ITEMS, key: ID });
     case 'tshCategories':
       return array(object({ id: string({ max: 64 }), name: string({ max: 200 }) }), { max: MAX_SETTING_ITEMS });
+    case 'reasons':
+      // Each reason is a trimmed text (no `;`: the legacy backoffice joins and splits the list with it) of 1 to 100 characters without control characters; two reasons that differ only by case are the same reason.
+      return refine(array(transform(personName(MAX_REASON_LENGTH), (reason) => (reason.includes(';') ? undefined : reason), 'format'), { max: MAX_REASONS }), duplicatedReasons, 'incorrect');
   }
 }
 
@@ -90,6 +103,8 @@ function kindSchema(field: SettingField): Schema<unknown> {
       return optional(boolean());
     case 'enum':
       return kind.def === null ? emptyAsNull(nullable(enumOf(kind.values))) : enumOf(kind.values);
+    case 'intOf':
+      return transform(integer(), (value) => (kind.values.includes(value) ? value : undefined), 'enum');
     case 'font':
       // The form (`R-C`) is checked by the service where the value changes, so a historical value sent back unchanged is accepted.
       return string({ max: 3 });

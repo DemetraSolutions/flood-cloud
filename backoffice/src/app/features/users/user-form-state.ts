@@ -36,6 +36,7 @@ import {
   AutomaticCashDevice,
   PosFlag,
   POS_FLAGS,
+  POS_GRANTS_ON_BY_DEFAULT,
 } from '../../core/users/pos.catalog';
 import { PIN_PATTERN } from '../../core/users/pin';
 import { initialsOf } from '../../shared/ui/avatar/avatar';
@@ -202,6 +203,11 @@ export class UserFormState {
       hasGroupDuties(this.role())
     );
   });
+  /** Whether the group of the user has the rooms feature (the handheld app and the room options). */
+  readonly roomsApply = computed(() => {
+    const groupId = this.groupId();
+    return groupId !== undefined && this.features.enabledFor(groupId, 'rooms');
+  });
   readonly posGrantsEditable = computed(
     () => this.posApplies() && this.canWrite() && this.canManagePermissions() && !this.isNew(),
   );
@@ -229,9 +235,12 @@ export class UserFormState {
 
   /** Whether the actor may give a POS permission (an aid): see {@link UserFormState}. */
   canGiveFlag(flag: PosFlag): boolean {
-    return (
-      this.posFree() || this.baseline().pos.grants[flag] || this.actorPos()?.grants[flag] === true
-    );
+    if (this.posFree() || this.baseline().pos.grants[flag]) {
+      return true;
+    }
+    // What the actor holds; the two app switches are on for an actor who has no value stored.
+    const held = this.actorPos()?.grants[flag];
+    return POS_GRANTS_ON_BY_DEFAULT.includes(flag) ? held !== false : held === true;
   }
 
   /** Whether the actor may give a flag of an automatic cash device (an aid). */

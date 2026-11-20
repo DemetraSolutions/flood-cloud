@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormField } from '@angular/forms/signals';
+import { FieldTree, FormField } from '@angular/forms/signals';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { Button } from '../../shared/ui/button/button';
@@ -9,7 +9,10 @@ import { StatusBadge } from '../../shared/ui/status-badge/status-badge';
 import { TextField } from '../../shared/ui/text-field/text-field';
 import { withCurrent } from '../companies/company-options';
 import { CredentialField } from './credential-field';
-import { DeviceRow, newDevice } from './place-model';
+import { DeviceRow, newDevice, TerminalRow } from './place-model';
+
+/** The form fields of a MultiSafepay terminal. */
+type TerminalTree = { [K in keyof TerminalRow]: FieldTree<string> };
 import { PlaceState } from './place-state';
 
 /** The nine device types, in the order of the old form. */
@@ -52,6 +55,9 @@ export const AUTOMATIC_CASH_DRIVERS: readonly string[] = [
   'GLORY-CI5-XCASH',
   'GLORY-CI10-XCASH',
 ];
+
+/** Most MultiSafepay terminals a device can have. */
+export const MAX_TERMINALS = 20;
 
 /** The blocks of the form of a device that only some types have. */
 export type DeviceBlock =
@@ -114,6 +120,7 @@ export class PlaceDevices {
     this.state.favorites().map((group) => ({ value: group.id, label: group.name })),
   );
 
+  protected readonly maxTerminals = MAX_TERMINALS;
   protected readonly fiscalDrivers = FISCAL_DRIVERS;
   protected readonly secondaryDrivers = SECONDARY_DRIVERS;
   protected readonly cashDrivers = AUTOMATIC_CASH_DRIVERS;
@@ -197,6 +204,49 @@ export class PlaceDevices {
 
   protected toggle(index: number): void {
     this.opened.update((current) => (current === index ? null : index));
+  }
+
+  /** The form fields of the MultiSafepay terminals of a device. */
+  protected terminalsOf(index: number): readonly TerminalTree[] {
+    return [...(this.items[index].multisafepayTerminals as unknown as Iterable<TerminalTree>)];
+  }
+
+  /** Label of a control of a terminal (the terminals of a device are numbered from 1). */
+  protected terminalLabel(key: string, position: number): string {
+    return this.i18n.t(`PLACES.DEVICES.${key}`, { number: position + 1 });
+  }
+
+  protected addTerminal(index: number): void {
+    this.state.edit('devices', (block) => ({
+      ...block,
+      items: block.items.map((device, at) =>
+        at === index
+          ? {
+              ...device,
+              multisafepayTerminals: [
+                ...device.multisafepayTerminals,
+                { terminalId: '', name: '' },
+              ],
+            }
+          : device,
+      ),
+    }));
+  }
+
+  protected removeTerminal(index: number, position: number): void {
+    this.state.edit('devices', (block) => ({
+      ...block,
+      items: block.items.map((device, at) =>
+        at === index
+          ? {
+              ...device,
+              multisafepayTerminals: device.multisafepayTerminals.filter(
+                (_, current) => current !== position,
+              ),
+            }
+          : device,
+      ),
+    }));
   }
 
   protected hasStation(device: DeviceRow, id: string): boolean {

@@ -107,12 +107,13 @@ describe('PlaceIntegrations', () => {
   it('shows a card for each provider, in the order of the old backoffice', async () => {
     const view = await open();
     const legends = [...view.root.querySelectorAll('legend')].map((l) => l.textContent?.trim());
-    expect(legends.slice(0, 6)).toEqual([
+    expect(legends.slice(0, 7)).toEqual([
       'PLACES.G.INTEGRATIONS.FLOOD_PAY',
       'PLACES.G.INTEGRATIONS.QR_CODE_PAYMENT',
       'PLACES.G.INTEGRATIONS.TAP_TO_PAY',
       'PLACES.G.INTEGRATIONS.DOJO',
       'PLACES.G.INTEGRATIONS.SATISPAY',
+      'PLACES.G.INTEGRATIONS.MULTISAFEPAY',
       'PLACES.G.INTEGRATIONS.QODEUP',
     ]);
     expect(view.root.querySelectorAll('form')).toHaveLength(1);
@@ -275,5 +276,145 @@ describe('PlaceIntegrations', () => {
     expect(buttonsOf(view, DOJO)).toEqual([]);
     expect(buttonsOf(view, APP_TOKEN)).toEqual([]);
     expect(stateOf(view, DOJO)).toBe('PLACES.CREDENTIAL.SET');
+  });
+
+  describe('MultiSafepay', () => {
+    const GROUP_ID = f('MULTISAFEPAY.TERMINAL_GROUP_ID');
+    const TERMINAL_KEY = f('MULTISAFEPAY.TERMINAL_GROUP_API_KEY');
+    const WEBSITE_KEY = f('MULTISAFEPAY.WEBSITE_API_KEY');
+    const QR_STATUS = f('MULTISAFEPAY.QR_STATUS');
+    const QR_SECONDS = f('MULTISAFEPAY.QR_SECONDS_ACTIVE');
+    const STATUS = f('MULTISAFEPAY.STATUS');
+    const withKeys = () =>
+      fakePlace({
+        integrations: withValue(
+          withValue(storedBlock('integrations'), 'multisafepay.terminalGroupApiKeySet', true),
+          'multisafepay.websiteApiKeySet',
+          true,
+        ),
+      });
+
+    it('is a card after Satispay with the status, the group id, the two keys, the QR switch and its validity', async () => {
+      const view = await open();
+      const card = [...view.root.querySelectorAll('fieldset')].find(
+        (fieldset) =>
+          fieldset.querySelector(':scope > legend')?.textContent?.trim() ===
+          'PLACES.G.INTEGRATIONS.MULTISAFEPAY',
+      ) as HTMLElement;
+      const text = card.textContent as string;
+      const order = [STATUS, GROUP_ID, TERMINAL_KEY, WEBSITE_KEY, QR_STATUS, QR_SECONDS].map(
+        (label) => text.indexOf(label),
+      );
+      expect(order.every((position) => position >= 0)).toBe(true);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(view.control(QR_SECONDS).value).toBe('600');
+    });
+
+    it('sets and removes the two keys, never showing them', async () => {
+      const view = await open({ place: withKeys() });
+      expect(stateOf(view, TERMINAL_KEY)).toBe('PLACES.CREDENTIAL.SET');
+      expect(stateOf(view, WEBSITE_KEY)).toBe('PLACES.CREDENTIAL.SET');
+      expect(credential(view, TERMINAL_KEY).querySelector('input')).toBeNull();
+      await press(view, TERMINAL_KEY, CHANGE);
+      await typeSecret(view, TERMINAL_KEY, 'terminal-secret');
+      await press(view, WEBSITE_KEY, REMOVE);
+      await savePatch(
+        view,
+        sentBlock({
+          multisafepay: { terminalGroupApiKey: 'terminal-secret', websiteApiKey: null },
+        }),
+      );
+    });
+
+    it('keeps a key that was not touched, and sets one that was not set', async () => {
+      const view = await open();
+      expect(buttonsOf(view, TERMINAL_KEY)).toEqual([SET_NEW]);
+      await press(view, WEBSITE_KEY, SET_NEW);
+      await typeSecret(view, WEBSITE_KEY, 'site');
+      await savePatch(view, sentBlock({ multisafepay: { websiteApiKey: 'site' } }));
+    });
+
+    it('sends the configuration: the group id, the QR validity as a number and the switches', async () => {
+      const view = await open();
+      await view.toggle(STATUS, true);
+      await view.toggle(QR_STATUS, true);
+      await view.type(GROUP_ID, 'GRP_1-a');
+      await view.type(QR_SECONDS, '900');
+      let settings = withValue(storedBlock('integrations'), 'multisafepay.status', true);
+      settings = withValue(settings, 'multisafepay.qrStatus', true);
+      settings = withValue(settings, 'multisafepay.terminalGroupId', 'GRP_1-a');
+      settings = withValue(settings, 'multisafepay.qrSecondsActive', 900);
+      await savePatch(view, sentBlock({}, settings));
+    });
+
+    it('sends null for an empty group id and the default validity for an empty one', async () => {
+      const view = await open({
+        place: fakePlace({
+          integrations: withValue(
+            storedBlock('integrations'),
+            'multisafepay.terminalGroupId',
+            'OLD',
+          ),
+        }),
+      });
+      await view.type(GROUP_ID, '');
+      await view.type(QR_SECONDS, '');
+      await savePatch(
+        view,
+        sentBlock({ multisafepay: { terminalGroupId: null, qrSecondsActive: 600 } }),
+      );
+    });
+
+    it('rejects a group id with characters the provider does not use, and a validity out of range', async () => {
+      const view = await open();
+      for (const [label, value, issue] of [
+        [GROUP_ID, 'a b', 'FORM.ISSUE.PATTERN'],
+        [GROUP_ID, 'x'.repeat(65), 'FORM.ISSUE.PATTERN'],
+        [QR_SECONDS, '59', 'FORM.ISSUE.MINIMUM'],
+        [QR_SECONDS, '31536001', 'FORM.ISSUE.MAXIMUM'],
+      ] as const) {
+        await view.type(label, value);
+        view.control(label).dispatchEvent(new Event('blur'));
+        await view.view();
+        expect(view.error(label)).toBe(issue);
+      }
+      await view.type(QR_SECONDS, '60');
+      view.control(QR_SECONDS).dispatchEvent(new Event('blur'));
+      await view.view();
+      expect(view.error(QR_SECONDS)).toBe('');
+    });
+
+    it('puts the 422 of the group id and of a key on their controls', async () => {
+      const view = await open();
+      await view.type(GROUP_ID, 'OK');
+      await press(view, TERMINAL_KEY, SET_NEW);
+      await typeSecret(view, TERMINAL_KEY, 'k');
+      await failSave(view, [
+        { field: 'integrations.multisafepay.terminalGroupId', issue: 'pattern' },
+        { field: 'integrations.multisafepay.terminalGroupApiKey', issue: 'notAllowed' },
+      ]);
+      expect(view.error(GROUP_ID)).toContain('FORM.ISSUE.PATTERN');
+      expect(credential(view, TERMINAL_KEY).textContent).toContain('FORM.ISSUE.NOT_ALLOWED');
+    });
+
+    it.each(LOCKED_ROLES)(
+      'lets a $role change the configuration but not the switches nor the keys',
+      async (profile) => {
+        const view = await open({ place: withKeys(), profile });
+        expect(view.control(STATUS).disabled).toBe(true);
+        expect(view.control(QR_STATUS).disabled).toBe(true);
+        expect(view.control(GROUP_ID).disabled).toBe(false);
+        expect(view.control(QR_SECONDS).disabled).toBe(false);
+        expect(buttonsOf(view, TERMINAL_KEY)).toEqual([]);
+        expect(buttonsOf(view, WEBSITE_KEY)).toEqual([]);
+        expect(stateOf(view, WEBSITE_KEY)).toBe('PLACES.CREDENTIAL.SET');
+      },
+    );
+
+    it.each(['PSA', 'D'] as const)('lets a %s switch it on, with the QR code', async (role) => {
+      const view = await open({ profile: { role } });
+      expect(view.control(STATUS).disabled).toBe(false);
+      expect(view.control(QR_STATUS).disabled).toBe(false);
+    });
   });
 });

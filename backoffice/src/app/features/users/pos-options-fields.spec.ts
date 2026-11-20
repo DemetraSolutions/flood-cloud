@@ -9,11 +9,12 @@ import { blankPos, PosOptionsModel } from './user-model';
 
 @Component({
   imports: [PosOptionsFields],
-  template: `<fc-pos-options-fields [options]="f" [favorites]="favorites()" />`,
+  template: `<fc-pos-options-fields [options]="f" [favorites]="favorites()" [rooms]="rooms()" />`,
 })
 class Host {
   readonly model = signal<PosOptionsModel>(blankPos().options);
   readonly favorites = signal<readonly FavoritesChoice[] | null>(null);
+  readonly rooms = signal(false);
   readonly f = form(this.model, (path) => {
     validate(path.quickDiscount, ({ value }) =>
       value() !== '' && Number.isNaN(Number(value())) ? { kind: 'pattern' } : undefined,
@@ -46,20 +47,73 @@ async function render() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('PosOptionsFields', () => {
-  it('shows the 31 preferences in their four groups', async () => {
+  it('shows the 33 preferences of the four groups, without the room ones when the group has no rooms', async () => {
     const { root } = await render();
     const fieldsets = [...root.querySelectorAll('.stack > fieldset')];
-    const groups = POS_OPTION_GROUPS.map((group) => group.id);
+    const groups = POS_OPTION_GROUPS.filter((group) => group.id !== 'RESTAURANT').map(
+      (group) => group.id,
+    );
     expect(fieldsets.map((f) => f.querySelector('legend')?.textContent)).toEqual([
       ...groups.map((id) => `USERS.POS.OPTION_GROUP.${id}`),
       'USERS.POS.CHOICES',
     ]);
-    POS_OPTION_GROUPS.forEach((group, index) => {
+    POS_OPTION_GROUPS.filter((group) => group.id !== 'RESTAURANT').forEach((group, index) => {
       const boxes = fieldsets[index].querySelectorAll('input[type=checkbox]');
       expect(boxes.length).toBe(group.flags.length);
     });
-    expect(root.querySelectorAll('input[type=checkbox]').length).toBe(31);
-    expect(POS_BOOLEAN_OPTIONS.length).toBe(31);
+    expect(root.querySelectorAll('input[type=checkbox]').length).toBe(33);
+    expect(POS_BOOLEAN_OPTIONS.length).toBe(34);
+    expect(root.textContent).not.toContain('USERS.POS.OPTION.ROOMS_LEGEND');
+    expect(root.textContent).not.toContain('USERS.POS.CHOICE.HANDHELD_TEXT_ZOOM');
+    // The product colour sits with the product preferences.
+    expect(fieldsets[1].textContent).toContain('USERS.POS.CHOICE.PRODUCTS_COLOR_STYLE');
+  });
+
+  it('shows the restaurant preferences and the "Palmare 2.0" group for a group with rooms', async () => {
+    const { root, host, update, optionsOf, fixture } = await render();
+    await update(() => host.rooms.set(true));
+    const legends = [...root.querySelectorAll('legend')].map((l) => l.textContent);
+    expect(legends).toContain('USERS.POS.OPTION_GROUP.RESTAURANT');
+    expect(legends).toContain('USERS.POS.OPTION_GROUP.HANDHELD');
+    expect(root.querySelectorAll('input[type=checkbox]').length).toBe(34);
+    const legend = findControl(fixture, 'USERS.POS.OPTION.ROOMS_LEGEND') as HTMLInputElement;
+    legend.checked = true;
+    legend.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(host.model().roomsLegend).toBe(true);
+    expect(optionsOf('USERS.POS.CHOICE.PRODUCTS_COLOR_STYLE')).toEqual([
+      ['line', 'USERS.POS.CHOICE_VALUE.PRODUCTS_COLOR_STYLE.LINE'],
+      ['fill', 'USERS.POS.CHOICE_VALUE.PRODUCTS_COLOR_STYLE.FILL'],
+    ]);
+    expect(optionsOf('USERS.POS.CHOICE.HANDHELD_TEXT_ZOOM').map(([value]) => value)).toEqual([
+      '85',
+      '90',
+      '95',
+      '100',
+      '105',
+      '110',
+      '115',
+      '120',
+      '125',
+    ]);
+    expect(optionsOf('USERS.POS.CHOICE.HANDHELD_TEXT_ZOOM')[3]).toEqual(['100', '100 %']);
+    expect(optionsOf('USERS.POS.CHOICE.HANDHELD_CATEGORIES_LAYOUT')).toEqual([
+      ['scroll', 'USERS.POS.CHOICE_VALUE.HANDHELD_CATEGORIES_LAYOUT.SCROLL'],
+      ['slidein', 'USERS.POS.CHOICE_VALUE.HANDHELD_CATEGORIES_LAYOUT.SLIDEIN'],
+      ['list', 'USERS.POS.CHOICE_VALUE.HANDHELD_CATEGORIES_LAYOUT.LIST'],
+    ]);
+    expect(optionsOf('USERS.POS.CHOICE.HANDHELD_CATEGORIES_ROWS')).toEqual([
+      ['1', '1'],
+      ['2', '2'],
+    ]);
+    expect(optionsOf('USERS.POS.CHOICE.HANDHELD_PRODUCTS_COLUMNS')[0]).toEqual([
+      '1',
+      'USERS.POS.CHOICE_VALUE.HANDHELD_PRODUCTS_COLUMNS.1',
+    ]);
+    expect(optionsOf('USERS.POS.CHOICE.HANDHELD_MENU_POSITION').map(([v]) => v)).toEqual([
+      'bottom',
+      'top',
+    ]);
   });
 
   it('edits a preference through its checkbox', async () => {
@@ -177,7 +231,7 @@ describe('PosOptionsFields', () => {
     expect(root.querySelector('p.note')?.textContent?.trim()).toBe(
       'USERS.POS.FAVORITES_UNREADABLE {"id":"fav-7"}',
     );
-    expect(root.querySelectorAll('select').length).toBe(9);
+    expect(root.querySelectorAll('select').length).toBe(10);
   });
 
   it('chooses the favorites list among those of the group', async () => {

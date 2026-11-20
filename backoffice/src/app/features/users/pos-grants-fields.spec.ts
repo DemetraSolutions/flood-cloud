@@ -36,7 +36,14 @@ const features = Object.fromEntries(FEATURE_NAMES.map((name) => [name, name === 
 >;
 
 async function render(
-  options: { role?: Role; pos?: UserPos; customPos?: boolean; manage?: boolean } = {},
+  options: {
+    role?: Role;
+    pos?: UserPos;
+    customPos?: boolean;
+    manage?: boolean;
+    rooms?: boolean;
+    userPos?: UserPos;
+  } = {},
 ) {
   TestBed.configureTestingModule({ providers: provideApiTesting() });
   vi.spyOn(TestBed.inject(I18nService), 't').mockImplementation((key) => key);
@@ -44,7 +51,7 @@ async function render(
     role: options.role ?? 'SA',
     permissions: ['users:create', 'users:update'],
     canManagePermissions: options.manage ?? true,
-    groupFeatures: features,
+    groupFeatures: { ...features, rooms: options.rooms ?? true },
     pos: options.pos ?? fakePos(),
   });
   const fixture = TestBed.createComponent(Host);
@@ -57,7 +64,13 @@ async function render(
   if (editing) {
     backend()
       .expectOne(`${API}/v1/groups/665f1c2e9b1d4a0012ab34a1/users/u1`)
-      .flush({ data: fakeUser({ id: 'u1', role: 'CA' }) });
+      .flush({
+        data: fakeUser({
+          id: 'u1',
+          role: 'CA',
+          ...(options.userPos === undefined ? {} : { pos: options.userPos }),
+        }),
+      });
     await settle();
     fixture.detectChanges();
     backend()
@@ -85,7 +98,7 @@ afterEach(() => {
 });
 
 describe('PosGrantsFields', () => {
-  it('shows the 44 permissions in their four groups and the automatic cash devices', async () => {
+  it('shows the 47 permissions in their five groups and the automatic cash devices', async () => {
     const { topFieldsets, checkboxes, root } = await render();
     const fieldsets = topFieldsets();
     expect(fieldsets.map((f) => f.querySelector('legend')?.textContent)).toEqual([
@@ -96,8 +109,8 @@ describe('PosGrantsFields', () => {
       expect(checkboxes(fieldsets[index]).length).toBe(group.flags.length);
     });
     const total = POS_GRANT_GROUPS.reduce((sum, group) => sum + group.flags.length, 0);
-    expect(total).toBe(44);
-    const devices = [...fieldsets[4].querySelectorAll('fieldset')];
+    expect(total).toBe(47);
+    const devices = [...fieldsets[5].querySelectorAll('fieldset')];
     expect(devices.map((d) => d.querySelector('legend')?.textContent)).toEqual(
       AUTOMATIC_CASH_DEVICES.map((device) => `USERS.POS.DEVICE.${deviceKey(device)}`),
     );
@@ -106,7 +119,7 @@ describe('PosGrantsFields', () => {
     });
     expect(root.textContent).toContain('USERS.POS.GRANT.DISCOUNT_REASON');
     expect(root.textContent).toContain('USERS.POS.AUTOMATIC_FLAG.ARCHIVE_ALL');
-    expect(checkboxes(fieldsets[4]).length).toBe(7 + 6 + 5 + 4 + 1);
+    expect(checkboxes(fieldsets[5]).length).toBe(7 + 6 + 5 + 4 + 1);
   });
 
   it('puts the two percentages in the sale group only', async () => {
@@ -114,13 +127,16 @@ describe('PosGrantsFields', () => {
     const fieldsets = topFieldsets();
     const percentages = (scope: HTMLElement) =>
       [...scope.querySelectorAll<HTMLInputElement>('input[inputmode=decimal]')].length;
-    expect(percentages(fieldsets[0])).toBe(2);
-    expect(percentages(fieldsets[1]) + percentages(fieldsets[2]) + percentages(fieldsets[3])).toBe(
-      0,
-    );
-    expect(percentages(fieldsets[4])).toBe(0);
-    expect(fieldsets[0].textContent).toContain('USERS.POS.DISCOUNT_MAX');
-    expect(fieldsets[0].textContent).toContain('USERS.POS.SERVICE_PERCENTAGE');
+    expect(percentages(fieldsets[1])).toBe(2);
+    expect(
+      percentages(fieldsets[0]) +
+        percentages(fieldsets[2]) +
+        percentages(fieldsets[3]) +
+        percentages(fieldsets[4]),
+    ).toBe(0);
+    expect(percentages(fieldsets[5])).toBe(0);
+    expect(fieldsets[1].textContent).toContain('USERS.POS.DISCOUNT_MAX');
+    expect(fieldsets[1].textContent).toContain('USERS.POS.SERVICE_PERCENTAGE');
   });
 
   it('edits permissions, percentages and automatic flags into the form model', async () => {
@@ -143,6 +159,46 @@ describe('PosGrantsFields', () => {
     expect(grants.servicePercentage).toBe('10');
   });
 
+  it('offers "Attiva per palmare" only to a group with rooms', async () => {
+    const withRooms = await render();
+    expect(withRooms.root.textContent).toContain('USERS.POS.GRANT.HANDHELD_ENABLED');
+    expect(withRooms.root.textContent).toContain('USERS.POS.GRANT.CASH_ENABLED');
+    expect(withRooms.root.textContent).toContain('USERS.POS.GRANT.HANDHELD_WALLET');
+    expect(withRooms.checkboxes().length).toBe(47 + 23);
+    withRooms.fixture.destroy();
+    backend().verify();
+    TestBed.resetTestingModule();
+    const without = await render({ rooms: false });
+    expect(without.root.textContent).not.toContain('USERS.POS.GRANT.HANDHELD_ENABLED');
+    expect(without.root.textContent).toContain('USERS.POS.GRANT.CASH_ENABLED');
+    expect(without.checkboxes().length).toBe(46 + 23);
+  });
+
+  it('lets an actor whose app grants are missing give the two that are on by default', async () => {
+    const pos = fakePos();
+    delete (pos.grants as unknown as Record<string, boolean>)['cashEnabled'];
+    delete (pos.grants as unknown as Record<string, boolean>)['handheldEnabled'];
+    const { fixture } = await render({ role: 'CA', pos });
+    expect(
+      (findControl(fixture, 'USERS.POS.GRANT.CASH_ENABLED') as HTMLInputElement).disabled,
+    ).toBe(false);
+    expect(
+      (findControl(fixture, 'USERS.POS.GRANT.HANDHELD_WALLET') as HTMLInputElement).disabled,
+    ).toBe(true);
+  });
+
+  it('does not let an actor give an app switch they have turned off', async () => {
+    const pos = fakePos();
+    pos.grants.cashEnabled = false;
+    const { fixture } = await render({ role: 'CA', pos, userPos: pos });
+    expect(
+      (findControl(fixture, 'USERS.POS.GRANT.CASH_ENABLED') as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (findControl(fixture, 'USERS.POS.GRANT.HANDHELD_ENABLED') as HTMLInputElement).disabled,
+    ).toBe(false);
+  });
+
   it('shows no hint when the actor can give everything', async () => {
     const { hints, checkboxes } = await render();
     expect(hints().filter((hint) => hint === 'USERS.POS.NOT_GRANTABLE')).toEqual([]);
@@ -154,7 +210,7 @@ describe('PosGrantsFields', () => {
     (pos.grants as unknown as Record<string, boolean>)['discount'] = true;
     pos.grants.automaticCash.glory.withdrawal = true;
     const { fixture, topFieldsets, checkboxes, hints } = await render({ role: 'CA', pos });
-    const sale = topFieldsets()[0];
+    const sale = topFieldsets()[1];
     const discount = findControl(fixture, 'USERS.POS.GRANT.DISCOUNT') as HTMLInputElement;
     expect(discount.disabled).toBe(false);
     const priceChange = findControl(fixture, 'USERS.POS.GRANT.PRICE_CHANGE') as HTMLInputElement;
@@ -163,7 +219,7 @@ describe('PosGrantsFields', () => {
     expect(hints(sale).length).toBe(9);
     expect(hints(sale).every((hint) => hint === 'USERS.POS.NOT_GRANTABLE')).toBe(true);
 
-    const cash = topFieldsets()[4];
+    const cash = topFieldsets()[5];
     const glory = findControl(fixture, 'USERS.POS.AUTOMATIC_FLAG.WITHDRAWAL') as HTMLInputElement;
     expect(glory.disabled).toBe(false);
     expect(hints(cash).length).toBe(22);
@@ -172,7 +228,7 @@ describe('PosGrantsFields', () => {
 
   it('does not flag a permission the user already has, even if the actor lacks it', async () => {
     const { fixture, state, checkboxes, hints } = await render({ role: 'CA' });
-    expect(hints().length).toBe(44 + 23);
+    expect(hints().length).toBe(45 + 23);
     const stored = fakePos();
     (stored.grants as unknown as Record<string, boolean>)['discount'] = true;
     stored.grants.automaticCash.vne.tools = true;
@@ -182,8 +238,8 @@ describe('PosGrantsFields', () => {
       .match(`${API}/v1/groups/665f1c2e9b1d4a0012ab34a1/lookup/price-lists`)
       .forEach((request) => request.flush({ data: [] }));
     await fixture.whenStable();
-    expect(hints().length).toBe(43 + 22);
-    expect(checkboxes().filter((box) => box.checked).length).toBe(2);
+    expect(hints().length).toBe(44 + 22);
+    expect(checkboxes().filter((box) => box.checked).length).toBe(4);
     expect((findControl(fixture, 'USERS.POS.GRANT.DISCOUNT') as HTMLInputElement).disabled).toBe(
       false,
     );

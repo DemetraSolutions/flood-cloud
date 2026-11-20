@@ -4,12 +4,14 @@
       <legend>{{ groupLabel(group.id) }}</legend>
       <div class="grid">
         @for (flag of group.flags; track flag) {
-          <fc-checkbox
-            [formField]="flagField(flag)"
-            [label]="flagLabel(flag)"
-            [hint]="flagHint(flag)"
-            [error]="error(flagField(flag))"
-          />
+          @if (flag !== 'handheldEnabled' || state.roomsApply()) {
+            <fc-checkbox
+              [formField]="flagField(flag)"
+              [label]="flagLabel(flag)"
+              [hint]="flagHint(flag)"
+              [error]="error(flagField(flag))"
+            />
+          }
         }
       </div>
       @if (group.id === 'SALE') {

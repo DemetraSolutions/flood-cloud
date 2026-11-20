@@ -1,6 +1,6 @@
 import { PLACE_LISTS } from '../../shared/legacy-write/place-lists.ts';
 import type { ItemDef, ItemFieldKind, ListDef } from '../../shared/legacy-write/place-lists.ts';
-import { array, boolean, integer, nullable, number, object, optional, string } from '../../shared/validation/schema.ts';
+import { array, boolean, integer, nullable, number, object, optional, personName, refine, string } from '../../shared/validation/schema.ts';
 import type { Schema } from '../../shared/validation/schema.ts';
 import { emptyAsNull } from '../companies/companies.schemas.ts';
 import type { Part } from '../companies/companies.schemas.ts';
@@ -10,6 +10,12 @@ const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** The form of a credential of a device: printable ASCII, spaces only inside. */
 const CREDENTIAL = /^[\x21-\x7E](?:[\x20-\x7E]*[\x21-\x7E])?$/;
+
+/** The paths (`<index>.terminalId`) of the terminals that repeat the `terminalId` of an earlier one. */
+const duplicatedTerminals = (terminals: ReadonlyArray<{ terminalId: string }>): string[] => {
+  const seen = new Set<string>();
+  return terminals.flatMap((terminal, index) => (seen.size === seen.add(terminal.terminalId).size ? [`${String(index)}.terminalId`] : []));
+};
 
 /** The schema of the value of a key of an item. Every key is optional in a request (a new item takes the default, an existing one keeps its value); the rules the form leaves to the service are checked there. */
 function kindSchema(kind: ItemFieldKind): Schema<unknown> {
@@ -33,6 +39,9 @@ function kindSchema(kind: ItemFieldKind): Schema<unknown> {
       // A credential: a text sets it, `null` or `''` clears it, leaving it out keeps it.
       // Not trimmed, printable characters only, no space at the ends: a credential is never changed silently nor holds a control character.
       return emptyAsNull(nullable(string({ max: kind.max, pattern: CREDENTIAL })));
+    case 'terminals':
+      // `terminalId` is unique in the list (the second one is `incorrect`), whatever the case is not: the identifiers of the provider are compared as they are.
+      return refine(array(object({ terminalId: string({ min: 1, max: 64, trim: true, pattern: /^[A-Za-z0-9_-]+$/ }), name: personName(100) }), { max: kind.max }), duplicatedTerminals, 'incorrect');
     case 'object':
       return object(Object.fromEntries(Object.entries(kind.fields).map(([key, field]) => [key, optional(kindSchema(field))])));
     case 'list':

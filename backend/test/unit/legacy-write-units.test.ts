@@ -199,7 +199,7 @@ describe('legacy write: defaults of a new place', () => {
     ]) {
       assert.ok(block in document, block);
     }
-    for (const [block, size] of [['general', 31], ['receipt', 26], ['prebilling', 12], ['ordering', 74], ['roomsSettings', 31], ['kiosk', 40], ['deliveryTakeAway', 19], ['delivery', 8], ['appointment', 8], ['selfOrdering', 5], ['payments', 4], ['fidelity', 5], ['tgm', 5], ['externalDisplay', 5]] as const) {
+    for (const [block, size] of [['general', 31], ['receipt', 26], ['prebilling', 12], ['ordering', 74], ['roomsSettings', 36], ['kiosk', 40], ['deliveryTakeAway', 19], ['delivery', 8], ['appointment', 8], ['selfOrdering', 5], ['payments', 4], ['fidelity', 5], ['tgm', 5], ['externalDisplay', 5]] as const) {
       assert.equal(Object.keys(document[block] as object).length, size, block);
     }
     assert.equal(Object.keys((document['medias'] as { images: object }).images).length, 9);

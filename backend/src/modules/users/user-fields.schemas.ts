@@ -5,14 +5,20 @@ import {
   AUTOMATIC_CASH,
   AUTOMATIC_CASH_DEVICES,
   POS_BOOLEAN_OPTIONS,
+  POS_CATEGORIES_LAYOUTS,
+  POS_CATEGORIES_ROWS,
+  POS_COLOR_STYLES,
   POS_FLAGS,
   POS_FONT_SIZES,
   POS_GRID_ZOOMS,
   POS_HANDHELD_COLUMNS,
   POS_KEYBOARDS,
+  POS_MENU_POSITIONS,
+  POS_PRODUCTS_COLUMNS,
   POS_SIDES,
   POS_TABLE_COLUMNS,
   POS_TEMPLATES,
+  POS_TEXT_ZOOMS,
 } from './pos.catalog.ts';
 import type { PosGrantsPatch, PosOptionsPatch, PosPatch } from './pos.catalog.ts';
 import { MAX_SHIFT_SLOTS, MAX_SHIFT_SPECIAL_DAYS, MAX_SHIFT_WEEKS, SHIFT_DAYS, SHIFT_TIME_PATTERN } from './shift-time.ts';
@@ -114,6 +120,12 @@ export function posOptionsSchema(personal = false): Schema<PosOptionsPatch, fals
     roomsTablesColumns: optional(nullable(numberOf(POS_TABLE_COLUMNS))),
     roomsTablesColumnsHandheld: optional(nullable(numberOf(POS_HANDHELD_COLUMNS))),
     roomsGridZoomHandheld: optional(numberOf(POS_GRID_ZOOMS)),
+    productsColorStyle: optional(enumOf(POS_COLOR_STYLES)),
+    handheldTextZoom: optional(numberOf(POS_TEXT_ZOOMS)),
+    handheldCategoriesLayout: optional(enumOf(POS_CATEGORIES_LAYOUTS)),
+    handheldCategoriesRows: optional(numberOf(POS_CATEGORIES_ROWS)),
+    handheldProductsColumns: optional(numberOf(POS_PRODUCTS_COLUMNS)),
+    handheldMenuPosition: optional(enumOf(POS_MENU_POSITIONS)),
     quickDiscount: percentage(),
     ...(personal
       ? {}

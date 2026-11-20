@@ -477,3 +477,73 @@ describe('POS permissions: who may give what', () => {
     assert.equal((await as.call(actor, 'POST', path(), body({ role: 'PA', pos: { grants: { discountMaxPercentage: 5, priceChange: false } } }))).status, 201);
   });
 });
+
+describe('the cash and handheld switches and the handheld 2.0 preferences', () => {
+  const cashOf = (document: Document): { sub: Document; options: Document } => ((document['permissions'] as Document)['apps'] as Document)['cash'] as { sub: Document; options: Document };
+  const NEW_OPTIONS = { productsColorStyle: 'fill', productsUppercase: true, productsBold: true, roomsLegend: true, handheldTextZoom: 125, handheldCategoriesLayout: 'slidein', handheldCategoriesRows: 1, handheldProductsColumns: 4, handheldMenuPosition: 'top' };
+
+  it('gives a new user the legacy defaults, in the response and in the document', async () => {
+    const created = await as.call(g0().sa, 'POST', path(), body({ role: 'PA' }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const { grants, options } = created.body.data.pos;
+    assert.deepEqual([grants.cashEnabled, grants.handheldEnabled, grants.handheldWallet], [true, true, false]);
+    assert.deepEqual(
+      [options.productsColorStyle, options.productsUppercase, options.productsBold, options.roomsLegend, options.handheldTextZoom, options.handheldCategoriesLayout, options.handheldCategoriesRows, options.handheldProductsColumns, options.handheldMenuPosition],
+      ['line', false, false, false, 100, 'scroll', 2, 2, 'bottom'],
+    );
+    const cash = cashOf(await stored(idOf(created)));
+    assert.deepEqual([cash.sub['cashEnabled'], cash.sub['handheldEnabled'], cash.sub['handheldWallet']], [true, true, false]);
+    assert.deepEqual([cash.options['handheldTextZoom'], cash.options['handheldCategoriesRows'], cash.options['handheldProductsColumns']], [100, 2, 2]);
+  });
+
+  it('writes the new values on their own paths, as numbers and texts, and keeps the rest', async () => {
+    const created = await as.call(g0().sa, 'POST', path(), body({ role: 'PA', pos: { grants: { handheldWallet: true, handheldEnabled: false }, options: NEW_OPTIONS } }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const id = idOf(created);
+    assert.deepEqual(
+      { ...cashOf(await stored(id)).options, priceLists: undefined, favoritesId: undefined },
+      { ...cashOf(await stored(id)).options, ...NEW_OPTIONS, priceLists: undefined, favoritesId: undefined },
+    );
+    assert.deepEqual([cashOf(await stored(id)).sub['handheldWallet'], cashOf(await stored(id)).sub['handheldEnabled'], cashOf(await stored(id)).sub['cashEnabled']], [true, false, true]);
+    const other = await stored(id);
+    const reply = await as.call(g0().sa, 'PATCH', path(id), { pos: { grants: { cashEnabled: false }, options: { handheldTextZoom: 85, roomsLegend: false } } });
+    assert.equal(reply.status, 200, JSON.stringify(reply.body));
+    const after = cashOf(await stored(id));
+    assert.deepEqual([after.sub['cashEnabled'], after.sub['handheldWallet'], after.options['handheldTextZoom'], after.options['roomsLegend'], after.options['productsColorStyle']], [false, true, 85, false, 'fill']);
+    assert.equal(typeof after.options['handheldTextZoom'], 'number');
+    assert.deepEqual([reply.body.data.pos.grants.cashEnabled, reply.body.data.pos.options.handheldTextZoom], [false, 85]);
+    assert.notDeepEqual(await stored(id), other);
+  });
+
+  it('refuses the values out of their list, field by field', async () => {
+    const post = async (options: Document) => failure(await as.call(g0().sa, 'POST', path(), body({ pos: { options } })));
+    assert.deepEqual(
+      await post({ productsColorStyle: 'x', handheldTextZoom: 87, handheldCategoriesLayout: 'grid', handheldCategoriesRows: 3, handheldProductsColumns: 5, handheldMenuPosition: 'left' }),
+      invalid(['pos.options.productsColorStyle', 'enum'], ['pos.options.handheldTextZoom', 'enum'], ['pos.options.handheldCategoriesLayout', 'enum'], ['pos.options.handheldCategoriesRows', 'enum'], ['pos.options.handheldProductsColumns', 'enum'], ['pos.options.handheldMenuPosition', 'enum']),
+    );
+    assert.deepEqual(await post({ handheldTextZoom: '100', roomsLegend: 'yes' }), invalid(['pos.options.roomsLegend', 'type'], ['pos.options.handheldTextZoom', 'type']));
+    assert.deepEqual(failure(await as.call(g0().sa, 'POST', path(), body({ pos: { grants: { cashEnabled: 'yes' } } }))), invalid(['pos.grants.cashEnabled', 'type']));
+  });
+
+  it('treats the switches as permissions and the preferences as free, and judges the switches against what a CA or PA holds', async () => {
+    const target = await freshPa({ permissions: everything(false) });
+    const noManage = await fresh({ permissions: everything(false) });
+    assert.deepEqual(failure(await as.call(noManage, 'PATCH', path(target), { pos: { grants: { handheldWallet: true } } })), denied);
+    assert.deepEqual(failure(await as.call(noManage, 'PATCH', path(target), { pos: { grants: { cashEnabled: false } } })), denied);
+    const optionsOnly = await as.call(noManage, 'PATCH', path(target), { pos: { options: NEW_OPTIONS } });
+    assert.equal(optionsOnly.status, 200, JSON.stringify(optionsOnly.body));
+    const actor = await limitedActor('CA', { sub: { cashEnabled: false, handheldEnabled: true } });
+    const patch = (pos: Document) => as.call(actor, 'PATCH', path(target), { pos });
+    assert.deepEqual(failure(await patch({ grants: { handheldWallet: true } })), notAllowed('pos.grants.handheldWallet'));
+    assert.equal((await patch({ grants: { cashEnabled: false } })).status, 200);
+    assert.deepEqual(failure(await patch({ grants: { cashEnabled: true } })), notAllowed('pos.grants.cashEnabled'));
+    // A new user of that creator does not start with the cash desk either.
+    const created = await as.call(actor, 'POST', path(), body({ role: 'PA' }));
+    assert.deepEqual([created.status, created.body.data.pos.grants.cashEnabled, created.body.data.pos.grants.handheldEnabled], [201, false, true]);
+    assert.deepEqual(failure(await as.call(actor, 'POST', path(), body({ role: 'PA', pos: { grants: { cashEnabled: true } } }))), notAllowed('pos.grants.cashEnabled'));
+    // The preferences are the user's own too; the switches are not.
+    const own = await as.call(g0().pa, 'PATCH', '/me', { pos: { options: { handheldMenuPosition: 'top', handheldTextZoom: 95 } } });
+    assert.deepEqual([own.status, own.body.data.pos.options.handheldMenuPosition, own.body.data.pos.options.handheldTextZoom], [200, 'top', 95]);
+    assert.deepEqual(failure(await as.call(g0().pa, 'PATCH', '/me', { pos: { grants: { cashEnabled: false } } })), invalid(['pos.grants', 'unknown']));
+  });
+});

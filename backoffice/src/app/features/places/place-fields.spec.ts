@@ -180,6 +180,47 @@ describe('toFieldValue', () => {
   });
 });
 
+describe('numeric selects', () => {
+  const idle = def('select', { values: ['15', '20', '30'], numeric: true });
+
+  it('read a number as text, and anything else as empty', () => {
+    expect(toFieldValue(idle, 20)).toBe('20');
+    expect(toFieldValue(idle, '20')).toBe('');
+    expect(toFieldValue(idle, null)).toBe('');
+    expect(toFieldValue(def('select', { values: ['a'] }), 'a')).toBe('a');
+    expect(toFieldValue(def('select', { values: ['a'] }), 3)).toBe('');
+  });
+
+  it('send a number, an empty choice as null', () => {
+    expect(toBodyValue(idle, '30')).toBe(30);
+    expect(toBodyValue(idle, '')).toBeNull();
+    expect(toBodyValue(def('select', { values: ['a'] }), 'a')).toBe('a');
+  });
+
+  it('are in the registry: the idle time of the tables and the MultiSafepay card', () => {
+    const idleKey = FIELDS.tables.find((definition) => definition.key === 'tableIdleMinutes');
+    expect(idleKey).toMatchObject({ type: 'select', numeric: true, values: ['15', '20', '30'] });
+    const card = FIELDS.integrations.filter((definition) => definition.group === 'MULTISAFEPAY');
+    expect(card.map((definition) => definition.key)).toEqual([
+      'multisafepay.status',
+      'multisafepay.terminalGroupId',
+      'multisafepay.terminalGroupApiKey',
+      'multisafepay.websiteApiKey',
+      'multisafepay.qrStatus',
+      'multisafepay.qrSecondsActive',
+    ]);
+    // The switches and the keys are for platform administrators and dealers.
+    expect(card.filter((definition) => definition.reserved).map((d) => d.key)).toEqual([
+      'multisafepay.status',
+      'multisafepay.qrStatus',
+    ]);
+    expect(card.filter((definition) => definition.privilegedOnly).map((d) => d.key)).toEqual([
+      'multisafepay.terminalGroupApiKey',
+      'multisafepay.websiteApiKey',
+    ]);
+  });
+});
+
 describe('toBodyValue', () => {
   it('sends a flag as it is', () => {
     expect(toBodyValue(def('flag'), true)).toBe(true);

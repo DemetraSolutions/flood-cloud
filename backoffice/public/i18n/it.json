@@ -243,7 +243,8 @@
       "DEFAULT": "Elemento standard: non si può modificare né eliminare.",
       "LAST": "Non si può eliminare l’ultimo elemento.",
       "REFERENCED": "Elemento usato da altri elementi.",
-      "IN_USE": "Elemento in uso: non si può eliminare."
+      "IN_USE": "Elemento in uso: non si può eliminare.",
+      "SEMICOLON": "Non può contenere il punto e virgola (;)."
     }
   },
   "GROUP_SELECTOR": {
@@ -549,9 +550,13 @@
         "UNLOCK_TABLE": "Sblocco del tavolo",
         "RESEND_PRODUCTS": "Reinvio dei prodotti",
         "SEARCH_PRODUCTS": "Ricerca dei prodotti",
-        "RIDER": "Rider"
+        "RIDER": "Rider",
+        "CASH_ENABLED": "Attiva per cassa",
+        "HANDHELD_ENABLED": "Attiva per palmare",
+        "HANDHELD_WALLET": "Borsello"
       },
       "GRANT_GROUP": {
+        "APPS": "App abilitate",
         "SALE": "Vendita e sconti",
         "RECEIPTS": "Scontrini e chiusure",
         "TABLES": "Tavoli e sale",
@@ -611,13 +616,18 @@
         "DELIVERY_TAKEAWAY_SHOW_ORDER_DETAIL_ON_SAVE": "Mostra il dettaglio dell'ordine d'asporto al salvataggio",
         "DELIVERY_TAKEAWAY_SHOW_PRODUCTION": "Mostra i centri di produzione dell'asporto",
         "QUICK_DISCOUNT": "Pulsante rapido di sconto (%)",
-        "FAVORITES_ID": "Elenco dei preferiti"
+        "FAVORITES_ID": "Elenco dei preferiti",
+        "PRODUCTS_UPPERCASE": "Nomi in maiuscolo",
+        "PRODUCTS_BOLD": "Nomi in grassetto",
+        "ROOMS_LEGEND": "Legenda in fondo alla sala"
       },
       "OPTION_GROUP": {
         "COUNTER": "Banco",
         "PRODUCTS": "Prodotti",
         "TABLES": "Tavoli e sale",
-        "DELIVERY": "Asporto e consegna"
+        "DELIVERY": "Asporto e consegna",
+        "RESTAURANT": "Preferenze ristorazione",
+        "HANDHELD": "Palmare 2.0"
       },
       "CHOICE": {
         "SIDE": "Lato del banco",
@@ -628,7 +638,13 @@
         "PRODUCTS_SHORT_NAME_FONT_SIZE": "Dimensione del nome breve dei prodotti",
         "ROOMS_TABLES_COLUMNS": "Colonne dei tavoli",
         "ROOMS_TABLES_COLUMNS_HANDHELD": "Colonne dei tavoli sul palmare",
-        "ROOMS_GRID_ZOOM_HANDHELD": "Zoom della mappa delle sale sul palmare"
+        "ROOMS_GRID_ZOOM_HANDHELD": "Zoom della mappa delle sale sul palmare",
+        "PRODUCTS_COLOR_STYLE": "Colore del prodotto",
+        "HANDHELD_TEXT_ZOOM": "Grandezza del testo",
+        "HANDHELD_CATEGORIES_LAYOUT": "Layout categorie",
+        "HANDHELD_CATEGORIES_ROWS": "File di categorie",
+        "HANDHELD_PRODUCTS_COLUMNS": "Numero colonne prodotti",
+        "HANDHELD_MENU_POSITION": "Posizione presa comanda"
       },
       "CHOICE_VALUE": {
         "SIDE": {
@@ -660,6 +676,25 @@
           "S": "Piccolo",
           "M": "Medio",
           "L": "Grande"
+        },
+        "PRODUCTS_COLOR_STYLE": {
+          "LINE": "Riga colorata",
+          "FILL": "Fondo colorato"
+        },
+        "HANDHELD_CATEGORIES_LAYOUT": {
+          "SCROLL": "Scorrevoli",
+          "SLIDEIN": "Slide-in",
+          "LIST": "In lista"
+        },
+        "HANDHELD_MENU_POSITION": {
+          "BOTTOM": "Sotto",
+          "TOP": "Sopra"
+        },
+        "HANDHELD_PRODUCTS_COLUMNS": {
+          "1": "1 Colonna",
+          "2": "2 Colonne",
+          "3": "3 Colonne",
+          "4": "4 Colonne"
         }
       }
     },
@@ -2150,7 +2185,10 @@
       "TIP_VALUE": "Importo",
       "TIP_PERCENT": "Percentuale",
       "TIP_AMOUNT": "Valore",
-      "ADD_TIP": "Aggiungi una mancia"
+      "ADD_TIP": "Aggiungi una mancia",
+      "DISCOUNT_REASONS": "Motivi dello sconto",
+      "DELETE_REASONS": "Motivi della cancellazione",
+      "ADD_REASON": "Aggiungi un motivo"
     },
     "RESERVATIONS": {
       "TIME_BLOCKS": "Fasce di prenotazione",
@@ -2405,7 +2443,10 @@
           "NAME": "Richiedi nome gruppo",
           "AUTO_CREATE_FIRST": "Creazione automatica gruppo all'apertura tavolo"
         },
-        "TIP_VALUES": "Valori mancia"
+        "TIP_VALUES": "Valori mancia",
+        "TABLE_IDLE_MINUTES": "Tavolo fermo dopo",
+        "VARIANTS_PER_ROW": "Varianti per riga",
+        "REASONS_FREE_TEXT": "Motivo scritto a mano"
       },
       "RESERVATIONS": {
         "STATUS": "Attiva",
@@ -2659,6 +2700,14 @@
           "USERNAME": "Username",
           "PASSWORD": "Password",
           "STRUCTURE_ID": "Structure ID"
+        },
+        "MULTISAFEPAY": {
+          "STATUS": "Attiva",
+          "TERMINAL_GROUP_ID": "Terminal Group ID",
+          "TERMINAL_GROUP_API_KEY": "Terminal Group Api Key",
+          "WEBSITE_API_KEY": "Website Api Key",
+          "QR_STATUS": "QR Code attivo",
+          "QR_SECONDS_ACTIVE": "Validità QR (secondi)"
         }
       },
       "DEALER_SETTINGS": {
@@ -2699,6 +2748,8 @@
         "DEFAULTS": "Impostazioni pagamenti"
       },
       "TABLES": {
+        "ROOMS": "Impostazioni sale",
+        "REASONS": "Motivi",
         "GENERAL": "Impostazioni ristorazione",
         "TABLE_GROUPS": "Impostazioni gruppi tavoli"
       },
@@ -2776,7 +2827,8 @@
         "TOMATO_AI": "Tomato Ai",
         "KEENON": "Keenon",
         "TSH": "TS Hospitality",
-        "PHLEX": "Phlex"
+        "PHLEX": "Phlex",
+        "MULTISAFEPAY": "MultiSafepay"
       },
       "DEALER_SETTINGS": {
         "TRACKING": "Impostazioni tracciamento",
@@ -2857,6 +2909,11 @@
       },
       "CATEGORY": {
         "RESTAURANT": "Ristorante"
+      },
+      "TABLE_IDLE_MINUTES": {
+        "15": "15 minuti",
+        "20": "20 minuti",
+        "30": "30 minuti"
       }
     },
     "STORE_KEY": {
@@ -2969,7 +3026,15 @@
       "SCALE_SEND_PRICE": "Invio prezzo al Kg alla bilancia",
       "BARCODE": "Lettura codice a barre bilanica non integrata",
       "BARCODE_INFO": "Inserendo una regola di questo tipo, in cassa sarà presente una nuova azione che permette di leggere il codice a barre di una bilancia non integrata.",
-      "BARCODE_RULE": "Regola prezzo"
+      "BARCODE_RULE": "Regola prezzo",
+      "MULTISAFEPAY": "MultiSafepay",
+      "MULTISAFEPAY_APP": "MultiSafepay App-to-App",
+      "MULTISAFEPAY_QR": "MultiSafepay QR Code",
+      "MULTISAFEPAY_TERMINALS": "Terminali MultiSafepay",
+      "MULTISAFEPAY_TERMINAL_ID": "Terminal ID {number}",
+      "MULTISAFEPAY_TERMINAL_NAME": "Nome terminale {number}",
+      "MULTISAFEPAY_REMOVE_TERMINAL": "Rimuovi il terminale {number}",
+      "MULTISAFEPAY_ADD_TERMINAL": "Aggiungi un terminale"
     },
     "STATIONS": {
       "ADD_STATION": "Aggiungi postazione comanda",
@@ -3162,7 +3227,9 @@
       "IMPORT_TOO_LARGE": "Il file è troppo grande.",
       "IMPORT_INVALID": "Il file non è un oggetto JSON.",
       "IMPORTED": "Impostazioni caricate nel modulo: {applied} valori applicati, {ignored} ignorati. Salva per confermarle."
-    }
+    },
+    "REASON_NUMBER": "{legend}: motivo {number}",
+    "NO_REASONS": "Nessun motivo: ne puoi aggiungere fino a 50."
   },
   "DIAGNOSTICS": {
     "TITLE": "Diagnostica",

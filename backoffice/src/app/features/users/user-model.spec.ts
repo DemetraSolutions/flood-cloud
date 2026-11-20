@@ -3,6 +3,7 @@ import {
   AUTOMATIC_CASH_DEVICES,
   POS_BOOLEAN_OPTIONS,
   POS_FLAGS,
+  POS_GRANTS_ON_BY_DEFAULT,
   UserPos,
 } from '../../core/users/pos.catalog';
 import {
@@ -35,7 +36,21 @@ describe('blankPos', () => {
   it('has nothing set', () => {
     const pos = blankPos();
     expect(pos.enabled).toBe(false);
-    expect(POS_FLAGS.every((flag) => pos.grants[flag] === false)).toBe(true);
+    // The two app switches are on for a new user, every other permission is off.
+    expect(pos.grants.cashEnabled).toBe(true);
+    expect(pos.grants.handheldEnabled).toBe(true);
+    expect(pos.grants.handheldWallet).toBe(false);
+    expect(
+      POS_FLAGS.filter((flag) => !POS_GRANTS_ON_BY_DEFAULT.includes(flag)).every(
+        (flag) => pos.grants[flag] === false,
+      ),
+    ).toBe(true);
+    expect(pos.options.productsColorStyle).toBe('line');
+    expect(pos.options.handheldTextZoom).toBe('100');
+    expect(pos.options.handheldCategoriesLayout).toBe('scroll');
+    expect(pos.options.handheldCategoriesRows).toBe('2');
+    expect(pos.options.handheldProductsColumns).toBe('2');
+    expect(pos.options.handheldMenuPosition).toBe('bottom');
     expect(POS_BOOLEAN_OPTIONS.every((name) => pos.options[name] === false)).toBe(true);
     expect(pos.grants.discountMaxPercentage).toBe('');
     expect(pos.grants.servicePercentage).toBe('');
@@ -89,6 +104,44 @@ describe('posModelOf', () => {
     expect(model.options.roomsTablesColumns).toBe('');
     expect(model.options.quickDiscount).toBe('');
     expect(model.options.defaultPriceListId).toBe('');
+  });
+
+  it('reads the new apps, wallet and handheld preferences', () => {
+    const stored = fakePos();
+    stored.grants.handheldWallet = true;
+    stored.grants.cashEnabled = false;
+    stored.options.productsColorStyle = 'fill';
+    stored.options.productsUppercase = true;
+    stored.options.handheldTextZoom = 115;
+    stored.options.handheldCategoriesLayout = 'slidein';
+    stored.options.handheldCategoriesRows = 1;
+    stored.options.handheldProductsColumns = 4;
+    stored.options.handheldMenuPosition = 'top';
+    const model = posModelOf(stored);
+    expect(model.grants.handheldWallet).toBe(true);
+    expect(model.grants.cashEnabled).toBe(false);
+    expect(model.grants.handheldEnabled).toBe(true);
+    expect(model.options).toMatchObject({
+      productsColorStyle: 'fill',
+      productsUppercase: true,
+      handheldTextZoom: '115',
+      handheldCategoriesLayout: 'slidein',
+      handheldCategoriesRows: '1',
+      handheldProductsColumns: '4',
+      handheldMenuPosition: 'top',
+    });
+  });
+
+  it('counts the two app switches missing from the response as on, the others as off', () => {
+    const stored = fakePos();
+    const grants = stored.grants as unknown as Record<string, unknown>;
+    delete grants['cashEnabled'];
+    delete grants['handheldEnabled'];
+    delete grants['handheldWallet'];
+    const model = posModelOf(stored as UserPos);
+    expect(model.grants.cashEnabled).toBe(true);
+    expect(model.grants.handheldEnabled).toBe(true);
+    expect(model.grants.handheldWallet).toBe(false);
   });
 
   it('counts flags and devices missing from the response as off', () => {

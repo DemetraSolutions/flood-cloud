@@ -4,17 +4,24 @@ import {
   AUTOMATIC_CASH_DEVICES,
   DISCOUNT_CAP_KEY,
   POS_BOOLEAN_OPTIONS,
+  POS_CATEGORIES_LAYOUTS,
+  POS_CATEGORIES_ROWS,
+  POS_COLOR_STYLES,
   POS_FLAGS,
   POS_FONT_SIZES,
   POS_GRID_ZOOMS,
   POS_HANDHELD_COLUMNS,
   POS_KEYBOARDS,
+  POS_GRANTS_ON_BY_DEFAULT,
   POS_LEGACY_KEY,
+  POS_MENU_POSITIONS,
   POS_PRICE_LISTS_PATH,
+  POS_PRODUCTS_COLUMNS,
   POS_ROOT,
   POS_SIDES,
   POS_TABLE_COLUMNS,
   POS_TEMPLATES,
+  POS_TEXT_ZOOMS,
   SERVICE_PERCENTAGE_KEY,
   defaultOptions,
   emptyPos,
@@ -43,12 +50,15 @@ class PosReader {
     this.anomalies.push({ kind: 'invalidType', field });
   }
 
-  /** A boolean: only `true` is true; absent and `null` are false without a remark, any other non-boolean is false and reported. */
-  flag(raw: unknown, field: string): boolean {
-    if (raw !== undefined && raw !== null && typeof raw !== 'boolean') {
+  /** A boolean: absent and `null` are the fallback without a remark, any other non-boolean is the fallback and reported. The fallback is `false`, `true` for the grants that are on by default. */
+  flag(raw: unknown, field: string, fallback = false): boolean {
+    if (typeof raw === 'boolean') {
+      return raw;
+    }
+    if (raw !== undefined && raw !== null) {
       this.wrong(field);
     }
-    return raw === true;
+    return fallback;
   }
 
   /** A percentage from 0 to 100; absent and `null` mean none, anything else out of range is reported and read as none. */
@@ -111,7 +121,9 @@ function readAutomaticCash(sub: unknown, reader: PosReader): AutomaticCash {
 }
 
 function readGrants(sub: unknown, reader: PosReader): PosGrants {
-  const flags = Object.fromEntries(POS_FLAGS.map((flag) => [flag, reader.flag(child(sub, POS_LEGACY_KEY[flag]), `${POS_ROOT}.sub.${POS_LEGACY_KEY[flag]}`)])) as { [K in (typeof POS_FLAGS)[number]]: boolean };
+  const flags = Object.fromEntries(
+    POS_FLAGS.map((flag) => [flag, reader.flag(child(sub, POS_LEGACY_KEY[flag]), `${POS_ROOT}.sub.${POS_LEGACY_KEY[flag]}`, POS_GRANTS_ON_BY_DEFAULT.some((on) => on === flag))]),
+  ) as { [K in (typeof POS_FLAGS)[number]]: boolean };
   return {
     ...flags,
     discountMaxPercentage: reader.percentage(child(sub, DISCOUNT_CAP_KEY), `${POS_ROOT}.sub.${DISCOUNT_CAP_KEY}`),
@@ -159,6 +171,12 @@ function readOptions(options: unknown, reader: PosReader): PosOptions {
     roomsTablesColumns: reader.columns(POS_TABLE_COLUMNS, child(options, 'roomsTablesColumns'), at('roomsTablesColumns')),
     roomsTablesColumnsHandheld: reader.columns(POS_HANDHELD_COLUMNS, child(options, 'roomsTablesColumnsHandheld'), at('roomsTablesColumnsHandheld')),
     roomsGridZoomHandheld: reader.choice(POS_GRID_ZOOMS, child(options, 'roomsGridZoomHandheld'), defaults.roomsGridZoomHandheld, at('roomsGridZoomHandheld')),
+    productsColorStyle: reader.choice(POS_COLOR_STYLES, child(options, 'productsColorStyle'), defaults.productsColorStyle, at('productsColorStyle')),
+    handheldTextZoom: reader.choice(POS_TEXT_ZOOMS, child(options, 'handheldTextZoom'), defaults.handheldTextZoom, at('handheldTextZoom')),
+    handheldCategoriesLayout: reader.choice(POS_CATEGORIES_LAYOUTS, child(options, 'handheldCategoriesLayout'), defaults.handheldCategoriesLayout, at('handheldCategoriesLayout')),
+    handheldCategoriesRows: reader.choice(POS_CATEGORIES_ROWS, child(options, 'handheldCategoriesRows'), defaults.handheldCategoriesRows, at('handheldCategoriesRows')),
+    handheldProductsColumns: reader.choice(POS_PRODUCTS_COLUMNS, child(options, 'handheldProductsColumns'), defaults.handheldProductsColumns, at('handheldProductsColumns')),
+    handheldMenuPosition: reader.choice(POS_MENU_POSITIONS, child(options, 'handheldMenuPosition'), defaults.handheldMenuPosition, at('handheldMenuPosition')),
     quickDiscount: reader.percentage(child(options, 'quickDiscount'), at('quickDiscount')),
     defaultPriceListId: reader.text(child(options, 'defaultPriceListId'), at('defaultPriceListId')),
     priceLists: readPriceLists(child(options, 'priceLists'), reader),

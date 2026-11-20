@@ -20,7 +20,11 @@
     </section>
     <section aria-labelledby="pos-options">
       <h3 id="pos-options">{{ 'USERS.POS.OPTIONS' | t }}</h3>
-      <fc-pos-options-fields [options]="options" [favorites]="state.favorites()" />
+      <fc-pos-options-fields
+        [options]="options"
+        [favorites]="state.favorites()"
+        [rooms]="state.roomsApply()"
+      />
     </section>
     <section aria-labelledby="pos-lists">
       <h3 id="pos-lists">{{ 'USERS.POS.PRICE_LISTS' | t }}</h3>

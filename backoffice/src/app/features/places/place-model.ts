@@ -133,8 +133,11 @@ export interface PaymentsModel extends ScalarBlock {
 }
 
 /** Tables. */
+/** Tables (the rooms settings): the tips and the reasons of a discount and of a deletion. */
 export interface TablesModel extends ScalarBlock {
   tipValues: TipRow[];
+  discountReasons: string[];
+  deleteReasons: string[];
 }
 
 /** Reservations. */
@@ -273,6 +276,15 @@ export interface DeviceRow {
   orderingPrintSingleProductTables: boolean;
   /** Ids of the print stations of the device. */
   printStations: string[];
+  multisafepayAppStatus: boolean;
+  multisafepayQrStatus: boolean;
+  multisafepayTerminals: TerminalRow[];
+}
+
+/** A MultiSafepay terminal of a device. */
+export interface TerminalRow {
+  terminalId: string;
+  name: string;
 }
 
 /** The devices and whether the stored list can be changed. */
@@ -413,6 +425,9 @@ export function newDevice(): DeviceRow {
     orderingPrintSingleProduct: false,
     orderingPrintSingleProductTables: false,
     printStations: [],
+    multisafepayAppStatus: false,
+    multisafepayQrStatus: false,
+    multisafepayTerminals: [],
   };
 }
 
@@ -512,6 +527,12 @@ function deviceRow(device: PlaceDevice): DeviceRow {
     orderingPrintSingleProduct: device.orderingPrintSingleProduct === true,
     orderingPrintSingleProductTables: device.orderingPrintSingleProductTables === true,
     printStations: ids(device.printStations),
+    multisafepayAppStatus: device.multisafepayAppStatus === true,
+    multisafepayQrStatus: device.multisafepayQrStatus === true,
+    multisafepayTerminals: list(device.multisafepayTerminals).map((raw) => ({
+      terminalId: text(object(raw)['terminalId']),
+      name: text(object(raw)['name']),
+    })),
   };
 }
 
@@ -796,6 +817,8 @@ export function toModel(record: PlaceRecord | null): PlaceModel {
         type: text(object(raw)['type']),
         value: numberText(object(raw)['value']),
       })),
+      discountReasons: ids(record?.tables['discountReasons']),
+      deleteReasons: ids(record?.tables['deleteReasons']),
     },
     reservations: {
       f: scalarsOf('reservations', record),
@@ -1002,6 +1025,12 @@ function deviceBody(row: DeviceRow): Record<string, unknown> {
     orderingPrintSingleProduct: row.orderingPrintSingleProduct,
     orderingPrintSingleProductTables: row.orderingPrintSingleProductTables,
     printStations: row.printStations,
+    multisafepayAppStatus: row.multisafepayAppStatus,
+    multisafepayQrStatus: row.multisafepayQrStatus,
+    multisafepayTerminals: row.multisafepayTerminals.map((terminal) => ({
+      terminalId: terminal.terminalId.trim(),
+      name: terminal.name.trim(),
+    })),
   };
 }
 
@@ -1190,6 +1219,8 @@ export function blockBody(
           type: row.type,
           value: Number(row.value),
         })),
+        discountReasons: model.tables.discountReasons.map((reason) => reason.trim()),
+        deleteReasons: model.tables.deleteReasons.map((reason) => reason.trim()),
       };
     case 'reservations':
       return {
