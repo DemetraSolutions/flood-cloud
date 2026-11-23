@@ -5,7 +5,7 @@ import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { withScope } from '../../shared/security/scope/scope-filters.ts';
 import { recordsOf, textOf } from '../groups/catalogs/kit.ts';
 import { visibleTo } from '../product-catalog/availability.ts';
@@ -26,7 +26,7 @@ export interface ProductLinks {
    * @param ids The ids to check (hexadecimal for everything but the attributes, whose ids are texts), at most a few hundred.
    * @returns The positions, in the list, of the ids that cannot be used.
    */
-  invalid(principal: AuthPrincipal, access: GroupAccess, kind: ProductLinkKind, ids: readonly string[]): Promise<number[]>;
+  invalid(principal: CatalogCaller, access: GroupAccess, kind: ProductLinkKind, ids: readonly string[]): Promise<number[]>;
 }
 
 /**
@@ -36,7 +36,7 @@ export interface ProductLinks {
  * @param databases Database accessor.
  */
 export function createProductLinks(databases: Databases): ProductLinks {
-  const found = (principal: AuthPrincipal, access: GroupAccess, collection: 'categories' | 'brands' | 'suppliers', ids: readonly string[]): Promise<Document[]> => {
+  const found = (principal: CatalogCaller, access: GroupAccess, collection: 'categories' | 'brands' | 'suppliers', ids: readonly string[]): Promise<Document[]> => {
     const wanted = [...new Set(ids)].map((id) => ObjectId.createFromHexString(id));
     const db = groupDatabaseFor(principal, access, databases);
     const options = { projection: { _id: 1 }, limit: wanted.length, maxTimeMS: LIST_MAX_TIME_MS };

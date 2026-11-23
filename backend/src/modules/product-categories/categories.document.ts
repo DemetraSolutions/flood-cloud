@@ -1,6 +1,6 @@
 import { Double, Int32, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { legacyLogoDescriptor, logo } from '../companies/company.mapper.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { flagOf, isRecord, textOf, valueAt } from '../groups/catalogs/kit.ts';
@@ -177,7 +177,7 @@ export function applyChange(stored: Document, set: Document, unset: Document): D
  * @param document The stored category.
  * @param reachable The categories the actor reaches, `null` when nothing is held back: of the categories of modifiers only these are logged.
  */
-export function categoryLoggable(principal: AuthPrincipal, document: Document, reachable: ReadonlySet<string> | null = null): Record<string, unknown> {
+export function categoryLoggable(principal: CatalogCaller, document: Document, reachable: ReadonlySet<string> | null = null): Record<string, unknown> {
   const allowed = perimeterOf(principal);
   const places = shownPlaces(principal, document['placesAvailability']);
   const parent = document['parentId'];

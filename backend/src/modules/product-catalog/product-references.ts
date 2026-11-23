@@ -8,7 +8,7 @@ import { categoriesVisibleTo } from '../product-categories/categories.availabili
 import { isVisibleProduct } from '../products/products.availability.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from './caller.ts';
 
 /** What stands for the products a company or place administrator does not reach in a list of users: one anonymous entry (the callers name it with the bare kind, never with an id). */
 export const ANONYMOUS_PRODUCT = '';
@@ -31,7 +31,7 @@ export interface ProductReferences {
    * @param access Verified access to the group.
    * @param brandId Id of the brand (`brandId` of the product).
    */
-  withBrand(principal: AuthPrincipal, access: GroupAccess, brandId: ObjectId): Promise<string[]>;
+  withBrand(principal: CatalogCaller, access: GroupAccess, brandId: ObjectId): Promise<string[]>;
   /**
    * The products with a price whose tax has a fiscal department number: the POS matches the department of the cash register with it.
    *
@@ -39,7 +39,7 @@ export interface ProductReferences {
    * @param access Verified access to the group.
    * @param department The department number of the tax (`prices[].taxData.department`).
    */
-  withDepartmentNumber(principal: AuthPrincipal, access: GroupAccess, department: number): Promise<string[]>;
+  withDepartmentNumber(principal: CatalogCaller, access: GroupAccess, department: number): Promise<string[]>;
   /**
    * The products that use some attributes (`attributes` holds the ids of the attributes of the groups of attributes).
    *
@@ -47,7 +47,7 @@ export interface ProductReferences {
    * @param access Verified access to the group.
    * @param attributeIds The ids of the attributes (at most the 200 of one group of attributes).
    */
-  withAttributes(principal: AuthPrincipal, access: GroupAccess, attributeIds: readonly string[]): Promise<string[]>;
+  withAttributes(principal: CatalogCaller, access: GroupAccess, attributeIds: readonly string[]): Promise<string[]>;
   /**
    * The products that are in a category (`categories` of the product).
    *
@@ -55,7 +55,7 @@ export interface ProductReferences {
    * @param access Verified access to the group.
    * @param categoryId Id of the category.
    */
-  inCategory(principal: AuthPrincipal, access: GroupAccess, categoryId: ObjectId): Promise<string[]>;
+  inCategory(principal: CatalogCaller, access: GroupAccess, categoryId: ObjectId): Promise<string[]>;
   /**
    * The products that apply a category of modifiers (`variantsCategories` of the product).
    *
@@ -63,7 +63,7 @@ export interface ProductReferences {
    * @param access Verified access to the group.
    * @param categoryId Id of the category.
    */
-  withModifierCategory(principal: AuthPrincipal, access: GroupAccess, categoryId: ObjectId): Promise<string[]>;
+  withModifierCategory(principal: CatalogCaller, access: GroupAccess, categoryId: ObjectId): Promise<string[]>;
   /**
    * The products whose menu (`selectableBundleProducts` and `selectableVariantsBundleProducts`) takes its choices from a category.
    *
@@ -71,7 +71,7 @@ export interface ProductReferences {
    * @param access Verified access to the group.
    * @param categoryId Id of the category.
    */
-  withBundleCategory(principal: AuthPrincipal, access: GroupAccess, categoryId: ObjectId): Promise<string[]>;
+  withBundleCategory(principal: CatalogCaller, access: GroupAccess, categoryId: ObjectId): Promise<string[]>;
   /**
    * Tells which of some products cannot be a modifier: they do not exist, are in the trash, or are not variants (`variant.status` is not `true`). One query limited to the list.
    *
@@ -80,7 +80,7 @@ export interface ProductReferences {
    * @param ids The ids to check, hexadecimal (a few hundred at most).
    * @returns The positions, in the list, of the ids that are not modifiers.
    */
-  notModifiers(principal: AuthPrincipal, access: GroupAccess, ids: readonly string[]): Promise<number[]>;
+  notModifiers(principal: CatalogCaller, access: GroupAccess, ids: readonly string[]): Promise<number[]>;
 }
 
 /**
@@ -89,7 +89,7 @@ export interface ProductReferences {
  * @param databases Database accessor.
  */
 export function createProductReferences(databases: Databases): ProductReferences {
-  const users = async (principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>): Promise<string[]> => {
+  const users = async (principal: CatalogCaller, access: GroupAccess, filter: Filter<Document>): Promise<string[]> => {
     const found = await bounded(() =>
       groupDatabaseFor(principal, access, databases)
         .collection('products')

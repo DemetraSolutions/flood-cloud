@@ -5,7 +5,7 @@ import type { ListPage, ListParams } from '../../shared/http/list.ts';
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { AuthPrincipal, ScopeHolder } from '../../shared/security/scope/principal.ts';
 import { IMAGES_LIST } from './media.list.ts';
 
 /** The fields of a stored image the API reads (a projection: the rest of the document is never loaded). */
@@ -45,7 +45,7 @@ export interface MediaRepository {
    * @param visible What the caller may see (the owner rule), combined with the id.
    * @returns The document, `null` when there is none (another group's image is not in this group's database).
    */
-  findImage(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId, visible: Filter<Document>): Promise<Document | null>;
+  findImage(principal: ScopeHolder, access: GroupAccess, imageId: ObjectId, visible: Filter<Document>): Promise<Document | null>;
   /**
    * Whether a document of the group database has this id (trash and type do not matter): used after an insert whose outcome is not known.
    *
@@ -68,7 +68,7 @@ export interface MediaRepository {
  * @param databases Database accessor.
  */
 export function createMediaRepository(databases: Databases): MediaRepository {
-  const files = (principal: AuthPrincipal, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('files');
+  const files = (principal: ScopeHolder, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('files');
   return {
     insert: async (principal, access, document) => {
       await files(principal, access).insertOne(document);

@@ -1,7 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
 import { PRODUCTS_INSERT_ONLY_FIELDS, PRODUCTS_OWNED_FIELDS } from '../../db/collections.ts';
-import { actorOf } from '../../shared/activity-log/actor.ts';
 import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { DataAction } from '../../shared/activity-log/catalog.ts';
 import { recordDataChange } from '../../shared/activity-log/data-change.ts';
@@ -12,7 +11,8 @@ import type { ErrorDetail } from '../../shared/http/errors.ts';
 import { escapeRegExp, listParamsOf } from '../../shared/http/list.ts';
 import type { Logger } from '../../shared/logging/logger.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { actorOfCaller, languageOfCaller, operatorMetadata } from '../product-catalog/caller.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { settleItem } from '../../shared/trash/trash.ts';
 import type { TrashItemOutcome, VersionCheck } from '../../shared/trash/trash.ts';
 import { newElementId, textOf, valueAt } from '../groups/catalogs/kit.ts';
@@ -26,12 +26,12 @@ import { blankProduct, duplicateProduct, productLoggable } from './products.docu
 import { cyclicComponents, planProduct } from './products.plan.ts';
 import type { PlanDeps } from './products.plan.ts';
 import { isEditableProduct, isVisibleProduct } from './products.availability.ts';
-import { componentsOf, idOf, productRow, productView } from './products.mapper.ts';
-import type { ProductFamily, ProductRow, ProductView } from './products.mapper.ts';
+import { PRODUCT_COST_FIELDS, componentsOf, idOf, productRow, productView, withoutCosts } from './products.mapper.ts';
+import type { ProductFamily, ProductRow, ProductView, ProductWithoutCosts } from './products.mapper.ts';
 import { guardProductRemoval } from './products.removal.ts';
 import type { ProductsRepository } from './products.repository.ts';
-import { productsListFor } from './products.schemas.ts';
-import type { CreateProductBody, PatchProductBody, ProductsQuery } from './products.schemas.ts';
+import { PRODUCT_CHANGES_LIST, productsListFor } from './products.schemas.ts';
+import type { CreateProductBody, PatchProductBody, ProductChangesQuery, ProductsQuery } from './products.schemas.ts';
 
 /** How many products a warning names at most (the others are counted). */
 export const MAX_WARNING_PRODUCTS = 5;
@@ -72,19 +72,26 @@ export interface ProductsService {
    *
    * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit the sort; `FORBIDDEN` when a company or place administrator asks for a place outside his perimeter; `NOT_FOUND` if the caller disappeared since the authentication.
    */
-  list(principal: AuthPrincipal, access: GroupAccess, query: ProductsQuery): Promise<ProductPage>;
+  list(principal: CatalogCaller, access: GroupAccess, query: ProductsQuery): Promise<ProductPage>;
+  /**
+   * A page of the whole products the caller reaches, oldest change first, for a client that keeps a copy of the catalog: with `updatedSince` every product changed from that instant (the ones in the trash and the
+   * disabled ones included, so the client can remove them), without it the products that are not in the trash. Every family unless one is asked. The costs, the suppliers and the simple cost are not read.
+   *
+   * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit.
+   */
+  listChanges(principal: CatalogCaller, access: GroupAccess, query: ProductChangesQuery): Promise<{ readonly items: readonly ProductWithoutCosts[]; readonly page: PageInfo }>;
   /**
    * One product, with the warnings of its code, PLU and barcodes.
    *
    * @throws {AppError} `NOT_FOUND` (also for a product a company or place administrator does not reach).
    */
-  get(principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<ProductResult>;
+  get(principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<ProductResult>;
   /**
    * Creates a product in the shape the legacy writes and records it. A code, a PLU or a barcode another product uses is a warning in the answer, never an error.
    *
    * @throws {AppError} `FORBIDDEN` for a company or place administrator who names a place outside his perimeter or none; `VALIDATION_ERROR` for a field the group lacks the function of, a language the group does not have, a missing name, and any reference that does not exist or that the caller does not reach.
    */
-  create(principal: AuthPrincipal, access: GroupAccess, body: CreateProductBody, client: ClientContext): Promise<ProductResult>;
+  create(principal: CatalogCaller, access: GroupAccess, body: CreateProductBody, client: ClientContext): Promise<ProductResult>;
   /**
    * Modifies a product (JSON Merge Patch on the texts, the lists and the maps by place as the schema says, every other field replaced), touching only the fields it owns, and records it. A request that changes nothing
    * writes and records nothing.
@@ -92,45 +99,45 @@ export interface ProductsService {
    * @param expected The version the client read (`If-Match`).
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN` for a company or place administrator who changes what is not his; `PRECONDITION_FAILED` when the product is not at the version the client read; `CONFLICT` when it is in the trash, or changed while this request ran, or the write would make a cycle of bills of materials; the errors of {@link ProductsService.create}.
    */
-  update(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, expected: string, body: PatchProductBody, client: ClientContext): Promise<ProductResult>;
+  update(principal: CatalogCaller, access: GroupAccess, id: ObjectId, expected: string, body: PatchProductBody, client: ClientContext): Promise<ProductResult>;
   /**
    * Duplicates a product (`<name> (Copy)` in every language, no code, PLU and barcode, no stock and no cost) and records it.
    *
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN` for a company or place administrator when the product is not wholly his; `CONFLICT` when it is in the trash.
    */
-  duplicate(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<ProductResult>;
+  duplicate(principal: CatalogCaller, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<ProductResult>;
   /**
    * Moves a product to the trash (it is never blocked by its references) and records it.
    *
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN`; `PRECONDITION_FAILED`; `CONFLICT` when it is already in the trash or changed meanwhile.
    */
-  trash(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, expected: string, client: ClientContext): Promise<ProductResult>;
+  trash(principal: CatalogCaller, access: GroupAccess, id: ObjectId, expected: string, client: ClientContext): Promise<ProductResult>;
   /**
    * Takes a product out of the trash and records it.
    *
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN`; `PRECONDITION_FAILED`; `CONFLICT` when it is not in the trash or changed meanwhile.
    */
-  restore(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, expected: string, client: ClientContext): Promise<ProductResult>;
+  restore(principal: CatalogCaller, access: GroupAccess, id: ObjectId, expected: string, client: ClientContext): Promise<ProductResult>;
   /**
    * Deletes a product that is in the trash for good and records it.
    *
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN`; `PRECONDITION_FAILED`; `CONFLICT` when it is not in the trash, with the references when something still uses it (`referenced`), or when it changed meanwhile.
    */
-  remove(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, expected: string, client: ClientContext): Promise<void>;
+  remove(principal: CatalogCaller, access: GroupAccess, id: ObjectId, expected: string, client: ClientContext): Promise<void>;
   /**
    * Moves several products to the trash, one after the other, each as the single-item route does; a product that cannot be moved is skipped with its reason and never stops the others.
    *
    * @param ids 1 to 100 products, without repetitions.
    */
-  trashMany(principal: AuthPrincipal, access: GroupAccess, ids: readonly ObjectId[], client: ClientContext): Promise<{ readonly results: readonly TrashManyItem[] }>;
+  trashMany(principal: CatalogCaller, access: GroupAccess, ids: readonly ObjectId[], client: ClientContext): Promise<{ readonly results: readonly TrashManyItem[] }>;
   /** Takes a product out of the trash for the trash page: exactly {@link ProductsService.restore}, with the version read just now, and a refusal as the issue. */
-  restoreFromTrash(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  restoreFromTrash(principal: CatalogCaller, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
   /** Deletes a product from the trash for the trash page: exactly {@link ProductsService.remove}, with the version read just now, and a refusal as the issue. */
-  deleteFromTrash(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
+  deleteFromTrash(principal: CatalogCaller, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<TrashItemOutcome>;
   /** The ids of the products in the trash that the caller reaches, in `_id` order, at most `limit`, after a cursor. */
-  trashedIds(principal: AuthPrincipal, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
+  trashedIds(principal: CatalogCaller, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
   /** How many products in the trash the caller reaches. */
-  countTrashed(principal: AuthPrincipal, access: GroupAccess): Promise<number>;
+  countTrashed(principal: CatalogCaller, access: GroupAccess): Promise<number>;
 }
 
 /** Collaborators of {@link createProductsService}. */
@@ -200,14 +207,8 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
   const planDeps: PlanDeps = { ...deps, newElementId: deps.newElementId ?? newElementId };
   const versionOf = (document: Document): string => productVersion(document, versionKey);
 
-  const languageOf = async (principal: AuthPrincipal): Promise<string> => {
-    const caller = await deps.users.findById(principal.userId);
-    if (caller === null) {
-      throw new AppError('NOT_FOUND');
-    }
-    return caller.user.language;
-  };
-  const found = async (principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<Document> => {
+  const languageOf = (principal: CatalogCaller, access: GroupAccess): Promise<string> => languageOfCaller(deps, principal, access.groupId);
+  const found = async (principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<Document> => {
     const document = await repository.findById(principal, access, id);
     if (document === null) {
       throw new AppError('NOT_FOUND');
@@ -220,7 +221,7 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
     }
   };
   /** The other products, not in the trash, that use the code, the PLU or a barcode of a product, as warnings. */
-  const warningsOf = async (principal: AuthPrincipal, access: GroupAccess, document: Document): Promise<DuplicateWarning[]> => {
+  const warningsOf = async (principal: CatalogCaller, access: GroupAccess, document: Document): Promise<DuplicateWarning[]> => {
     const code = textOf(document['code']);
     const plu = textOf(document['plu']);
     const barcodes = [...new Set((Array.isArray(document['barcode']) ? (document['barcode'] as unknown[]) : []).flatMap((item) => (typeof (item as Document | null)?.['value'] === 'string' ? [(item as Document)['value'] as string] : [])))];
@@ -243,13 +244,13 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
       }),
     ];
   };
-  const resultOf = async (principal: AuthPrincipal, access: GroupAccess, document: Document, withWarnings = true): Promise<ProductResult> => ({
+  const resultOf = async (principal: CatalogCaller, access: GroupAccess, document: Document, withWarnings = true): Promise<ProductResult> => ({
     entity: { ...productView(document, principal, access.features), ...(withWarnings ? { warnings: await warningsOf(principal, access, document) } : {}) },
     version: versionOf(document),
   });
-  const record = (principal: AuthPrincipal, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Record<string, unknown> | undefined, after: Record<string, unknown> | undefined, metadata?: Record<string, string>) =>
+  const record = (principal: CatalogCaller, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Record<string, unknown> | undefined, after: Record<string, unknown> | undefined, metadata?: Record<string, string>) =>
     recordDataChange(activityLog, {
-      actor: actorOf(principal),
+      actor: actorOfCaller(principal),
       groupId: access.groupId,
       resource: { type: 'product', id: id.toHexString() },
       action,
@@ -257,7 +258,7 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
       after,
       requestId: client.requestId,
       ...(client.ip === null ? {} : { ip: client.ip }),
-      ...(metadata === undefined ? {} : { metadata }),
+      metadata: { ...metadata, ...operatorMetadata(principal) },
     });
   /** The date of a change: strictly after the date read, so that two changes within the same millisecond still have different versions. */
   const dateAfter = (read: unknown): Date => {
@@ -269,13 +270,13 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
       throw new AppError('PRECONDITION_FAILED');
     }
   };
-  const assertEditable = (principal: AuthPrincipal, stored: Document): void => {
+  const assertEditable = (principal: CatalogCaller, stored: Document): void => {
     if (!isEditableProduct(principal, stored['placesAvailability'])) {
       throw new AppError('FORBIDDEN');
     }
   };
   /** Moves a product to the trash or out of it: the product must be in the opposite state and wholly the caller's; `check` is the `If-Match` of the request, or `bulk` (an item of a bulk call, which has no version). */
-  const changeState = async (principal: AuthPrincipal, access: GroupAccess, id: ObjectId, check: VersionCheck, client: ClientContext, to: 'trashed' | 'restored'): Promise<Document> => {
+  const changeState = async (principal: CatalogCaller, access: GroupAccess, id: ObjectId, check: VersionCheck, client: ClientContext, to: 'trashed' | 'restored'): Promise<Document> => {
     const stored = await found(principal, access, id);
     assertEditable(principal, stored);
     if ((stored['trash'] === true) === (to === 'trashed')) {
@@ -296,7 +297,7 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
     return next;
   };
   /** Deletes a product that is in the trash; `check` as in {@link changeState}. */
-  const deleteTrashed = async (principal: AuthPrincipal, access: GroupAccess, id: ObjectId, check: VersionCheck, client: ClientContext): Promise<void> => {
+  const deleteTrashed = async (principal: CatalogCaller, access: GroupAccess, id: ObjectId, check: VersionCheck, client: ClientContext): Promise<void> => {
     const stored = await found(principal, access, id);
     assertEditable(principal, stored);
     if (stored['trash'] !== true) {
@@ -325,7 +326,7 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
 
   return {
     list: async (principal, access, query) => {
-      const language = await languageOf(principal);
+      const language = await languageOf(principal, access);
       const config = productsListFor(language);
       const params = listParamsOf(query, config);
       const allowed = perimeterOf(principal);
@@ -362,6 +363,16 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
       const supplierIds = [...new Set(items.flatMap((document) => idOf(valueAt(document, 'lastAveragePrice.lastSupplierId')) ?? []))];
       const supplierNames = supplierIds.length === 0 ? new Map<string, string | null>() : await repository.supplierNames(principal, access, supplierIds);
       return { items: items.map((document) => productRow(document, principal, access.features, language, defaultList, supplierNames)), page };
+    },
+
+    listChanges: async (principal, access, query) => {
+      const params = listParamsOf(query, PRODUCT_CHANGES_LIST);
+      const conditions: Filter<Document>[] = [
+        ...(query.family === undefined ? [] : [familyFilter(query.family)]),
+        query.updatedSince === undefined ? { trash: { $ne: true } } : { updateDate: { $gte: new Date(query.updatedSince) } },
+      ];
+      const { items, page } = await repository.listFull(principal, access, { $and: conditions }, params, PRODUCT_CHANGES_LIST, PRODUCT_COST_FIELDS);
+      return { items: items.map((document) => withoutCosts(productView(document, principal, access.features))), page };
     },
 
     get: async (principal, access, id) => resultOf(principal, access, await found(principal, access, id)),

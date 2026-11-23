@@ -21,6 +21,26 @@ export const requireStore: RequestHandler = (_req, res, next) => {
   next();
 };
 
+/** The text of an id as the validation of the ids accepts it. */
+const OBJECT_ID_TEXT = /^[0-9a-fA-F]{24}$/;
+
+/**
+ * Builds the check of the path parameters of a route only a store may call: each one must be the text of an id (24 hexadecimal characters), `422 VALIDATION_ERROR` (`format`) otherwise, before anything
+ * else of the route runs. The route builder puts it in front of every store route that declares `params`, so a store route never reads a path value that was not checked for its shape.
+ *
+ * @param names The names of the path parameters the route declares.
+ * @returns The handler.
+ */
+export function requireStoreParams(names: readonly string[]): RequestHandler {
+  return (req, _res, next) => {
+    const malformed = names.filter((name) => !OBJECT_ID_TEXT.test(String(req.params[name])));
+    if (malformed.length > 0) {
+      throw new AppError('VALIDATION_ERROR', { details: malformed.map((field) => ({ field, issue: 'format' })) });
+    }
+    next();
+  };
+}
+
 /**
  * Restricts a route on `/groups/:groupId/places/:placeId` to the place of the store key: any other place (of the same group or not) is the same `404` as one that does not exist.
  * It runs before the validation of the parameters, so the raw value is compared with the id of the place as 24 lower case hexadecimal characters.

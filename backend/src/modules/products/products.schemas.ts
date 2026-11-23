@@ -68,6 +68,25 @@ export function productsListFor(language: string): ListConfig {
   return { ...PRODUCTS_LIST, sorts: { ...PRODUCTS_LIST.sorts, name: { field: 'name', kind: 'string', expression: localizedName(language) } } };
 }
 
+/**
+ * How a download of the changes of the products is ordered: by the date of the last change, oldest first (a product changed meanwhile moves to the end, so a client that reads page after page sees it
+ * again, never misses it). There is no search and no other sort.
+ */
+export const PRODUCT_CHANGES_LIST: ListConfig = Object.freeze({
+  sorts: Object.freeze({ updatedAt: Object.freeze({ field: 'updateDate', kind: 'date' as const }) }),
+  defaultSort: 'updatedAt',
+  searchFields: Object.freeze([]),
+});
+
+/** What a read of the changes of the products asks: the page, the family (every family when left out) and the instant the changes are counted from (the products not in the trash, whatever their date, when left out). */
+export interface ProductChangesQuery {
+  readonly limit?: number;
+  readonly cursor?: string;
+  readonly family?: (typeof PRODUCT_FAMILIES)[number];
+  /** An instant, normalized ISO 8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`). */
+  readonly updatedSince?: string;
+}
+
 /** The `true`/`false` of a query string. */
 const flag = () => transform(enumOf(['true', 'false']), (value) => value === 'true', 'enum');
 
@@ -263,9 +282,9 @@ function externalUrl(): Schema<string, false> {
 
 const modifierBase = () => ({ type: optional(enumOf(MODIFIER_TYPES)), pricePercentagePlus: optional(nullable(number({ min: 0, max: 1000 }))), pricePercentageMinus: optional(nullable(number({ min: 0, max: 100 }))) });
 
-/** Body of `POST /v1/groups/{groupId}/products`: only the name is required. Nothing else is accepted. */
-export const createProductBody = object({
-  ...commonShape(),
+/** The fields of a creation, over the common ones. */
+const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+  ...shape,
   name: nameTexts(),
   shortName: optional(shortNameTexts()),
   description: optional(descriptionTexts()),
@@ -276,23 +295,43 @@ export const createProductBody = object({
   counterPrintStations: optional(stationsByPlace()),
 });
 
+/** The fields of a modification, over the common ones. */
+const patchFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+  ...shape,
+  name: optional(nameTextsPatch()),
+  shortName: optional(shortNameTextsPatch()),
+  description: optional(descriptionTextsPatch()),
+  shortDescription: optional(descriptionTextsPatch()),
+  isModifier: optional(boolean()),
+  modifier: optional(object({ ...modifierBase(), description: optional(descriptionTextsPatch()) })),
+  printStations: optional(stationsByPlacePatch()),
+  counterPrintStations: optional(stationsByPlacePatch()),
+});
+
+/**
+ * The common fields without the ones the server of a point of sale never writes: `simpleCost` and `suppliers` (costs and suppliers of the whole group, which it cannot read either) and `image` and
+ * `gallery` (the library of images is not its to use). A key that is not here is `422` `unknown`, like any unknown key, and nothing is written.
+ */
+export const STORE_EXCLUDED_WRITE_FIELDS = Object.freeze(['simpleCost', 'suppliers', 'image', 'gallery'] as const);
+function storeShape() {
+  const { simpleCost: _cost, suppliers: _suppliers, image: _image, gallery: _gallery, ...rest } = commonShape();
+  return rest;
+}
+
+/** Body of `POST /v1/groups/{groupId}/products`: only the name is required. Nothing else is accepted. */
+export const createProductBody = object(createFields(commonShape()));
+
 /** Validated body of a creation. */
 export type CreateProductBody = Infer<typeof createProductBody>;
 
 /** Body of `PATCH /v1/groups/{groupId}/products/{id}`: any of the fields, at least one (`required` on the body otherwise). `isModifier` can only be repeated as it is. */
-export const patchProductBody = atLeastOne(
-  object({
-    ...commonShape(),
-    name: optional(nameTextsPatch()),
-    shortName: optional(shortNameTextsPatch()),
-    description: optional(descriptionTextsPatch()),
-    shortDescription: optional(descriptionTextsPatch()),
-    isModifier: optional(boolean()),
-    modifier: optional(object({ ...modifierBase(), description: optional(descriptionTextsPatch()) })),
-    printStations: optional(stationsByPlacePatch()),
-    counterPrintStations: optional(stationsByPlacePatch()),
-  }),
-);
+export const patchProductBody = atLeastOne(object(patchFields(commonShape())));
+
+/** Body of `POST /v1/store-context/catalog/products`: the one of the backoffice without {@link STORE_EXCLUDED_WRITE_FIELDS}. */
+export const storeCreateProductBody = object(createFields(storeShape())) as unknown as typeof createProductBody;
+
+/** Body of `PATCH /v1/store-context/catalog/products/{id}`: the one of the backoffice without {@link STORE_EXCLUDED_WRITE_FIELDS}. */
+export const storePatchProductBody = atLeastOne(object(patchFields(storeShape()))) as unknown as typeof patchProductBody;
 
 /** Validated body of a modification. */
 export type PatchProductBody = Infer<typeof patchProductBody>;

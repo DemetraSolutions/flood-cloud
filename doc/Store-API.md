@@ -2,7 +2,7 @@
 
 Documento per chi sviluppa il **server di punto vendita**: descrive solo le chiamate che il server di negozio può fare al cloud con la propria **chiave di negozio**. Si aggiorna a ogni passo che apre una nuova chiamata al negozio (registro in fondo).
 
-- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita.
+- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita, catalogo del punto vendita (lettura di prodotti, categorie e reparti; scrittura di prodotti e categorie).
 - **Non è qui:** le API del backoffice (`doc/API.md`) e le API pubbliche per gli integratori (`doc/Public-API.md`).
 
 ## 1. Convenzioni
@@ -11,7 +11,7 @@ Documento per chi sviluppa il **server di punto vendita**: descrive solo le chia
 - **Formato:** JSON UTF-8 (`Content-Type: application/json`), body non compresso.
 - **Risposte:** `{ "data": … }`; le liste aggiungono `page`.
 - **Errori:** `{ "error": { "code": "…", "message": "…", "details": [ … ] } }`. Si decide in base a `code` e allo stato HTTP, mai al testo di `message`.
-- **Date:** ISO 8601 in UTC. **Importi:** interi in centesimi. **Identificativi:** stringhe, da trattare come opache.
+- **Date:** ISO 8601 in UTC. **Importi:** interi in centesimi, **tranne i prezzi del catalogo (§4.9), che sono in unità di valuta decimali** (per esempio `12.2` euro, non `1220`). **Identificativi:** stringhe, da trattare come opache.
 - **`X-Request-Id`:** ogni risposta lo porta; va scritto nei log del server di negozio e indicato nelle segnalazioni.
 - **Cache:** ogni risposta è `Cache-Control: no-store`.
 
@@ -310,14 +310,172 @@ Gli utenti che operano sul punto vendita, con il loro **PIN in chiaro**. La pass
 
 Le chiamate dei §4.3–4.7 sono pensate per essere interrogate periodicamente: con `If-None-Match` uguale all'ultimo `ETag` la risposta è `304` senza corpo e non si perde nulla. Si rileggono comunque all'avvio e dopo ogni `403 STORE_DISABLED` risolto. Contano nel limite di 600 richieste al minuto della chiave (§5).
 
+### 4.9 Catalogo del punto vendita — `/v1/store-context/catalog/…`
+
+Il catalogo che il server di negozio scarica e, per i prodotti e le categorie, modifica. Tutte le chiamate usano la **chiave di negozio**; il punto vendita, l'azienda e il gruppo sono sempre quelli della chiave: **nessun parametro li sceglie** (un parametro che non è nelle tabelle qui sotto dà `422`).
+
+> **Prezzi.** I prezzi del catalogo sono in **unità di valuta decimali** (`"net": 10`, `"gross": 12.2` per 12,20 euro), come li usa il POS, e non in centesimi come gli altri importi di questo documento. `net` è l'imponibile, `gross` l'importo con IVA.
+
+- **Che cosa si vede.** Le voci **disponibili nel proprio punto vendita** o per **tutti** i punti vendita. Una voce di un altro punto vendita non esiste per il negozio (`404`). Dei dati per punto vendita (`places`, postazioni di stampa `printStations`/`counterPrintStations`, `stock`) si vedono **solo quelli del proprio punto vendita**.
+- **Forma dei dati.** Le stesse rappresentazioni del backoffice (`doc/API.md`, "Catalogo") viste dal punto vendita; nei prodotti **non ci sono** `costs`, `suppliers` e `simpleCost` (costi e fornitori sono dati dell'intero gruppo) e `warnings` non nomina gli altri prodotti. I campi che dipendono dalle funzioni del gruppo (`cash`, `warehouse`, `rooms`, `media`…) ci sono solo se il gruppo le ha. `editable` dice se il negozio può modificare la voce **per intero**; `placeEditable` se può modificare almeno i dati del proprio punto vendita.
+- **Una voce "per tutti" con un solo punto vendita.** Se il gruppo ha **un solo punto vendita fuori dal cestino** (il cloud lo verifica in modo prudente: nel dubbio valgono le regole di due punti vendita), una voce per tutti (`places`/`placeIds` vuoto) è interamente del negozio (`editable: true`) e se ne può anche creare una. Con due o più punti vendita una voce per tutti è in sola lettura per i campi comuni (`403 FORBIDDEN` con il nome del campo) e non se ne può creare. La regola si valuta a ogni richiesta: appena nasce un secondo punto vendita, la richiesta successiva torna alle regole di due punti vendita. **Attenzione:** una voce creata "per tutti" quando il gruppo ha un solo punto vendita **diventa visibile e disponibile anche al secondo punto vendita** quando nasce (e per quest'ultimo è in sola lettura nei campi comuni).
+
+#### Letture
+
+Nessuna lettura chiede l'operatore. Ogni elenco è a pagine con cursore (`page.next`, da passare così com'è come `cursor`; un cursore non valido dà `422`): il catalogo non arriva mai in una sola risposta.
+
+| Chiamata | Query ammessa | Note |
+|---|---|---|
+| `GET /v1/store-context/catalog/products` | `limit` 1–**50** (default 25), `cursor`, `family` (`products`, `services`, `tgm`, `modifiers`; senza, tutte), `updatedSince` | Prodotti **interi**, dal meno recente al più recente per data di modifica (`updatedAt`). |
+| `GET /v1/store-context/catalog/products/{productId}` | — | Il prodotto con l'`ETag` della sua versione (l'`If-Match` della scrittura successiva) e i `warnings` dei duplicati. |
+| `GET /v1/store-context/catalog/categories` | `limit` 1–**100** (default 50), `cursor`, `updatedSince` | Dal meno recente al più recente. Ogni categoria ha anche `parentId`, `depth`, `parentHidden`, `cyclic`. |
+| `GET /v1/store-context/catalog/categories/tree` | — | Albero compatto (`{ id, name, parentId, position, enabled, children }`), con `ETag` debole e `304`. `409 CONFLICT` (`categories`/`tooMany`) in un gruppo con troppe categorie. |
+| `GET /v1/store-context/catalog/categories/{categoryId}` | — | La categoria con l'`ETag`. |
+| `GET /v1/store-context/catalog/departments` | `limit` 1–**100** (default 50), `cursor` | Reparti per nome. `403 FEATURE_DISABLED` se il gruppo non ha la funzione `cash`. |
+
+Marche e gruppi di attributi non sono aperti al negozio. Listini, aliquote e gruppi preferiti non sono qui: arrivano con la configurazione del gruppo (§4.3).
+
+**`updatedSince`** è un istante ISO 8601 (`2026-11-23T10:00:00.000Z`, oppure solo la data). Restituisce ogni voce **modificata da quell'istante in poi (compreso)**, **anche quelle disattivate (`enabled: false`) e quelle nel cestino (`trashed: true`)**, perché il negozio le tolga dalla propria copia. Senza `updatedSince` i prodotti nel cestino non ci sono (quelli disattivati sì).
+
+**Primo scaricamento.**
+1. `GET /store-context/group` (§4.3): listini, aliquote, gruppi preferiti, lingue, funzioni.
+2. `GET /store-context/catalog/categories` a pagine, fino a `page.next: null`; poi, se serve, `…/categories/tree`.
+3. `GET /store-context/catalog/departments` a pagine.
+4. `GET /store-context/catalog/products?limit=50` a pagine, senza `updatedSince` e senza `family` (o una famiglia alla volta).
+5. Si conserva il **più grande `updatedAt`** visto tra prodotti e categorie (per ciascuno dei due elenchi).
+
+**Aggiornamento incrementale.** Si ripetono le chiamate dei punti 2 e 4 con `updatedSince=<il più grande updatedAt conservato>`. La voce con quello stesso `updatedAt` torna: si confronta per `id`. Per ogni voce ricevuta: se `trashed` è `true` o `enabled` è `false` la si toglie dalle vendite, altrimenti la si sostituisce. Un prodotto modificato mentre si leggono le pagine passa in fondo all'elenco: si legge una volta in più, mai si perde. Una rilettura completa periodica (per esempio notturna) resta la rete di sicurezza: le voci scritte da programmi che non aggiornano la data di modifica non compaiono nell'incrementale.
+
+**Esempio — un prodotto** (`GET /v1/store-context/catalog/products?limit=1`):
+```json
+{
+  "data": [
+    {
+      "id": "665f…", "family": "products", "type": "product", "isModifier": false, "enabled": true,
+      "code": "ACQ", "name": { "it": "Acqua" }, "shortName": { "it": "Acqua" }, "description": { "it": "" }, "shortDescription": { "it": "" },
+      "favorite": false, "generic": false, "toCheck": false, "noDiscount": false,
+      "brandId": null, "categoryIds": ["665f…"], "attributeIds": [], "position": null, "productionValue": null,
+      "availability": { "pos": true, "warehouse": true },
+      "integrations": { "floodOrders": false, "yellgo": false, "leggimenu": false },
+      "validFrom": null, "validTo": null,
+      "loadUnit": "pz", "unloadUnit": "pz", "conversionRatio": 1,
+      "colors": { "text": "#000000", "background": "#ffffff" },
+      "barcodes": [{ "value": "8000000000001", "loadQuantity": null, "saleQuantity": 1 }],
+      "prices": [
+        {
+          "id": "price-1", "priceListId": "list-1", "currency": "EUR", "taxId": "tax-001",
+          "tax": { "rate": 22, "department": 1, "description": "Ordinaria", "vatNature": null },
+          "net": 10, "gross": 12.2, "discount": 0,
+          "validFrom": null, "validTo": null, "dailyFrom": null, "dailyTo": null, "weekDays": [], "fromQuantity": 1, "maxSaleQuantity": null
+        }
+      ],
+      "places": [{ "placeId": "665f…", "favorite": true, "favoriteHandheld": false, "position": null, "productionCenterId": null }],
+      "stock": { "665f…": { "665f…": { "quantity": 4, "min": 1, "max": 9, "location": "A1" } } },
+      "shipping": { "width": null, "height": null, "depth": null, "weight": null },
+      "components": [], "menu": [], "modularPriceRule": null,
+      "editable": true, "placeEditable": true, "trashed": false, "trashedAt": null,
+      "createdAt": "2024-03-01T09:00:00.000Z", "updatedAt": "2026-11-20T09:00:00.000Z"
+    }
+  ],
+  "page": { "limit": 1, "next": "eyJ2ZXIiOjEs…" }
+}
+```
+`stock` ha come chiavi l'id del **proprio** punto vendita e, sotto, gli id dei depositi. I campi `requiredModifierIds`, `modifierIds`, `excludedModifierIds` e `modifierCategoryIds` ci sono se il gruppo ha le varianti.
+
+**Esempio — una categoria** (`GET /v1/store-context/catalog/categories`):
+```json
+{
+  "data": [
+    {
+      "id": "665f…", "name": { "it": "Bevande" }, "description": { "it": "" }, "enabled": true, "position": 1, "productionValue": null,
+      "availability": { "pos": true }, "noDiscount": false, "requiresLegalAge": false,
+      "integrations": { "floodOrders": false, "yellgo": false, "leggimenu": false },
+      "backgroundColor": "#000000", "textColor": "#000000",
+      "places": [{ "placeId": "665f…", "position": 1, "productionCenterId": null }],
+      "editable": true,
+      "createdAt": "2024-03-01T09:00:00.000Z", "updatedAt": "2026-11-20T09:00:00.000Z",
+      "parentId": null, "parentHidden": false, "depth": 0, "cyclic": false
+    }
+  ],
+  "page": { "limit": 50, "next": null }
+}
+```
+**Esempio — l'albero:** `{ "data": [{ "id": "665f…", "name": "Bevande", "parentId": null, "parentHidden": false, "position": 1, "enabled": true, "children": [] }] }`. **Esempio — un reparto:** `{ "id": "665f…", "code": 5, "taxId": "tax-001", "tax": { "rate": 22, "department": 1, "vatNature": null, "description": null }, "noDiscount": false, "secondaryFiscalPrinter": false, "name": { "it": "Reparto 1" }, "description": { "it": "" }, "enabled": true, "placeIds": [], "editable": false, "createdAt": "…", "updatedAt": "…" }`.
+
+#### Scritture
+
+Si possono **creare, modificare, duplicare, cestinare e ripristinare i prodotti** (le varianti sono prodotti) e **creare, modificare ed eliminare le categorie**. **Non** esistono: l'eliminazione definitiva di un prodotto, lo svuotamento del cestino, le scritture su reparti, marche e attributi, la sincronizzazione dei tabacchi. Il cambio dei prezzi è una modifica del prodotto (`prices`).
+
+| Chiamata | Header richiesti | Corpo | Risposta |
+|---|---|---|---|
+| `POST /v1/store-context/catalog/products` | `X-Operator-Id`, `Idempotency-Key` | il prodotto (stesso corpo della creazione del backoffice, `doc/API.md`, "Prodotti") | `201`, `Location`, `ETag` |
+| `PATCH /v1/store-context/catalog/products/{productId}` | `X-Operator-Id`, `If-Match` | i campi da cambiare (JSON Merge Patch sui testi e sulle liste come nel backoffice) | `200`, `ETag` |
+| `POST …/products/{productId}/duplicate` | `X-Operator-Id`, `Idempotency-Key` | nessuno | `201`, `Location` del nuovo prodotto |
+| `POST …/products/{productId}/trash` | `X-Operator-Id`, `If-Match` | nessuno | `200` |
+| `POST …/products/{productId}/restore` | `X-Operator-Id`, `If-Match` | nessuno | `200` |
+| `POST /v1/store-context/catalog/categories` | `X-Operator-Id`, `Idempotency-Key` | la categoria (come nel backoffice, "Categorie") | `201`, `Location`, `ETag` |
+| `PATCH …/categories/{categoryId}` | `X-Operator-Id`, `If-Match` | i campi da cambiare | `200`, `ETag` |
+| `DELETE …/categories/{categoryId}` | `X-Operator-Id` | nessuno | `204`; `409` se qualcosa la usa; nessuna eliminazione a cascata, niente cicli |
+
+**Campi che il negozio non scrive.** I corpi di scrittura sono quelli del backoffice **senza** questi campi: nei prodotti `simpleCost`, `suppliers`, `image` e `gallery`; nelle categorie `image` e `icon` (costi e fornitori sono dati dell'intero gruppo, che il negozio non legge; la libreria delle immagini non è sua). Una di queste chiavi dà `422` (`unknown`, come ogni chiave sconosciuta) e non viene scritto nulla. La **duplicazione** copia invece nel nuovo prodotto costi e fornitori del prodotto d'origine, senza mostrarli.
+
+Le regole sono **quelle del backoffice** (stessi controlli, stessi codici): i campi che dipendono dalle funzioni del gruppo, i riferimenti che devono esistere, la **concorrenza** (`If-Match` con l'`ETag` letto: `412` se la voce è cambiata, `422` se manca o non è un tag forte), l'`Idempotency-Key` in creazione (un UUID; la stessa chiave con lo stesso corpo risponde di nuovo come la prima volta, con un corpo diverso `409`; le chiavi sono **legate alla chiave di negozio** e valgono 24 ore), i limiti di dimensione (corpo del prodotto fino a 256 KB, della categoria fino a 128 KB: oltre `413`; non JSON `415`). In scrittura il negozio può cambiare **per intero** una voce solo se `editable` è `true`; una voce condivisa con altri punti vendita (o per tutti, con due o più punti vendita) accetta soltanto i campi del proprio punto vendita (`places`, `printStations`, `counterPrintStations`, `stock` per i prodotti) e per gli altri risponde `403 FORBIDDEN` con `details: [{ field, issue: "notAllowed" }]`. Un negozio non può dichiarare un punto vendita diverso dal proprio (`403`).
+
+**Esempio — cambio di prezzo:**
+```
+PATCH /v1/store-context/catalog/products/665f…
+Authorization: Bearer fc_sk_…
+X-Operator-Id: 665f…
+If-Match: "ofQyXEWYuR1LURZT2EB4zAb4gmcNZ2kptw2o6mGKnOE"
+Content-Type: application/json
+
+{ "prices": [{ "id": "price-1", "priceListId": "list-1", "currency": "EUR", "taxId": "tax-001", "gross": 12.5 }] }
+```
+→ `200` con il prodotto aggiornato e il nuovo `ETag`.
+
+**Esempio — creazione di un prodotto** (con un solo punto vendita nel gruppo `places` può mancare; con più punti vendita deve nominare il proprio):
+```
+POST /v1/store-context/catalog/products
+X-Operator-Id: 665f…
+Idempotency-Key: <UUID generato dal server di negozio>
+{ "name": { "it": "Pane" }, "places": [{ "placeId": "665f…" }] }
+```
+→ `201`, `Location: /v1/store-context/catalog/products/665f…`, `ETag`.
+
+#### L'operatore delle scritture
+
+Ogni scrittura porta l'header **`X-Operator-Id`**: l'id (24 caratteri esadecimali) dell'utente che sta operando in cassa. Il cloud **lo verifica prima di leggere il corpo**:
+
+- l'utente deve essere uno di quelli che il negozio riceve da `GET /store-context/users` (§4.7): dipendente o amministratore del punto vendita, amministratore dell'azienda del punto vendita, amministratore del gruppo; non un amministratore di piattaforma o un rivenditore, non un utente nel cestino né di altri punti vendita o gruppi;
+- deve essere **attivo**;
+- deve avere, nella propria matrice dei permessi, il permesso di **scrittura sui prodotti** (`permissions.products.w`, il modulo "Prodotti" della scheda utente).
+
+Se anche una sola condizione manca (header assente o malformato, utente sconosciuto, di un altro punto vendita, disattivato, senza permesso) la risposta è **sempre la stessa**: `403`, `{ "error": { "code": "OPERATOR_NOT_ALLOWED", "message": "Operator not allowed" } }`, senza dire quale. Il server di negozio non deve interpretarla come "utente inesistente": mostra "operatore non autorizzato".
+
+L'operatore è **dichiarato dal negozio, non autenticato dal cloud**: il cloud non ha un segreto dell'utente (il PIN lo controlla il negozio). Non concede nulla che la chiave di negozio non possa già fare; nel registro delle attività l'attore resta il negozio (con l'id della chiave) e l'operatore compare a parte (`operatorId`). Il server di negozio resta responsabile di verificare il PIN dell'operatore prima di mandare la scrittura. Chi possiede la chiave di negozio può indicare **qualunque operatore attivo del punto vendita che abbia il permesso**: `operatorId` nel registro è quindi un'indicazione, **non una prova** di chi ha agito, e la chiave va protetta di conseguenza (§2).
+
+**Limite delle scritture.** Oltre al limite generale della chiave (§5), le scritture del catalogo hanno un limite proprio di **120 al minuto per chiave**: `429 RATE_LIMITED` con `Retry-After`. Contano anche le scritture con operatore rifiutato; le letture no.
+
+#### Voci che escono dall'aggiornamento incrementale
+
+L'aggiornamento con `updatedSince` **non** segnala: una voce che esce dal perimetro del punto vendita (per esempio il suo punto vendita è tolto dalla disponibilità) e una **categoria eliminata**. Non compaiono più né in elenco né come cestinate. Per toglierle dalla propria copia serve la **rilettura completa periodica** (ricostruire l'elenco e scartare gli id non più presenti).
+
+
 ## 5. Stati ed errori di ogni chiamata autenticata
 
 | Stato | `code` | Quando | Cosa fa il server di negozio |
 |---|---|---|---|
 | `401` | `UNAUTHENTICATED` | Chiave assente, malformata, sconosciuta o **revocata**. Succede anche se il punto vendita è stato messo nel cestino o eliminato, o se è stata fatta una nuova attivazione. | La chiave è persa: chiede una nuova attivazione. |
 | `403` | `STORE_DISABLED` | La chiave è valida ma il punto vendita non è operativo: gruppo sospeso o nel cestino, punto vendita disattivato, licenza scaduta, azienda nel cestino. | **Tiene la chiave**, avvisa l'operatore e riprova più tardi: riprende da solo dopo riattivazione, ripristino o rinnovo. |
-| `403` | `FORBIDDEN` | La chiamata non è aperta al server di negozio. | Errore di integrazione: la chiamata non è tra quelle di questo documento. |
-| `404` | `NOT_FOUND` | Risorsa inesistente o non del proprio punto vendita. | Errore di integrazione: nessuna chiamata di questo documento ha identificativi nel percorso. |
+| `403` | `FORBIDDEN` | La chiamata non è aperta al server di negozio; oppure, nel catalogo, un campo di una voce condivisa con altri punti vendita (`details` nomina il campo). | Errore di integrazione, o per i campi condivisi: si possono cambiare solo i dati del proprio punto vendita. |
+| `403` | `OPERATOR_NOT_ALLOWED` | Scrittura del catalogo senza un operatore valido (§4.9): la stessa risposta per ogni motivo. | Mostra "operatore non autorizzato"; non riprova. |
+| `403` | `FEATURE_DISABLED` | Reparti di un gruppo senza la funzione `cash`. | Non scarica i reparti. |
+| `404` | `NOT_FOUND` | Risorsa inesistente o non del proprio punto vendita (nel catalogo: un prodotto, una categoria di un altro punto vendita o di un altro gruppo). | Toglie la voce dalla propria copia; una voce che non esiste non si scrive. |
+| `409` | `CONFLICT` | Catalogo: la voce è nel cestino o è cambiata mentre si scriveva, la categoria è usata o c'è un ciclo, `Idempotency-Key` riusata con un corpo diverso. | Rilegge la voce e riprova se ha senso. |
+| `412` | `PRECONDITION_FAILED` | Catalogo: la voce non è più alla versione dell'`If-Match`. | Rilegge la voce (nuovo `ETag`) e riapplica la modifica. |
+| `413` / `415` | `PAYLOAD_TOO_LARGE` / `UNSUPPORTED_MEDIA_TYPE` | Corpo oltre il limite (§4.9) o non JSON. | Errore di integrazione. |
+| `429` | `RATE_LIMITED` | Anche: oltre 120 scritture del catalogo al minuto per chiave. | Aspetta `Retry-After`. |
+| `422` | `VALIDATION_ERROR` | Parametro, identificativo o corpo non validi (anche `simpleCost`, `suppliers`, `image`, `gallery` nei prodotti e `image`, `icon` nelle categorie); `details` nomina i campi. Mancano `If-Match` o `Idempotency-Key`. | Errore di integrazione, o dato da correggere. |
 | `429` | `RATE_LIMITED` | Oltre **600 richieste al minuto** per chiave. Contano tutte le richieste, anche quelle rifiutate. | Aspetta i secondi di `Retry-After`. |
 | `5xx` | — | Errore del cloud. | Riprova con attesa crescente; segnala `X-Request-Id`. |
 
@@ -327,7 +485,8 @@ Un punto vendita ripristinato dal cestino **non riottiene** la vecchia chiave: s
 
 Chiamate non ancora aperte al server di negozio, previste con i prossimi passi (oggi rispondono `403 FORBIDDEN`):
 
-- catalogo (prodotti, categorie e le altre anagrafiche) limitato a ciò che vale per il punto vendita;
+- la sincronizzazione dei tabacchi del catalogo;
+- marche e attributi (il POS non li usa);
 - anagrafiche dei clienti (contatti).
 
 ## 7. Registro delle modifiche
@@ -339,3 +498,4 @@ Chiamate non ancora aperte al server di negozio, previste con i prossimi passi (
 | 2026-11-23 | Sequenza della prima configurazione (§3). Il punto vendita si legge solo con `GET /v1/store-context/place`: `GET /v1/groups/{groupId}/places/{placeId}` non è più aperta al server di negozio. |
 | 2026-11-23 | Paesi e province (§4.6). |
 | 2026-11-23 | Utenti del punto vendita con PIN in chiaro (§4.7). |
+| 2026-11-23 | Catalogo del punto vendita (§4.9): campi non scrivibili, limite di 120 scritture al minuto, rilettura completa periodica; letture di prodotti, categorie, albero e reparti con `updatedSince`; scritture di prodotti e categorie con l'operatore dichiarato (`X-Operator-Id`, `403 OPERATOR_NOT_ALLOWED`); voci "per tutti" di un gruppo con un solo punto vendita. I prezzi del catalogo sono in unità di valuta decimali. |

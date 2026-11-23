@@ -5,7 +5,7 @@ import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { createEntityRepository, entityProjection } from '../product-catalog/entity.repository.ts';
 import type { EntityRepository } from '../product-catalog/entity.repository.ts';
 import { createTaxProducts } from '../products/products.tax.ts';
@@ -30,7 +30,7 @@ export interface DepartmentsRepository extends EntityRepository {
    * @returns The departments (id and code), at most {@link MAX_DEPARTMENTS_READ}.
    * @throws {Error} If the group has more than {@link MAX_DEPARTMENTS_READ} departments: the check would be made on a part of them, so it is refused explicitly.
    */
-  codes(principal: AuthPrincipal, access: GroupAccess): Promise<Array<{ readonly id: ObjectId; readonly code: unknown; readonly updateDate: unknown }>>;
+  codes(principal: CatalogCaller, access: GroupAccess): Promise<Array<{ readonly id: ObjectId; readonly code: unknown; readonly updateDate: unknown }>>;
   /**
    * Whether the group has another active department (`status` `true`) whose tax rate has a fiscal department number.
    *
@@ -39,7 +39,7 @@ export interface DepartmentsRepository extends EntityRepository {
    * @param except The department being deleted.
    * @param department The department number of the tax rate.
    */
-  hasOtherActiveWithNumber(principal: AuthPrincipal, access: GroupAccess, except: ObjectId, department: number): Promise<boolean>;
+  hasOtherActiveWithNumber(principal: CatalogCaller, access: GroupAccess, except: ObjectId, department: number): Promise<boolean>;
 }
 
 /**
@@ -48,7 +48,7 @@ export interface DepartmentsRepository extends EntityRepository {
  * @param databases Database accessor.
  */
 export function createDepartmentsRepository(databases: Databases): DepartmentsRepository {
-  const departments = (principal: AuthPrincipal, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products_departments');
+  const departments = (principal: CatalogCaller, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products_departments');
   return {
     ...createEntityRepository(databases, { open: (db) => db.collection('products_departments'), ownedFields: PRODUCTS_DEPARTMENTS_OWNED_FIELDS, summary: SUMMARY }),
 
@@ -81,7 +81,7 @@ export interface TaxDepartments {
    * @param taxId Id of the tax rate.
    * @returns At most {@link MAX_REPORTED_DEPARTMENTS} departments, hexadecimal.
    */
-  usedBy(principal: AuthPrincipal, access: GroupAccess, taxId: string): Promise<string[]>;
+  usedBy(principal: CatalogCaller, access: GroupAccess, taxId: string): Promise<string[]>;
   /**
    * The ids of the products, not in the trash, that have a price with a tax rate of the group (`prices[].taxData.id`).
    *
@@ -90,7 +90,7 @@ export interface TaxDepartments {
    * @param taxId Id of the tax rate.
    * @returns At most 20 products, hexadecimal.
    */
-  productsUsing(principal: AuthPrincipal, access: GroupAccess, taxId: string): Promise<string[]>;
+  productsUsing(principal: CatalogCaller, access: GroupAccess, taxId: string): Promise<string[]>;
   /**
    * Makes the copy of a tax rate in the departments that hold it, and in the prices of the products that hold it (`tax` and `taxData`; with a new percentage the gross price stays and the net one is computed again),
    * equal to the rate, and the date of the change of the departments and of the products touched new. It writes only what differs, so
@@ -103,7 +103,7 @@ export interface TaxDepartments {
    * @param session The transaction to write in, when there is one.
    * @returns How far the realignment of the prices went (inside a transaction it is always complete, or the whole write is refused).
    */
-  realign(principal: AuthPrincipal, access: GroupAccess, copy: Document, now: Date, session?: ClientSession): Promise<Realignment>;
+  realign(principal: CatalogCaller, access: GroupAccess, copy: Document, now: Date, session?: ClientSession): Promise<Realignment>;
   /**
    * The way to write the group document and its departments in one transaction: available when the group database is on the cluster of the common database (a transaction cannot span clusters),
    * `null` otherwise.
@@ -119,7 +119,7 @@ export interface TaxDepartments {
  * @param databases Database accessor.
  */
 export function createTaxDepartments(databases: Databases): TaxDepartments {
-  const departments = (principal: AuthPrincipal, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products_departments');
+  const departments = (principal: CatalogCaller, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products_departments');
   const products = createTaxProducts(databases);
   return {
     productsUsing: (principal, access, taxId) => products.usedBy(principal, access, taxId),

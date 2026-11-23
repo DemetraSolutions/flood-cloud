@@ -1,7 +1,7 @@
 import type { ObjectId } from 'mongodb';
 import { AppError } from '../../shared/http/errors.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import type { CatalogsService } from '../groups/catalogs/catalogs.service.ts';
 import { productFavorites } from '../groups/catalogs/product-favorites.ts';
 import type { ProductFavorite } from '../groups/catalogs/product-favorites.ts';
@@ -41,7 +41,7 @@ const PRODUCT_KINDS: ReadonlyArray<readonly [string, ProductUserKind]> = [
  * @param id Id of the product.
  * @throws {AppError} `CONFLICT` with a `referenced` detail for each user (`<kind>.<id>`) and, for what the caller may not be told, one anonymous `<kind>` detail.
  */
-export async function guardProductRemoval(deps: RemovalDeps, principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<void> {
+export async function guardProductRemoval(deps: RemovalDeps, principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<void> {
   const restricted = perimeterOf(principal) !== null;
   const wanted = id.toHexString();
   const refuse = (kind: string, shown: readonly string[], hidden: boolean): never => {

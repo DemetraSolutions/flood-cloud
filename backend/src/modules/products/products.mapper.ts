@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { logo } from '../companies/company.mapper.ts';
 import type { FeatureFlags } from '../groups/features.ts';
@@ -281,6 +281,22 @@ export interface ProductView {
   readonly updatedAt: string | null;
 }
 
+/** The fields of a product that are costs or suppliers of the whole group: a caller that has no business with them is never given them, and they are not read from the database for it. */
+export const PRODUCT_COST_FIELDS: readonly string[] = Object.freeze(['suppliers', 'simpleCost', 'lastAveragePrice']);
+
+/** A product as {@link ProductView} shows it, without the costs, the suppliers and the simple cost: not assignable from a {@link ProductView}, so the compiler refuses to give one where this is expected. */
+export type ProductWithoutCosts = Omit<ProductView, 'costs' | 'suppliers' | 'simpleCost'> & { readonly costs?: never; readonly suppliers?: never; readonly simpleCost?: never };
+
+/**
+ * Drops from a product view the costs, the suppliers and the simple cost (field by field: a field added to the view never leaves with them by itself).
+ *
+ * @param view The view of a product.
+ */
+export function withoutCosts(view: ProductView): ProductWithoutCosts {
+  const { costs: _costs, suppliers: _suppliers, simpleCost: _simpleCost, ...rest } = view;
+  return rest;
+}
+
 /** The barcodes of a stored document, read tolerantly. */
 export function barcodesOf(raw: unknown, features: Pick<FeatureFlags, 'warehouse'>): Barcode[] {
   return recordsOf(raw).flatMap((item) =>
@@ -436,7 +452,7 @@ function scaleTypeOf(raw: unknown): 'weight' | 'piece' | null {
  * @param principal The caller, whose perimeter decides the places shown and whether the product is editable.
  * @param features The features of the group: a field of a function the group does not have is left out.
  */
-export function productView(document: Document, principal: AuthPrincipal, features: FeatureFlags): ProductView {
+export function productView(document: Document, principal: CatalogCaller, features: FeatureFlags): ProductView {
   const allowed = perimeterOf(principal);
   const modifier = isModifierProduct(document);
   const switches = {
@@ -572,7 +588,7 @@ export interface ProductRow {
  * @param defaultPriceListId The default price list of the group.
  * @param supplierNames The display names of the last suppliers of the page, by id.
  */
-export function productRow(document: Document, principal: AuthPrincipal, features: FeatureFlags, language: string, defaultPriceListId: string | null, supplierNames: ReadonlyMap<string, string | null> = new Map()): ProductRow {
+export function productRow(document: Document, principal: CatalogCaller, features: FeatureFlags, language: string, defaultPriceListId: string | null, supplierNames: ReadonlyMap<string, string | null> = new Map()): ProductRow {
   const names = textsOf(document['name']);
   const moves = features.warehouse && valueAt(document, 'availability.warehouse') === true && document['type'] !== 'service';
   const trashed = document['trash'] === true;

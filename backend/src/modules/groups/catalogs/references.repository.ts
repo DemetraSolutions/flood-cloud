@@ -5,7 +5,7 @@ import { bounded } from '../../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../../shared/security/scope/group-access.ts';
 import { groupMirror } from '../../../shared/security/scope/group-mirror.ts';
-import type { AuthPrincipal } from '../../../shared/security/scope/principal.ts';
+import type { ScopeHolder } from '../../../shared/security/scope/principal.ts';
 import type { ReferenceCheck, ReferenceCollection } from './catalog.ts';
 
 /** The kinds of reference read from the group database; `places` is not among them: it is read from the copies in the common database. */
@@ -31,7 +31,7 @@ export interface ReferencesRepository {
    * @param check The ids and where they must be.
    * @returns The positions, in the list, of the ids that are missing; empty when all exist.
    */
-  missing(principal: AuthPrincipal, access: GroupAccess, check: ReferenceCheck): Promise<number[]>;
+  missing(principal: ScopeHolder, access: GroupAccess, check: ReferenceCheck): Promise<number[]>;
 }
 
 /**

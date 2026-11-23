@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from 'node:util';
 import { Int32, ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
 import { PRODUCTS_CATEGORIES_OWNED_FIELDS } from '../../db/collections.ts';
-import { actorOf } from '../../shared/activity-log/actor.ts';
 import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { DataAction } from '../../shared/activity-log/catalog.ts';
 import { recordDataChange } from '../../shared/activity-log/data-change.ts';
@@ -12,7 +11,8 @@ import type { ErrorDetail } from '../../shared/http/errors.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
 import type { Logger } from '../../shared/logging/logger.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { actorOfCaller, languageOfCaller, operatorMetadata } from '../product-catalog/caller.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { legacyLogoDescriptor, logo } from '../companies/company.mapper.ts';
 import { flagOf, isRecord, textOf, valueAt } from '../groups/catalogs/kit.ts';
@@ -23,7 +23,7 @@ import type { ReferencesRepository } from '../groups/catalogs/references.reposit
 import type { UsersRepository } from '../users/users.repository.ts';
 import { perimeterOf } from '../product-catalog/availability.ts';
 import { entityVersion } from '../product-catalog/entity.service.ts';
-import type { EntityService } from '../product-catalog/entity.service.ts';
+import type { EntityPage, EntityService } from '../product-catalog/entity.service.ts';
 import type { GroupLanguages } from '../product-catalog/group-languages.ts';
 import { imageOf } from '../product-catalog/image.ts';
 import type { ProductReferences } from '../product-catalog/product-references.ts';
@@ -36,8 +36,8 @@ import { categoryView, colorValue, objectIdsValue, plainOf, wholeValue } from '.
 import type { CategoryView } from './categories.mapper.ts';
 import type { CategoryPlaces } from './categories.places.ts';
 import type { CategoriesRepository } from './categories.repository.ts';
-import { MAX_STATION_PLACES, categoriesListFor } from './categories.schemas.ts';
-import type { CategoriesQuery, CreateCategoryBody, PatchCategoryBody } from './categories.schemas.ts';
+import { CATEGORY_CHANGES_LIST, MAX_STATION_PLACES, categoriesListFor } from './categories.schemas.ts';
+import type { CategoriesQuery, CategoryChangesQuery, CreateCategoryBody, PatchCategoryBody } from './categories.schemas.ts';
 import { MAX_CATEGORIES, MAX_LEVELS, isWithin, onCycle, shapeOf } from './categories.tree.ts';
 import type { TreeNode, TreeShape } from './categories.tree.ts';
 
@@ -75,7 +75,13 @@ export interface CategoriesService extends EntityService<Category, CreateCategor
    *
    * @throws {AppError} `CONFLICT` (`categories`/`tooMany`) in a group that has more than {@link MAX_CATEGORIES} categories; `NOT_FOUND` if the caller disappeared since the authentication.
    */
-  tree(principal: AuthPrincipal, access: GroupAccess): Promise<CategoryTreeNode[]>;
+  tree(principal: CatalogCaller, access: GroupAccess): Promise<CategoryTreeNode[]>;
+  /**
+   * A page of the categories the caller reaches, oldest change first, for a client that keeps a copy of the catalog: with `updatedSince` every category changed from that instant, without it all of them.
+   *
+   * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit.
+   */
+  listChanges(principal: CatalogCaller, access: GroupAccess, query: CategoryChangesQuery): Promise<EntityPage<Category>>;
 }
 
 /** Collaborators of {@link createCategoriesService}. */
@@ -89,7 +95,7 @@ export interface CategoriesServiceDeps {
   readonly catalogs: Pick<CatalogsService, 'list'>;
   readonly products: Pick<ProductReferences, 'inCategory' | 'withModifierCategory' | 'withBundleCategory' | 'notModifiers'>;
   /** The descriptor of an image of the library, `null` when the caller may not use it. */
-  readonly images: { imageSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
+  readonly images: { imageSource(principal: CatalogCaller, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
   readonly languages: GroupLanguages;
   readonly users: Pick<UsersRepository, 'findById'>;
   readonly activityLog: ActivityLog;
@@ -176,7 +182,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
   const newId = deps.newId ?? (() => new ObjectId());
   const hex = (id: ObjectId): string => id.toHexString();
 
-  const loadTree = async (principal: AuthPrincipal, access: GroupAccess): Promise<Tree | null> => {
+  const loadTree = async (principal: CatalogCaller, access: GroupAccess): Promise<Tree | null> => {
     const nodes = await repository.nodes(principal, access);
     if (nodes === null) {
       return null;
@@ -185,14 +191,14 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
     const shape = shapeOf(nodes);
     return { nodes, shape, reachable, view: reachable === null ? shape : shapeOf(nodes.filter((node) => reachable.has(node.id))) };
   };
-  const requireTree = async (principal: AuthPrincipal, access: GroupAccess): Promise<Tree> => {
+  const requireTree = async (principal: CatalogCaller, access: GroupAccess): Promise<Tree> => {
     const tree = await loadTree(principal, access);
     if (tree === null) {
       throw tooMany();
     }
     return tree;
   };
-  const viewOf = (principal: AuthPrincipal, access: GroupAccess, document: Document, tree: Tree | null): Category => {
+  const viewOf = (principal: CatalogCaller, access: GroupAccess, document: Document, tree: Tree | null): Category => {
     const id = hex(document['_id'] as ObjectId);
     const stored = document['parentId'] instanceof ObjectId ? hex(document['parentId']) : null;
     const full = tree?.shape.parentOf.get(id);
@@ -208,14 +214,14 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
       cyclic: tree?.view.cyclic.has(id) ?? false,
     };
   };
-  const resultOf = (principal: AuthPrincipal, access: GroupAccess, document: Document, tree: Tree | null) => ({
+  const resultOf = (principal: CatalogCaller, access: GroupAccess, document: Document, tree: Tree | null) => ({
     entity: viewOf(principal, access, document, tree),
     version: entityVersion(document, PRODUCTS_CATEGORIES_OWNED_FIELDS, versionKey),
   });
-  const record = async (principal: AuthPrincipal, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Document | undefined, after: Document | undefined) => {
+  const record = async (principal: CatalogCaller, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Document | undefined, after: Document | undefined) => {
     const reachable = perimeterOf(principal) === null ? null : await repository.reachableIds(principal, access);
     await recordDataChange(activityLog, {
-      actor: actorOf(principal),
+      actor: actorOfCaller(principal),
       groupId: access.groupId,
       resource: { type: 'productCategory', id: hex(id) },
       action,
@@ -223,16 +229,11 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
       after: after === undefined ? undefined : categoryLoggable(principal, after, reachable),
       requestId: client.requestId,
       ...(client.ip === null ? {} : { ip: client.ip }),
+      metadata: operatorMetadata(principal),
     });
   };
-  const languageOf = async (principal: AuthPrincipal): Promise<string> => {
-    const caller = await deps.users.findById(principal.userId);
-    if (caller === null) {
-      throw new AppError('NOT_FOUND');
-    }
-    return caller.user.language;
-  };
-  const found = async (principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<Document> => {
+  const languageOf = (principal: CatalogCaller, access: GroupAccess): Promise<string> => languageOfCaller(deps, principal, access.groupId);
+  const found = async (principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<Document> => {
     const document = await repository.findById(principal, access, id);
     if (document === null) {
       throw new AppError('NOT_FOUND');
@@ -245,7 +246,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
     }
   };
   /** The descriptor of an image of the library (`null` for none, or when it is not usable: a problem is added to `issues`). */
-  const imageOfRequest = async (principal: AuthPrincipal, access: GroupAccess, image: { readonly imageId: string } | null, field: string, issues: ErrorDetail[]): Promise<MediaLogo | null> => {
+  const imageOfRequest = async (principal: CatalogCaller, access: GroupAccess, image: { readonly imageId: string } | null, field: string, issues: ErrorDetail[]): Promise<MediaLogo | null> => {
     if (image === null) {
       return null;
     }
@@ -256,7 +257,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
     return source;
   };
   /** The positions, in `ids`, of the places that do not exist in the group (or are in the trash). */
-  const missingPlaces = (principal: AuthPrincipal, access: GroupAccess, field: string, ids: readonly string[]): Promise<number[]> =>
+  const missingPlaces = (principal: CatalogCaller, access: GroupAccess, field: string, ids: readonly string[]): Promise<number[]> =>
     ids.length === 0 ? Promise.resolve([]) : deps.references.missing(principal, access, { field, collection: 'places', ids });
 
   /** The problems of a new parent: it does not exist or is not reached, it is the category itself or one of its descendants, or the tree would be too deep. */
@@ -273,7 +274,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
   };
 
   /** Checks the places of a request (create: all of them; modify: the ones the category did not have) and the production centers it names. */
-  const placesIssues = async (principal: AuthPrincipal, access: GroupAccess, stored: unknown, requested: readonly PlaceEntry[], issues: ErrorDetail[]): Promise<void> => {
+  const placesIssues = async (principal: CatalogCaller, access: GroupAccess, stored: unknown, requested: readonly PlaceEntry[], issues: ErrorDetail[]): Promise<void> => {
     assertPlacesInPerimeter(principal, requested.map((entry) => entry.placeId), 'places');
     const current = new Map(placesOf(stored).entries.map((entry) => [entry.placeId, entry]));
     const added = requested.filter((entry) => !current.has(entry.placeId));
@@ -297,7 +298,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
    * one the place has (only the ones the category did not have for that place are judged, so an old station that is gone never blocks an unrelated change).
    */
   const stationsIssues = async (
-    principal: AuthPrincipal,
+    principal: CatalogCaller,
     access: GroupAccess,
     field: 'printStations' | 'counterPrintStations',
     requested: Readonly<Record<string, readonly string[] | null>>,
@@ -342,7 +343,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
   };
 
   /** The modifiers and the categories of modifiers of a request that cannot be used (only the ones the category did not have are judged). */
-  const modifierIssues = async (principal: AuthPrincipal, access: GroupAccess, body: { modifierIds?: readonly string[] | undefined; modifierCategoryIds?: readonly string[] | undefined }, stored: Document | undefined, issues: ErrorDetail[]): Promise<void> => {
+  const modifierIssues = async (principal: CatalogCaller, access: GroupAccess, body: { modifierIds?: readonly string[] | undefined; modifierCategoryIds?: readonly string[] | undefined }, stored: Document | undefined, issues: ErrorDetail[]): Promise<void> => {
     const had = (path: string): Set<string> => new Set(Array.isArray(stored?.[path]) ? (stored[path] as unknown[]).flatMap((id) => (id instanceof ObjectId ? [hex(id)] : [])) : []);
     const check = async (field: 'modifierIds' | 'modifierCategoryIds', path: string, missing: (ids: readonly string[]) => Promise<number[]>): Promise<void> => {
       const requested = body[field];
@@ -359,7 +360,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
     };
     await check('modifierIds', 'variants', (ids) => deps.products.notModifiers(principal, access, ids));
     // A company or place administrator can use only the categories he reaches: another one is judged exactly like one that does not exist (no oracle, and no reference to a category he cannot see
-    // that would block its deletion). The modifier products have no perimeter yet: it arrives with the products module.
+    // that would block its deletion). The modifier products are checked by `deps.products.notModifiers`, which judges only the ones the caller reaches.
     await check('modifierCategoryIds', 'variantsCategories', async (ids) => {
       const missing = await deps.references.missing(principal, access, { field: 'modifierCategoryIds', collection: 'categories', ids });
       if (perimeterOf(principal) === null) {
@@ -374,7 +375,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
    * Refuses the deletion of a category that is still referred to. The kinds of reference are looked for one after the other, from the cheapest, and the search stops at the first kind found: the
    * `409` lists (at most 20 of) that kind only, so a refusal never repeats the three scans of the products. A company or place administrator is named only what he reaches (the rest is one anonymous detail).
    */
-  const guardRemove = async (principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<void> => {
+  const guardRemove = async (principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<void> => {
     const allowed = perimeterOf(principal);
     const wanted = hex(id);
     const reachable = async (): Promise<((item: string) => boolean) | null> => {
@@ -408,7 +409,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
 
   return {
     list: async (principal, access, query: CategoriesQuery) => {
-      const config = categoriesListFor(await languageOf(principal));
+      const config = categoriesListFor(await languageOf(principal, access));
       const params = listParamsOf(query, config);
       const tree = await loadTree(principal, access);
       let parentFilter: Filter<Document> = {};
@@ -428,13 +429,20 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
       return { items: items.map((document) => viewOf(principal, access, document, tree)), page };
     },
 
+    listChanges: async (principal, access, query) => {
+      const params = listParamsOf(query, CATEGORY_CHANGES_LIST);
+      const tree = await loadTree(principal, access);
+      const { items, page } = await repository.list(principal, access, query.updatedSince === undefined ? {} : { updateDate: { $gte: new Date(query.updatedSince) } }, params, CATEGORY_CHANGES_LIST);
+      return { items: items.map((document) => viewOf(principal, access, document, tree)), page };
+    },
+
     get: async (principal, access, id) => {
       const document = await found(principal, access, id);
       return resultOf(principal, access, document, await loadTree(principal, access));
     },
 
     tree: async (principal, access) => {
-      const language = await languageOf(principal);
+      const language = await languageOf(principal, access);
       const { shape, view, reachable } = await requireTree(principal, access);
       const nodes = new Map<string, CategoryTreeNode>();
       for (const document of await repository.treeDocuments(principal, access)) {
@@ -459,7 +467,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
       const issues = featureIssues(access, body);
       const groupLanguages = await deps.languages.of(access.groupId);
       const languages = new Set(groupLanguages);
-      const required = requiredLanguage(await languageOf(principal), groupLanguages);
+      const required = requiredLanguage(await languageOf(principal, access), groupLanguages);
       issues.push(...languageIssues('name', body.name, undefined, languages), ...languageIssues('description', body.description ?? {}, undefined, languages));
       if (body.name[required] === undefined) {
         issues.push({ field: `name.${required}`, issue: 'required' });
@@ -556,7 +564,7 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
         if (body.name !== undefined) {
           const merged = mergeTexts(stored['name'], body.name);
           issues.push(...languageIssues('name', body.name, stored['name'], languages));
-          const required = requiredLanguage(await languageOf(principal), groupLanguages);
+          const required = requiredLanguage(await languageOf(principal, access), groupLanguages);
           // A name keeps a text in the required language it already had, and never ends up with none.
           if (Object.keys(textsOf(merged)).length === 0 || (textsOf(stored['name'])[required] !== undefined && textsOf(merged)[required] === undefined)) {
             issues.push({ field: `name.${required}`, issue: 'required' });

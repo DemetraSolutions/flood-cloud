@@ -4,7 +4,8 @@ import type { Document } from 'mongodb';
 import { AppError } from '../../shared/http/errors.ts';
 import type { ErrorDetail } from '../../shared/http/errors.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { languageOfCaller } from '../product-catalog/caller.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { legacyLogoDescriptor, logo } from '../companies/company.mapper.ts';
 import { flagOf, isRecord, recordsOf, textOf, valueAt } from '../groups/catalogs/kit.ts';
@@ -19,7 +20,7 @@ import type { PriceList } from '../groups/catalogs/price-lists.ts';
 import { taxes } from '../groups/catalogs/taxes.ts';
 import type { Tax } from '../groups/catalogs/taxes.ts';
 import type { Feature } from '../groups/features.ts';
-import { perimeterOf } from '../product-catalog/availability.ts';
+import { ownsEveryPlace, perimeterOf } from '../product-catalog/availability.ts';
 import type { GroupLanguages } from '../product-catalog/group-languages.ts';
 import { languageIssues, mergeTexts, requiredLanguage, textsOf } from '../product-catalog/texts.ts';
 import { numberValue, plainOf, stationsOf, wholeValue } from '../product-categories/categories.mapper.ts';
@@ -64,7 +65,7 @@ export interface PlanDeps {
   readonly references: Pick<ReferencesRepository, 'missing'>;
   readonly catalogs: Pick<CatalogsService, 'list'>;
   /** The descriptor of an image of the library, `null` when the caller may not use it. */
-  readonly images: { imageSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
+  readonly images: { imageSource(principal: CatalogCaller, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
   readonly languages: GroupLanguages;
   readonly users: Pick<UsersRepository, 'findById'>;
   /** A new element id (the id of a price). */
@@ -73,7 +74,7 @@ export interface PlanDeps {
 
 /** What is to be planned: a creation (the stored document is the blank one the legacy starts a form from) or a modification. */
 export interface PlanInput {
-  readonly principal: AuthPrincipal;
+  readonly principal: CatalogCaller;
   readonly access: GroupAccess;
   readonly id: ObjectId;
   readonly stored: Document;
@@ -394,11 +395,7 @@ export async function planProduct(deps: PlanDeps, input: PlanInput): Promise<Pla
       issues.push(...languageIssues(field, request, current, languages));
       const merged = mergeTexts(current, request);
       if (field === 'name') {
-        const caller = await deps.users.findById(principal.userId);
-        if (caller === null) {
-          throw new AppError('NOT_FOUND');
-        }
-        const required = requiredLanguage(caller.user.language, groupLanguages);
+        const required = requiredLanguage(await languageOfCaller(deps, principal, access.groupId), groupLanguages);
         // A name keeps a text in the required language it already had, and never ends up with none.
         if (Object.keys(textsOf(merged)).length === 0 || (textsOf(current)[required] !== undefined && textsOf(merged)[required] === undefined) || (creating && textsOf(merged)[required] === undefined)) {
           issues.push({ field: `name.${required}`, issue: 'required' });
@@ -682,8 +679,8 @@ export async function planProduct(deps: PlanDeps, input: PlanInput): Promise<Pla
     const requested: ProductPlace[] = (body.places ?? []).map((entry) => ({ placeId: entry.placeId, favorite: entry.favorite ?? false, favoriteHandheld: entry.favoriteHandheld ?? false, position: entry.position ?? null, productionCenterId: entry.productionCenterId ?? null }));
     (body.places ?? []).forEach((entry, index) => entry.favoriteHandheld !== undefined && !features.rooms && issues.push({ field: `places.${String(index)}.favoriteHandheld`, issue: 'notAllowed' }));
     const next = productPlacesDocument(principal, stored['placesAvailability'], requested);
-    // A company or place administrator cannot limit a product that is for every place, nor end up with one that is.
-    if (!creating && restricted && productPlacesOf(stored['placesAvailability']).length === 0) {
+    // A company or place administrator cannot limit a product that is for every place, nor end up with one that is (unless the group has one place only, which makes such a product wholly his).
+    if (!creating && restricted && !ownsEveryPlace(principal) && productPlacesOf(stored['placesAvailability']).length === 0) {
       throw new AppError('FORBIDDEN', { details: [{ field: 'places', issue: 'notAllowed' }] });
     }
     assertPlacesInPerimeter(principal, requested.map((entry) => entry.placeId), next.length);

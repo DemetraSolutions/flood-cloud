@@ -36,6 +36,7 @@ export interface DataChange {
 export async function recordDataChange(activityLog: ActivityLog, change: DataChange): Promise<void> {
   const all = computeChanges(change.before, change.after, change.sensitive === undefined ? {} : { sensitive: change.sensitive });
   const truncated = all.length > MAX_CHANGES;
+  const metadata = { ...change.metadata, ...(truncated ? { changesTruncated: true, changesTotal: all.length } : {}) };
   await activityLog.record({
     category: 'data',
     action: change.action,
@@ -46,6 +47,6 @@ export async function recordDataChange(activityLog: ActivityLog, change: DataCha
     changes: truncated ? all.slice(0, MAX_CHANGES) : all,
     ...(change.requestId === undefined ? {} : { requestId: change.requestId }),
     ...(change.ip === undefined ? {} : { ip: change.ip }),
-    ...(change.metadata === undefined && !truncated ? {} : { metadata: { ...change.metadata, ...(truncated ? { changesTruncated: true, changesTotal: all.length } : {}) } }),
+    ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
   });
 }

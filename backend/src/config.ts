@@ -112,6 +112,8 @@ export interface Config {
   readonly rateLimitStoreActivationPerIp: number;
   /** Activation code creations, cancellations and key revocations per minute allowed to a user (`RATE_LIMIT_STORE_KEY_ADMIN_PER_USER`). */
   readonly rateLimitStoreKeyAdminPerUser: number;
+  /** Writes of the catalog allowed to a store key per minute (`RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE`). */
+  readonly rateLimitStoreCatalogWritePerStore: number;
   /** Creations, changes and revocations of public API keys per minute allowed to a user (`RATE_LIMIT_API_KEY_ADMIN_PER_USER`). */
   readonly rateLimitApiKeyAdminPerUser: number;
   /** Creations, changes and deletions of countries and provinces per minute allowed to a user (`RATE_LIMIT_COUNTRIES_ADMIN_PER_USER`). */
@@ -678,6 +680,7 @@ export function loadConfig(env: Env): Config {
   const rateLimitApiPerStore = readInteger(env, issues, 'RATE_LIMIT_API_PER_STORE', 600, 1, 1_000_000);
   const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
+  const rateLimitStoreCatalogWritePerStore = readInteger(env, issues, 'RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE', 120, 1, 1_000_000);
   const rateLimitApiKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_API_KEY_ADMIN_PER_USER', 20, 1, 100000);
   const rateLimitCountriesAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_COUNTRIES_ADMIN_PER_USER', 30, 1, 100000);
   const rateLimitTrashAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_TRASH_ADMIN_PER_USER', 30, 1, 100000);
@@ -762,6 +765,7 @@ export function loadConfig(env: Env): Config {
     rateLimitApiPerStore === undefined ||
     rateLimitStoreActivationPerIp === undefined ||
     rateLimitStoreKeyAdminPerUser === undefined ||
+    rateLimitStoreCatalogWritePerStore === undefined ||
     rateLimitApiKeyAdminPerUser === undefined ||
     rateLimitCountriesAdminPerUser === undefined ||
     rateLimitTrashAdminPerUser === undefined ||
@@ -818,6 +822,7 @@ export function loadConfig(env: Env): Config {
     rateLimitApiPerStore,
     rateLimitStoreActivationPerIp,
     rateLimitStoreKeyAdminPerUser,
+    rateLimitStoreCatalogWritePerStore,
     rateLimitApiKeyAdminPerUser,
     rateLimitCountriesAdminPerUser,
     rateLimitTrashAdminPerUser,

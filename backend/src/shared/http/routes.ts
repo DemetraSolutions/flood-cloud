@@ -14,7 +14,7 @@ import { requireApiKeyPermission } from '../security/scope/api-key-guards.ts';
 import { reportCrossGroupAccess, requireGroupAccess, requireStoreGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { requireFeature } from '../security/scope/require-feature.ts';
-import { refuseStore, requireStore, requireStorePermission, requireStorePlace } from '../security/scope/store-guards.ts';
+import { refuseStore, requireStore, requireStoreParams, requireStorePermission, requireStorePlace } from '../security/scope/store-guards.ts';
 import { AppError } from './errors.ts';
 
 /** HTTP methods a route may declare. */
@@ -64,11 +64,30 @@ export interface UserAuth {
 }
 
 /**
+ * The only path parameters a store route may have: the ids of the entries of the catalog it reads or writes (`/store-context/catalog/products/:productId`). The builder checks each one is the text of
+ * an id before anything else of the route runs; the group, the company and the place are never a parameter, they come from the store key.
+ */
+export const STORE_PATH_PARAMETERS = Object.freeze(['productId', 'categoryId'] as const);
+
+/** A path parameter a store route may declare. */
+export type StoreParameter = (typeof STORE_PATH_PARAMETERS)[number];
+
+/**
  * A route only the server of a point of sale may call, with its store key (`GET /v1/store-context`). It needs no permission of the catalog (the profile of the store is fixed), has no path parameter
- * and is rate limited per store key.
+ * but the ids it declares in `params` and is rate limited per store key.
  */
 export interface StoreAuth {
   readonly kind: 'store';
+  /**
+   * The path parameters of the route: exactly the ones in its path, each of {@link STORE_PATH_PARAMETERS}. The builder checks each is the text of an id (`422` otherwise) right after the group access, so
+   * a store route has no other parameter and never reads one unchecked.
+   */
+  readonly params?: readonly StoreParameter[];
+  /**
+   * The check of who stands at the till, declared **exactly** by the routes that write (every method but `GET`): it runs after the group access and the declared rate limit rules and before the body is read, so the body of a store
+   * that has no verified operator is never parsed. A read declares none.
+   */
+  readonly operator?: RequestHandler;
   /**
    * `true` for a route that reads the group database of the store: the builder then issues the verified access to the one group of the store key (`requireStoreGroupAccess`) right after the
    * authentication, so the access is never a middleware a route can place by hand, and a `user` route can never have it. Needs a surface with the group access dependencies.
@@ -152,7 +171,7 @@ function normalizePath(path: string): string {
   return lower.length > 1 && lower.endsWith('/') ? lower.slice(0, -1) : lower;
 }
 
-type AuthFields = { kind?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown; store?: unknown };
+type AuthFields = { kind?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown; store?: unknown; params?: unknown; operator?: unknown };
 
 /** The problems of a `user` route that declares `store`. */
 function storeProblems(label: string, route: RouteDefinition, auth: AuthFields, options: MountOptions): string[] {
@@ -179,15 +198,32 @@ function storeProblems(label: string, route: RouteDefinition, auth: AuthFields, 
 function storeOnlyProblems(label: string, route: RouteDefinition, auth: AuthFields, options: MountOptions): string[] {
   const problems: string[] = [];
   if (['permission', 'anyPermission', 'feature', 'allowWithPendingPasswordChange', 'store'].some((name) => (auth as Record<string, unknown>)[name] !== undefined)) {
-    problems.push(`${label}: a store route declares nothing but its kind and, when it reads the group, group: true`);
+    problems.push(`${label}: a store route declares nothing but its kind and, when it reads the group, group: true, the ids of its path (params) and, when it writes, its operator`);
   }
   if (auth.group !== undefined && auth.group !== true) {
     problems.push(`${label}: a store route's group can only be true`);
   } else if (auth.group === true && options.groupAccess === undefined) {
     problems.push(`${label}: a store route that asks for the group needs the groupAccess dependencies`);
   }
-  if (/:/.test(String(route.path))) {
-    problems.push(`${label}: a store route has no path parameter`);
+  if ((auth.params !== undefined || auth.operator !== undefined) && auth.group !== true) {
+    problems.push(`${label}: a store route with params or an operator must declare group: true`);
+  }
+  if (/[*{}]/.test(String(route.path))) {
+    problems.push(`${label}: a store route's path has no wildcard or group (*, {, }): only literal segments and the declared ids`);
+  }
+  const declared: unknown = auth.params;
+  if (declared !== undefined && !(Array.isArray(declared) && declared.length > 0 && new Set(declared).size === declared.length && declared.every((name) => (STORE_PATH_PARAMETERS as readonly unknown[]).includes(name)))) {
+    problems.push(`${label}: a store route's params are a list, without repetitions, of ${STORE_PATH_PARAMETERS.join(', ')}`);
+  }
+  const inPath = [...String(route.path).matchAll(/:(\w+)/g)].map((match) => match[1]);
+  const listed = Array.isArray(declared) ? (declared as unknown[]) : [];
+  if (String(route.path).replace(/:\w+/g, '').includes(':') || inPath.length !== listed.length || !inPath.every((name) => listed.includes(name))) {
+    problems.push(`${label}: a store route has no path parameter other than the ids it declares in params`);
+  }
+  if (auth.operator !== undefined && typeof auth.operator !== 'function') {
+    problems.push(`${label}: a store route's operator must be a function`);
+  } else if ((auth.operator !== undefined) !== (route.method !== 'GET')) {
+    problems.push(`${label}: a store route declares an operator exactly when it writes`);
   }
   if (options.authenticate === undefined || options.storeKeys !== true) {
     problems.push(`${label}: a store route needs a surface that accepts store keys, with its authenticate middleware`);
@@ -417,7 +453,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  *
  * A caller that authenticated with a store key (`res.locals.store`, never `res.locals.auth`) is refused with `403` by every `user` route that does not declare `store: true`, right after `authenticate`;
  * on a route that does, it follows its own chain (the group check on the store principal, the place of the key, the store profile, the feature), and a user follows the chain above.
- * A route with `auth: { kind: 'store' }` runs `authenticate`, refuses whoever is not a store and applies the declared rules before the body. The per-key rate limit is the store authentication's own.
+ * A route with `auth: { kind: 'store' }` runs `authenticate`, refuses whoever is not a store, issues the group access (`group: true`), checks the ids of its path (`params`), applies the declared rules, runs the check of the operator of a write (`operator`) and reads the body. The per-key rate limit is the store authentication's own.
  * A route with `auth: { kind: 'apiKey', permission }` (the public surface) runs `authenticate` (guarded by the per-IP limit on failed authentications), refuses a key that lacks the permission (`403`), then applies the
  * declared rules before the body; the per-key rate limit and the daily quota are the API key authentication's own.
  *
@@ -427,7 +463,7 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * @throws {Error} At startup, listing every invalid route (missing or unknown auth,
  * empty reason, unknown permission, both or an empty `anyPermission`, unknown feature or a feature without `group: true`, `user` route without `authenticate` or rate limit dependencies, inconsistent `group`,
  * malformed rate limit rules, malformed `middleware`, `multipart` or `compress`, an anonymous route without a pre-parser rate limit rule or a misplaced exemption,
- * auth kind not allowed on the surface, an `apiKey` route with a permission outside the public catalog or without `authenticate` and the rate limit dependencies, a `store` declaration that is not `true`, on an anonymous route, with `anyPermission`, outside `STORE_PROFILE`, without `group: true` and a `:placeId`, with a pending password change or on a surface that does not accept store keys, a store route with anything but its kind or with a path parameter, disallowed method,
+ * auth kind not allowed on the surface, an `apiKey` route with a permission outside the public catalog or without `authenticate` and the rate limit dependencies, a `store` declaration that is not `true`, on an anonymous route, with `anyPermission`, outside `STORE_PROFILE`, without `group: true` and a `:placeId`, with a pending password change or on a surface that does not accept store keys, a store route with anything but its kind, its group, its ids and its operator, with a path parameter that is not a declared id, with an operator on a read or without one on a write, disallowed method,
  * bad path, duplicate method and path).
  */
 export function mountRoutes(router: Router, routes: readonly RouteDefinition[], options: MountOptions = {}): void {
@@ -486,7 +522,14 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         middleware.push(refuseStore, ...userChain);
       }
     } else if (route.auth.kind === 'store') {
-      middleware.push(guardAuthentication(authenticate!, rateLimitOptions!), requireStore, ...(route.auth.group === true ? [requireStoreGroupAccess(groupAccess!.groups)] : []), ...beforeBody);
+      middleware.push(
+        guardAuthentication(authenticate!, rateLimitOptions!),
+        requireStore,
+        ...(route.auth.group === true ? [requireStoreGroupAccess(groupAccess!.groups)] : []),
+        ...(route.auth.params === undefined ? [] : [requireStoreParams(route.auth.params)]),
+        ...beforeBody,
+        ...(route.auth.operator === undefined ? [] : [route.auth.operator]),
+      );
     } else if (route.auth.kind === 'apiKey') {
       // The per-key rate limit and the daily quota are the authentication's own (the limits are the key's, not a constant of the rule).
       middleware.push(guardAuthentication(authenticate!, { ...rateLimitOptions!, authFailureRule: rateLimitOptions!.apiKeyAuthFailureRule }), requireApiKeyPermission(route.auth.permission), ...beforeBody);

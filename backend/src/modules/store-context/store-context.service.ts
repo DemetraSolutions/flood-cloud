@@ -20,6 +20,7 @@ import type { StorePlace } from '../places/place.types.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
 import type { PageInfo } from '../../shared/http/envelope.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
+import type { User } from '../users/user.types.ts';
 import { USERS_LIST } from '../users/users.list.ts';
 import { toStoreGroup, toStoreUser } from './store-context.mapper.ts';
 import { storeUsersFilter } from './store-context.users.ts';
@@ -89,13 +90,24 @@ export interface StoreContextService {
    * @throws {AppError} `NOT_FOUND` if the place is gone or has no company id; `VALIDATION_ERROR` for a cursor that does not fit.
    */
   getUsers(store: StorePrincipal, access: GroupAccess, query: StoreUsersQuery): Promise<StoreUsersResult>;
+  /**
+   * One user of the very set {@link StoreContextService.getUsers} gives the store (the `E` and `PA` of the place, the `CA` of the company the place has now, the `SA` of the group; never a PSA, a dealer, a
+   * trashed user or one of another group), by id and without the PIN: who stands at the till of a store, for the checks of its writes. Disabled users are found: the caller decides what that means.
+   *
+   * @param store The store principal (the only source of the group and the place).
+   * @param access Verified access to the group of the store.
+   * @param id Id of the user.
+   * @returns The user, or `null` when he is not in that set (the same answer whatever the reason).
+   * @throws {AppError} `NOT_FOUND` if the place is gone or has no company id.
+   */
+  findUser(store: StorePrincipal, access: GroupAccess, id: ObjectId): Promise<User | null>;
 }
 
 /** Collaborators of {@link createStoreContextService}. */
 export interface StoreContextServiceDeps {
   readonly groups: ManagedGroupsRepository;
   readonly repository: StoreContextRepository;
-  readonly users: Pick<UsersRepository, 'listForStore'>;
+  readonly users: Pick<UsersRepository, 'listForStore' | 'findOneForStore'>;
   readonly catalogs: Pick<CatalogsService, 'list'>;
   /** The read of the companies and places of the store's own perimeter. */
   readonly readerFor: (store: StorePrincipal, access: GroupAccess) => Pick<CompaniesPlacesWriter, 'read'>;
@@ -155,6 +167,12 @@ export function createStoreContextService(deps: StoreContextServiceDeps): StoreC
       const { companyId } = await currentCompany(store, access);
       const { users: found, page } = await users.listForStore(storeUsersFilter(store.groupId, store.placeId, companyId), listParamsOf(query, USERS_LIST));
       return { users: found.map(toStoreUser), page, companyId };
+    },
+
+    findUser: async (store, access, id) => {
+      const { companyId } = await currentCompany(store, access);
+      const found = await users.findOneForStore({ $and: [storeUsersFilter(store.groupId, store.placeId, companyId), { _id: id }] });
+      return found === null ? null : found.user;
     },
 
     getPlace: async (store, access) => {

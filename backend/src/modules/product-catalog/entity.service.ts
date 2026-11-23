@@ -2,7 +2,6 @@ import { createHmac } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { BSON, ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
-import { actorOf } from '../../shared/activity-log/actor.ts';
 import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { DataAction } from '../../shared/activity-log/catalog.ts';
 import { recordDataChange } from '../../shared/activity-log/data-change.ts';
@@ -14,7 +13,8 @@ import type { ErrorDetail } from '../../shared/http/errors.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
 import type { ListConfig } from '../../shared/http/list.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { actorOfCaller, languageOfCaller, operatorMetadata } from './caller.ts';
+import type { CatalogCaller } from './caller.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { dateOf, valueAt } from '../groups/catalogs/kit.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
@@ -85,7 +85,7 @@ export interface EntityPage<V> {
 
 /** The caller and the group of an operation. */
 export interface KindContext {
-  readonly principal: AuthPrincipal;
+  readonly principal: CatalogCaller;
   readonly access: GroupAccess;
 }
 
@@ -123,33 +123,33 @@ export interface EntityService<V extends { readonly id: string }, C extends obje
    *
    * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit the sort; `NOT_FOUND` if the caller disappeared since the authentication.
    */
-  list(principal: AuthPrincipal, access: GroupAccess, query: EntityQuery): Promise<EntityPage<V>>;
+  list(principal: CatalogCaller, access: GroupAccess, query: EntityQuery): Promise<EntityPage<V>>;
   /**
    * One entry.
    *
    * @throws {AppError} `NOT_FOUND` (also for an entry a company or place administrator does not reach).
    */
-  get(principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<EntityResult<V>>;
+  get(principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<EntityResult<V>>;
   /**
    * Creates an entry and records its creation.
    *
    * @throws {AppError} `FORBIDDEN` for a company or place administrator who names a place outside his perimeter or none; `VALIDATION_ERROR` for a language the group does not have, a missing
    * name in the required language, an image without the `media` feature or not of the library, a place that does not exist; and the errors of the kind.
    */
-  create(principal: AuthPrincipal, access: GroupAccess, body: C, client: ClientContext): Promise<EntityResult<V>>;
+  create(principal: CatalogCaller, access: GroupAccess, body: C, client: ClientContext): Promise<EntityResult<V>>;
   /**
    * Modifies an entry (JSON Merge Patch on the texts, the other fields replaced) and records it. A request that changes nothing writes and records nothing.
    *
    * @param expected The version the client read (`If-Match`).
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN` for a company or place administrator when the entry is not editable by him; `PRECONDITION_FAILED` when the entry is not at the version the client read; `CONFLICT` when it changed while this request ran; the errors of {@link EntityService.create}.
    */
-  update(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, expected: string, body: P, client: ClientContext): Promise<EntityResult<V>>;
+  update(principal: CatalogCaller, access: GroupAccess, id: ObjectId, expected: string, body: P, client: ClientContext): Promise<EntityResult<V>>;
   /**
    * Deletes an entry for good and records it.
    *
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN` for a company or place administrator when the entry is for every place or names a place outside his perimeter; `CONFLICT` with the references when it is in use, or without details when it changed (or went) while the request ran.
    */
-  remove(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<void>;
+  remove(principal: CatalogCaller, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<void>;
 }
 
 /** Collaborators of {@link createEntityService}. */
@@ -157,9 +157,9 @@ export interface EntityServiceDeps<X extends object, C extends EntityCreateBody,
   readonly kind: EntityKind<X, C, P>;
   readonly repository: EntityRepository;
   /** Which of some places exist in the group and are not in the trash. */
-  readonly places: { missing(principal: AuthPrincipal, access: GroupAccess, check: { field: string; collection: 'places'; ids: readonly string[] }): Promise<number[]> };
+  readonly places: { missing(principal: CatalogCaller, access: GroupAccess, check: { field: string; collection: 'places'; ids: readonly string[] }): Promise<number[]> };
   /** The descriptor of an image of the library, `null` when the caller may not use it. */
-  readonly images: { imageSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
+  readonly images: { imageSource(principal: CatalogCaller, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
   readonly languages: GroupLanguages;
   /** Reads the language of the caller. */
   readonly users: Pick<UsersRepository, 'findById'>;
@@ -214,7 +214,7 @@ export function createEntityService<X extends object, C extends EntityCreateBody
   const newId = deps.newId ?? (() => new ObjectId());
   type Entity = EntityView & X;
 
-  const viewOf = (principal: AuthPrincipal, access: GroupAccess, document: Document): Entity =>
+  const viewOf = (principal: CatalogCaller, access: GroupAccess, document: Document): Entity =>
     ({
       id: (document['_id'] as ObjectId).toHexString(),
       ...kind.extra(document),
@@ -227,12 +227,12 @@ export function createEntityService<X extends object, C extends EntityCreateBody
       createdAt: dateOf(document['insertDate']),
       updatedAt: dateOf(document['updateDate']),
     }) as unknown as Entity;
-  const resultOf = (principal: AuthPrincipal, access: GroupAccess, document: Document): EntityResult<Entity> => ({
+  const resultOf = (principal: CatalogCaller, access: GroupAccess, document: Document): EntityResult<Entity> => ({
     entity: viewOf(principal, access, document),
     version: entityVersion(document, kind.ownedFields, versionKey),
   });
   /** What the activity log keeps of an entry: its fields, never anything the backend does not own, and of the places only the ones the actor may see. */
-  const loggable = (principal: AuthPrincipal, document: Document): Record<string, unknown> => ({
+  const loggable = (principal: CatalogCaller, document: Document): Record<string, unknown> => ({
     ...kind.loggable(kind.extra(document)),
     name: textsOf(document['name']),
     description: textsOf(document['description']),
@@ -240,9 +240,9 @@ export function createEntityService<X extends object, C extends EntityCreateBody
     placeIds: shownPlaceIds(principal, document['placesAvailability']),
     imageId: imageOf(document)?._id ?? null,
   });
-  const record = (principal: AuthPrincipal, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Document | undefined, after: Document | undefined) =>
+  const record = (principal: CatalogCaller, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Document | undefined, after: Document | undefined) =>
     recordDataChange(activityLog, {
-      actor: actorOf(principal),
+      actor: actorOfCaller(principal),
       groupId: access.groupId,
       resource: { type: kind.resource, id: id.toHexString() },
       action,
@@ -250,15 +250,10 @@ export function createEntityService<X extends object, C extends EntityCreateBody
       after: after === undefined ? undefined : loggable(principal, after),
       requestId: client.requestId,
       ...(client.ip === null ? {} : { ip: client.ip }),
+      metadata: operatorMetadata(principal),
     });
-  const languageOf = async (principal: AuthPrincipal): Promise<string> => {
-    const caller = await deps.users.findById(principal.userId);
-    if (caller === null) {
-      throw new AppError('NOT_FOUND');
-    }
-    return caller.user.language;
-  };
-  const found = async (principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<Document> => {
+  const languageOf = (principal: CatalogCaller, access: GroupAccess): Promise<string> => languageOfCaller(deps, principal, access.groupId);
+  const found = async (principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<Document> => {
     const document = await repository.findById(principal, access, id);
     if (document === null) {
       throw new AppError('NOT_FOUND');
@@ -266,7 +261,7 @@ export function createEntityService<X extends object, C extends EntityCreateBody
     return document;
   };
   /** The descriptor of the image of a request: `null` for none; a problem is added to `issues`. */
-  const imageOfRequest = async (principal: AuthPrincipal, access: GroupAccess, image: { readonly imageId: string } | null, issues: ErrorDetail[]): Promise<MediaLogo | null> => {
+  const imageOfRequest = async (principal: CatalogCaller, access: GroupAccess, image: { readonly imageId: string } | null, issues: ErrorDetail[]): Promise<MediaLogo | null> => {
     if (!access.features.media) {
       issues.push({ field: 'image', issue: 'notAllowed' });
       return null;
@@ -281,7 +276,7 @@ export function createEntityService<X extends object, C extends EntityCreateBody
     return source;
   };
   /** The places that do not exist (or are in the trash) among the ones an entry newly names. */
-  const missingPlaces = async (principal: AuthPrincipal, access: GroupAccess, requested: readonly string[], added: readonly string[], issues: ErrorDetail[]): Promise<void> => {
+  const missingPlaces = async (principal: CatalogCaller, access: GroupAccess, requested: readonly string[], added: readonly string[], issues: ErrorDetail[]): Promise<void> => {
     if (added.length === 0) {
       return;
     }
@@ -301,7 +296,7 @@ export function createEntityService<X extends object, C extends EntityCreateBody
 
   return {
     list: async (principal, access, query) => {
-      const config = kind.listConfig(await languageOf(principal));
+      const config = kind.listConfig(await languageOf(principal, access));
       const params = listParamsOf(query, config);
       const filter: Filter<Document> = {
         ...(params.q === null ? {} : nameSearch(params.q)),
@@ -316,7 +311,7 @@ export function createEntityService<X extends object, C extends EntityCreateBody
     create: async (principal, access, body, client) => {
       const groupLanguages = await deps.languages.of(access.groupId);
       const languages = new Set(groupLanguages);
-      const required = requiredLanguage(await languageOf(principal), groupLanguages);
+      const required = requiredLanguage(await languageOf(principal, access), groupLanguages);
       const issues = [...languageIssues('name', body.name, undefined, languages), ...languageIssues('description', body.description ?? {}, undefined, languages)];
       if (body.name[required] === undefined) {
         issues.push({ field: `name.${required}`, issue: 'required' });
@@ -368,7 +363,7 @@ export function createEntityService<X extends object, C extends EntityCreateBody
         if (body.name !== undefined) {
           const merged = mergeTexts(stored['name'], body.name);
           issues.push(...languageIssues('name', body.name, stored['name'], languages));
-          const required = requiredLanguage(await languageOf(principal), groupLanguages);
+          const required = requiredLanguage(await languageOf(principal, access), groupLanguages);
           // A name keeps a text in the required language it already had, and never ends up with none.
           if (Object.keys(textsOf(merged)).length === 0 || (textsOf(stored['name'])[required] !== undefined && textsOf(merged)[required] === undefined)) {
             issues.push({ field: `name.${required}`, issue: 'required' });

@@ -1,6 +1,6 @@
 import { Int32, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { logo } from '../companies/company.mapper.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { flagOf, isRecord, textOf, valueAt } from '../groups/catalogs/kit.ts';
@@ -215,7 +215,7 @@ const bounded = (list: readonly unknown[]): { readonly count: number; readonly f
  * @param principal The actor.
  * @param document The stored product.
  */
-export function productLoggable(principal: AuthPrincipal, document: Document): Record<string, unknown> {
+export function productLoggable(principal: CatalogCaller, document: Document): Record<string, unknown> {
   const allowed = perimeterOf(principal);
   const references = (list: readonly string[]): unknown => (allowed === null ? bounded(list) : { count: list.length });
   const stock = Object.entries(stockOf(document['quantity'], allowed)).flatMap(([placeId, storages]) => Object.entries(storages).map(([storageId, entry]) => ({ placeId, storageId, min: entry.min, max: entry.max, location: entry.location })));

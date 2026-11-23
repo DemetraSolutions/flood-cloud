@@ -2,9 +2,9 @@ import { Int32, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { AppError } from '../../shared/http/errors.ts';
 import type { ErrorDetail } from '../../shared/http/errors.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { flagOf, integerOf, isRecord, textOf } from '../groups/catalogs/kit.ts';
-import { perimeterOf } from '../product-catalog/availability.ts';
+import { isForEveryPlace, ownsEveryPlace, perimeterOf } from '../product-catalog/availability.ts';
 import { plainOf } from '../product-categories/categories.mapper.ts';
 
 /** Most places the availability of a product may name (the places of a group). */
@@ -83,7 +83,7 @@ export function productPlacesOf(raw: unknown): StoredProductPlaces {
  * @param principal The authenticated caller.
  * @param raw The stored `placesAvailability`.
  */
-export function shownProductPlaces(principal: AuthPrincipal, raw: unknown): ProductPlace[] {
+export function shownProductPlaces(principal: CatalogCaller, raw: unknown): ProductPlace[] {
   const allowed = perimeterOf(principal);
   const { entries } = productPlacesOf(raw);
   return allowed === null ? [...entries] : entries.filter((entry) => allowed.has(entry.placeId));
@@ -95,7 +95,7 @@ export function shownProductPlaces(principal: AuthPrincipal, raw: unknown): Prod
  * @param principal The authenticated caller.
  * @param raw The stored `placesAvailability`.
  */
-export function isVisibleProduct(principal: AuthPrincipal, raw: unknown): boolean {
+export function isVisibleProduct(principal: CatalogCaller, raw: unknown): boolean {
   const allowed = perimeterOf(principal);
   if (allowed === null) {
     return true;
@@ -115,15 +115,15 @@ export function isVisibleProduct(principal: AuthPrincipal, raw: unknown): boolea
 }
 
 /**
- * Whether the caller may modify, trash and delete a product as a whole: always for the roles that are not limited to places; a company or place administrator only when the product names places, none of them
+ * Whether the caller may modify, trash and delete a product as a whole: always for the roles that are not limited to places, and for the product for every place when the group has one place only (`ownsEveryPlace`); a company or place administrator (or the server of a point of sale) otherwise only when the product names places, none of them
  * anomalous and all inside his perimeter (a product for every place, one shared with places outside it, or one with anomalous elements) gives him only his own place data).
  *
  * @param principal The authenticated caller.
  * @param raw The stored `placesAvailability`.
  */
-export function isEditableProduct(principal: AuthPrincipal, raw: unknown): boolean {
+export function isEditableProduct(principal: CatalogCaller, raw: unknown): boolean {
   const allowed = perimeterOf(principal);
-  if (allowed === null) {
+  if (allowed === null || (ownsEveryPlace(principal) && isForEveryPlace(raw))) {
     return true;
   }
   const stored = productPlacesOf(raw);
@@ -139,7 +139,7 @@ export function isEditableProduct(principal: AuthPrincipal, raw: unknown): boole
  * @param requested The places of the request.
  * @returns The list to store.
  */
-export function productPlacesDocument(principal: AuthPrincipal, stored: unknown, requested: readonly ProductPlace[]): Document[] {
+export function productPlacesDocument(principal: CatalogCaller, stored: unknown, requested: readonly ProductPlace[]): Document[] {
   const allowed = perimeterOf(principal);
   const raw = Array.isArray(stored) ? (stored as unknown[]) : [];
   const current = new Map<string, Document>();
@@ -164,20 +164,20 @@ export function productPlacesDocument(principal: AuthPrincipal, stored: unknown,
 }
 
 /**
- * Refuses a company or place administrator the places outside his perimeter, and an availability that ends up with no place at all (a product for every place is not his to make).
+ * Refuses a company or place administrator the places outside his perimeter, and an availability that ends up with no place at all (a product for every place is not his to make, unless the group has one place only).
  *
  * @param principal The authenticated caller.
  * @param requested The places of the request.
  * @param resulting How many places the product has afterwards (the ones outside his perimeter that stay included).
  * @throws {AppError} `FORBIDDEN` with `places.<index>.placeId` `notAllowed` for each place outside the perimeter, or `places` `notAllowed` when the list would be empty.
  */
-export function assertPlacesInPerimeter(principal: AuthPrincipal, requested: readonly string[], resulting: number): void {
+export function assertPlacesInPerimeter(principal: CatalogCaller, requested: readonly string[], resulting: number): void {
   const allowed = perimeterOf(principal);
   if (allowed === null) {
     return;
   }
   const outside: ErrorDetail[] = requested.flatMap((id, index) => (allowed.has(id) ? [] : [{ field: `places.${String(index)}.placeId`, issue: 'notAllowed' }]));
-  if (outside.length === 0 && resulting === 0) {
+  if (outside.length === 0 && resulting === 0 && !ownsEveryPlace(principal)) {
     outside.push({ field: 'places', issue: 'notAllowed' });
   }
   if (outside.length > 0) {

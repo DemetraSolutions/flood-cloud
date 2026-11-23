@@ -1,6 +1,6 @@
 import { Double, Int32, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { logo } from '../companies/company.mapper.ts';
 import type { FeatureFlags } from '../groups/features.ts';
@@ -161,7 +161,7 @@ export function stationsOf(raw: unknown, allowed: ReadonlySet<string> | null): S
  * @param features The features of the group: a field of a function the group does not have is left out.
  * @param reachable The categories the caller reaches, `null` when nothing is held back: of the categories of modifiers only these are shown.
  */
-export function categoryView(document: Document, principal: AuthPrincipal, features: FeatureFlags, reachable: ReadonlySet<string> | null = null): CategoryView {
+export function categoryView(document: Document, principal: CatalogCaller, features: FeatureFlags, reachable: ReadonlySet<string> | null = null): CategoryView {
   const allowed = perimeterOf(principal);
   const switches = {
     ...(features.cash ? { pos: flagOf(valueAt(document, 'availability.pos')) } : {}),

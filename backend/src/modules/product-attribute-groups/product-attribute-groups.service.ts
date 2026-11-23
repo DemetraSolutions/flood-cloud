@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from 'node:util';
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { PRODUCTS_ATTRIBUTES_OWNED_FIELDS } from '../../db/collections.ts';
-import { actorOf } from '../../shared/activity-log/actor.ts';
 import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { DataAction } from '../../shared/activity-log/catalog.ts';
 import { recordDataChange } from '../../shared/activity-log/data-change.ts';
@@ -11,7 +10,8 @@ import { AppError } from '../../shared/http/errors.ts';
 import type { ErrorDetail } from '../../shared/http/errors.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { actorOfCaller, languageOfCaller } from '../product-catalog/caller.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { dateOf, isRecord, recordsOf, referenced } from '../groups/catalogs/kit.ts';
 import { perimeterOf } from '../product-catalog/availability.ts';
 import type { EntityRepository } from '../product-catalog/entity.repository.ts';
@@ -80,7 +80,7 @@ function attributesOf(raw: unknown): Attribute[] {
 export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): AttributeGroupsService {
   const { repository, activityLog, versionKey, products } = deps;
   const newId = deps.newId ?? (() => new ObjectId());
-  const viewOf = (principal: AuthPrincipal, document: Document): AttributeGroup => ({
+  const viewOf = (principal: CatalogCaller, document: Document): AttributeGroup => ({
     id: (document['_id'] as ObjectId).toHexString(),
     name: textsOf(document['name']),
     attributes: attributesOf(document['attributes']),
@@ -88,12 +88,12 @@ export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): 
     createdAt: dateOf(document['insertDate']),
     updatedAt: dateOf(document['updateDate']),
   });
-  const resultOf = (principal: AuthPrincipal, document: Document): EntityResult<AttributeGroup> => ({ entity: viewOf(principal, document), version: entityVersion(document, PRODUCTS_ATTRIBUTES_OWNED_FIELDS, versionKey) });
+  const resultOf = (principal: CatalogCaller, document: Document): EntityResult<AttributeGroup> => ({ entity: viewOf(principal, document), version: entityVersion(document, PRODUCTS_ATTRIBUTES_OWNED_FIELDS, versionKey) });
   /** What the activity log keeps of a group: its name and its attributes. */
   const loggable = (document: Document): Record<string, unknown> => ({ name: textsOf(document['name']), attributes: attributesOf(document['attributes']) });
-  const record = (principal: AuthPrincipal, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Document | undefined, after: Document | undefined) =>
+  const record = (principal: CatalogCaller, access: GroupAccess, client: ClientContext, id: ObjectId, action: DataAction, before: Document | undefined, after: Document | undefined) =>
     recordDataChange(activityLog, {
-      actor: actorOf(principal),
+      actor: actorOfCaller(principal),
       groupId: access.groupId,
       resource: { type: 'productAttributeGroup', id: id.toHexString() },
       action,
@@ -102,14 +102,8 @@ export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): 
       requestId: client.requestId,
       ...(client.ip === null ? {} : { ip: client.ip }),
     });
-  const languageOf = async (principal: AuthPrincipal): Promise<string> => {
-    const caller = await deps.users.findById(principal.userId);
-    if (caller === null) {
-      throw new AppError('NOT_FOUND');
-    }
-    return caller.user.language;
-  };
-  const found = async (principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<Document> => {
+  const languageOf = (principal: CatalogCaller, access: GroupAccess): Promise<string> => languageOfCaller(deps, principal, access.groupId);
+  const found = async (principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<Document> => {
     const document = await repository.findById(principal, access, id);
     if (document === null) {
       throw new AppError('NOT_FOUND');
@@ -117,14 +111,14 @@ export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): 
     return document;
   };
   /** `409` with the products that use some attributes, when there are any. */
-  const assertUnused = async (principal: AuthPrincipal, access: GroupAccess, attributeIds: readonly string[]): Promise<void> => {
+  const assertUnused = async (principal: CatalogCaller, access: GroupAccess, attributeIds: readonly string[]): Promise<void> => {
     const users = await products.withAttributes(principal, access, attributeIds);
     if (users.length > 0) {
       throw referenced(users.map((id) => userField('products', id)));
     }
   };
   /** The groups of attributes are written only by the platform, dealer and group administrators: a company or place administrator, who has no perimeter over them, only reads. */
-  const assertWriter = (principal: AuthPrincipal): void => {
+  const assertWriter = (principal: CatalogCaller): void => {
     if (perimeterOf(principal) !== null) {
       throw new AppError('FORBIDDEN');
     }
@@ -137,7 +131,7 @@ export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): 
 
   return {
     list: async (principal, access, query) => {
-      const config = attributeGroupsListFor(await languageOf(principal));
+      const config = attributeGroupsListFor(await languageOf(principal, access));
       const params = listParamsOf(query, config);
       const { items, page } = await repository.list(principal, access, params.q === null ? {} : nameSearch(params.q), params, config);
       return { items: items.map((item) => viewOf(principal, item)), page } satisfies EntityPage<AttributeGroup>;
@@ -149,7 +143,7 @@ export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): 
       assertWriter(principal);
       const groupLanguages = await deps.languages.of(access.groupId);
       const languages = new Set(groupLanguages);
-      const required = requiredLanguage(await languageOf(principal), groupLanguages);
+      const required = requiredLanguage(await languageOf(principal, access), groupLanguages);
       const attributes = body.attributes ?? [];
       const issues = [
         ...languageIssues('name', body.name, undefined, languages),
@@ -185,7 +179,7 @@ export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): 
       if (body.name !== undefined) {
         const merged = mergeTexts(stored['name'], body.name);
         issues.push(...languageIssues('name', body.name, stored['name'], languages));
-        const required = requiredLanguage(await languageOf(principal), groupLanguages);
+        const required = requiredLanguage(await languageOf(principal, access), groupLanguages);
         // A name keeps a text in the required language it already had, and never ends up with none.
         if (Object.keys(textsOf(merged)).length === 0 || (textsOf(stored['name'])[required] !== undefined && textsOf(merged)[required] === undefined)) {
           issues.push({ field: `name.${required}`, issue: 'required' });

@@ -3,7 +3,7 @@ import { PRODUCTS_BRANDS_OWNED_FIELDS } from '../../db/collections.ts';
 import type { Logger } from '../../shared/logging/logger.ts';
 import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { referenced } from '../groups/catalogs/kit.ts';
 import type { ReferencesRepository } from '../groups/catalogs/references.repository.ts';
@@ -28,7 +28,7 @@ export interface BrandsServiceDeps {
   readonly repository: EntityRepository;
   readonly products: Pick<ProductReferences, 'withBrand'>;
   readonly references: Pick<ReferencesRepository, 'missing'>;
-  readonly images: { imageSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
+  readonly images: { imageSource(principal: CatalogCaller, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
   readonly languages: GroupLanguages;
   readonly users: Pick<UsersRepository, 'findById'>;
   readonly activityLog: ActivityLog;

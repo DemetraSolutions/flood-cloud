@@ -9,7 +9,7 @@ import { listParamsOf } from '../../shared/http/list.ts';
 import type { Logger } from '../../shared/logging/logger.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { AuthPrincipal, ScopeHolder } from '../../shared/security/scope/principal.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import { IMAGE_FORMATS, detectImageFormat, slugOf, titleOf } from './image-format.ts';
 import { processImage } from './image-processing.ts';
@@ -71,7 +71,7 @@ export interface MediaService {
    * @param imageId Id of the image.
    * @returns The descriptor, `null` when the image does not exist in the group, is in the trash, is not the caller's to see, or lacks what an image needs or holds something unsafe.
    */
-  imageSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null>;
+  imageSource(principal: ScopeHolder, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null>;
 }
 
 /** Collaborators of {@link createMediaService}. */
@@ -109,7 +109,7 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
   const filesHost = async (access: GroupAccess): Promise<string | null> => filesHostOf(await repository.filesHost(access.groupId));
 
   /** What the caller may see: a company administrator only the images of his own companies (an image without a company, as every legacy one, is not his); the others all. */
-  const visibleTo = (principal: AuthPrincipal): Filter<Document> => (principal.scope.kind === 'companies' ? { companyId: { $in: [...principal.scope.companyIds] } } : {});
+  const visibleTo = (principal: ScopeHolder): Filter<Document> => (principal.scope.kind === 'companies' ? { companyId: { $in: [...principal.scope.companyIds] } } : {});
 
   /** Logs a storage failure by what it says (the operation, the reason, the HTTP status) and nothing else. */
   const logStorageFailure = (message: string, error: unknown): void => {
@@ -253,8 +253,8 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
     },
 
     imageSource: async (principal, access, imageId) => {
-      // A place administrator has no company in his scope (the server does not derive it here): he gets no image rather than every image of the group.
-      if (principal.scope.kind === 'places') {
+      // A place administrator has no company in his scope (the server does not derive it here): he gets no image rather than every image of the group. The server of a point of sale is in the same case.
+      if (principal.scope.kind === 'places' || principal.scope.kind === 'store') {
         return null;
       }
       const document = await repository.findImage(principal, access, imageId, visibleTo(principal));

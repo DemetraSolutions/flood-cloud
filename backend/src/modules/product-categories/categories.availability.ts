@@ -2,9 +2,9 @@ import { Double, Int32, ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
 import { AppError } from '../../shared/http/errors.ts';
 import type { ErrorDetail } from '../../shared/http/errors.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { integerOf, isRecord, textOf } from '../groups/catalogs/kit.ts';
-import { perimeterOf } from '../product-catalog/availability.ts';
+import { isForEveryPlace, ownsEveryPlace, perimeterOf } from '../product-catalog/availability.ts';
 
 /** Most places the availability of a category may name. */
 export const MAX_CATEGORY_PLACES = 200;
@@ -73,7 +73,7 @@ export function placesOf(raw: unknown): StoredPlaces {
  *
  * @param principal The authenticated caller.
  */
-export function categoriesVisibleTo(principal: AuthPrincipal): Filter<Document> {
+export function categoriesVisibleTo(principal: CatalogCaller): Filter<Document> {
   const allowed = perimeterOf(principal);
   if (allowed === null) {
     return {};
@@ -89,22 +89,22 @@ export function categoriesVisibleTo(principal: AuthPrincipal): Filter<Document> 
  * @param principal The authenticated caller.
  * @param raw The stored `placesAvailability`.
  */
-export function shownPlaces(principal: AuthPrincipal, raw: unknown): PlaceEntry[] {
+export function shownPlaces(principal: CatalogCaller, raw: unknown): PlaceEntry[] {
   const allowed = perimeterOf(principal);
   const { entries } = placesOf(raw);
   return allowed === null ? [...entries] : entries.filter((entry) => allowed.has(entry.placeId));
 }
 
 /**
- * Whether the caller may modify or delete a category: always for the roles that are not limited to places; a company or place administrator only when the category names places, none of them
- * anomalous and all inside his perimeter (a category for every place, one shared with places outside it, or one with anomalous elements is read only to him).
+ * Whether the caller may modify or delete a category: always for the roles that are not limited to places; a company or place administrator (or the server of a point of sale) only when the category names places, none of them
+ * anomalous and all inside his perimeter (a category for every place, one shared with places outside it, or one with anomalous elements is read only to him), unless the group has one place only (`ownsEveryPlace`): a category for every place is then wholly his.
  *
  * @param principal The authenticated caller.
  * @param raw The stored `placesAvailability`.
  */
-export function isWritableCategory(principal: AuthPrincipal, raw: unknown): boolean {
+export function isWritableCategory(principal: CatalogCaller, raw: unknown): boolean {
   const allowed = perimeterOf(principal);
-  if (allowed === null) {
+  if (allowed === null || (ownsEveryPlace(principal) && isForEveryPlace(raw))) {
     return true;
   }
   const stored = placesOf(raw);
@@ -118,27 +118,27 @@ export function isWritableCategory(principal: AuthPrincipal, raw: unknown): bool
  * @param raw The stored `placesAvailability`.
  * @throws {AppError} `FORBIDDEN`.
  */
-export function assertWritableCategory(principal: AuthPrincipal, raw: unknown): void {
+export function assertWritableCategory(principal: CatalogCaller, raw: unknown): void {
   if (!isWritableCategory(principal, raw)) {
     throw new AppError('FORBIDDEN');
   }
 }
 
 /**
- * Refuses a company or place administrator the places outside his perimeter, and an availability with no place at all (a category for every place is not his to make).
+ * Refuses a company or place administrator the places outside his perimeter, and an availability with no place at all (a category for every place is not his to make, unless the group has one place only).
  *
  * @param principal The authenticated caller.
  * @param requested The places of the request.
  * @param field The field of the request the places are in, for the details.
  * @throws {AppError} `FORBIDDEN` with `<field>.<index>.placeId` `notAllowed` for each place outside the perimeter, or `<field>` `notAllowed` when the list is empty.
  */
-export function assertPlacesInPerimeter(principal: AuthPrincipal, requested: readonly string[], field: string): void {
+export function assertPlacesInPerimeter(principal: CatalogCaller, requested: readonly string[], field: string): void {
   const allowed = perimeterOf(principal);
   if (allowed === null) {
     return;
   }
   const outside: ErrorDetail[] = requested.flatMap((id, index) => (allowed.has(id) ? [] : [{ field: `${field}.${String(index)}.placeId`, issue: 'notAllowed' }]));
-  if (outside.length === 0 && requested.length === 0) {
+  if (outside.length === 0 && requested.length === 0 && !ownsEveryPlace(principal)) {
     outside.push({ field, issue: 'notAllowed' });
   }
   if (outside.length > 0) {

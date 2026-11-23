@@ -218,3 +218,90 @@ describe('mountRoutes: the declarations about store keys', () => {
     assert.match(problem([only({ kind: 'store' })], { ...dependencies, allowedAuth: ['anonymous', 'user'] }), /auth kind "store" is not allowed on this surface/);
   });
 });
+
+describe('mountRoutes: the ids and the operator of a store route', () => {
+  const dependencies = { authenticate: userAuthenticate, groupAccess: { groups: { ...groups }, onCrossGroupAccess: () => undefined }, rateLimit: memoryRateLimitMount(), allowedAuth: ['anonymous', 'user', 'store'] as const, storeKeys: true as const };
+  const operator: RequestHandler = (_req, _res, next) => next();
+  const route = (auth: Record<string, unknown>, path: string, method = 'GET') => defineRoute({ method, path, auth: { kind: 'store', group: true, ...auth }, handler: who } as unknown as RouteDefinition);
+  const problem = (list: RouteDefinition[]): string => {
+    try {
+      mountRoutes(express.Router(), list, dependencies);
+    } catch (error) {
+      return (error as Error).message;
+    }
+    return assert.fail('expected mountRoutes to throw');
+  };
+
+  it('mounts the ids of the catalog on a path that has exactly them, and the operator on a write', () => {
+    mountRoutes(express.Router(), [route({ params: ['productId'] }, '/store/products/:productId'), route({ params: ['categoryId'], operator }, '/store/categories/:categoryId', 'PATCH'), route({ operator }, '/store/products', 'POST')], dependencies);
+  });
+
+  it('refuses a parameter that is not a declared id of the catalog: the group, the place and any other name never come from a path', () => {
+    assert.match(problem([route({}, '/store/products/:productId')]), /no path parameter other than the ids it declares in params/);
+    assert.match(problem([route({ params: ['productId'] }, '/store/products')]), /no path parameter other than the ids it declares in params/);
+    assert.match(problem([route({ params: ['productId'] }, '/store/products/:categoryId')]), /no path parameter other than the ids it declares in params/);
+    assert.match(problem([route({ params: ['productId'] }, '/store/products/:productId/:other')]), /no path parameter other than the ids it declares in params/);
+    assert.match(problem([route({ params: ['productId'] }, '/store/products/:productId:x')]), /no path parameter other than the ids it declares in params/);
+    for (const params of [['groupId'], ['placeId'], ['id'], [], ['productId', 'productId'], 'productId', [1]]) {
+      assert.match(problem([route({ params }, '/store/:groupId')]), /params are a list, without repetitions, of productId, categoryId/);
+    }
+  });
+
+  it('wants group: true with params or an operator, and no wildcard or group in the path', () => {
+    assert.match(problem([route({ group: undefined, params: ['productId'] }, '/store/products/:productId')]), /with params or an operator must declare group: true/);
+    assert.match(problem([route({ group: undefined, operator }, '/store/products', 'POST')]), /with params or an operator must declare group: true/);
+    for (const path of ['/store/*', '/store/{products}', '/store/products{/:productId}', '/store/*rest', '/store/a}']) {
+      assert.match(problem([route({}, path)]), /no wildcard or group/);
+    }
+  });
+
+  it('wants an operator exactly on a write, and a function', () => {
+    assert.match(problem([route({}, '/store/products', 'POST')]), /declares an operator exactly when it writes/);
+    assert.match(problem([route({}, '/store/products/x', 'DELETE')]), /declares an operator exactly when it writes/);
+    assert.match(problem([route({ operator }, '/store/products', 'GET')]), /declares an operator exactly when it writes/);
+    assert.match(problem([route({ operator: 'yes' }, '/store/products', 'POST')]), /operator must be a function/);
+  });
+
+  it('runs the ids and the operator before the body of a write is read, and refuses an id that is not one', async () => {
+    const seen: string[] = [];
+    const verify: RequestHandler = (req, _res, next) => {
+      seen.push(`operator:${req.get('x-operator') ?? 'none'}`);
+      if (req.get('x-operator') !== 'ok') {
+        throw new AppError('OPERATOR_NOT_ALLOWED');
+      }
+      next();
+    };
+    const limiter = memoryRateLimiter();
+    const app = await startApp(
+      {
+        routes: { v1: [route({ params: ['productId'], operator: verify }, '/store/products/:productId', 'PATCH'), route({ params: ['productId'] }, '/store/products/:productId', 'GET')].map((definition) => ({ ...definition, handler: (req, res) => void res.json({ data: { id: req.params['productId'], body: req.body ?? null } }) })) },
+        authenticate: { v1: userAuthenticate, store: storeAuthenticate },
+        groupAccess: { groups },
+        rateLimiter: limiter,
+      },
+      {},
+    );
+    try {
+      const call = (method: string, id: string, headers: Record<string, string>, body?: string) =>
+        fetch(`${app.baseUrl}/v1/store/products/${id}`, { method, headers: { authorization: `Bearer ${KEY}`, ...headers }, ...(body === undefined ? {} : { body }) });
+      const id = 'a'.repeat(24);
+      assert.equal((await call('GET', id, {})).status, 200);
+      assert.equal((await call('GET', id.toUpperCase(), {})).status, 200);
+      for (const bad of ['not-an-id', 'a'.repeat(23), 'g'.repeat(24), `${id}0`]) {
+        const reply = await call('GET', bad, {});
+        assert.deepEqual([reply.status, ((await reply.json()) as { error: { code: string; details: unknown } }).error.details], [422, [{ field: 'productId', issue: 'format' }]], bad);
+      }
+      // A write whose operator is refused: 403 even though the body is not JSON, so the body was never read; an id that is not one is refused before the operator is asked.
+      seen.length = 0;
+      const refused = await call('PATCH', id, { 'content-type': 'application/json', 'x-operator': 'no' }, '{"broken":');
+      assert.deepEqual([refused.status, ((await refused.json()) as { error: { code: string } }).error.code], [403, 'OPERATOR_NOT_ALLOWED']);
+      assert.equal((await call('PATCH', 'nope', { 'content-type': 'application/json', 'x-operator': 'ok' }, '{}')).status, 422);
+      assert.deepEqual(seen, ['operator:no']);
+      const written = await call('PATCH', id, { 'content-type': 'application/json', 'x-operator': 'ok' }, '{"a":1}');
+      assert.deepEqual(await written.json(), { data: { id, body: { a: 1 } } });
+      assert.equal((await call('PATCH', id, { 'content-type': 'application/json' }, '{}')).status, 403);
+    } finally {
+      await app.close();
+    }
+  });
+});

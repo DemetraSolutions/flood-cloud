@@ -5,7 +5,7 @@ import type { ListConfig, ListPage, ListParams } from '../../shared/http/list.ts
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from './caller.ts';
 import { withScope } from '../../shared/security/scope/scope-filters.ts';
 import { visibleTo } from './availability.ts';
 
@@ -33,7 +33,7 @@ export interface EntityRepository {
    * @param params Validated list parameters.
    * @param config How the list is sorted, for the language of the caller.
    */
-  list(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>, params: ListParams, config: ListConfig): Promise<ListPage>;
+  list(principal: CatalogCaller, access: GroupAccess, filter: Filter<Document>, params: ListParams, config: ListConfig): Promise<ListPage>;
   /**
    * One entry, or `null` when it does not exist in the group or the caller does not reach it (a company or place administrator reaches the entries for every place and the ones that name a place of his own).
    *
@@ -41,7 +41,7 @@ export interface EntityRepository {
    * @param access Verified access to the group.
    * @param id Id of the entry.
    */
-  findById(principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<Document | null>;
+  findById(principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<Document | null>;
   /**
    * Inserts a whole new entry.
    *
@@ -49,7 +49,7 @@ export interface EntityRepository {
    * @param access Verified access to the group.
    * @param document The document, built by the service.
    */
-  insert(principal: AuthPrincipal, access: GroupAccess, document: Document): Promise<void>;
+  insert(principal: CatalogCaller, access: GroupAccess, document: Document): Promise<void>;
   /**
    * Applies a change, only if the entry still has the date it was read with, so a change made meanwhile is never overwritten. Only the given fields are touched: every other key of the document stays.
    *
@@ -60,7 +60,7 @@ export interface EntityRepository {
    * @param readDate The `updateDate` the entry had when it was read, of whatever type (`undefined` when it had none): the write requires exactly that value.
    * @returns `updated`, or `conflict` when the entry changed (or disappeared) since it was read, or a container of {@link EntityChange.intact} is not an object.
    */
-  update(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, change: EntityChange, readDate: unknown): Promise<'updated' | 'conflict'>;
+  update(principal: CatalogCaller, access: GroupAccess, id: ObjectId, change: EntityChange, readDate: unknown): Promise<'updated' | 'conflict'>;
   /**
    * Deletes an entry.
    *
@@ -71,7 +71,22 @@ export interface EntityRepository {
    * @param readPlaces The `placesAvailability` the entry had when it was read (`undefined` when it had none): the deletion requires exactly that value too.
    * @returns Whether an entry was deleted (`false` when it changed or disappeared since it was read).
    */
-  remove(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, readDate: unknown, readPlaces: unknown): Promise<boolean>;
+  remove(principal: CatalogCaller, access: GroupAccess, id: ObjectId, readDate: unknown, readPlaces: unknown): Promise<boolean>;
+}
+
+/** The read of whole entries, which only the collections that a client downloads need (the products). */
+export interface FullListing {
+  /**
+   * A page of the whole entries the caller reaches (every owned field, not the summary of {@link EntityRepository.list}), in the order of the list configuration, minus some fields that are not read at all.
+   *
+   * @param principal The caller.
+   * @param access Verified access to the group.
+   * @param filter The filter of the request, combined with what the caller may reach.
+   * @param params Validated list parameters.
+   * @param config How the list is sorted.
+   * @param omit Top-level fields (or paths) that are left out of the projection, so they are never read from the database.
+   */
+  listFull(principal: CatalogCaller, access: GroupAccess, filter: Filter<Document>, params: ListParams, config: ListConfig, omit?: readonly string[]): Promise<ListPage>;
 }
 
 /** How a repository is built over one collection. */
@@ -88,7 +103,7 @@ export interface EntityRepositoryOptions {
    */
   readonly trees?: readonly string[];
   /** The filter of what a caller reaches ({@link visibleTo} for the departments and the brands, whose availability is a list of place ids). */
-  readonly visible?: (principal: AuthPrincipal) => Filter<Document>;
+  readonly visible?: (principal: CatalogCaller) => Filter<Document>;
   /** Whether a path is owned although it is not listed (the leaves of a map whose keys are made at run time, and nothing else of it). */
   readonly owns?: (path: string) => boolean;
   /** The owned fields a new document has and a modification never writes: they are never read (apart from the {@link EntityRepositoryOptions.readFields}) and a modification refuses to write them. */
@@ -121,13 +136,13 @@ export function sameAs(field: string, read: unknown): Filter<Document> {
  * @param databases Database accessor.
  * @param options The collection and its fields.
  */
-export function createEntityRepository(databases: Databases, options: EntityRepositoryOptions): EntityRepository {
+export function createEntityRepository(databases: Databases, options: EntityRepositoryOptions): EntityRepository & FullListing {
   const insertOnly = new Set(options.insertOnly ?? []);
   const writable = options.ownedFields.filter((field) => !insertOnly.has(field));
   const owned = new Set(writable);
   const projection = entityProjection([...writable, ...(options.readFields ?? [])]);
   const visible = options.visible ?? visibleTo;
-  const entries = (principal: AuthPrincipal, access: GroupAccess): Collection<Document> => options.open(groupDatabaseFor(principal, access, databases));
+  const entries = (principal: CatalogCaller, access: GroupAccess): Collection<Document> => options.open(groupDatabaseFor(principal, access, databases));
   /** Whether a path is owned: it is listed, or (the default) something above it is, or (with `trees`) it is below a tree. */
   const isOwned = (path: string): boolean => {
     const segments = path.split('.');
@@ -159,6 +174,11 @@ export function createEntityRepository(databases: Databases, options: EntityRepo
         await bounded(() => entries(principal, access).aggregate(listPipeline(withScope(visible(principal), filter), params, config, options.summary), { maxTimeMS: LIST_MAX_TIME_MS }).toArray()),
         params,
       ),
+
+    listFull: async (principal, access, filter, params, config, omit = []) => {
+      const wanted = Object.fromEntries(Object.entries(projection).filter(([path]) => !omit.some((left) => path === left || path.startsWith(`${left}.`)))) as Record<string, 1>;
+      return pageOf(await bounded(() => entries(principal, access).aggregate(listPipeline(withScope(visible(principal), filter), params, config, wanted), { maxTimeMS: LIST_MAX_TIME_MS }).toArray()), params);
+    },
 
     findById: (principal, access, id) => bounded(() => entries(principal, access).findOne(withScope(visible(principal), { _id: id }), { projection, maxTimeMS: LIST_MAX_TIME_MS })),
 

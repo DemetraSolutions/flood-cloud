@@ -21,7 +21,7 @@ import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import type { MediaLogo } from '../companies/company.types.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 
 /** A department as the API shows it. */
 export type Department = EntityView & DepartmentExtra;
@@ -36,7 +36,7 @@ export interface DepartmentsServiceDeps {
   readonly catalogs: Pick<CatalogsService, 'list'>;
   readonly products: Pick<ProductReferences, 'withDepartmentNumber'>;
   readonly references: Pick<ReferencesRepository, 'missing'>;
-  readonly images: { imageSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
+  readonly images: { imageSource(principal: CatalogCaller, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null> };
   readonly languages: GroupLanguages;
   readonly users: Pick<UsersRepository, 'findById'>;
   readonly activityLog: ActivityLog;

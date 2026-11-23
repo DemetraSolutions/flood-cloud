@@ -83,6 +83,7 @@ import { createCatalogRoutes } from './modules/groups/catalogs/catalogs.routes.t
 import { createCatalogsService } from './modules/groups/catalogs/catalogs.service.ts';
 import { newElementId } from './modules/groups/catalogs/kit.ts';
 import { createReferencesRepository } from './modules/groups/catalogs/references.repository.ts';
+import { createPlaceCounter, withSoleLocation } from './modules/product-catalog/availability.ts';
 import { createEntityController } from './modules/product-catalog/entity.controller.ts';
 import { createGroupLanguages } from './modules/product-catalog/group-languages.ts';
 import { createProductReferences } from './modules/product-catalog/product-references.ts';
@@ -134,6 +135,11 @@ import { createReferenceService } from './modules/reference/reference.service.ts
 import { createSessionsRepository } from './modules/sessions/sessions.repository.ts';
 import { createAuthenticateStore } from './modules/store-keys/authenticate-store.ts';
 import { createConfigurationReadAudit } from './modules/store-context/store-context.audit.ts';
+import { createOperatorAudit } from './modules/store-catalog/store-catalog.audit.ts';
+import { createStoreCatalogController } from './modules/store-catalog/store-catalog.controller.ts';
+import { createRequireOperator } from './modules/store-catalog/store-catalog.operator.ts';
+import { createStoreCatalogRoutes } from './modules/store-catalog/store-catalog.routes.ts';
+import { createStoreCatalogService } from './modules/store-catalog/store-catalog.service.ts';
 import { createStoreContextController } from './modules/store-context/store-context.controller.ts';
 import { createStoreContextRepository } from './modules/store-context/store-context.repository.ts';
 import { createStoreContextRoutes } from './modules/store-context/store-context.routes.ts';
@@ -316,15 +322,16 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   });
   const authenticateStore = createAuthenticateStore({ repository: storeKeysRepository, state: storeKeysState, activityLog, rateLimiter, logger, apiRule: rules.apiPerStore, now });
   const storeKeys = createStoreKeysController(storeKeysService, now);
+  const storeContextService = createStoreContextService({
+    groups: managedGroups,
+    repository: createStoreContextRepository(databases),
+    users,
+    catalogs: catalogsService,
+    readerFor: (store, access) => companiesPlacesReader(store, access, databases, { versionKey }),
+    logger,
+  });
   const storeContext = createStoreContextController(
-    createStoreContextService({
-      groups: managedGroups,
-      repository: createStoreContextRepository(databases),
-      users,
-      catalogs: catalogsService,
-      readerFor: (store, access) => companiesPlacesReader(store, access, databases, { versionKey }),
-      logger,
-    }),
+    storeContextService,
     versionKey,
     createConfigurationReadAudit({ activityLog, rateLimiter, logger }),
     referenceService,
@@ -346,7 +353,9 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const groupLanguages = createGroupLanguages(databases);
   const catalogDeps = { references: referencesRepository, images: mediaService, languages: groupLanguages, users, activityLog, logger, versionKey, now };
   const categoryPlaces = createCategoryPlaces(databases);
-  const productsService = createProductsService({
+  // The rule of the single place (`withSoleLocation`): the services of the departments, the brands, the categories and the products are the ones every caller uses, the server of a store included.
+  const placeCounter = createPlaceCounter(databases);
+  const productsService = withSoleLocation(createProductsService({
     repository: createProductsRepository(databases),
     links: createProductLinks(databases),
     places: categoryPlaces,
@@ -359,7 +368,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     logger,
     versionKey,
     now,
-  });
+  }), placeCounter, logger);
   // The trash page: bulk operations that call the single-item operations of the domains above.
   const trash = createTrashController(
     createTrashService({ companies: companiesService, places: placesService, users: usersService, groups: groupsService, products: productsService, activityLog }),
@@ -368,11 +377,14 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
   const errorDocuments = createErrorDocumentsController(createErrorDocumentsService({ repository: createErrorDocumentsRepository(databases), dealerGroups: createDealerGroupsRepository(databases) }), now);
   const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
-  const productDepartments = createEntityController(createDepartmentsService({ ...catalogDeps, repository: createDepartmentsRepository(databases), catalogs: catalogsService, products: productReferences }));
-  const productBrands = createEntityController(createBrandsService({ ...catalogDeps, repository: createBrandsRepository(databases), products: productReferences }));
-  const productCategories = createCategoriesController(
-    createCategoriesService({ repository: createCategoriesRepository(databases), places: categoryPlaces, catalogs: catalogsService, products: productReferences, ...catalogDeps }),
-  );
+  const departmentsService = withSoleLocation(createDepartmentsService({ ...catalogDeps, repository: createDepartmentsRepository(databases), catalogs: catalogsService, products: productReferences }), placeCounter, logger);
+  const productDepartments = createEntityController(departmentsService);
+  const productBrands = createEntityController(withSoleLocation(createBrandsService({ ...catalogDeps, repository: createBrandsRepository(databases), products: productReferences }), placeCounter, logger));
+  const categoriesService = withSoleLocation(createCategoriesService({ repository: createCategoriesRepository(databases), places: categoryPlaces, catalogs: catalogsService, products: productReferences, ...catalogDeps }), placeCounter, logger);
+  const productCategories = createCategoriesController(categoriesService);
+  // The catalog of the server of a point of sale: the same services, for a caller limited to the place of its key, and the check of the operator of its writes.
+  const storeCatalog = createStoreCatalogController(createStoreCatalogService({ products: productsService, categories: categoriesService, departments: departmentsService }));
+  const requireOperator = createRequireOperator({ context: storeContextService, audit: createOperatorAudit({ activityLog, rateLimiter, logger }) });
   const productAttributeGroups = createEntityController(
     createAttributeGroupsService({ repository: createAttributeGroupsRepository(databases), products: productReferences, languages: groupLanguages, users, activityLog, versionKey, now, newAttributeId: newElementId }),
   );
@@ -399,6 +411,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createProductCategoriesRoutes(productCategories, idempotency),
       ...createProductsRoutes(createProductsController(productsService), idempotency),
       ...createProductAttributeGroupsRoutes(productAttributeGroups, idempotency),
+      ...createStoreCatalogRoutes(storeCatalog, idempotency, requireOperator, rules.storeCatalogWritePerStore),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createCountriesRoutes(countries, rules),
       ...createSettingsRoutes(settings, rules),

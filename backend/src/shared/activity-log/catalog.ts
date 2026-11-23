@@ -45,6 +45,7 @@ export const SECURITY_ACTIONS = Object.freeze([
   'store.keyRevoked',
   'store.revokedKeyPresented',
   'store.configurationRead',
+  'store.operatorRejected',
   'apiKey.created',
   'apiKey.updated',
   'apiKey.revoked',
@@ -124,6 +125,8 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
   'store.revokedKeyPresented': [],
   // The server of a store read the configuration that carries credentials: which one (`group`, `place` or `users`) and the ids of its company and place, never a value.
   'store.configurationRead': ['resource', 'companyId', 'placeId'],
+  // The server of a store sent a write of the catalog without a usable operator (`reason`: `missing`, `malformed`, `notFound`, `disabled` or `noPermission`) and the id it declared, when it was well formed; the response never says which.
+  'store.operatorRejected': ['reason', 'operatorId'],
   // A public API key is recorded by its name and the characters of its prefix after `fc_pk_` (`keyHint`: the log redacts any text that starts like a key), never the key; an update lists the names of the fields it changed.
   'apiKey.created': ['name', 'keyHint'],
   'apiKey.updated': ['name', 'keyHint', 'fields'],
@@ -140,6 +143,9 @@ const BILLING_METADATA: readonly string[] = ['period', 'dealers', 'lines'];
 
 /** What the entry of a purged group carries: how many documents of each kind the tool deleted in that run (counts only), and `resumed` when the group database was already gone (a repeated run: the counts are those of the last run alone). */
 const PURGE_METADATA: readonly string[] = ['collections', 'documents', 'users', 'companies', 'places', 'apiKeys', 'apiUsage', 'storeKeys', 'activationCodes', 'reserveWithGoogle', 'idempotencyKeys', 'resumed'];
+
+/** The data actions the server of a point of sale may perform on the product catalog: their entries also say which operator stood at the till (`operatorId`, declared by the store and verified, never the actor). */
+const STORE_WRITE_ACTIONS: ReadonlySet<string> = new Set(['product.created', 'product.updated', 'product.trashed', 'product.restored', 'product.duplicated', 'productCategory.created', 'productCategory.updated', 'productCategory.deleted']);
 
 /** Extra metadata keys of some data actions: a permanent deletion keeps no field changes, only the role of the user it removed (the group is the entry's `groupId`), and a duplicated place the id of the place it was copied from. */
 const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'], 'place.duplicated': ['sourceId'], 'product.duplicated': ['sourceId'], 'group.tax.realignmentIncomplete': ['taxId', 'remainingBlocks', 'skipped'], 'tobaccos.imported': ['inserted', 'previous', 'reason'], 'vatLookup.performed': ['outcome'], 'country.created': ['countryCode'], 'country.updated': ['countryCode'], 'country.deleted': ['countryCode'], 'countryArea.created': ['countryCode', 'areaCode'], 'countryArea.updated': ['countryCode', 'areaCode'], 'countryArea.deleted': ['countryCode', 'areaCode'], 'trash.bulkRestored': TRASH_METADATA, 'trash.bulkDeleted': TRASH_METADATA, 'trash.emptied': TRASH_METADATA, 'activations.renewalBaseFrozen': BILLING_METADATA, 'activations.renewalBaseUnfrozen': BILLING_METADATA, 'activations.monthClosed': BILLING_METADATA, 'activations.monthReopened': BILLING_METADATA, 'group.purged': PURGE_METADATA };
@@ -165,7 +171,7 @@ export const ACTION_CATALOG: ReadonlyMap<string, ActionDefinition> = (() => {
     const security = catalog.get(action);
     catalog.set(action, {
       categories: security === undefined ? ['data'] : ['security', 'data'],
-      metadataKeys: [...(security?.metadataKeys ?? []), ...DATA_METADATA, ...(DATA_EXTRA_METADATA[action] ?? [])],
+      metadataKeys: [...(security?.metadataKeys ?? []), ...DATA_METADATA, ...(DATA_EXTRA_METADATA[action] ?? []), ...(STORE_WRITE_ACTIONS.has(action) ? ['operatorId'] : [])],
     });
   }
   catalog.set('request.failed', { categories: ['error'], metadataKeys: ['method', 'route', 'errorName', 'errorCode'] });

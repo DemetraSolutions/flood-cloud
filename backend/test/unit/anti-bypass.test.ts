@@ -28,6 +28,7 @@ async function filesUnder(dir: string): Promise<string[]> {
   return nested.flat();
 }
 
+const PLACES_READ = 'shared/security/scope/group-places.ts';
 const MIRROR_FILE = 'shared/security/scope/group-mirror.ts';
 
 describe('database access cannot be bypassed outside src/db', () => {
@@ -154,8 +155,8 @@ describe('database access cannot be bypassed outside src/db', () => {
       let seen = false;
       for (const file of await filesUnder(SRC)) {
         const path = posix(file);
-        if (path.startsWith('db/') || path.startsWith('tools/') || path === WRITER) {
-          // The tools read the originals in the group databases; only sync-copies may touch the copies (checked below); the writer is checked in its own test.
+        if (path.startsWith('db/') || path.startsWith('tools/') || path === WRITER || path === PLACES_READ) {
+          // The tools read the originals in the group databases; only sync-copies may touch the copies (checked below); the writer is checked in its own test; the one read of the places of the rule of the group with one place is checked by its own test.
           continue;
         }
         const names = [...(await readFile(file, 'utf8')).matchAll(/\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/g)].map((match) => match[0]);
@@ -201,6 +202,23 @@ describe('database access cannot be bypassed outside src/db', () => {
         assert.ok(!/groupDatabaseFor\([^;]*\)\s*\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/.test(text), `${path} reads companies or places from a group database`);
         assert.ok(!/\.group\([^;]*\)\s*\.collection(?:<[^>]*>)?\(\s*['"`](companies|places)['"`]/.test(text), `${path} reads companies or places from a group database`);
       }
+    });
+
+    it('opens the places of a group database in one place only: the read of the rule of the group with one place', async () => {
+      const importers: string[] = [];
+      const readers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        const text = await readFile(file, 'utf8');
+        if (path !== PLACES_READ && /import\s*(?:type\s*)?\{[^}]*\bactiveGroupPlaceIds\b[^}]*\}\s*from\s*'[^']*group-places\.ts'/.test(text)) {
+          importers.push(path);
+        }
+        if (/groupDatabaseFor\([^;]*\);[^]*?\bdb\.collection\(\s*['"`]places['"`]\)/.test(text)) {
+          readers.push(path);
+        }
+      }
+      assert.deepEqual(importers, ['modules/product-catalog/availability.ts']);
+      assert.deepEqual(readers, [PLACES_READ]);
     });
 
     it('imports the reads of the places that the categories refer to (print stations, production centers, uses of a category) only in the categories places module (step C2)', async () => {

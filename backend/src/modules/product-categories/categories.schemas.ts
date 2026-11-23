@@ -51,6 +51,21 @@ export function categoriesListFor(language: string): ListConfig {
   return { ...CATEGORIES_LIST, sorts: { name: { field: 'name', kind: 'string', expression: localizedName(language) }, position: CATEGORIES_LIST.sorts['position']! } };
 }
 
+/** How a download of the changes of the categories is ordered: by the date of the last change, oldest first; no search and no other sort. */
+export const CATEGORY_CHANGES_LIST: ListConfig = Object.freeze({
+  sorts: Object.freeze({ updatedAt: Object.freeze({ field: 'updateDate', kind: 'date' as const }) }),
+  defaultSort: 'updatedAt',
+  searchFields: Object.freeze([]),
+});
+
+/** What a read of the changes of the categories asks: the page and the instant the changes are counted from (every category when left out). */
+export interface CategoryChangesQuery {
+  readonly limit?: number;
+  readonly cursor?: string;
+  /** An instant, normalized ISO 8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`). */
+  readonly updatedSince?: string;
+}
+
 /** The `true`/`false` of a query string. */
 const flag = () => transform(enumOf(['true', 'false']), (value) => value === 'true', 'enum');
 
@@ -142,28 +157,45 @@ const stationsByPlace = () => record(stations(), { max: MAX_STATION_PLACES, key:
 /** The print stations of a modification: for each place named, its stations, or `null` to take the place away; the places not named stay. */
 const stationsByPlacePatch = () => record(nullable(stations()), { max: MAX_STATION_PLACES, key: HEX_ID });
 
-/** Body of `POST /v1/groups/{groupId}/product-categories`: only the name is required. Nothing else is accepted. */
-export const createCategoryBody = object({
-  ...commonShape(),
+/** The fields of a creation, over the common ones. */
+const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+  ...shape,
   name: nameTexts(),
   description: optional(descriptionTexts()),
   printStations: optional(stationsByPlace()),
   counterPrintStations: optional(stationsByPlace()),
 });
 
+/** The fields of a modification, over the common ones. */
+const patchFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+  ...shape,
+  name: optional(nameTextsPatch()),
+  description: optional(descriptionTextsPatch()),
+  printStations: optional(stationsByPlacePatch()),
+  counterPrintStations: optional(stationsByPlacePatch()),
+});
+
+/** The common fields without the ones the server of a point of sale never writes: `image` and `icon` (the library of images is not its to use). Such a key is `422` `unknown` and nothing is written. */
+export const STORE_EXCLUDED_CATEGORY_FIELDS = Object.freeze(['image', 'icon'] as const);
+function storeShape() {
+  const { image: _image, icon: _icon, ...rest } = commonShape();
+  return rest;
+}
+
+/** Body of `POST /v1/groups/{groupId}/product-categories`: only the name is required. Nothing else is accepted. */
+export const createCategoryBody = object(createFields(commonShape()));
+
 /** Validated body of a creation. */
 export type CreateCategoryBody = Infer<typeof createCategoryBody>;
 
 /** Body of `PATCH /v1/groups/{groupId}/product-categories/{id}`: any of the fields, at least one (`required` on the body otherwise). */
-export const patchCategoryBody = atLeastOne(
-  object({
-    ...commonShape(),
-    name: optional(nameTextsPatch()),
-    description: optional(descriptionTextsPatch()),
-    printStations: optional(stationsByPlacePatch()),
-    counterPrintStations: optional(stationsByPlacePatch()),
-  }),
-);
+export const patchCategoryBody = atLeastOne(object(patchFields(commonShape())));
+
+/** Body of `POST /v1/store-context/catalog/categories`: the one of the backoffice without {@link STORE_EXCLUDED_CATEGORY_FIELDS}. */
+export const storeCreateCategoryBody = object(createFields(storeShape())) as unknown as typeof createCategoryBody;
+
+/** Body of `PATCH /v1/store-context/catalog/categories/{id}`: the one of the backoffice without {@link STORE_EXCLUDED_CATEGORY_FIELDS}. */
+export const storePatchCategoryBody = atLeastOne(object(patchFields(storeShape()))) as unknown as typeof patchCategoryBody;
 
 /** Validated body of a modification. */
 export type PatchCategoryBody = Infer<typeof patchCategoryBody>;

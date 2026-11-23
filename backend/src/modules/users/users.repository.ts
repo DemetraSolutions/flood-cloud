@@ -5,6 +5,7 @@ import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS, escapeRegExp, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
 import type { ListParams } from '../../shared/http/list.ts';
 import type { PageInfo } from '../../shared/http/envelope.ts';
+import { bounded } from '../../shared/security/scope/bounded.ts';
 import { legacyScopeIds } from '../../shared/security/scope/legacy-scope.ts';
 import { withScope } from '../../shared/security/scope/scope-filters.ts';
 import { normalizeUsername } from '../../shared/security/username.ts';
@@ -187,6 +188,14 @@ export interface UsersRepository {
    * @param params Validated list parameters (`limit` and `cursor`).
    */
   listForStore(filter: Filter<Document>, params: ListParams): Promise<{ readonly users: readonly StoreUserRecord[]; readonly page: PageInfo }>;
+  /**
+   * Reads one user of the set a store may read (see {@link UsersRepository.listForStore}), without the PIN. The filter is built by the caller from the store principal and the id of the user, never from a request
+   * value alone.
+   *
+   * @param filter The filter of who the store may read, narrowed to one `_id`.
+   * @returns The user, or `null` when none matches.
+   */
+  findOneForStore(filter: Filter<Document>): Promise<MappedUser | null>;
   /**
    * The ids of the users that match a filter, in `_id` order (a stable order, so a bulk operation that repeats finds the next ones), at most `limit`. The filter carries the scope
    * (`usersScopeFilter`) and the trash condition: callers build it with `withScope`.
@@ -383,6 +392,11 @@ export function createUsersRepository(databases: Databases): UsersRepository {
         users: items.map((document) => ({ mapped: fromLegacy(document as LegacyUserDocument, { summary: true }), pin: typeof document['pin'] === 'string' && document['pin'] !== '' ? document['pin'] : null })),
         page,
       };
+    },
+
+    findOneForStore: async (filter) => {
+      const document = await bounded(() => users().findOne(filter, { projection: USER_PROJECTION, maxTimeMS: LIST_MAX_TIME_MS }));
+      return document === null ? null : fromLegacy(document as LegacyUserDocument, { summary: true });
     },
 
     findTrashedIds: async (filter, limit) =>

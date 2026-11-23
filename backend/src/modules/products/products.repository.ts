@@ -6,10 +6,10 @@ import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { withScope } from '../../shared/security/scope/scope-filters.ts';
 import { createEntityRepository, sameAs } from '../product-catalog/entity.repository.ts';
-import type { EntityRepository } from '../product-catalog/entity.repository.ts';
+import type { EntityRepository, FullListing } from '../product-catalog/entity.repository.ts';
 import { contactName } from '../group-lookup/lookup.repository.ts';
 import { categoriesVisibleTo } from '../product-categories/categories.availability.ts';
 
@@ -61,7 +61,7 @@ export interface DuplicateQuery {
 }
 
 /** The `products` collection of a group database, as seen by a caller. */
-export interface ProductsRepository extends EntityRepository {
+export interface ProductsRepository extends EntityRepository, FullListing {
   /**
    * The other products, not in the trash, that have one of the values (a code, a PLU or a barcode): their ids, the three fields and where they are available. At most {@link MAX_DUPLICATE_SCAN}: the
    * check is a warning, so a long tail is counted, not read.
@@ -71,7 +71,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param id The product the values belong to, excluded.
    * @param query The values.
    */
-  usingValues(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, query: DuplicateQuery): Promise<Document[]>;
+  usingValues(principal: CatalogCaller, access: GroupAccess, id: ObjectId, query: DuplicateQuery): Promise<Document[]>;
   /**
    * Tells which of some products are valid for a use: they exist and are not in the trash, a modifier or not as asked, and (for a company or place administrator) reached by the caller. One query limited to the list.
    *
@@ -82,7 +82,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param scoped Whether a company or place administrator may use only the products he reaches.
    * @returns The positions, in the list, of the ids that are not valid.
    */
-  invalid(principal: AuthPrincipal, access: GroupAccess, ids: readonly string[], use: 'modifier' | 'plain', scoped: boolean): Promise<number[]>;
+  invalid(principal: CatalogCaller, access: GroupAccess, ids: readonly string[], use: 'modifier' | 'plain', scoped: boolean): Promise<number[]>;
   /**
    * The components of the bill of materials of some products (whatever the caller reaches: a cycle cannot be judged on a part of the data).
    *
@@ -91,7 +91,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param ids The products, hexadecimal (at most {@link MAX_BUNDLE_READ}).
    * @returns The components of each product that exists, hexadecimal.
    */
-  componentsOf(principal: AuthPrincipal, access: GroupAccess, ids: readonly string[]): Promise<Map<string, string[]>>;
+  componentsOf(principal: CatalogCaller, access: GroupAccess, ids: readonly string[]): Promise<Map<string, string[]>>;
   /**
    * The products, not in the trash, that use a product in one of the four ways (at most {@link MAX_REPORTED_PRODUCTS}).
    *
@@ -100,7 +100,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param id Id of the product.
    * @param kind In its bill of materials, in a menu, in a group of choices of modifiers, or in the lists of modifiers.
    */
-  users(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, kind: ProductUserKind): Promise<ProductUser[]>;
+  users(principal: CatalogCaller, access: GroupAccess, id: ObjectId, kind: ProductUserKind): Promise<ProductUser[]>;
   /**
    * The categories whose list of modifiers (`variants`) has the product (at most {@link MAX_REPORTED_PRODUCTS}).
    *
@@ -109,7 +109,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param id Id of the product.
    * @returns The categories with where they are available (the places decide whether a company or place administrator may be told about them).
    */
-  categoriesWithModifier(principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<ProductUser[]>;
+  categoriesWithModifier(principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<ProductUser[]>;
   /**
    * Moves a product to the trash or takes it out, only if it is still as it was read.
    *
@@ -121,7 +121,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param read What the product had when it was read: its `updateDate`, `trash` and `placesAvailability`.
    * @returns Whether the product was changed (`false` when it changed, or went, since it was read).
    */
-  setTrash(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, to: 'trashed' | 'restored', now: Date, read: { readonly updateDate: unknown; readonly trash: unknown; readonly placesAvailability: unknown }): Promise<boolean>;
+  setTrash(principal: CatalogCaller, access: GroupAccess, id: ObjectId, to: 'trashed' | 'restored', now: Date, read: { readonly updateDate: unknown; readonly trash: unknown; readonly placesAvailability: unknown }): Promise<boolean>;
   /**
    * Deletes a product that is in the trash, only if it is still as it was read.
    *
@@ -131,7 +131,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param read What the product had when it was read.
    * @returns Whether a product was deleted.
    */
-  removeTrashed(principal: AuthPrincipal, access: GroupAccess, id: ObjectId, read: { readonly updateDate: unknown; readonly placesAvailability: unknown }): Promise<boolean>;
+  removeTrashed(principal: CatalogCaller, access: GroupAccess, id: ObjectId, read: { readonly updateDate: unknown; readonly placesAvailability: unknown }): Promise<boolean>;
   /**
    * The ids of the products in the trash that the caller reaches, in `_id` order, at most `limit`.
    *
@@ -140,14 +140,14 @@ export interface ProductsRepository extends EntityRepository {
    * @param limit How many ids at most.
    * @param after Only the products with an id greater than this one, `null` for all.
    */
-  trashedIds(principal: AuthPrincipal, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
+  trashedIds(principal: CatalogCaller, access: GroupAccess, limit: number, after: ObjectId | null): Promise<ObjectId[]>;
   /**
    * How many products in the trash the caller reaches.
    *
    * @param principal The authenticated caller.
    * @param access Verified access to the group.
    */
-  countTrashed(principal: AuthPrincipal, access: GroupAccess): Promise<number>;
+  countTrashed(principal: CatalogCaller, access: GroupAccess): Promise<number>;
   /**
    * The display names of some contacts (company name, else name and surname, in clear; `null` when there is none), in one read limited to the ids: what a page of the list shows as the last supplier (a contact in the trash has no name shown; one that is no longer a supplier keeps it).
    *
@@ -156,7 +156,7 @@ export interface ProductsRepository extends EntityRepository {
    * @param ids The contacts, hexadecimal (at most a page).
    * @returns The name of each contact that exists.
    */
-  supplierNames(principal: AuthPrincipal, access: GroupAccess, ids: readonly string[]): Promise<Map<string, string | null>>;
+  supplierNames(principal: CatalogCaller, access: GroupAccess, ids: readonly string[]): Promise<Map<string, string | null>>;
   /**
    * The users of the group that provide a product as a service (`servicesId`): at most {@link MAX_REPORTED_PRODUCTS}, trashed users included (a user taken out of the trash would have a service that is gone).
    *
@@ -173,7 +173,7 @@ export interface ProductsRepository extends EntityRepository {
  * @param databases Database accessor.
  */
 export function createProductsRepository(databases: Databases): ProductsRepository {
-  const products = (principal: AuthPrincipal, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products');
+  const products = (principal: CatalogCaller, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products');
   const idsOf = (documents: readonly Document[]): ObjectId[] => documents.map((document) => document['_id'] as ObjectId);
   const either = (id: ObjectId): { $in: Array<ObjectId | string> } => ({ $in: [id, id.toHexString()] });
   const read = <T>(work: () => Promise<T>): Promise<T> => bounded(work);

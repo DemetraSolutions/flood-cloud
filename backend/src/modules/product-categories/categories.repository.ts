@@ -6,7 +6,7 @@ import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { withScope } from '../../shared/security/scope/scope-filters.ts';
 import { createEntityRepository, entityProjection } from '../product-catalog/entity.repository.ts';
 import type { EntityRepository } from '../product-catalog/entity.repository.ts';
@@ -27,7 +27,7 @@ export interface CategoriesRepository extends EntityRepository {
    * @param access Verified access to the group.
    * @returns The categories, or `null` when the group has more than {@link MAX_CATEGORIES} (the tree is then not read, never read on a part).
    */
-  nodes(principal: AuthPrincipal, access: GroupAccess): Promise<TreeNode[] | null>;
+  nodes(principal: CatalogCaller, access: GroupAccess): Promise<TreeNode[] | null>;
   /**
    * The ids of the categories the caller reaches (every one for the roles that are not limited to places).
    *
@@ -35,14 +35,14 @@ export interface CategoriesRepository extends EntityRepository {
    * @param access Verified access to the group.
    * @returns At most {@link MAX_CATEGORIES} ids.
    */
-  reachableIds(principal: AuthPrincipal, access: GroupAccess): Promise<Set<string>>;
+  reachableIds(principal: CatalogCaller, access: GroupAccess): Promise<Set<string>>;
   /**
    * The categories the caller reaches, with what the compact tree shows (name, stored parent, position, state), at most {@link MAX_CATEGORIES}.
    *
    * @param principal The authenticated caller.
    * @param access Verified access to the group.
    */
-  treeDocuments(principal: AuthPrincipal, access: GroupAccess): Promise<Document[]>;
+  treeDocuments(principal: CatalogCaller, access: GroupAccess): Promise<Document[]>;
   /**
    * The categories whose stored parent is a category, itself excluded (one that is its own parent is not its own child): at most {@link MAX_REPORTED_CATEGORIES}.
    *
@@ -51,7 +51,7 @@ export interface CategoriesRepository extends EntityRepository {
    * @param id Id of the category.
    * @returns The ids, hexadecimal.
    */
-  subcategories(principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<string[]>;
+  subcategories(principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<string[]>;
   /**
    * The other categories that apply a category as a category of modifiers (`variantsCategories`): at most {@link MAX_REPORTED_CATEGORIES}.
    *
@@ -60,7 +60,7 @@ export interface CategoriesRepository extends EntityRepository {
    * @param id Id of the category.
    * @returns The ids, hexadecimal.
    */
-  modifierCategoryUsers(principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<string[]>;
+  modifierCategoryUsers(principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<string[]>;
 }
 
 /** What the compact tree reads of a category. */
@@ -72,7 +72,7 @@ const TREE_PROJECTION = Object.freeze({ name: 1, parentId: 1, position: 1, statu
  * @param databases Database accessor.
  */
 export function createCategoriesRepository(databases: Databases): CategoriesRepository {
-  const categories = (principal: AuthPrincipal, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products_categories');
+  const categories = (principal: CatalogCaller, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products_categories');
   const idsOf = (documents: readonly Document[]): string[] => documents.map((document) => (document['_id'] as ObjectId).toHexString());
   return {
     ...createEntityRepository(databases, {

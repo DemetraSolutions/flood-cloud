@@ -5,7 +5,7 @@ import { LIST_MAX_TIME_MS } from '../../shared/http/list.ts';
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { usableRate } from './products.pricing.ts';
 
 /** Most products one block of the realignment of a tax rate writes. */
@@ -30,7 +30,7 @@ export interface TaxProducts {
    * @param taxId Id of the tax rate.
    * @returns At most {@link MAX_REPORTED_TAX_PRODUCTS} products, hexadecimal.
    */
-  usedBy(principal: AuthPrincipal, access: GroupAccess, taxId: string): Promise<string[]>;
+  usedBy(principal: CatalogCaller, access: GroupAccess, taxId: string): Promise<string[]>;
   /**
    * Makes the copy of a tax rate in the prices that hold it equal to the rate (`tax` and the five keys of `taxData`, no other key of a price), and the date of the change of the products it touches new. When the
    * percentage changes, the gross price (`taxed`) stays fixed and the net one (`price`) is computed again, to eight decimals; a price whose gross amount is not a number keeps its net one. It writes only the products
@@ -44,7 +44,7 @@ export interface TaxProducts {
    * @returns Whether every product was realigned and, if not, how many blocks are left (only without a transaction: repeating the call goes on). A rate that is not usable (`NaN`, infinite, `-100` or less) is skipped, and the result says so (`skipped`, not complete).
    * @throws {AppError} `CONFLICT` (`products`/`tooMany`) when, inside a transaction, the group has more products to realign than {@link MAX_TAX_BLOCKS} blocks hold (the whole write is then undone).
    */
-  realign(principal: AuthPrincipal, access: GroupAccess, copy: Document, now: Date, session?: ClientSession): Promise<Realignment>;
+  realign(principal: CatalogCaller, access: GroupAccess, copy: Document, now: Date, session?: ClientSession): Promise<Realignment>;
 }
 
 /** How far a realignment went. */
@@ -93,7 +93,7 @@ export interface TaxBlocks {
  * @param blocks The size and the number of the blocks of a realignment ({@link TAX_BLOCK_SIZE} and {@link MAX_TAX_BLOCKS} by default).
  */
 export function createTaxProducts(databases: Databases, blocks: TaxBlocks = { size: TAX_BLOCK_SIZE, max: MAX_TAX_BLOCKS }): TaxProducts {
-  const products = (principal: AuthPrincipal, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products');
+  const products = (principal: CatalogCaller, access: GroupAccess) => groupDatabaseFor(principal, access, databases).collection('products');
   return {
     usedBy: async (principal, access, taxId) => {
       const found = await bounded(() => products(principal, access).find({ trash: { $ne: true }, 'prices.taxData.id': taxId }, { projection: { _id: 1 }, limit: MAX_REPORTED_TAX_PRODUCTS, maxTimeMS: LIST_MAX_TIME_MS }).toArray());

@@ -3,7 +3,7 @@ import type { Databases } from '../../db/databases.ts';
 import { bounded } from '../../shared/security/scope/bounded.ts';
 import { findPlacesUsingCategory, readPlaceSetups } from '../../shared/security/scope/group-mirror.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { recordsOf, textOf } from '../groups/catalogs/kit.ts';
 import { MAX_REPORTED_CATEGORIES } from './categories.repository.ts';
 
@@ -27,7 +27,7 @@ export interface CategoryPlaces {
    * @param placeIds The places, hexadecimal (at most the 200 a category may name).
    * @returns The setup of each place asked for.
    */
-  setupOf(principal: AuthPrincipal, access: GroupAccess, placeIds: readonly string[]): Promise<ReadonlyMap<string, PlaceSetup>>;
+  setupOf(principal: CatalogCaller, access: GroupAccess, placeIds: readonly string[]): Promise<ReadonlyMap<string, PlaceSetup>>;
   /**
    * The places that still refer to a category: in the categories a print station makes a summary for (`printStations[].summaryCategoriesIds`), in the kiosk (`kiosk.upsellingCategoryId`,
    * `kiosk.productsCategories`), in the self ordering of any price list (`selfOrdering.priceListsConfig.<id>.productsCategories`) and in the map to the categories of TS Hospitality
@@ -38,7 +38,7 @@ export interface CategoryPlaces {
    * @param id Id of the category.
    * @returns The ids of the places, hexadecimal.
    */
-  using(principal: AuthPrincipal, access: GroupAccess, id: ObjectId): Promise<string[]>;
+  using(principal: CatalogCaller, access: GroupAccess, id: ObjectId): Promise<string[]>;
 }
 
 /** The ids of the items of a list of a place, read tolerantly: the items that are objects with a text `id`. */

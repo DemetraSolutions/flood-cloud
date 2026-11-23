@@ -46,6 +46,8 @@ export interface RateLimitRules {
   readonly apiPerStore: RateLimitRule;
   /** Activation code exchanges per client IP address: the route is anonymous, so this runs before the body is read. */
   readonly storeActivationPerIp: RateLimitRule;
+  /** Writes of the catalog (products and categories) per store key per minute, declared by the write routes of `/store-context/catalog`. */
+  readonly storeCatalogWritePerStore: RateLimitRule;
   /** Creations and cancellations of activation codes and revocations of store keys per authenticated user. */
   readonly storeKeyAdminPerUser: RateLimitRule;
   /** Creations, changes and revocations of public API keys per authenticated user. */
@@ -114,6 +116,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     cervedLookupPerUserDaily: Object.freeze({ bucket: 'cerved-lookup-day:user', limit: config.rateLimitCervedLookupPerUserDaily, windowSeconds: DAY_SECONDS, key: perUser }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
     apiPerStore: Object.freeze({ bucket: 'api:store', limit: config.rateLimitApiPerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
+    storeCatalogWritePerStore: Object.freeze({ bucket: 'store-catalog-write:store', limit: config.rateLimitStoreCatalogWritePerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),
     storeKeyAdminPerUser: Object.freeze({ bucket: 'storeKeyAdmin:user', limit: config.rateLimitStoreKeyAdminPerUser, key: perUser }),
     apiKeyAdminPerUser: Object.freeze({ bucket: 'apiKeyAdmin:user', limit: config.rateLimitApiKeyAdminPerUser, key: perUser }),

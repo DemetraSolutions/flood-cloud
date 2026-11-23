@@ -2,6 +2,7 @@ import type { GroupAccess } from '../security/scope/group-access.ts';
 import type { ValidatedInput } from '../validation/middleware.ts';
 import type { ObjectId } from 'mongodb';
 import type { ApiKeyPrincipal, AuthPrincipal, StorePrincipal } from '../security/scope/principal.ts';
+import type { StoreOperator } from '../../modules/product-catalog/caller.ts';
 
 declare global {
   namespace Express {
@@ -16,6 +17,8 @@ declare global {
       auth?: AuthPrincipal;
       /** Verified store principal, set by the store key authentication of `/v1`; never set together with `auth`. */
       store?: StorePrincipal;
+      /** The operator of a write of a store, declared in `X-Operator-Id` and verified by the `operator` check of the route; only on the store routes that write. */
+      storeOperator?: StoreOperator;
       /** Verified API key principal, set by the API key authentication of `/public/v1`; never set together with `auth` or `store`. */
       apiKey?: ApiKeyPrincipal;
       /** Id of the session whose access token authenticated the request, set by the Bearer middleware. */
