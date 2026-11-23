@@ -50,6 +50,8 @@ export class MediaPicker {
   readonly groupId = input.required<string>();
   /** Company the page is about: uploads belong to it (a company administrator must give it). */
   readonly companyId = input<string>();
+  /** Whether the user may upload a new image (the server refuses it to who has no company to give). */
+  readonly canUpload = input(true);
   /** Whether the dialog is open (two-way). */
   readonly open = model(false);
   /** Emitted with the image the user chose. */

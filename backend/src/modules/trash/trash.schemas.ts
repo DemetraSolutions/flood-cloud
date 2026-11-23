@@ -13,15 +13,15 @@ export const MAX_TRASH_IDS = 100;
 export const EMPTY_BATCH_SIZE = 200;
 
 /** The kinds of the trash of a group, in the order of the tabs. The groups have their own route: they are platform-wide and are never deleted. */
-export const TRASH_KINDS = Object.freeze(['companies', 'places', 'users'] as const);
+export const TRASH_KINDS = Object.freeze(['companies', 'places', 'users', 'products'] as const);
 
 /** A kind of item that can be in the trash of a group. */
 export type TrashKind = (typeof TRASH_KINDS)[number];
 
 /** The permission each operation needs on each kind: restoring is `<kind>:trash`, deleting is `<kind>:delete`, the ones of the single-item routes. */
 export const KIND_PERMISSIONS: Readonly<Record<'restore' | 'delete', Readonly<Record<TrashKind, Permission>>>> = Object.freeze({
-  restore: Object.freeze({ companies: 'companies:trash', places: 'places:trash', users: 'users:trash' }),
-  delete: Object.freeze({ companies: 'companies:delete', places: 'places:delete', users: 'users:delete' }),
+  restore: Object.freeze({ companies: 'companies:trash', places: 'places:trash', users: 'users:trash', products: 'products:update' }),
+  delete: Object.freeze({ companies: 'companies:delete', places: 'places:delete', users: 'users:delete', products: 'products:update' }),
 });
 
 /** Path parameters of the routes of a group's trash: an unknown kind is a `422`. */

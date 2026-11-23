@@ -1,0 +1,384 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ 'PRODUCT_CATEGORIES.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  <fc-page-header [heading]="(isNew() ? 'PRODUCT_CATEGORIES.FORM.NEW_TITLE' : 'PRODUCT_CATEGORIES.FORM.EDIT_TITLE') | t">
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{ 'PRODUCT_CATEGORIES.FORM.BACK' | t }}</a>
+      @if (canWrite()) {
+        <button
+          fc-button
+          type="submit"
+          form="category-form"
+          [loading]="submitting()"
+          [disabled]="!unsaved()"
+        >
+          {{ isNew() ? ('PRODUCT_CATEGORIES.FORM.CREATE' | t) : ('COMMON.SAVE' | t) }}
+        </button>
+      }
+    </ng-container>
+  </fc-page-header>
+  <fc-record-group [groupId]="groupId()" />
+
+  @if (item(); as current) {
+    <p class="meta">
+      {{ 'PRODUCT_CATALOG.FORM.UPDATED' | t: { date: date(current.updatedAt) } }}
+    </p>
+    @if (current.cyclic) {
+      <p class="note" role="note">{{ 'PRODUCT_CATEGORIES.CYCLIC_NOTE' | t }}</p>
+    }
+  }
+
+  @if (sharedReadOnly()) {
+    <p class="note" role="note">{{ 'PRODUCT_CATEGORIES.READ_ONLY_SHARED' | t }}</p>
+  }
+
+  <form id="category-form" novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (stale()) {
+        <button fc-button variant="secondary" type="button" (click)="reload()">
+          {{ 'PRODUCT_CATALOG.FORM.RELOAD' | t }}
+        </button>
+      }
+    }
+
+    <fc-tab-list
+      [label]="'PRODUCT_CATALOG.SECTIONS' | t"
+      idPrefix="category"
+      [tabs]="tabs()"
+      [active]="section()"
+      (activeChange)="select($event)"
+    />
+
+    <section
+      id="category-panel-general"
+      role="tabpanel"
+      aria-labelledby="category-tab-general"
+      [hidden]="section() !== 'general'"
+    >
+      <fc-checkbox
+        [formField]="categoryForm.enabled"
+        [label]="'PRODUCT_CATALOG.FIELD.ENABLED' | t"
+        [hint]="'PRODUCT_CATALOG.FIELD.ENABLED_HINT' | t"
+      />
+      @if (features().cash) {
+        <fc-checkbox
+          [formField]="categoryForm.availability.pos"
+          [label]="'PRODUCT_CATEGORIES.FIELD.POS' | t"
+        />
+      }
+      @if (features().customersApp) {
+        <fc-checkbox
+          [formField]="categoryForm.availability.ecommerce"
+          [label]="'PRODUCT_CATEGORIES.FIELD.ECOMMERCE' | t"
+        />
+        <fc-checkbox
+          [formField]="categoryForm.featured"
+          [label]="'PRODUCT_CATEGORIES.FIELD.FEATURED' | t"
+        />
+      }
+      <fc-checkbox
+        [formField]="categoryForm.noDiscount"
+        [label]="'PRODUCT_CATALOG.FIELD.NO_DISCOUNT' | t"
+      />
+      <fc-checkbox
+        [formField]="categoryForm.requiresLegalAge"
+        [label]="'PRODUCT_CATEGORIES.FIELD.LEGAL_AGE' | t"
+      />
+      @if (features().tobaccosGamesMonopoly) {
+        <fc-checkbox
+          [formField]="categoryForm.secondaryFiscalPrinter"
+          [label]="'PRODUCT_CATALOG.FIELD.SECONDARY_PRINTER' | t"
+        />
+      }
+
+      <fieldset>
+        <legend>{{ 'PRODUCT_CATEGORIES.INTEGRATIONS.TITLE' | t }}</legend>
+        <fc-checkbox
+          [formField]="categoryForm.integrations.floodOrders"
+          [label]="'PRODUCT_CATEGORIES.INTEGRATIONS.FLOOD_ORDERS' | t"
+        />
+        <fc-checkbox
+          [formField]="categoryForm.integrations.yellgo"
+          [label]="'PRODUCT_CATEGORIES.INTEGRATIONS.YELLGO' | t"
+        />
+        <fc-checkbox
+          [formField]="categoryForm.integrations.leggimenu"
+          [label]="'PRODUCT_CATEGORIES.INTEGRATIONS.LEGGIMENU' | t"
+        />
+      </fieldset>
+
+      <div class="grid">
+        <fc-select
+          [formField]="categoryForm.parentId"
+          [label]="'PRODUCT_CATEGORIES.FIELD.PARENT' | t"
+          [placeholder]="parentPlaceholder()"
+          [options]="parentOptions()"
+          [hint]="treeFailed() ? ('PRODUCT_CATEGORIES.FIELD.PARENT_FAILED' | t) : null"
+          [error]="error(categoryForm.parentId)"
+          (blurred)="categoryForm.parentId().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="categoryForm.position"
+          inputmode="numeric"
+          autocomplete="off"
+          [label]="'PRODUCT_CATEGORIES.FIELD.POSITION' | t"
+          [error]="error(categoryForm.position)"
+          (blurred)="categoryForm.position().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="categoryForm.productionValue"
+          inputmode="numeric"
+          autocomplete="off"
+          [label]="'PRODUCT_CATEGORIES.FIELD.PRODUCTION_VALUE' | t"
+          [error]="error(categoryForm.productionValue)"
+          (blurred)="categoryForm.productionValue().markAsTouched()"
+        />
+      </div>
+
+      @for (language of languages(); track language) {
+        <fc-text-field
+          [formField]="categoryForm.name[language]"
+          autocomplete="off"
+          [hint]="language === requiredLang() ? ('PRODUCT_CATALOG.FIELD.REQUIRED_LANGUAGE' | t) : null"
+          [label]="languageLabel('NAME', language)"
+          [error]="error(categoryForm.name[language])"
+          (blurred)="categoryForm.name[language]().markAsTouched()"
+        />
+      }
+      @for (language of languages(); track language) {
+        <fc-textarea
+          [formField]="categoryForm.description[language]"
+          [rows]="3"
+          [label]="languageLabel('DESCRIPTION', language)"
+          [error]="error(categoryForm.description[language])"
+          (blurred)="categoryForm.description[language]().markAsTouched()"
+        />
+      }
+
+      @if (features().rooms) {
+        <fieldset>
+          <legend>{{ 'PRODUCT_CATEGORIES.DINING.TITLE' | t }}</legend>
+          <fc-checkbox
+            [formField]="categoryForm.dining.endOfMeal"
+            [label]="'PRODUCT_CATEGORIES.DINING.END_OF_MEAL' | t"
+          />
+          <fc-checkbox
+            [formField]="categoryForm.dining.hiddenOnHandheld"
+            [label]="'PRODUCT_CATEGORIES.DINING.HIDDEN_ON_HANDHELD' | t"
+          />
+          <div class="grid">
+            <fc-text-field
+              [formField]="categoryForm.dining.feePercentage"
+              inputmode="decimal"
+              autocomplete="off"
+              [label]="'PRODUCT_CATEGORIES.DINING.FEE' | t"
+              [error]="error(categoryForm.dining.feePercentage)"
+              (blurred)="categoryForm.dining.feePercentage().markAsTouched()"
+            />
+            <fc-text-field
+              [formField]="categoryForm.dining.printGroup"
+              inputmode="numeric"
+              autocomplete="off"
+              [label]="'PRODUCT_CATEGORIES.DINING.PRINT_GROUP' | t"
+              [error]="error(categoryForm.dining.printGroup)"
+              (blurred)="categoryForm.dining.printGroup().markAsTouched()"
+            />
+            <fc-select
+              [formField]="categoryForm.dining.type"
+              [label]="'PRODUCT_CATEGORIES.DINING.TYPE' | t"
+              [options]="diningTypes()"
+            />
+          </div>
+          <fc-checkbox
+            [formField]="categoryForm.dining.alwaysFirstCourse"
+            [label]="'PRODUCT_CATEGORIES.DINING.ALWAYS_FIRST' | t"
+          />
+          <fc-checkbox
+            [formField]="categoryForm.dining.notAffiliatedMenu"
+            [label]="'PRODUCT_CATEGORIES.DINING.NOT_AFFILIATED' | t"
+          />
+        </fieldset>
+      }
+
+      @if (features().tobaccosGamesMonopoly) {
+        <fieldset>
+          <legend>{{ 'PRODUCT_CATEGORIES.TOBACCO.TITLE' | t }}</legend>
+          <fc-checkbox
+            [formField]="categoryForm.tobacco"
+            [label]="'PRODUCT_CATEGORIES.TOBACCO.TYPE' | t"
+          />
+        </fieldset>
+      }
+
+      @if (features().cash) {
+        <fieldset>
+          <legend>{{ 'PRODUCT_CATEGORIES.COLORS.TITLE' | t }}</legend>
+          <div class="grid">
+            <fc-text-field
+              [formField]="categoryForm.backgroundColor"
+              type="color"
+              [label]="'PRODUCT_CATEGORIES.COLORS.BACKGROUND' | t"
+            />
+            <fc-text-field
+              [formField]="categoryForm.textColor"
+              type="color"
+              [label]="'PRODUCT_CATEGORIES.COLORS.TEXT' | t"
+            />
+          </div>
+          @if (canWrite()) {
+            <div class="quick" role="group" [attr.aria-label]="'PRODUCT_CATEGORIES.COLORS.QUICK' | t">
+              @for (color of quickColors; track color) {
+                <button
+                  type="button"
+                  class="swatch"
+                  [style.background-color]="color"
+                  [attr.aria-label]="'PRODUCT_CATEGORIES.COLORS.PICK' | t: { color }"
+                  (click)="setBackground(color)"
+                ></button>
+              }
+            </div>
+          }
+        </fieldset>
+      }
+    </section>
+
+    @if (features().productsVariants) {
+      <section
+        id="category-panel-variants"
+        role="tabpanel"
+        aria-labelledby="category-tab-variants"
+        [hidden]="section() !== 'variants'"
+      >
+        <p class="note">{{ 'PRODUCT_CATEGORIES.VARIANTS.HINT' | t }}</p>
+        <fc-reference-picker
+          [formField]="categoryForm.modifierIds"
+          [label]="'PRODUCT_CATEGORIES.VARIANTS.PRODUCTS' | t"
+          [loader]="productLoader()"
+          [labels]="productLabels()"
+          [error]="error(categoryForm.modifierIds)"
+          (blurred)="categoryForm.modifierIds().markAsTouched()"
+        />
+        <fc-category-check-list
+          [formField]="categoryForm.modifierCategoryIds"
+          [label]="'PRODUCT_CATEGORIES.VARIANTS.CATEGORIES' | t"
+          [entries]="treeEntries()"
+          [error]="error(categoryForm.modifierCategoryIds)"
+        />
+        @if (treeFailed()) {
+          <p class="note" role="note">{{ 'PRODUCT_CATEGORIES.FIELD.PARENT_FAILED' | t }}</p>
+        }
+      </section>
+    }
+
+    @if (features().ordering) {
+      <section
+        id="category-panel-stations"
+        role="tabpanel"
+        aria-labelledby="category-tab-stations"
+        [hidden]="section() !== 'stations'"
+      >
+        <p class="note">{{ 'PRODUCT_CATEGORIES.STATIONS.HINT' | t }}</p>
+        @if (placesFailed()) {
+          <p class="note" role="alert">{{ 'PRODUCT_CATEGORIES.PLACES_FAILED' | t }}</p>
+        }
+        <fc-category-stations
+          [formField]="categoryForm.stations"
+          [groupId]="groupId()"
+          [places]="placeList()"
+          [error]="error(categoryForm.stations)"
+        />
+      </section>
+    }
+
+    <section
+      id="category-panel-availability"
+      role="tabpanel"
+      aria-labelledby="category-tab-availability"
+      [hidden]="section() !== 'availability'"
+    >
+      @if (restricted()) {
+        <p class="note" role="note">{{ 'PRODUCT_CATEGORIES.AVAILABILITY.RESTRICTED' | t }}</p>
+      } @else {
+        <p class="note">{{ 'PRODUCT_CATEGORIES.AVAILABILITY.HINT' | t }}</p>
+      }
+      @if (placesFailed()) {
+        <p class="note" role="alert">{{ 'PRODUCT_CATEGORIES.PLACES_FAILED' | t }}</p>
+      }
+      <fc-category-availability
+        [formField]="categoryForm.places"
+        [groupId]="groupId()"
+        [places]="placeList()"
+        [error]="error(categoryForm.places)"
+      />
+    </section>
+
+    @if (features().media) {
+      <section
+        id="category-panel-media"
+        role="tabpanel"
+        aria-labelledby="category-tab-media"
+        [hidden]="section() !== 'media'"
+      >
+        <fc-text-field
+          [formField]="categoryForm.internalFileName"
+          autocomplete="off"
+          [label]="'PRODUCT_CATEGORIES.MEDIA.INTERNAL_FILE_NAME' | t"
+          [error]="error(categoryForm.internalFileName)"
+          (blurred)="categoryForm.internalFileName().markAsTouched()"
+        />
+        <fc-text-field
+          [formField]="categoryForm.externalUrl"
+          type="url"
+          autocomplete="off"
+          [label]="'PRODUCT_CATEGORIES.MEDIA.EXTERNAL_URL' | t"
+          [hint]="'PRODUCT_CATEGORIES.MEDIA.EXTERNAL_URL_HINT' | t"
+          [error]="error(categoryForm.externalUrl)"
+          (blurred)="categoryForm.externalUrl().markAsTouched()"
+        />
+        <fc-logo-slot
+          [label]="'PRODUCT_CATEGORIES.MEDIA.IMAGE' | t"
+          [logo]="model().image"
+          [groupId]="groupId()"
+          [canUpload]="!restricted()"
+          [disabled]="!canWrite()"
+          (logoChange)="setImage('image', $event)"
+        />
+        @if (error(categoryForm.image); as problem) {
+          <p class="problem" role="alert">{{ problem }}</p>
+        }
+        <fc-logo-slot
+          [label]="'PRODUCT_CATEGORIES.MEDIA.ICON' | t"
+          [logo]="model().icon"
+          [groupId]="groupId()"
+          [canUpload]="!restricted()"
+          [disabled]="!canWrite()"
+          (logoChange)="setImage('icon', $event)"
+        />
+        @if (error(categoryForm.icon); as problem) {
+          <p class="problem" role="alert">{{ problem }}</p>
+        }
+      </section>
+    }
+  </form>
+}
+
+<fc-confirm-dialog
+  [heading]="'PRODUCT_CATALOG.LEAVE.TITLE' | t"
+  [message]="'PRODUCT_CATALOG.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'PRODUCT_CATALOG.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>

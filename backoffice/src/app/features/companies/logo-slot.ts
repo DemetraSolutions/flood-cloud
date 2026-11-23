@@ -40,6 +40,8 @@ export class LogoSlot {
   readonly groupId = input.required<string>();
   /** Company the logo belongs to. */
   readonly companyId = input<string>();
+  /** Whether the picker offers the upload of a new image. */
+  readonly canUpload = input(true);
   /** Disables the buttons. */
   readonly disabled = input(false, { transform: booleanAttribute });
   /** Emitted with the new logo (`null` to remove it). */

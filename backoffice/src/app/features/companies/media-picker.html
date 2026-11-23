@@ -21,10 +21,12 @@
         [accept]="accept"
         (change)="onFile($event)"
       />
-      <button fc-button variant="secondary" [loading]="uploading()" (click)="browse()">
-        {{ 'COMPANIES.MEDIA.UPLOAD' | t }}
-      </button>
-      <p class="hint">{{ 'COMPANIES.MEDIA.UPLOAD_HINT' | t }}</p>
+      @if (canUpload()) {
+        <button fc-button variant="secondary" [loading]="uploading()" (click)="browse()">
+          {{ 'COMPANIES.MEDIA.UPLOAD' | t }}
+        </button>
+        <p class="hint">{{ 'COMPANIES.MEDIA.UPLOAD_HINT' | t }}</p>
+      }
     </div>
   </div>
   <p class="problem" role="alert">{{ problem() }}</p>

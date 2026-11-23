@@ -195,6 +195,16 @@ describe('MediaPicker', () => {
   });
 
   describe('upload', () => {
+    it('offers no upload to who may not upload, and still lists the images', async () => {
+      const { fixture, open, list, root, view } = await render();
+      fixture.componentRef.setInput('canUpload', false);
+      await open();
+      list().flush({ data: [], page: { limit: 12, next: null } });
+      await view();
+      expect(root.querySelector('.upload button')).toBeNull();
+      expect(root.querySelector('.upload .hint')).toBeNull();
+    });
+
     it('opens the file chooser from the button', async () => {
       const { open, list, root, view } = await render();
       await open();

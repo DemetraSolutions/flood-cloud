@@ -10,6 +10,7 @@ import {
   renderTrash,
   result,
   trashPage,
+  TRASH_ALL,
   USER_BARE,
   USER_ROW,
 } from '../../../testing/trash';
@@ -136,6 +137,27 @@ describe('Trash across groups', () => {
       expect(search().has('dealerId')).toBe(false);
       request('companies').flush(trashPage([]));
       await view();
+    });
+  });
+
+  describe('products', () => {
+    it('has no tab of products: they are managed by group', async () => {
+      const { request, view, root } = await renderTrash('/trash', {
+        permissions: [...TRASH_ALL, 'products:read'],
+      });
+      request('companies').flush(trashPage([IN_G1]));
+      await view();
+      const tabs = [...root.querySelectorAll('[role=tab]')].map((tab) => tab.textContent?.trim());
+      expect(tabs).toEqual(['TRASH.KIND.COMPANIES', 'TRASH.KIND.PLACES', 'TRASH.KIND.USERS', 'TRASH.KIND.GROUPS']);
+    });
+
+    it('falls back to the first tab when the URL asks for them', async () => {
+      const { request, view, root } = await renderTrash('/trash?tab=products', {
+        permissions: [...TRASH_ALL, 'products:read'],
+      });
+      request('companies').flush(trashPage([IN_G1]));
+      await view();
+      expect(root.querySelector('[role=tab][aria-selected=true]')?.id).toBe('trash-tab-companies');
     });
   });
 

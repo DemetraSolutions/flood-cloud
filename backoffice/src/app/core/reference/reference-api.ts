@@ -20,6 +20,8 @@ export interface ReferenceItem {
   /** Company of a store; `null` when the legacy data has no valid company. */
   readonly companyId?: string | null;
   readonly trashed?: boolean;
+  /** The price lists of a supplier (`lookup/suppliers` only). */
+  readonly priceLists?: readonly { readonly id: string; readonly name: string }[];
 }
 
 /** Parameters of a reference read (`q` filters by name; `companyId` only applies to stores). */
@@ -30,10 +32,14 @@ export interface ReferenceQuery {
   readonly companyId?: string;
   /** Ids to resolve (1 to {@link MAX_LOOKUP_IDS}). */
   readonly ids?: readonly string[];
+  /** Only the modifier (variant) products (`true`) or only the other ones (`false`); only for `lookup/products`. */
+  readonly modifier?: boolean;
+  /** Only the products that have this category; only for `lookup/products`. */
+  readonly categoryId?: string;
 }
 
 /** Compact reads of a group for the selectors of favorites and promotions (`products:read`). */
-export type LookupKind = 'products' | 'product-categories' | 'customers' | 'contact-groups';
+export type LookupKind = 'products' | 'product-categories' | 'customers' | 'contact-groups' | 'suppliers';
 // `companies`, `places` and `lookup` reads go through the {@link ReferenceStore}.
 
 /** Most ids a compact read resolves in one request. */
@@ -146,13 +152,18 @@ export class ReferenceApi {
    * @param groupId Group of the elements.
    * @param kind Which compact read.
    * @param ids Ids to resolve.
+   * @param modifier Only the modifier (variant) products (`lookup/products`).
    */
   lookupNames(
     groupId: string,
     kind: LookupKind,
     ids: readonly string[],
+    modifier = false,
   ): Promise<Record<string, string>> {
-    return this.namesByIds((query) => this.lookup(groupId, kind, query), ids);
+    return this.namesByIds(
+      (query) => this.lookup(groupId, kind, modifier ? { ...query, modifier: true } : query),
+      ids,
+    );
   }
 
   private async namesByIds(

@@ -1,6 +1,7 @@
-import type { Collection, Document, Filter, ObjectId } from 'mongodb';
+import type { ClientSession, Collection, Document, Filter, ObjectId } from 'mongodb';
 import { GROUPS_OWNED_CATALOGS, GROUPS_OWNED_FIELDS } from '../../../db/collections.ts';
 import type { Databases } from '../../../db/databases.ts';
+import { bounded } from '../../../shared/security/scope/bounded.ts';
 import { LIST_MAX_TIME_MS } from '../../../shared/http/list.ts';
 import type { ContainerChange } from './catalog.ts';
 import { equal, isRecord, valueAt } from './kit.ts';
@@ -42,10 +43,11 @@ export interface CatalogsRepository {
    * @param changes The containers to write.
    * @param expected The `updateDate` read with the containers.
    * @param now The new `updateDate`.
+   * @param session The transaction to write in, when the write goes together with a write in a group database.
    * @returns `updated`; `notFound`; `conflict` when the document changed since it was read; `malformed` when a parent container (`fidelity`) is not an object.
    * @throws {Error} If a path is outside the catalogs the backend owns.
    */
-  apply(id: ObjectId, changes: readonly ContainerChange[], expected: unknown, now: Date): Promise<CatalogWriteOutcome>;
+  apply(id: ObjectId, changes: readonly ContainerChange[], expected: unknown, now: Date, session?: ClientSession): Promise<CatalogWriteOutcome>;
 }
 
 /** Name of the computed field that carries the size of the document in the projection of a read (a name no legacy field uses). */
@@ -122,13 +124,14 @@ export function createCatalogsRepository(databases: Databases): CatalogsReposito
   return {
     read: async (id, paths) => {
       const projection = { updateDate: 1, [DOCUMENT_SIZE_FIELD]: { $bsonSize: '$$ROOT' }, ...Object.fromEntries(paths.map((path) => [path, 1 as const])) };
-      const document = await groups().findOne({ _id: id }, { projection, maxTimeMS: LIST_MAX_TIME_MS });
+      const document = await bounded(() => groups().findOne({ _id: id }, { projection, maxTimeMS: LIST_MAX_TIME_MS }));
       return document === null
         ? null
         : { updateDate: document['updateDate'], size: document[DOCUMENT_SIZE_FIELD] as number, values: Object.fromEntries(paths.map((path) => [path, valueAt(document, path)])) };
     },
 
-    apply: async (id, changes, expected, now) => {
+    apply: async (id, changes, expected, now, session) => {
+      const options = session === undefined ? {} : { session };
       const { set, unset } = buildCatalogUpdate(changes);
       const parents = parentsOf(changes.map((change) => change.path));
       const intact: Filter<Document>[] = parents.map((path) => ({ $or: [{ [path]: { $exists: false } }, { [path]: { $type: 'object' } }] }));
@@ -137,14 +140,14 @@ export function createCatalogsRepository(databases: Databases): CatalogsReposito
       if (Object.keys(unset).length > 0) {
         update['$unset'] = unset;
       }
-      const result = await groups().updateOne({ _id: id, ...version, ...(intact.length === 0 ? {} : { $and: intact }) }, update);
+      const result = await groups().updateOne({ _id: id, ...version, ...(intact.length === 0 ? {} : { $and: intact }) }, update, options);
       if (result.matchedCount === 1) {
         return 'updated';
       }
-      if ((await groups().countDocuments({ _id: id }, { limit: 1 })) === 0) {
+      if ((await groups().countDocuments({ _id: id }, { limit: 1, ...options })) === 0) {
         return 'notFound';
       }
-      return intact.length > 0 && (await groups().countDocuments({ _id: id, $and: intact }, { limit: 1 })) === 0 ? 'malformed' : 'conflict';
+      return intact.length > 0 && (await groups().countDocuments({ _id: id, $and: intact }, { limit: 1, ...options })) === 0 ? 'malformed' : 'conflict';
     },
   };
 }

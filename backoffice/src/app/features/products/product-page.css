@@ -1,0 +1,32 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 64rem;
+}
+
+.meta,
+.note {
+  color: var(--color-text-muted);
+}
+
+form,
+section[role='tabpanel']:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.views {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.problem {
+  margin: 0;
+  color: var(--color-danger);
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}

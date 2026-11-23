@@ -1,0 +1,29 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 60rem;
+}
+
+.meta,
+.note {
+  color: var(--color-text-muted);
+}
+
+form,
+section[role='tabpanel']:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.problem {
+  margin: 0;
+  color: var(--color-danger);
+}

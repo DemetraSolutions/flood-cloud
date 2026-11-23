@@ -5,6 +5,7 @@ import {
   PLACE_ROW,
   renderTrash,
   trashPage,
+  TRASH_ALL,
   USER_ROW,
 } from '../../../testing/trash';
 
@@ -30,6 +31,20 @@ describe('TrashPage', () => {
     expect(panel?.id).toBe('trash-panel-companies');
     expect(panel?.getAttribute('aria-labelledby')).toBe('trash-tab-companies');
     expect(panel?.querySelector('fc-trash-tab')).not.toBeNull();
+  });
+
+  it('adds the products tab with products:read', async () => {
+    const { flush, root } = await renderTrash(undefined, {
+      permissions: [...TRASH_ALL, 'products:read'],
+    });
+    await flush('companies', [COMPANY_ROW]);
+    expect(labels(root)).toEqual([
+      'TRASH.KIND.COMPANIES',
+      'TRASH.KIND.PLACES',
+      'TRASH.KIND.USERS',
+      'TRASH.KIND.PRODUCTS',
+      'TRASH.KIND.GROUPS',
+    ]);
   });
 
   it('shows only the tabs the user may read', async () => {

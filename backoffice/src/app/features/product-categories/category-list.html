@@ -1,0 +1,169 @@
+<header class="page-header">
+  <h1>{{ 'PRODUCT_CATEGORIES.TITLE' | t }}</h1>
+  <a *fcCan="'products:update'" class="new" [routerLink]="newRoute()">{{ 'PRODUCT_CATEGORIES.NEW' | t }}</a>
+</header>
+<p class="hint">{{ 'PRODUCT_CATEGORIES.HINT' | t }}</p>
+
+@if (blocked(); as refused) {
+  <section class="blocked" role="alert" aria-labelledby="blocked-heading">
+    <h2 id="blocked-heading">{{ 'PRODUCT_CATEGORIES.DELETE.BLOCKED_TITLE' | t: { name: refused.category } }}</h2>
+    <p>{{ 'PRODUCT_CATEGORIES.DELETE.BLOCKED_MESSAGE' | t }}</p>
+    @for (group of refused.groups; track group.kind) {
+      <h3>{{ kindLabel(group.kind) }}</h3>
+      <ul>
+        @for (item of group.items; track $index) {
+          <li>{{ item }}</li>
+        }
+        @if (group.hidden) {
+          <li>{{ 'PRODUCT_CATEGORIES.DELETE.HIDDEN' | t }}</li>
+        }
+      </ul>
+    }
+    <p class="note">{{ 'PRODUCT_CATEGORIES.DELETE.MORE_AFTER' | t }}</p>
+    <button fc-button variant="secondary" (click)="blocked.set(null)">
+      {{ 'COMMON.CLOSE' | t }}
+    </button>
+  </section>
+}
+
+<div class="views" role="group" [attr.aria-label]="'PRODUCT_CATEGORIES.VIEW.LABEL' | t">
+  <button
+    fc-button
+    type="button"
+    [variant]="viewValue() === 'table' ? 'primary' : 'secondary'"
+    [attr.aria-pressed]="viewValue() === 'table'"
+    (click)="onView('table')"
+  >
+    {{ 'PRODUCT_CATEGORIES.VIEW.TABLE' | t }}
+  </button>
+  <button
+    fc-button
+    type="button"
+    [variant]="viewValue() === 'tree' ? 'primary' : 'secondary'"
+    [attr.aria-pressed]="viewValue() === 'tree'"
+    (click)="onView('tree')"
+  >
+    {{ 'PRODUCT_CATEGORIES.VIEW.TREE' | t }}
+  </button>
+</div>
+
+@if (viewValue() === 'tree') {
+  @if (tree.error()) {
+    <fc-error-state
+      [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+      [message]="treeErrorMessage()"
+      [requestId]="treeError()?.requestId ?? null"
+      (retry)="reloadTree()"
+    />
+  } @else if (tree.isLoading()) {
+    <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+  } @else if (treeNodes().length === 0) {
+    <fc-empty-state
+      [title]="'PRODUCT_CATEGORIES.EMPTY' | t"
+      [message]="'PRODUCT_CATEGORIES.EMPTY_TREE' | t"
+    />
+  } @else {
+    <fc-category-tree-view
+      [nodes]="treeNodes()"
+      [label]="'PRODUCT_CATEGORIES.TITLE' | t"
+      (open)="openNode($event)"
+    />
+  }
+} @else {
+  @if (anyCyclic()) {
+    <p class="warning" role="status">{{ 'PRODUCT_CATEGORIES.CYCLIC_WARNING' | t }}</p>
+  }
+
+  <form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+    <fc-text-field
+      type="search"
+      [label]="'PRODUCT_CATALOG.SEARCH' | t"
+      [value]="searchText()"
+      (valueChange)="onSearch($event)"
+    />
+    <fc-select
+      [label]="'PRODUCT_CATALOG.STATE.LABEL' | t"
+      [options]="stateOptions()"
+      [value]="stateValue()"
+      (valueChange)="onState($event)"
+    />
+  </form>
+
+  @if (entries.error()) {
+    <fc-error-state
+      [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+      [message]="errorMessage()"
+      [requestId]="loadError()?.requestId ?? null"
+      (retry)="reload()"
+    />
+  } @else {
+    <fc-data-table
+      [caption]="'PRODUCT_CATEGORIES.TITLE' | t"
+      [columns]="columns()"
+      [rows]="rows()"
+      [rowKey]="rowKey"
+      [loading]="entries.isLoading()"
+      [sort]="tableSort()"
+      [emptyTitle]="'PRODUCT_CATEGORIES.EMPTY' | t"
+      [emptyMessage]="'PRODUCT_CATALOG.EMPTY_MESSAGE' | t"
+      (sortChange)="onSort($event)"
+    >
+      <a *fcCan="'products:update'" fcEmptyAction [routerLink]="newRoute()">{{ 'PRODUCT_CATEGORIES.NEW' | t }}</a>
+      <ng-template fcCell="name" let-row>
+        <span class="name" [style.padding-inline-start.rem]="indent(row)">
+          <a [routerLink]="detailRoute(row.id)">{{ nameOf(row) }}</a>
+          @if (row.cyclic) {
+            <fc-status-badge tone="warning">{{ 'PRODUCT_CATEGORIES.CYCLIC' | t }}</fc-status-badge>
+          }
+        </span>
+      </ng-template>
+      <ng-template fcCell="enabled" let-row>
+        @if (row.enabled) {
+          <fc-status-badge tone="success">{{ 'PRODUCT_CATALOG.STATE.ENABLED' | t }}</fc-status-badge>
+        } @else {
+          <fc-status-badge>{{ 'PRODUCT_CATALOG.STATE.DISABLED' | t }}</fc-status-badge>
+        }
+      </ng-template>
+      <ng-template fcRowActions let-row>
+        <a
+          [routerLink]="detailRoute(row.id)"
+          [attr.aria-label]="'PRODUCT_CATEGORIES.EDIT_LABEL' | t: { name: nameOf(row) }"
+        >
+          {{ 'PRODUCT_CATEGORIES.EDIT' | t }}
+        </a>
+        @if (editable(row)) {
+          <button
+            *fcCan="'products:update'"
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="'PRODUCT_CATEGORIES.DELETE.LABEL' | t: { name: nameOf(row) }"
+            (click)="askDelete(row)"
+          >
+            {{ 'PRODUCT_CATALOG.DELETE.ACTION' | t }}
+          </button>
+        }
+      </ng-template>
+    </fc-data-table>
+
+    <fc-cursor-paginator
+      [limit]="pageSize()"
+      [nextCursor]="nextCursor()"
+      [hasPrevious]="cursorStack().length > 0"
+      [loading]="entries.isLoading()"
+      (previousPage)="onPrevious()"
+      (nextPage)="onNext($event)"
+      (limitChange)="onLimit($event)"
+    />
+  }
+}
+
+<fc-confirm-dialog
+  [heading]="'PRODUCT_CATEGORIES.DELETE.TITLE' | t"
+  [message]="confirmMessage()"
+  [confirmLabel]="'PRODUCT_CATALOG.DELETE.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="delete()"
+/>

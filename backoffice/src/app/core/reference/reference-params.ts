@@ -25,5 +25,11 @@ export function referenceParams(query: ReferenceQuery): Record<string, string | 
   if (query.ids !== undefined && query.ids.length > 0) {
     params['ids'] = query.ids.join(',');
   }
+  if (query.categoryId) {
+    params['categoryId'] = query.categoryId;
+  }
+  if (query.modifier !== undefined) {
+    params['modifier'] = String(query.modifier);
+  }
   return params;
 }

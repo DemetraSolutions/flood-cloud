@@ -130,6 +130,7 @@ describe('ReferenceApi', () => {
         'product-categories',
         'customers',
         'contact-groups',
+        'suppliers',
       ] as const) {
         const result = api.lookup('g/1', kind, { q: 'x' });
         const request = backend().expectOne(
@@ -148,6 +149,60 @@ describe('ReferenceApi', () => {
       expect(request.request.params.get('ids')).toBe('a,b');
       request.flush(PAGE);
       await result;
+    });
+
+    it('asks only for the modifier products when told so, for the list and for the names', async () => {
+      const list = api.lookup('g1', 'products', { modifier: true });
+      const first = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/products`);
+      expect(first.request.params.get('modifier')).toBe('true');
+      first.flush(PAGE);
+      await list;
+      const names = api.lookupNames('g1', 'products', ['a'], true);
+      const second = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/products`);
+      expect(second.request.params.get('modifier')).toBe('true');
+      second.flush(PAGE);
+      await names;
+      const plain = api.lookup('g1', 'products', {});
+      const third = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/products`);
+      expect(third.request.params.has('modifier')).toBe(false);
+      third.flush(PAGE);
+      await plain;
+    });
+
+    it('sends modifier=false to skip the modifier products, and nothing when the filter is absent', async () => {
+      const excluded = api.lookup('g1', 'products', { modifier: false });
+      const first = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/products`);
+      expect(first.request.params.get('modifier')).toBe('false');
+      first.flush(PAGE);
+      await excluded;
+      const absent = api.lookup('g1', 'products', { q: 'a' });
+      const second = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/products`);
+      expect(second.request.params.has('modifier')).toBe(false);
+      second.flush(PAGE);
+      await absent;
+    });
+
+    it('sends the category filter only when it is not empty', async () => {
+      const filtered = api.lookup('g1', 'products', { categoryId: 'k1' });
+      const first = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/products`);
+      expect(first.request.params.get('categoryId')).toBe('k1');
+      first.flush(PAGE);
+      await filtered;
+      for (const query of [{ categoryId: '', limit: 1 }, { limit: 2 }]) {
+        const result = api.lookup('g1', 'products', query);
+        const request = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/products`);
+        expect(request.request.params.has('categoryId')).toBe(false);
+        request.flush(PAGE);
+        await result;
+      }
+    });
+
+    it('reads the price lists of a supplier', async () => {
+      const result = api.lookup('g1', 'suppliers', {});
+      const request = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/suppliers`);
+      const page = { data: [{ id: 's1', name: 'Forn', priceLists: [{ id: 'l1', name: 'Base' }] }], page: { next: null } };
+      request.flush(page);
+      expect((await result).data[0].priceLists).toEqual([{ id: 'l1', name: 'Base' }]);
     });
 
     it('does not send an empty list of ids', async () => {

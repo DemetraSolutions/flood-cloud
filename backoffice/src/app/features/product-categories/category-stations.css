@@ -1,0 +1,54 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.stores {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+details {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.count,
+.note {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.count {
+  margin-inline-start: var(--space-2);
+}
+
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+  margin-block-start: var(--space-2);
+}
+
+fieldset {
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+legend {
+  padding-inline: var(--space-1);
+}
+
+.problem {
+  margin: var(--space-2) 0 0;
+  color: var(--color-danger);
+}

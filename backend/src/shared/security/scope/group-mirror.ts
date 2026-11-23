@@ -549,6 +549,79 @@ export async function findPlacesUsingTemplate(principal: ScopeHolder, access: Gr
     .toArray();
 }
 
+/**
+ * Reads the lists of items of some places of a group that the categories and the products of its catalog refer to (steps C2 and C3): `printStations[].id`, `productionCenter[].id` (a category or a product names a print
+ * station and a production center of each place it is for) and `storages[].id` (a product has a stock in a storage of a place). It is the only read of the copies that looks inside those three lists, and it returns nothing but the ids in them.
+ *
+ * @param principal The authenticated caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ * @param placeIds The places, at most a few hundred (the read is limited to their number).
+ * @returns The places that exist in the copies (`_id`, and the ids of the two lists).
+ * @throws {Error} If the access was not issued by `requireGroupAccess` for the principal, or the list is empty or has anything but `ObjectId`s.
+ */
+export async function readPlaceSetups(principal: ScopeHolder, access: GroupAccess, databases: Databases, placeIds: readonly ObjectId[]): Promise<Document[]> {
+  assertVerifiedGroupAccess(principal, access);
+  if (placeIds.length === 0 || !placeIds.every((id) => id instanceof ObjectId)) {
+    throw new Error('A read of the print stations of some places needs their ids');
+  }
+  return databases
+    .common()
+    .collection('places')
+    .find({ $and: [groupCondition(access.groupId), { _id: { $in: [...placeIds] } }] }, { projection: { _id: 1, 'printStations.id': 1, 'productionCenter.id': 1, 'storages.id': 1 }, limit: placeIds.length, maxTimeMS: LIST_MAX_TIME_MS })
+    .toArray();
+}
+
+/**
+ * Finds the places of a group, trashed ones included, that still refer to a product category (step C2: the deletion of a category is refused while one does): in the categories a print station makes
+ * a summary of, in the kiosk, in the self ordering of any price list and in the map to the categories of TS Hospitality. It is the only read of the copies that looks inside those settings, and it
+ * returns nothing but ids. The paths are fixed here and the category id is the only thing the caller supplies (as an `ObjectId`; the places keep it as text).
+ *
+ * @param principal The authenticated caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ * @param categoryId Id of the category.
+ * @param limit How many places to return at most, a positive integer.
+ * @returns The ids of the places, by id, at most `limit`.
+ * @throws {Error} If the access was not issued by `requireGroupAccess` for the principal, the id is not an `ObjectId`, or the limit is not a positive integer.
+ */
+export async function findPlacesUsingCategory(principal: ScopeHolder, access: GroupAccess, databases: Databases, categoryId: ObjectId, limit: number): Promise<ObjectId[]> {
+  assertVerifiedGroupAccess(principal, access);
+  if (!(categoryId instanceof ObjectId)) {
+    throw new Error('A read of the places that use a category needs a category id');
+  }
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error('A read of the places that use a category needs a positive limit');
+  }
+  const hex = categoryId.toHexString();
+  // `selfOrdering.priceListsConfig` is a map by price list: its keys are made at run time, so it is read with `$objectToArray`.
+  const inSelfOrdering: Document = {
+    $expr: {
+      $anyElementTrue: {
+        $map: {
+          input: { $objectToArray: { $cond: [{ $eq: [{ $type: '$selfOrdering.priceListsConfig' }, 'object'] }, '$selfOrdering.priceListsConfig', {}] } },
+          as: 'config',
+          in: { $cond: [{ $isArray: '$$config.v.productsCategories' }, { $in: [hex, { $map: { input: '$$config.v.productsCategories', as: 'category', in: '$$category._id' } }] }, false] },
+        },
+      },
+    },
+  };
+  const found = await databases
+    .common()
+    .collection('places')
+    .find(
+      {
+        $and: [
+          groupCondition(access.groupId),
+          { $or: [{ 'printStations.summaryCategoriesIds': hex }, { 'kiosk.upsellingCategoryId': hex }, { 'kiosk.productsCategories._id': hex }, { [`integrations.tsh.categoriesMap.${hex}`]: { $exists: true } }, inSelfOrdering] },
+        ],
+      },
+      { projection: { _id: 1 }, limit, sort: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS },
+    )
+    .toArray();
+  return found.map((place) => place['_id'] as ObjectId);
+}
+
 /** The ids of the companies or places of the copies that use a country or a province (trashed ones included), at most the limit of the read: a client cannot tell exactly the limit from more. */
 export interface CountryUsageOfKind {
   /** Ids of the documents, by id. */

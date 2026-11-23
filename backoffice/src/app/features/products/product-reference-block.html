@@ -1,0 +1,19 @@
+<section class="blocked" role="alert" aria-labelledby="product-blocked-heading">
+  <h2 id="product-blocked-heading">{{ 'PRODUCTS.DELETE.BLOCKED_TITLE' | t: { name: block().product } }}</h2>
+  <p>{{ 'PRODUCTS.DELETE.BLOCKED_MESSAGE' | t }}</p>
+  @for (group of block().groups; track group.kind) {
+    <h3>{{ kindLabel(group.kind) }}</h3>
+    <ul>
+      @for (item of group.items; track $index) {
+        <li>{{ item }}</li>
+      }
+      @if (group.hidden) {
+        <li>{{ 'PRODUCTS.DELETE.HIDDEN' | t }}</li>
+      }
+    </ul>
+  }
+  <p class="note">{{ 'PRODUCTS.DELETE.MORE_AFTER' | t }}</p>
+  <button fc-button variant="secondary" type="button" (click)="closed.emit()">
+    {{ 'COMMON.CLOSE' | t }}
+  </button>
+</section>

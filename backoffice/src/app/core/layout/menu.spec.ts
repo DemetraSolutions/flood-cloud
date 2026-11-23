@@ -95,7 +95,89 @@ describe('visibleMenu', () => {
     const menu = visibleMenu(MENU, allowAll, allowAll);
     const children = (id: string) => ids([...(menu.find((i) => i.id === id)?.children ?? [])]);
     expect(children('fidelity')).toEqual(['card-types', 'points-collections', 'prize-catalogues']);
-    expect(children('products')).toEqual(['product-favorites']);
+    expect(children('products')).toEqual([
+      'product-favorites',
+      'products-list',
+      'services-list',
+      'modifiers-list',
+      'tobacco-products-list',
+      'product-categories',
+      'product-departments',
+      'product-brands',
+      'product-attribute-groups',
+    ]);
+  });
+
+  it('puts the four lists of products, services, variants and tobacco products before the categories, each with its feature', () => {
+    const children = MENU.find((i) => i.id === 'products')?.children ?? [];
+    const lists = children.slice(1, 5);
+    expect(lists.map((i) => i.id)).toEqual(['products-list', 'services-list', 'modifiers-list', 'tobacco-products-list']);
+    expect(children[5].id).toBe('product-categories');
+    expect(lists).toMatchObject([
+      { labelKey: 'MENU.PRODUCTS_LIST', groupPath: 'products', permission: 'products:read' },
+      { labelKey: 'MENU.SERVICES_LIST', groupPath: 'services', permission: 'products:read', feature: 'services' },
+      { labelKey: 'MENU.MODIFIERS_LIST', groupPath: 'product-modifiers', permission: 'products:read', feature: 'productsVariants' },
+      {
+        labelKey: 'MENU.TOBACCO_PRODUCTS_LIST',
+        groupPath: 'tobacco-products',
+        permission: 'products:read',
+        feature: 'tobaccosGamesMonopoly',
+      },
+    ]);
+    expect(lists[0].feature).toBeUndefined();
+  });
+
+  it('shows each list of products only when the group has its feature', () => {
+    const shown = (hasFeature: (f: string) => boolean) =>
+      visibleMenu(MENU, (p) => p === 'products:read', hasFeature)
+        .find((i) => i.id === 'products')
+        ?.children?.map((i) => i.id)
+        .filter((id) => id.endsWith('-list'));
+    expect(shown(() => false)).toEqual(['products-list']);
+    expect(shown((f) => f === 'services')).toEqual(['products-list', 'services-list']);
+    expect(shown((f) => f === 'productsVariants')).toEqual(['products-list', 'modifiers-list']);
+    expect(shown((f) => f === 'tobaccosGamesMonopoly')).toEqual(['products-list', 'tobacco-products-list']);
+    expect(shown(() => true)).toEqual(['products-list', 'services-list', 'modifiers-list', 'tobacco-products-list']);
+  });
+
+  it('shows departments, brands and attribute groups with products:read, the departments only with the cash feature', () => {
+    const productChildren = (can: (p: string) => boolean, hasFeature: (f: string) => boolean) =>
+      visibleMenu(MENU, can, hasFeature)
+        .find((i) => i.id === 'products')
+        ?.children?.map((i) => i.id);
+    expect(productChildren((p) => p === 'products:read', allowAll)).toEqual([
+      'product-favorites',
+      'products-list',
+      'services-list',
+      'modifiers-list',
+      'tobacco-products-list',
+      'product-categories',
+      'product-departments',
+      'product-brands',
+      'product-attribute-groups',
+    ]);
+    expect(productChildren(allowAll, (f) => f !== 'cash')).toEqual([
+      'product-favorites',
+      'products-list',
+      'services-list',
+      'modifiers-list',
+      'tobacco-products-list',
+      'product-categories',
+      'product-brands',
+      'product-attribute-groups',
+    ]);
+    expect(productChildren((p) => p === 'places:read', allowAll)).toBeUndefined();
+    expect(
+      MENU.find((i) => i.id === 'products')?.children?.find((i) => i.id === 'product-categories')?.feature,
+    ).toBeUndefined();
+    expect(
+      MENU.find((i) => i.id === 'products')?.children?.filter((i) => !['product-favorites', 'products-list', 'services-list', 'modifiers-list', 'tobacco-products-list'].includes(i.id)),
+    ).toMatchObject([
+      { id: 'product-categories', groupPath: 'product-categories', permission: 'products:read' },
+      { id: 'product-departments', groupPath: 'product-departments', feature: 'cash' },
+      { id: 'product-brands', groupPath: 'product-brands' },
+      { id: 'product-attribute-groups', groupPath: 'product-attribute-groups' },
+    ]);
   });
 
   it('shows companies with companies:read in the group area', () => {

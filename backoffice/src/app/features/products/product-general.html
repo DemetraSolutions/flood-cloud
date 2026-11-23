@@ -1,0 +1,285 @@
+<div class="grid">
+  @if (types().length > 1) {
+    <fc-select
+      [formField]="form().type"
+      [label]="'PRODUCTS.FIELD.TYPE' | t"
+      [options]="typeOptions()"
+    />
+  }
+</div>
+
+<fieldset>
+  <legend>{{ 'PRODUCTS.CARD.STATE' | t }}</legend>
+  <fc-checkbox
+    [formField]="form().enabled"
+    [label]="'PRODUCT_CATALOG.FIELD.ENABLED' | t"
+    [hint]="'PRODUCT_CATALOG.FIELD.ENABLED_HINT' | t"
+  />
+  <fc-checkbox [formField]="form().favorite" [label]="'PRODUCTS.FIELD.FAVORITE' | t" />
+  @if (features().rooms) {
+    <fc-checkbox [formField]="form().favoriteHandheld" [label]="'PRODUCTS.FIELD.FAVORITE_HANDHELD' | t" />
+  }
+  <fc-checkbox
+    [formField]="form().generic"
+    [label]="'PRODUCTS.FIELD.GENERIC' | t"
+    [hint]="'PRODUCTS.FIELD.GENERIC_HINT' | t"
+  />
+  <fc-checkbox [formField]="form().toCheck" [label]="'PRODUCTS.FIELD.TO_CHECK' | t" />
+  <fc-checkbox [formField]="form().noDiscount" [label]="'PRODUCT_CATALOG.FIELD.NO_DISCOUNT' | t" />
+  @if (features().cash) {
+    <fc-checkbox [formField]="form().availability.pos" [label]="'PRODUCT_CATEGORIES.FIELD.POS' | t" />
+  }
+  @if (features().warehouse) {
+    <fc-checkbox [formField]="form().availability.warehouse" [label]="'PRODUCTS.FIELD.WAREHOUSE' | t" />
+  }
+  @if (features().customersApp) {
+    <fc-checkbox [formField]="form().availability.ecommerce" [label]="'PRODUCT_CATEGORIES.FIELD.ECOMMERCE' | t" />
+    <fc-checkbox [formField]="form().featured" [label]="'PRODUCT_CATEGORIES.FIELD.FEATURED' | t" />
+  }
+</fieldset>
+
+<fieldset>
+  <legend>{{ 'PRODUCT_CATEGORIES.INTEGRATIONS.TITLE' | t }}</legend>
+  <fc-checkbox [formField]="form().integrations.floodOrders" [label]="'PRODUCT_CATEGORIES.INTEGRATIONS.FLOOD_ORDERS' | t" />
+  <fc-checkbox [formField]="form().integrations.yellgo" [label]="'PRODUCT_CATEGORIES.INTEGRATIONS.YELLGO' | t" />
+  <fc-checkbox [formField]="form().integrations.leggimenu" [label]="'PRODUCT_CATEGORIES.INTEGRATIONS.LEGGIMENU' | t" />
+</fieldset>
+
+<div class="grid">
+  <fc-text-field
+    [formField]="form().code"
+    autocomplete="off"
+    [label]="'PRODUCTS.FIELD.CODE' | t"
+    [error]="error(form().code)"
+    (blurred)="form().code().markAsTouched()"
+  />
+  <fc-select
+    [formField]="form().brandId"
+    [label]="'PRODUCTS.FIELD.BRAND' | t"
+    [placeholder]="'PRODUCTS.FIELD.BRAND_NONE' | t"
+    [options]="brands()"
+  />
+  <fc-text-field
+    [formField]="form().position"
+    inputmode="numeric"
+    autocomplete="off"
+    [label]="'PRODUCT_CATEGORIES.FIELD.POSITION' | t"
+    [error]="error(form().position)"
+    (blurred)="form().position().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().productionValue"
+    inputmode="numeric"
+    autocomplete="off"
+    [label]="'PRODUCT_CATEGORIES.FIELD.PRODUCTION_VALUE' | t"
+    [error]="error(form().productionValue)"
+    (blurred)="form().productionValue().markAsTouched()"
+  />
+</div>
+<fc-product-warning-note [groupId]="groupId()" [warning]="codeWarning()" />
+
+@for (language of languages(); track language) {
+  <fc-text-field
+    [formField]="form().name[language]"
+    autocomplete="off"
+    [hint]="language === requiredLang() ? ('PRODUCT_CATALOG.FIELD.REQUIRED_LANGUAGE' | t) : null"
+    [label]="languageLabel('NAME', language)"
+    [error]="error(form().name[language])"
+    (blurred)="form().name[language]().markAsTouched()"
+  />
+}
+@for (language of languages(); track language) {
+  <fc-text-field
+    [formField]="form().shortName[language]"
+    autocomplete="off"
+    [label]="languageLabel('SHORT_NAME', language)"
+    [error]="error(form().shortName[language])"
+    (blurred)="form().shortName[language]().markAsTouched()"
+  />
+}
+@for (language of languages(); track language) {
+  <fc-textarea
+    [formField]="form().shortDescription[language]"
+    [rows]="2"
+    [label]="languageLabel('SHORT_DESCRIPTION', language)"
+    [error]="error(form().shortDescription[language])"
+    (blurred)="form().shortDescription[language]().markAsTouched()"
+  />
+}
+@for (language of languages(); track language) {
+  <fc-textarea
+    [formField]="form().description[language]"
+    [rows]="3"
+    [label]="languageLabel('DESCRIPTION', language)"
+    [error]="error(form().description[language])"
+    (blurred)="form().description[language]().markAsTouched()"
+  />
+}
+
+@if (service() && features().services) {
+  <fieldset>
+    <legend>{{ 'PRODUCTS.CARD.SERVICE' | t }}</legend>
+    <div class="grid">
+      <fc-text-field
+        [formField]="form().duration"
+        type="time"
+        [label]="'PRODUCTS.FIELD.DURATION' | t"
+        [error]="error(form().duration)"
+        (blurred)="form().duration().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="form().maxConcurrent"
+        inputmode="numeric"
+        autocomplete="off"
+        [label]="'PRODUCTS.FIELD.MAX_CONCURRENT' | t"
+        [error]="error(form().maxConcurrent)"
+        (blurred)="form().maxConcurrent().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+}
+
+@if (modifier() && features().productsVariants) {
+  <fieldset>
+    <legend>{{ 'PRODUCTS.CARD.MODIFIER' | t }}</legend>
+    <div class="grid">
+      <fc-select [formField]="form().modifier.type" [label]="'PRODUCTS.MODIFIER.TYPE' | t" [options]="modifierTypes()" />
+      <fc-text-field
+        [formField]="form().modifier.pricePercentagePlus"
+        inputmode="decimal"
+        autocomplete="off"
+        [label]="'PRODUCTS.MODIFIER.PLUS' | t"
+        [error]="error(form().modifier.pricePercentagePlus)"
+        (blurred)="form().modifier.pricePercentagePlus().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="form().modifier.pricePercentageMinus"
+        inputmode="decimal"
+        autocomplete="off"
+        [label]="'PRODUCTS.MODIFIER.MINUS' | t"
+        [error]="error(form().modifier.pricePercentageMinus)"
+        (blurred)="form().modifier.pricePercentageMinus().markAsTouched()"
+      />
+    </div>
+    @for (language of languages(); track language) {
+      <fc-text-field
+        [formField]="form().modifier.description[language]"
+        autocomplete="off"
+        [label]="languageLabel('MODIFIER_DESCRIPTION', language)"
+        [error]="error(form().modifier.description[language])"
+        (blurred)="form().modifier.description[language]().markAsTouched()"
+      />
+    }
+  </fieldset>
+}
+
+@if (features().warehouse) {
+  <fieldset>
+    <legend>{{ 'PRODUCTS.CARD.UNITS' | t }}</legend>
+    <div class="grid">
+      <fc-select
+        [formField]="form().loadUnit"
+        [label]="'PRODUCTS.FIELD.LOAD_UNIT' | t"
+        [placeholder]="'PRODUCTS.FIELD.UNIT_NONE' | t"
+        [options]="units()"
+      />
+      <fc-select
+        [formField]="form().unloadUnit"
+        [label]="'PRODUCTS.FIELD.UNLOAD_UNIT' | t"
+        [placeholder]="'PRODUCTS.FIELD.UNIT_NONE' | t"
+        [options]="units()"
+      />
+      <fc-text-field
+        [formField]="form().conversionRatio"
+        inputmode="decimal"
+        autocomplete="off"
+        [label]="'PRODUCTS.FIELD.CONVERSION_RATIO' | t"
+        [error]="error(form().conversionRatio)"
+        (blurred)="form().conversionRatio().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+}
+
+@if (showScales()) {
+  <fieldset>
+    <legend>{{ 'PRODUCTS.CARD.SCALES' | t }}</legend>
+    <fc-checkbox [formField]="form().availability.scales" [label]="'PRODUCTS.FIELD.SCALES' | t" />
+    <div class="grid">
+      <fc-text-field
+        [formField]="form().plu"
+        inputmode="numeric"
+        autocomplete="off"
+        [label]="'PRODUCTS.FIELD.PLU' | t"
+        [error]="error(form().plu)"
+        (blurred)="form().plu().markAsTouched()"
+      />
+      <fc-select [formField]="form().scaleType" [label]="'PRODUCTS.FIELD.SCALE_TYPE' | t" [options]="scaleTypes()" />
+    </div>
+    <fc-product-warning-note [groupId]="groupId()" [warning]="pluWarning()" />
+  </fieldset>
+}
+
+@if (features().cash) {
+  <fieldset>
+    <legend>{{ 'PRODUCT_CATEGORIES.COLORS.TITLE' | t }}</legend>
+    <div class="grid">
+      <fc-text-field [formField]="form().colors.background" type="color" [label]="'PRODUCT_CATEGORIES.COLORS.BACKGROUND' | t" />
+      <fc-text-field [formField]="form().colors.text" type="color" [label]="'PRODUCT_CATEGORIES.COLORS.TEXT' | t" />
+    </div>
+    @if (!readOnly()) {
+      <div class="quick" role="group" [attr.aria-label]="'PRODUCT_CATEGORIES.COLORS.QUICK' | t">
+        @for (color of quickColors; track color) {
+          <button
+            type="button"
+            class="swatch"
+            [style.background-color]="color"
+            [attr.aria-label]="'PRODUCT_CATEGORIES.COLORS.PICK' | t: { color }"
+            (click)="setBackground(color)"
+          ></button>
+        }
+      </div>
+    }
+  </fieldset>
+}
+
+@if (showDining()) {
+  <fieldset>
+    <legend>{{ 'PRODUCT_CATEGORIES.DINING.TITLE' | t }}</legend>
+    <fc-checkbox [formField]="form().dining.halfPortion" [label]="'PRODUCTS.DINING.HALF_PORTION' | t" />
+    <fc-checkbox [formField]="form().dining.hiddenOnHandheld" [label]="'PRODUCT_CATEGORIES.DINING.HIDDEN_ON_HANDHELD' | t" />
+    <fc-checkbox [formField]="form().dining.affiliatedMenu" [label]="'PRODUCTS.DINING.AFFILIATED_MENU' | t" />
+    <fc-checkbox [formField]="form().dining.reversePrint" [label]="'PRODUCTS.DINING.REVERSE_PRINT' | t" />
+    <fc-text-field
+      [formField]="form().dining.feePercentage"
+      inputmode="decimal"
+      autocomplete="off"
+      [label]="'PRODUCT_CATEGORIES.DINING.FEE' | t"
+      [error]="error(form().dining.feePercentage)"
+      (blurred)="form().dining.feePercentage().markAsTouched()"
+    />
+  </fieldset>
+}
+
+@if (showPeriod()) {
+  <fieldset>
+    <legend>{{ 'PRODUCTS.CARD.PERIOD' | t }}</legend>
+    <p class="hint">{{ 'PRODUCTS.PERIOD.HINT' | t }}</p>
+    <div class="grid">
+      <fc-text-field
+        [formField]="form().validFrom"
+        type="datetime-local"
+        [label]="'PRODUCTS.PERIOD.FROM' | t"
+        [error]="error(form().validFrom)"
+        (blurred)="form().validFrom().markAsTouched()"
+      />
+      <fc-text-field
+        [formField]="form().validTo"
+        type="datetime-local"
+        [label]="'PRODUCTS.PERIOD.TO' | t"
+        [error]="error(form().validTo)"
+        (blurred)="form().validTo().markAsTouched()"
+      />
+    </div>
+  </fieldset>
+}

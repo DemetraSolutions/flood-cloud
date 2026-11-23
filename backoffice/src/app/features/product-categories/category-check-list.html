@@ -1,0 +1,13 @@
+<fieldset [disabled]="disabled()" [attr.aria-describedby]="error() ? errorId : null">
+  <legend>{{ label() }}</legend>
+  <ul>
+    @for (row of rows(); track row.id) {
+      <li [style.padding-inline-start.rem]="row.level * 1.25">
+        <fc-checkbox [label]="row.text" [checked]="row.checked" (checkedChange)="toggle(row.id, $event)" />
+      </li>
+    }
+  </ul>
+  @if (error()) {
+    <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+  }
+</fieldset>

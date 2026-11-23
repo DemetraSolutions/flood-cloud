@@ -1,0 +1,31 @@
+<p class="note">{{ 'PRODUCTS.VARIANTS.HINT' | t }}</p>
+<fc-reference-picker
+  [formField]="form().requiredModifierIds"
+  [label]="'PRODUCTS.VARIANTS.REQUIRED' | t"
+  [loader]="loader()"
+  [labels]="labels()"
+  [error]="error(form().requiredModifierIds)"
+  (blurred)="form().requiredModifierIds().markAsTouched()"
+/>
+<fc-reference-picker
+  [formField]="form().modifierIds"
+  [label]="'PRODUCTS.VARIANTS.SELECTABLE' | t"
+  [loader]="loader()"
+  [labels]="labels()"
+  [error]="error(form().modifierIds)"
+  (blurred)="form().modifierIds().markAsTouched()"
+/>
+<fc-reference-picker
+  [formField]="form().excludedModifierIds"
+  [label]="'PRODUCTS.VARIANTS.EXCLUDED' | t"
+  [loader]="loader()"
+  [labels]="labels()"
+  [error]="error(form().excludedModifierIds)"
+  (blurred)="form().excludedModifierIds().markAsTouched()"
+/>
+<fc-category-check-list
+  [formField]="form().modifierCategoryIds"
+  [label]="'PRODUCTS.VARIANTS.CATEGORIES' | t"
+  [entries]="entries()"
+  [error]="error(form().modifierCategoryIds)"
+/>

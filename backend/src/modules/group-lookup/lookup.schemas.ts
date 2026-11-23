@@ -28,8 +28,8 @@ const shape = { ...listQueryShape(LOOKUP_LIST), limit: optional(integerString({ 
 /** Query of the compact reads of categories, customers and contact groups: the common list parameters (page of at most 100) and `ids`. */
 export const lookupQuery = object(shape);
 
-/** Query of `GET /v1/groups/{groupId}/lookup/products`: the common parameters, `ids` and the optional `type`. */
-export const lookupProductsQuery = object({ ...shape, type: optional(enumOf(LOOKUP_PRODUCT_TYPES)) });
+/** Query of `GET /v1/groups/{groupId}/lookup/products`: the common parameters, `ids`, the optional `type`, the optional `modifier` (`true`: only the variant products, `false`: only the others) and the optional `categoryId` (only the products that have that category; a category the caller does not reach gives an empty page). */
+export const lookupProductsQuery = object({ ...shape, type: optional(enumOf(LOOKUP_PRODUCT_TYPES)), modifier: optional(enumOf(['true', 'false'])), categoryId: optional(string({ min: 24, max: 24, pattern: /^[0-9a-fA-F]{24}$/ })) });
 
 /** Validated query of the compact reads without `type`. */
 export type LookupQuery = Infer<typeof lookupQuery>;

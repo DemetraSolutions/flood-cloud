@@ -1,0 +1,172 @@
+<ul class="rows" [attr.aria-describedby]="error() ? errorId : null">
+  @for (rule of rules(); track $index; let first = $first; let last = $last) {
+    <li>
+      <fieldset [disabled]="disabled()">
+        <legend>{{ 'PRODUCTS.PRICES.RULE' | t: { number: rule.index + 1 } }}</legend>
+        <div class="grid">
+          <fc-select
+            [label]="'PRODUCTS.PRICES.LIST' | t: { number: rule.index + 1 }"
+            [placeholder]="'PRODUCTS.PRICES.LIST_NONE' | t"
+            [options]="rule.lists"
+            [value]="rule.row.priceListId"
+            [error]="message(rule.issues.priceListId)"
+            (valueChange)="change(rule.index, { priceListId: $event })"
+          />
+          <fc-select
+            [label]="'PRODUCTS.PRICES.CURRENCY' | t: { number: rule.index + 1 }"
+            [placeholder]="'PRODUCTS.PRICES.CURRENCY_NONE' | t"
+            [options]="rule.currencyOptions"
+            [value]="rule.row.currency"
+            [error]="message(rule.issues.currency)"
+            (valueChange)="change(rule.index, { currency: $event })"
+          />
+          <fc-select
+            [label]="'PRODUCTS.PRICES.TAX' | t: { number: rule.index + 1 }"
+            [placeholder]="'PRODUCTS.PRICES.TAX_NONE' | t"
+            [options]="rule.taxes"
+            [value]="rule.row.taxId"
+            [error]="message(rule.issues.taxId)"
+            (valueChange)="setTax(rule.index, $event)"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.PRICES.NET' | t: { number: rule.index + 1 }"
+            [value]="rule.row.net"
+            [error]="message(rule.issues.net)"
+            (valueChange)="write(rule.index, 'net', $event)"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.PRICES.GROSS' | t: { number: rule.index + 1 }"
+            [value]="rule.row.gross"
+            [error]="message(rule.issues.gross)"
+            (valueChange)="write(rule.index, 'gross', $event)"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.PRICES.DISCOUNT' | t: { number: rule.index + 1 }"
+            [value]="rule.row.discount"
+            [error]="message(rule.issues.discount)"
+            (valueChange)="change(rule.index, { discount: $event })"
+          />
+        </div>
+        <div class="grid">
+          <fc-text-field
+            type="datetime-local"
+            [label]="'PRODUCTS.PRICES.VALID_FROM' | t: { number: rule.index + 1 }"
+            [value]="rule.row.validFrom"
+            [error]="message(rule.issues.validFrom)"
+            (valueChange)="change(rule.index, { validFrom: $event })"
+          />
+          <fc-text-field
+            type="datetime-local"
+            [label]="'PRODUCTS.PRICES.VALID_TO' | t: { number: rule.index + 1 }"
+            [value]="rule.row.validTo"
+            [error]="message(rule.issues.validTo)"
+            (valueChange)="change(rule.index, { validTo: $event })"
+          />
+          <fc-text-field
+            type="time"
+            [label]="'PRODUCTS.PRICES.DAILY_FROM' | t: { number: rule.index + 1 }"
+            [value]="rule.row.dailyFrom"
+            [error]="message(rule.issues.dailyFrom)"
+            (valueChange)="change(rule.index, { dailyFrom: $event })"
+          />
+          <fc-text-field
+            type="time"
+            [label]="'PRODUCTS.PRICES.DAILY_TO' | t: { number: rule.index + 1 }"
+            [value]="rule.row.dailyTo"
+            [error]="message(rule.issues.dailyTo)"
+            (valueChange)="change(rule.index, { dailyTo: $event })"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.PRICES.FROM_QUANTITY' | t: { number: rule.index + 1 }"
+            [value]="rule.row.fromQuantity"
+            [error]="message(rule.issues.fromQuantity)"
+            (valueChange)="change(rule.index, { fromQuantity: $event })"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.PRICES.MAX_QUANTITY' | t: { number: rule.index + 1 }"
+            [value]="rule.row.maxSaleQuantity"
+            [error]="message(rule.issues.maxSaleQuantity)"
+            (valueChange)="change(rule.index, { maxSaleQuantity: $event })"
+          />
+        </div>
+        <fieldset>
+          <legend>{{ 'PRODUCTS.PRICES.WEEK_DAYS' | t: { number: rule.index + 1 } }}</legend>
+          <p class="hint">{{ 'PRODUCTS.PRICES.WEEK_DAYS_HINT' | t }}</p>
+          <div class="quick">
+            @for (entry of weekDays(); track entry.day) {
+              <fc-checkbox
+                [label]="entry.name"
+                [checked]="rule.row.weekDays.includes(entry.day)"
+                (checkedChange)="toggleDay(rule.index, entry.day, $event)"
+              />
+            }
+          </div>
+        </fieldset>
+        <dl class="facts">
+          <dt>{{ 'PRODUCTS.PRICES.SUMMARY_GROSS' | t }}</dt>
+          <dd>{{ rule.gross }}</dd>
+          <dt>{{ 'PRODUCTS.PRICES.SUMMARY_DISCOUNTED_NET' | t }}</dt>
+          <dd>{{ rule.discountedNet }}</dd>
+          <dt>{{ 'PRODUCTS.PRICES.SUMMARY_DISCOUNTED_GROSS' | t }}</dt>
+          <dd>{{ rule.discountedGross }}</dd>
+        </dl>
+      </fieldset>
+      @if (!disabled()) {
+        <div class="actions">
+          <button
+            fc-button
+            variant="secondary"
+            type="button"
+            [disabled]="first"
+            [attr.aria-label]="'PRODUCTS.PRICES.UP_LABEL' | t: { number: rule.index + 1 }"
+            (click)="move(rule.index, -1)"
+          >
+            {{ 'PRODUCTS.PRICES.UP' | t }}
+          </button>
+          <button
+            fc-button
+            variant="secondary"
+            type="button"
+            [disabled]="last"
+            [attr.aria-label]="'PRODUCTS.PRICES.DOWN_LABEL' | t: { number: rule.index + 1 }"
+            (click)="move(rule.index, 1)"
+          >
+            {{ 'PRODUCTS.PRICES.DOWN' | t }}
+          </button>
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="'PRODUCTS.PRICES.REMOVE_LABEL' | t: { number: rule.index + 1 }"
+            (click)="remove(rule.index)"
+          >
+            {{ 'PRODUCTS.REMOVE' | t }}
+          </button>
+        </div>
+      }
+    </li>
+  } @empty {
+    <li class="note">{{ 'PRODUCTS.PRICES.EMPTY' | t }}</li>
+  }
+</ul>
+<p class="visually-hidden" role="status">{{ moved() }}</p>
+@if (!disabled()) {
+  <div class="actions">
+    <button fc-button variant="secondary" type="button" [disabled]="value().length >= limit" (click)="add()">
+      {{ 'PRODUCTS.PRICES.ADD' | t }}
+    </button>
+  </div>
+}
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

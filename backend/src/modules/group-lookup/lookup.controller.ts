@@ -9,8 +9,12 @@ export interface LookupController {
   products: RequestHandler;
   categories: RequestHandler;
   customers: RequestHandler;
+  suppliers: RequestHandler;
+  currencies: RequestHandler;
+  measureUnits: RequestHandler;
   contactGroups: RequestHandler;
   priceLists: RequestHandler;
+  taxes: RequestHandler;
   emailTemplates: RequestHandler;
   languages: RequestHandler;
 }
@@ -30,6 +34,16 @@ export function createLookupController(service: LookupService): LookupController
       const { items, page } = await service.categories(res.locals.auth!, res.locals.groupAccess!, inputOf<LookupQuery>(res, 'query'));
       sendRevalidatedPage(req, res, items, page);
     },
+    suppliers: async (req, res) => {
+      const { items, page } = await service.suppliers(res.locals.auth!, res.locals.groupAccess!, inputOf<LookupQuery>(res, 'query'));
+      sendRevalidatedPage(req, res, items, page);
+    },
+    currencies: async (req, res) => {
+      sendRevalidated(req, res, await service.currencies(res.locals.groupAccess!));
+    },
+    measureUnits: async (req, res) => {
+      sendRevalidated(req, res, await service.measureUnits(res.locals.groupAccess!));
+    },
     customers: async (req, res) => {
       const { items, page } = await service.customers(res.locals.auth!, res.locals.groupAccess!, inputOf<LookupQuery>(res, 'query'));
       sendRevalidatedPage(req, res, items, page);
@@ -44,6 +58,9 @@ export function createLookupController(service: LookupService): LookupController
     },
     languages: async (req, res) => {
       sendRevalidated(req, res, await service.languages(res.locals.groupAccess!));
+    },
+    taxes: async (req, res) => {
+      sendRevalidated(req, res, await service.taxes(res.locals.groupAccess!));
     },
     priceLists: async (req, res) => {
       sendRevalidated(req, res, await service.priceLists(res.locals.groupAccess!));

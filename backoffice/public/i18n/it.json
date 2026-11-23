@@ -9,7 +9,9 @@
     "CANCEL": "Annulla",
     "CONFIRM": "Conferma",
     "ACTIONS": "Azioni",
-    "SAVE": "Salva"
+    "SAVE": "Salva",
+    "YES": "Sì",
+    "NO": "No"
   },
   "PAGINATION": {
     "LABEL": "Paginazione",
@@ -60,7 +62,15 @@
     "TOBACCOS": "Listino Tabacchi",
     "COUNTRIES": "Gestione stati",
     "ACTIVATIONS": "Attivazioni",
-    "PRICE_LIST": "Listino"
+    "PRICE_LIST": "Listino",
+    "PRODUCT_DEPARTMENTS": "Reparti",
+    "PRODUCT_BRANDS": "Marche",
+    "PRODUCT_ATTRIBUTES": "Attributi",
+    "PRODUCT_CATEGORIES": "Categorie",
+    "PRODUCTS_LIST": "Prodotti",
+    "SERVICES_LIST": "Servizi",
+    "MODIFIERS_LIST": "Varianti",
+    "TOBACCO_PRODUCTS_LIST": "Tabacchi"
   },
   "THEME": {
     "SYSTEM": "Automatico (segue il sistema)",
@@ -3619,7 +3629,8 @@
       "COMPANIES": "Aziende",
       "PLACES": "Punti vendita",
       "USERS": "Utenti",
-      "GROUPS": "Gruppi"
+      "GROUPS": "Gruppi",
+      "PRODUCTS": "Prodotti"
     },
     "SEARCH": "Cerca nel cestino",
     "LOAD_ERROR": "Impossibile caricare il cestino",
@@ -3639,7 +3650,9 @@
       "EMAIL": "E-mail",
       "ID": "ID",
       "DEALER": "Dealer",
-      "TRASHED_AT": "Nel cestino dal"
+      "TRASHED_AT": "Nel cestino dal",
+      "CODE": "Codice",
+      "FAMILY": "Tipo"
     },
     "SELECT_ALL": "Seleziona tutti gli elementi della pagina",
     "SELECT_ROW": "Seleziona {name}",
@@ -3682,7 +3695,8 @@
       "FORBIDDEN": "Non hai il permesso di agire su questo elemento",
       "HAS_GROUPS": "Il rivenditore ha ancora gruppi",
       "NOT_TRASHED": "L'elemento non è più nel cestino",
-      "NOT_FOUND": "L'elemento non esiste più o non è accessibile"
+      "NOT_FOUND": "L'elemento non esiste più o non è accessibile",
+      "REFERENCED_PRODUCTS": "Il prodotto è ancora usato da distinte, menu, varianti, servizi di un utente, preferiti o promozioni"
     }
   },
   "PRICE_SERVICE": {
@@ -3881,5 +3895,697 @@
       "DETAIL": "Dettaglio attivazioni"
     },
     "TABS": "Viste delle attivazioni"
+  },
+  "PRODUCT_CATALOG": {
+    "SEARCH": "Cerca per nome",
+    "LOAD_ERROR": "Impossibile caricare i dati",
+    "EMPTY_MESSAGE": "Non ci sono voci che corrispondono alla ricerca.",
+    "READ_ONLY_SHARED": "Questa voce è condivisa con altri punti vendita (o vale per tutti): non rientra nel tuo perimetro e puoi solo consultarla.",
+    "SECTIONS": "Sezioni della scheda",
+    "SECTION": {
+      "GENERAL": "Generale",
+      "AVAILABILITY": "Disponibilità",
+      "MEDIA": "Media"
+    },
+    "STATE": {
+      "LABEL": "Stato",
+      "ALL": "Tutti",
+      "ENABLED": "Attivo",
+      "DISABLED": "Non attivo"
+    },
+    "COLUMN": {
+      "CODE": "Codice",
+      "NAME": "Nome",
+      "TAX": "Aliquota",
+      "STATE": "Stato"
+    },
+    "DELETE": {
+      "ACTION": "Elimina"
+    },
+    "FIELD": {
+      "ENABLED": "Stato attivo",
+      "ENABLED_HINT": "Una voce non attiva non viene proposta.",
+      "NO_DISCOUNT": "Non scontabile",
+      "SECONDARY_PRINTER": "Stampa su stampante fiscale secondaria",
+      "CODE": "Codice",
+      "CODE_HINT": "Numero del reparto sul registratore, da 1 a 99: deve essere unico nel gruppo.",
+      "TAX": "Aliquota",
+      "TAX_NONE": "Scegli l’aliquota",
+      "TAX_FAILED": "Impossibile leggere le aliquote del gruppo: riapri la pagina.",
+      "NAME_IN": "Nome ({language})",
+      "DESCRIPTION_IN": "Descrizione ({language})",
+      "REQUIRED_LANGUAGE": "Obbligatorio"
+    },
+    "AVAILABILITY": {
+      "PLACES": "Punti vendita",
+      "HINT": "Se non ne scegli nessuno, la voce vale per tutti i punti vendita del gruppo.",
+      "RESTRICTED": "Vedi e scegli solo i punti vendita del tuo perimetro. Una nuova voce deve valere per almeno uno dei tuoi punti vendita: non puoi crearne una per tutti."
+    },
+    "MEDIA": {
+      "IMAGE": "Immagine"
+    },
+    "FORM": {
+      "STALE": "La voce è stata modificata da qualcun altro dopo che l’hai aperta. Ricaricala per vedere l’ultima versione: le tue modifiche non salvate andranno perse.",
+      "RELOAD": "Ricarica",
+      "UPDATED": "Ultima modifica: {date}"
+    },
+    "LEAVE": {
+      "TITLE": "Uscire senza salvare?",
+      "MESSAGE": "Le modifiche non sono state salvate e andranno perse.",
+      "CONFIRM": "Esci senza salvare"
+    },
+    "ERROR": {
+      "DELETE_FORBIDDEN": "Non puoi eliminare questa voce: puoi eliminare solo quelle che valgono esclusivamente per i tuoi punti vendita.",
+      "FORBIDDEN": "Non hai il permesso di modificare questa voce: vale per punti vendita fuori dal tuo perimetro o per tutti i punti vendita.",
+      "PLACES_FORBIDDEN": "Scegli almeno un punto vendita del tuo perimetro: non puoi lasciare l’elenco vuoto né nominare punti vendita che non sono tuoi.",
+      "CONCURRENT": "I dati sono cambiati nel frattempo. Ricarica e riprova.",
+      "ATTRIBUTES_FORBIDDEN": "Non hai il permesso di modificare gli attributi."
+    },
+    "DEPARTMENTS": {
+      "TITLE": "Reparti",
+      "HINT": "I reparti del registratore di cassa: codice, aliquota e disponibilità per punto vendita.",
+      "NEW": "Nuovo reparto",
+      "EMPTY": "Nessun reparto",
+      "DELETE": {
+        "TITLE": "Elimina reparto",
+        "LABEL": "Elimina il reparto {name}",
+        "CONFIRM": "Eliminare definitivamente il reparto «{name}»? L’operazione non si può annullare.",
+        "DONE": "Reparto «{name}» eliminato",
+        "BLOCKED_TITLE": "Il reparto «{name}» è in uso",
+        "BLOCKED_MESSAGE": "È l’ultimo reparto attivo della sua aliquota ed è usato dai prodotti seguenti. Cambia il reparto di quei prodotti o attiva un altro reparto con la stessa aliquota, poi riprova."
+      },
+      "FORM": {
+        "NEW_TITLE": "Nuovo reparto",
+        "EDIT_TITLE": "Reparto",
+        "BACK": "Torna ai reparti",
+        "CREATE": "Crea reparto",
+        "CREATED": "Reparto creato",
+        "SAVED": "Reparto salvato"
+      }
+    },
+    "BRANDS": {
+      "TITLE": "Marche",
+      "HINT": "Le marche dei prodotti: nome, descrizione e disponibilità per punto vendita.",
+      "NEW": "Nuova marca",
+      "EMPTY": "Nessuna marca",
+      "DELETE": {
+        "TITLE": "Elimina marca",
+        "LABEL": "Elimina la marca {name}",
+        "CONFIRM": "Eliminare definitivamente la marca «{name}»? L’operazione non si può annullare.",
+        "DONE": "Marca «{name}» eliminata",
+        "BLOCKED_TITLE": "La marca «{name}» è in uso",
+        "BLOCKED_MESSAGE": "Non si può eliminare finché la usano i prodotti seguenti. Cambia la marca di quei prodotti e riprova."
+      },
+      "FORM": {
+        "NEW_TITLE": "Nuova marca",
+        "EDIT_TITLE": "Marca",
+        "BACK": "Torna alle marche",
+        "CREATE": "Crea marca",
+        "CREATED": "Marca creata",
+        "SAVED": "Marca salvata"
+      }
+    },
+    "ATTRIBUTES": {
+      "TITLE": "Attributi",
+      "HINT": "I gruppi di attributi dei prodotti (per esempio colore o taglia) e i loro valori.",
+      "READ_ONLY": "Puoi consultare gli attributi ma non modificarli: li gestiscono gli amministratori della piattaforma, i dealer e l’amministratore dell’account.",
+      "NEW": "Nuovo gruppo di attributi",
+      "GROUP_NAME_IN": "Nome del gruppo ({language})",
+      "CREATE": "Crea gruppo",
+      "CREATED": "Gruppo di attributi creato",
+      "LIST": "Lista attributi",
+      "EMPTY_GROUPS": "Nessun gruppo di attributi.",
+      "MORE": "Mostra altri gruppi",
+      "COUNT": "{count} attributi",
+      "EMPTY": "Questo gruppo non ha ancora attributi.",
+      "ROW": "Attributo {number}",
+      "NAME_IN": "Nome attributo ({language})",
+      "REMOVE": "Elimina",
+      "REMOVE_LABEL": "Elimina l’attributo {number}",
+      "ADD": "Aggiungi un attributo",
+      "ADD_ACTION": "Aggiungi",
+      "LIMIT": "Raggiunto il numero massimo di attributi del gruppo (200).",
+      "SAVED": "Gruppo «{name}» salvato",
+      "STALE": "Il gruppo è stato modificato da qualcun altro dopo che l’hai aperto. Ricaricalo per vedere l’ultima versione: le tue modifiche non salvate andranno perse.",
+      "RELOAD": "Ricarica il gruppo",
+      "BLOCKED_TITLE": "Il gruppo «{name}» è in uso",
+      "BLOCKED_MESSAGE": "Un attributo che stai togliendo (o il gruppo) è usato dai prodotti seguenti. Toglilo da quei prodotti e riprova.",
+      "DELETE": {
+        "ACTION": "Elimina gruppo",
+        "TITLE": "Elimina gruppo di attributi",
+        "CONFIRM": "Eliminare definitivamente il gruppo «{name}» con tutti i suoi attributi? L’operazione non si può annullare.",
+        "DONE": "Gruppo «{name}» eliminato"
+      }
+    }
+  },
+  "PRODUCT_CATEGORIES": {
+    "TITLE": "Categorie",
+    "HINT": "Le categorie dei prodotti, organizzate ad albero: genitore, posizione, disponibilità per punto vendita e impostazioni per cassa, ristorazione ed ecommerce.",
+    "NEW": "Nuova categoria",
+    "EMPTY": "Nessuna categoria",
+    "EMPTY_TREE": "Il gruppo non ha ancora categorie.",
+    "NO_NAME": "(senza nome)",
+    "PARENT_HIDDEN": "Genitore non visibile",
+    "CYCLIC": "Ciclo",
+    "CYCLIC_WARNING": "Alcune categorie fanno parte di un ciclo di genitori del vecchio sistema e sono lette come radici. Non è un errore: per sistemarle scegli un altro genitore (o nessuno) nella loro scheda.",
+    "CYCLIC_NOTE": "Questa categoria fa parte di un ciclo di genitori del vecchio sistema ed è letta come radice. Salvandola con un altro genitore (o nessuno) il ciclo si risolve.",
+    "READ_ONLY_SHARED": "Questa categoria vale anche per punti vendita fuori dal tuo perimetro (o per tutti): puoi solo consultarla.",
+    "EDIT": "Modifica",
+    "EDIT_LABEL": "Modifica la categoria {name}",
+    "PLACES_FAILED": "Impossibile leggere i punti vendita del gruppo: riapri la pagina.",
+    "VIEW": {
+      "LABEL": "Vista",
+      "TABLE": "Tabella",
+      "TREE": "Albero"
+    },
+    "TREE": {
+      "EXPAND": "Apri {name}",
+      "COLLAPSE": "Chiudi {name}"
+    },
+    "COLUMN": {
+      "NAME": "Nome",
+      "PARENT": "Genitore",
+      "POSITION": "Posizione",
+      "POS": "Disponibile per cassa",
+      "STATE": "Stato",
+      "UPDATED": "Data modifica"
+    },
+    "SECTION": {
+      "GENERAL": "Generale",
+      "VARIANTS": "Varianti",
+      "STATIONS": "Postazioni comanda",
+      "AVAILABILITY": "Disponibilità",
+      "MEDIA": "Media"
+    },
+    "FIELD": {
+      "POS": "Disponibile per cassa",
+      "ECOMMERCE": "Disponibile per ecommerce",
+      "FEATURED": "In evidenza",
+      "LEGAL_AGE": "Richiede maggiore età",
+      "PARENT": "Genitore",
+      "PARENT_NONE": "-- Seleziona genitore --",
+      "PARENT_FAILED": "Impossibile leggere l’albero delle categorie: riapri la pagina.",
+      "POSITION": "Posizione",
+      "PRODUCTION_VALUE": "Valore produzione"
+    },
+    "INTEGRATIONS": {
+      "TITLE": "Integrazioni",
+      "FLOOD_ORDERS": "Flood Orders",
+      "YELLGO": "YellGO",
+      "LEGGIMENU": "Leggimenu"
+    },
+    "DINING": {
+      "TITLE": "Ristorazione",
+      "END_OF_MEAL": "Fine pasto",
+      "HIDDEN_ON_HANDHELD": "Nascondi su palmare",
+      "FEE": "Incentivo %",
+      "PRINT_GROUP": "Gruppo di stampa",
+      "TYPE": "Tipo",
+      "TYPE_OTHER": "Altro",
+      "TYPE_FOOD": "Food",
+      "TYPE_BEVERAGE": "Beverage",
+      "ALWAYS_FIRST": "Sempre in prima portata",
+      "NOT_AFFILIATED": "Non convenzionabile"
+    },
+    "TOBACCO": {
+      "TITLE": "Tabacchi, giochi e monopolio",
+      "TYPE": "Tipo tabacchi/giochi/monopolio"
+    },
+    "COLORS": {
+      "TITLE": "Colori pulsanti App POS",
+      "BACKGROUND": "Colore di sfondo",
+      "TEXT": "Colore del testo",
+      "QUICK": "Colori rapidi dello sfondo",
+      "PICK": "Usa il colore {color} come sfondo"
+    },
+    "VARIANTS": {
+      "HINT": "Le varianti scelte si applicano a tutti i prodotti della categoria.",
+      "PRODUCTS": "Varianti della categoria",
+      "CATEGORIES": "Categorie di varianti"
+    },
+    "STATIONS": {
+      "HINT": "Per ogni punto vendita scegli le postazioni che ricevono gli ordini di questa categoria.",
+      "CHOSEN": "{count} scelte",
+      "LOAD_ERROR": "Impossibile leggere le postazioni di questo punto vendita.",
+      "NONE": "Questo punto vendita non ha postazioni comanda.",
+      "NO_PLACES": "Non ci sono punti vendita.",
+      "ROOMS": "Ordini di sala – {place}",
+      "COUNTER": "Ordini al banco – {place}"
+    },
+    "AVAILABILITY": {
+      "HINT": "Se non ne scegli nessuno, la categoria vale per tutti i punti vendita del gruppo.",
+      "RESTRICTED": "Vedi e scegli solo i punti vendita del tuo perimetro e la categoria deve valere per almeno uno dei tuoi punti vendita: non puoi lasciarla per tutti.",
+      "NO_PLACES": "Non ci sono punti vendita.",
+      "POSITION": "Posizione in {place}",
+      "CENTER": "Centro di produzione di {place}",
+      "CENTER_NONE": "Nessuno",
+      "CENTERS_ERROR": "Impossibile leggere i centri di produzione di questo punto vendita."
+    },
+    "MEDIA": {
+      "INTERNAL_FILE_NAME": "Nome file interno",
+      "EXTERNAL_URL": "URL esterno",
+      "EXTERNAL_URL_HINT": "Solo indirizzi https.",
+      "IMAGE": "Immagine principale",
+      "ICON": "Icona"
+    },
+    "FORM": {
+      "NEW_TITLE": "Nuova categoria",
+      "EDIT_TITLE": "Categoria",
+      "BACK": "Torna alle categorie",
+      "CREATE": "Crea categoria",
+      "CREATED": "Categoria creata",
+      "SAVED": "Categoria salvata",
+      "STALE": "La categoria è stata modificata da qualcun altro dopo che l’hai aperta. Ricaricala per vedere l’ultima versione: le tue modifiche non salvate andranno perse."
+    },
+    "ERROR": {
+      "PLACES_FORBIDDEN": "Scegli solo punti vendita del tuo perimetro, almeno uno.",
+      "TOO_MANY": "Il gruppo ha raggiunto il numero massimo di categorie (2.000)."
+    },
+    "DELETE": {
+      "TITLE": "Elimina categoria",
+      "LABEL": "Elimina la categoria {name}",
+      "CONFIRM": "Eliminare definitivamente la categoria «{name}»? L’operazione non si può annullare. Le sue sottocategorie non vengono eliminate: finché ci sono, la categoria non si può eliminare.",
+      "DONE": "Categoria «{name}» eliminata",
+      "BLOCKED_TITLE": "La categoria «{name}» è in uso",
+      "BLOCKED_MESSAGE": "Non si può eliminare finché le voci seguenti la usano. Toglila da lì (o elimina prima le sottocategorie) e riprova.",
+      "HIDDEN": "Altre voci che non puoi vedere",
+      "MORE_AFTER": "Il server segnala un tipo di riferimento per volta: dopo aver rimosso quelli elencati potrebbero comparirne altri (sottocategorie, prodotti, promozioni, punti vendita)."
+    },
+    "REFERENCE": {
+      "subcategories": "Sottocategorie",
+      "products": "Prodotti",
+      "productModifierCategories": "Prodotti che la usano come categoria di varianti",
+      "productBundles": "Prodotti composti che la usano",
+      "categoryModifierCategories": "Categorie che la usano come categoria di varianti",
+      "promotions": "Promozioni",
+      "places": "Punti vendita"
+    }
+  },
+  "PRODUCTS": {
+    "FAMILY": {
+      "PRODUCTS": {
+        "TITLE": "Prodotti",
+        "HINT": "I prodotti del gruppo: codice, nome, giacenza, prezzo di listino e stato. Filtra per categoria, fornitore o punto vendita e cerca per nome, codice o barcode.",
+        "NEW": "Nuovo prodotto",
+        "NEW_TITLE": "Nuovo prodotto",
+        "EDIT_TITLE": "Prodotto",
+        "EMPTY": "Nessun prodotto"
+      },
+      "SERVICES": {
+        "TITLE": "Servizi",
+        "HINT": "I servizi del gruppo, con durata e numero massimo di clienti contemporanei. Filtra per categoria, fornitore o punto vendita e cerca per nome, codice o barcode.",
+        "NEW": "Nuovo servizio",
+        "NEW_TITLE": "Nuovo servizio",
+        "EDIT_TITLE": "Servizio",
+        "EMPTY": "Nessun servizio"
+      },
+      "MODIFIERS": {
+        "TITLE": "Varianti",
+        "HINT": "Le varianti dei prodotti: aggiunte, rimozioni e note che si applicano a un prodotto o a una categoria.",
+        "NEW": "Nuova variante",
+        "NEW_TITLE": "Nuova variante",
+        "EDIT_TITLE": "Variante",
+        "EMPTY": "Nessuna variante"
+      },
+      "TOBACCOS": {
+        "TITLE": "Tabacchi",
+        "HINT": "Tabacchi, giochi e monopolio del gruppo. Filtra per categoria, fornitore o punto vendita e cerca per nome, codice o barcode.",
+        "NEW": "Nuovo prodotto",
+        "NEW_TITLE": "Nuovo tabacco, gioco o monopolio",
+        "EDIT_TITLE": "Tabacco, gioco o monopolio",
+        "EMPTY": "Nessun prodotto"
+      }
+    },
+    "NEW_QUICK": "Nuovo rapido",
+    "QUICK_EDIT": "Modifica rapida",
+    "QUICK_EDIT_LABEL": "Modifica rapida di {name}",
+    "EDIT_LABEL": "Apri {name}",
+    "REMOVE": "Rimuovi",
+    "SEARCH": "Cerca",
+    "SEARCH_HINT": "Nome, codice o barcode",
+    "SELECT_ALL": "Seleziona tutti i prodotti modificabili della pagina",
+    "SELECT_ROW": "Seleziona {name}",
+    "SELECTED": "{count} selezionati",
+    "READ_ONLY_BADGE": "Sola lettura",
+    "PARTIAL_BADGE": "Solo i tuoi punti vendita",
+    "READ_ONLY_SHARED": "Questo prodotto vale anche per punti vendita fuori dal tuo perimetro (o per tutti) e non puoi modificare i dati dei tuoi punti vendita: puoi solo consultarlo.",
+    "READ_ONLY_PARTIAL": "Questo prodotto vale anche per punti vendita fuori dal tuo perimetro (o per tutti): puoi modificare solo la disponibilità, le postazioni comanda e le giacenze minima, massima e ubicazione dei tuoi punti vendita. Il resto è in sola lettura.",
+    "TRASHED_NOTE": "Questo prodotto è nel cestino: è in sola lettura. Ripristinalo per modificarlo o eliminalo definitivamente.",
+    "COLUMN": {
+      "SELECT": "Seleziona",
+      "CODE": "Codice",
+      "NAME": "Nome",
+      "STOCK": "Giacenza totale",
+      "PRICE": "Prezzo listino",
+      "LAST_SUPPLIER": "Ultimo fornitore",
+      "UPDATED": "Data modifica",
+      "STATE": "Stato"
+    },
+    "FILTER": {
+      "CATEGORY": "Categoria",
+      "ALL_CATEGORIES": "Tutte le categorie",
+      "SUPPLIER": "Fornitore",
+      "PLACE": "Punto vendita",
+      "ALL_PLACES": "Tutti i punti vendita",
+      "FAVORITES": "Solo i preferiti",
+      "ALL_SUPPLIERS": "Tutti i fornitori",
+      "SUPPLIER_CLEAR": "Togli il filtro per fornitore"
+    },
+    "ENABLE": {
+      "ON": "{name} è attivo",
+      "OFF": "{name} è non attivo",
+      "ON_ACTION": "Attiva",
+      "OFF_ACTION": "Disattiva",
+      "ON_LABEL": "Attiva {name}",
+      "OFF_LABEL": "Disattiva {name}"
+    },
+    "DUPLICATE": {
+      "ACTION": "Duplica",
+      "LABEL": "Duplica {name}",
+      "DONE": "{name} duplicato: la copia ha il nome con (Copy)."
+    },
+    "TRASH": {
+      "ACTION": "Cestina",
+      "LABEL": "Metti {name} nel cestino",
+      "TITLE": "Mettere nel cestino?",
+      "CONFIRM": "Mettere nel cestino {count} prodotti? Si possono ripristinare dalla pagina Cestino.",
+      "CONFIRM_ONE": "Mettere nel cestino {name}? Si può ripristinare dalla pagina Cestino.",
+      "SELECTED_ACTION": "Cestina i selezionati",
+      "REPORT_TITLE": "Esito dell'operazione",
+      "REPORT_TRASHED": "Nel cestino: {count}.",
+      "REPORT_SKIPPED": "Non elaborati: {count}.",
+      "REPORT_ITEM": "{name}: {issue}",
+      "ISSUE": {
+        "NOTFOUND": "il prodotto non esiste più o non è accessibile",
+        "FORBIDDEN": "non hai il permesso di cestinarlo",
+        "ALREADYTRASHED": "è già nel cestino",
+        "CONFLICT": "è cambiato nel frattempo: riprova"
+      }
+    },
+    "RESTORE": {
+      "ACTION": "Ripristina",
+      "DONE": "Prodotto ripristinato."
+    },
+    "DELETE": {
+      "ACTION": "Elimina definitivamente",
+      "TITLE": "Eliminare definitivamente?",
+      "CONFIRM": "Eliminare definitivamente questo prodotto? L'operazione è irreversibile.",
+      "DONE": "{name} è stato eliminato definitivamente.",
+      "BLOCKED_TITLE": "{name} non si può eliminare",
+      "BLOCKED_MESSAGE": "Il prodotto è ancora usato da:",
+      "HIDDEN": "Altri elementi che non puoi vedere",
+      "MORE_AFTER": "Dopo aver tolto questi riferimenti potrebbero comparirne altri: il controllo si ferma al primo tipo trovato."
+    },
+    "REFERENCE": {
+      "productBundles": "Distinte base di altri prodotti",
+      "productMenus": "Menu di altri prodotti",
+      "productModifierChoices": "Scelte di varianti di altri prodotti",
+      "productModifierLists": "Varianti di altri prodotti",
+      "categoryModifiers": "Varianti di categorie",
+      "serviceUsers": "Utenti che lo hanno tra i servizi",
+      "favorites": "Gruppi preferiti",
+      "promotions": "Promozioni"
+    },
+    "VIEW": {
+      "LABEL": "Vista",
+      "QUICK": "Rapida",
+      "FULL": "Completa"
+    },
+    "FORM": {
+      "BACK": "Torna all'elenco",
+      "CREATE": "Crea",
+      "CREATED": "Prodotto creato.",
+      "SAVED": "Prodotto salvato.",
+      "STALE": "Il prodotto è stato modificato da qualcun altro mentre lo stavi modificando. Ricarica la pagina per vedere la versione aggiornata (le tue modifiche non salvate andranno perse)."
+    },
+    "ERROR": {
+      "PLACES_FORBIDDEN": "Puoi scegliere solo i tuoi punti vendita e non puoi rendere il prodotto disponibile per tutti.",
+      "TOO_MANY": "Ci sono troppi elementi in una delle liste del prodotto."
+    },
+    "SECTION": {
+      "GENERAL": "Generale",
+      "BARCODES": "Barcode",
+      "PRICES": "Prezzi",
+      "CATEGORIES": "Categorie",
+      "AVAILABILITY": "Disponibilità",
+      "VARIANTS": "Varianti",
+      "STATIONS": "Postazioni comanda",
+      "STOCK": "Giacenza",
+      "ATTRIBUTES": "Attributi",
+      "COMPOSITION": "Composizione",
+      "MEDIA": "Media",
+      "MARGIN": "Marginalità",
+      "SUPPLIERS": "Fornitori",
+      "SHIPPING": "Spedizione"
+    },
+    "TYPE": {
+      "PRODUCT": "Prodotto",
+      "SERVICE": "Servizio",
+      "EXEMPT": "Esente",
+      "TOBACCOS": "Tabacchi",
+      "GAMES": "Giochi",
+      "MONOPOLY": "Monopolio"
+    },
+    "CARD": {
+      "STATE": "Stato e disponibilità",
+      "SERVICE": "Servizio",
+      "MODIFIER": "Variante",
+      "UNITS": "Unità di misura",
+      "SCALES": "Bilance",
+      "PERIOD": "Periodo disponibilità"
+    },
+    "FIELD": {
+      "TYPE": "Tipo",
+      "FAVORITE": "Preferito",
+      "FAVORITE_HANDHELD": "Preferito (Palmare)",
+      "GENERIC": "Generico",
+      "GENERIC_HINT": "La cassa chiede nome, prezzo e quantità.",
+      "TO_CHECK": "Da verificare (Beta)",
+      "WAREHOUSE": "Movimenta magazzino",
+      "CODE": "Codice",
+      "NAME_IN": "Nome prodotto ({language})",
+      "SHORT_NAME_IN": "Nome breve ({language})",
+      "SHORT_DESCRIPTION_IN": "Descrizione breve ({language})",
+      "DESCRIPTION_IN": "Descrizione ({language})",
+      "MODIFIER_DESCRIPTION_IN": "Descrizione della variante ({language})",
+      "BRAND": "Marca",
+      "BRAND_NONE": "-- Nessuna marca --",
+      "DURATION": "Durata",
+      "MAX_CONCURRENT": "Massimo contemporaneo",
+      "LOAD_UNIT": "Unità di misura carico",
+      "UNLOAD_UNIT": "Unità di misura scarico",
+      "UNIT_NONE": "-- Nessuna unità --",
+      "CONVERSION_RATIO": "Rapporto conversione",
+      "SCALES": "Disponibile per bilance",
+      "PLU": "PLU",
+      "SCALE_TYPE": "Peso / Pezzo"
+    },
+    "SCALES": {
+      "WEIGHT": "Peso",
+      "PIECE": "Pezzo"
+    },
+    "MODIFIER": {
+      "TYPE": "Tipo variante",
+      "TYPE_ADDREMOVE": "+ / -",
+      "TYPE_ADD": "+",
+      "TYPE_REMOVE": "-",
+      "TYPE_INFO": "Info",
+      "PLUS": "Prezzo percentuale +",
+      "MINUS": "Prezzo percentuale -"
+    },
+    "DINING": {
+      "HALF_PORTION": "Disponibilità mezza porzione",
+      "AFFILIATED_MENU": "Menu convenzionato",
+      "REVERSE_PRINT": "Stampa reverse"
+    },
+    "PERIOD": {
+      "HINT": "Il prodotto è disponibile solo in questo periodo; senza date è sempre disponibile.",
+      "FROM": "Inizio disponibilità",
+      "TO": "Fine disponibilità"
+    },
+    "WARNING": {
+      "DUPLICATE": "Usato anche da:",
+      "OTHERS": "e da altri {count} prodotti"
+    },
+    "BARCODES": {
+      "VALUE": "Barcode {number}",
+      "LOAD_QUANTITY": "Quantità di carico (UMC) del barcode {number}",
+      "UNLOAD_QUANTITY": "Quantità di scarico (UMS) del barcode {number}",
+      "SALE_QUANTITY": "Quantità di vendita (UMS) del barcode {number}",
+      "ADD": "Aggiungi barcode",
+      "REMOVE_LABEL": "Rimuovi il barcode {number}",
+      "EMPTY": "Nessun barcode."
+    },
+    "PRICES": {
+      "SCALES_NOTE": "Il prezzo dei prodotti a peso è sempre considerato al kg.",
+      "RULE": "Regola prezzo {number}",
+      "LIST": "Listino (regola {number})",
+      "LIST_NONE": "-- Seleziona listino --",
+      "CURRENCY": "Valuta (regola {number})",
+      "CURRENCY_NONE": "-- Seleziona valuta --",
+      "TAX": "Aliquota (regola {number})",
+      "TAX_NONE": "-- Seleziona aliquota --",
+      "NET": "Imponibile (regola {number})",
+      "GROSS": "IVA inclusa (regola {number})",
+      "DISCOUNT": "Sconto % (regola {number})",
+      "VALID_FROM": "Valido dal (regola {number})",
+      "VALID_TO": "Valido fino al (regola {number})",
+      "DAILY_FROM": "Fascia oraria dalle (regola {number})",
+      "DAILY_TO": "Fascia oraria alle (regola {number})",
+      "FROM_QUANTITY": "Quantità minima (regola {number})",
+      "MAX_QUANTITY": "Quantità massima vendibile (regola {number})",
+      "WEEK_DAYS": "Giorni della settimana (regola {number})",
+      "WEEK_DAYS_HINT": "Senza giorni scelti la regola vale tutti i giorni.",
+      "SUMMARY_GROSS": "IVA compresa",
+      "SUMMARY_DISCOUNTED_NET": "Imponibile (scontato)",
+      "SUMMARY_DISCOUNTED_GROSS": "IVA compresa (scontato)",
+      "UP": "Su",
+      "UP_LABEL": "Sposta su la regola {number}",
+      "DOWN": "Giù",
+      "DOWN_LABEL": "Sposta giù la regola {number}",
+      "REMOVE_LABEL": "Rimuovi la regola {number}",
+      "MOVED": "Regola {from} spostata alla posizione {to}",
+      "ADD": "Aggiungi regola prezzo",
+      "EMPTY": "Nessuna regola prezzo."
+    },
+    "CATEGORIES": {
+      "LABEL": "Categorie del prodotto"
+    },
+    "AVAILABILITY": {
+      "HINT": "Non selezionando alcun punto vendita il prodotto sarà automaticamente disponibile per tutti.",
+      "HINT_NEW": "Non selezionando alcun punto vendita il prodotto sarà disponibile per tutti i punti vendita, anche quelli che verranno creati in futuro.",
+      "RESTRICTED": "Vedi e scegli solo i tuoi punti vendita: il prodotto deve essere disponibile per almeno uno di essi.",
+      "LOCKED": "Questo prodotto è disponibile per tutti i punti vendita: non puoi limitarne la disponibilità.",
+      "FAVORITE": "Preferito in {place}",
+      "FAVORITE_HANDHELD": "Preferito (Palmare) in {place}",
+      "POSITION": "Posizione in {place}",
+      "CENTER": "Centro di produzione in {place}",
+      "CENTER_NONE": "-- Nessun centro --",
+      "CENTERS_ERROR": "Impossibile leggere i centri di produzione di questo punto vendita."
+    },
+    "VARIANTS": {
+      "HINT": "Le varianti del prodotto: quelle richieste alla vendita, quelle selezionabili e quelle escluse (che altrimenti arrivano da una categoria).",
+      "REQUIRED": "Varianti obbligatorie",
+      "SELECTABLE": "Varianti selezionabili",
+      "EXCLUDED": "Varianti escluse",
+      "CATEGORIES": "Categorie di varianti"
+    },
+    "STATIONS": {
+      "HINT": "Per ogni punto vendita scegli le postazioni che ricevono gli ordini di questo prodotto."
+    },
+    "STOCK": {
+      "HINT": "La quantità è aggiornata dal magazzino e non si modifica qui; puoi cambiare giacenza minima, massima e ubicazione.",
+      "TOTAL": "Giacenza totale",
+      "COST_LAST": "Ultimo costo",
+      "COST_AVERAGE": "Costo medio",
+      "COST_WEIGHTED_AVERAGE": "Costo medio ponderato",
+      "LAST_SUPPLIER": "Ultimo fornitore",
+      "NONE": "Nessuna",
+      "LOAD_ERROR": "Impossibile leggere i depositi di questo punto vendita.",
+      "NO_STORAGES": "Questo punto vendita non ha depositi.",
+      "QUANTITY": "Quantità – {storage}",
+      "MIN": "Giacenza minima – {storage}",
+      "MAX": "Giacenza massima – {storage}",
+      "LOCATION": "Ubicazione – {storage}"
+    },
+    "ATTRIBUTES": {
+      "NONE": "Il gruppo non ha ancora attributi.",
+      "NONE_IN_GROUP": "Questo gruppo non ha attributi.",
+      "TRUNCATED": "Sono mostrati solo i primi 100 gruppi di attributi."
+    },
+    "COMPOSITION": {
+      "COMPONENTS": "Distinta base",
+      "MENU": "Menu a scelta",
+      "CHOICES": "Personalizzazione con varianti",
+      "MODULAR": "Componibile da altri prodotti",
+      "MODULAR_RULE": "Regola prezzo",
+      "MODULAR_NONE": "-- Nessuna --",
+      "RULE_AVERAGE": "Media",
+      "RULE_SUM": "Somma",
+      "RULE_FIXED": "Fisso"
+    },
+    "COMPONENTS": {
+      "HINT": "I prodotti di cui è fatto: la quantità è nell'unità di carico del componente.",
+      "ADD": "Aggiungi componente",
+      "CLEAR": "Annulla la scelta",
+      "QUANTITY": "Quantità di {name}",
+      "WASTE": "Scarto % di {name}",
+      "REMOVE_LABEL": "Rimuovi {name}",
+      "EMPTY": "Nessun componente."
+    },
+    "CHOICES": {
+      "CATEGORY": "Categoria (gruppo {number})",
+      "CATEGORY_NONE": "-- Seleziona categoria --",
+      "QUANTITY": "Quantità (gruppo {number})",
+      "COURSE": "Uscita (gruppo {number})",
+      "FREE_QUANTITY": "Quantità gratis (gruppo {number})",
+      "PRICE_RULE": "Prezzo (gruppo {number})",
+      "RULE_HIGHEST": "Più alto",
+      "RULE_LOWEST": "Più basso",
+      "PRODUCTS": "Prodotti del gruppo {number} (senza scelta, tutta la categoria)",
+      "REMOVE_LABEL": "Rimuovi il gruppo {number}",
+      "ADD": "Aggiungi gruppo",
+      "EMPTY": "Nessun gruppo."
+    },
+    "MEDIA": {
+      "IMAGE": "Immagine principale",
+      "GALLERY": "Galleria",
+      "GALLERY_HINT": "Fino a {max} immagini della libreria.",
+      "GALLERY_IMAGE": "Immagine {number} della galleria",
+      "GALLERY_ADD": "Aggiungi alla galleria",
+      "GALLERY_EMPTY": "La galleria è vuota."
+    },
+    "MARGIN": {
+      "SIMPLE_COST": "Costo semplificato",
+      "SIMPLE_COST_HINT": "Il ricarico delle regole prezzo si calcola su questo costo e, con il magazzino, sugli ultimi costi.",
+      "NONE": "Nessun ricarico da mostrare: servono una regola prezzo con un imponibile e almeno un costo.",
+      "CAPTION": "Ricarico per regola prezzo e costo",
+      "RULE": "Regola",
+      "RULE_NUMBER": "Regola {number}",
+      "COST": "Costo",
+      "PRICE": "Imponibile (scontato)",
+      "MARKUP": "Ricarico",
+      "MARKUP_PERCENTAGE": "Ricarico %",
+      "FOOD_COST": "Food cost %",
+      "BASIS_SIMPLE": "Costo semplificato",
+      "BASIS_LAST": "Ultimo costo",
+      "BASIS_AVERAGE": "Costo medio",
+      "BASIS_WEIGHTED_AVERAGE": "Costo medio ponderato"
+    },
+    "SUPPLIERS": {
+      "HINT": "Il fornitore si sceglie cercandolo per nome. Per ogni listino del fornitore si indicano costo e sconti.",
+      "SUPPLIER": "Fornitore {number}",
+      "CONTACT": "Fornitore {number}",
+      "CODE": "Codice articolo (fornitore {number})",
+      "NAME": "Nome prodotto (fornitore {number})",
+      "MIN_QUANTITY": "Quantità minima ordinabile (fornitore {number})",
+      "DELIVERY_TIME": "Tempo di consegna (fornitore {number})",
+      "DELIVERY_UNIT": "Unità del tempo di consegna (fornitore {number})",
+      "UNIT_DAYS": "Giorni",
+      "UNIT_MONTHS": "Mesi",
+      "UNIT_YEARS": "Anni",
+      "FAVORITE": "Fornitore {number} preferito",
+      "LIST": "Listino {name}",
+      "LIST_PRICE": "Prezzo costo (listino {name})",
+      "LIST_DISCOUNT_1": "Sconto 1 % (listino {name})",
+      "LIST_DISCOUNT_2": "Sconto 2 % (listino {name})",
+      "LIST_DISCOUNT_3": "Sconto 3 % (listino {name})",
+      "REMOVE_LABEL": "Rimuovi il fornitore {number}",
+      "ADD": "Aggiungi fornitore",
+      "EMPTY": "Nessun fornitore.",
+      "CONTACT_NONE": "-- Cerca fornitore --",
+      "CONTACT_CLEAR": "Togli il fornitore {number}",
+      "NO_NAME": "(fornitore senza nome)",
+      "LIST_NO_NAME": "(listino senza nome)",
+      "LIST_GONE": "Il fornitore non ha più questo listino: resta quello salvato.",
+      "LIST_ADD": "Aggiungi il listino {name}",
+      "LIST_REMOVE": "Togli il listino {name}"
+    },
+    "SHIPPING": {
+      "WIDTH": "Larghezza (cm)",
+      "HEIGHT": "Altezza (cm)",
+      "DEPTH": "Profondità (cm)",
+      "WEIGHT": "Peso (kg)"
+    }
   }
 }

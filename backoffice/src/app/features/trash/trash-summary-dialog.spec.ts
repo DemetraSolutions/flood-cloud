@@ -108,6 +108,22 @@ describe('TrashSummaryDialog', () => {
     expect(text).not.toContain('P10');
   });
 
+  it('explains a referenced product with its own reason', async () => {
+    const { root, view } = render(
+      {
+        restored: 0,
+        deleted: 0,
+        skipped: [{ id: 'a', issue: 'referenced' }],
+        failedGroups: [],
+      },
+      [['a', 'Acqua']],
+      'products',
+    );
+    await view();
+    const text = root.querySelector('li')?.textContent?.replace(/\s+/g, ' ');
+    expect(text).toContain('TRASH.ISSUE.REFERENCED_PRODUCTS TRASH.SUMMARY.COUNT {"count":1} Acqua');
+  });
+
   it('closes with the button of the dialog', async () => {
     const { fixture, root, view } = render({
       restored: 1,

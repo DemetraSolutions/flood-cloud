@@ -238,9 +238,10 @@ export const FILES_OWNED_FIELDS: readonly string[] = Object.freeze([
 export const EMAIL_TEMPLATES_OWNED_FIELDS: readonly string[] = Object.freeze(['name', 'text', 'html', 'insertDate', 'updateDate']);
 
 /**
- * Fields of the legacy `products_departments` documents of a group database (the departments the POS reads with the tax of each) this backend writes: only whole new documents, inserted
- * by the onboarding of a customer, one per tax rate (`doc/Tasks.md` area 8); no field of an existing department is ever changed from here, and no department is read or deleted.
- * `groupId` is a key of this backend, additive: the legacy ignores it. The legacy creates no index on the collection and neither does this backend.
+ * Fields of the legacy `products_departments` documents of a group database (the departments the POS reads with the tax of each) this backend writes: whole new documents inserted by the onboarding
+ * of a customer, one per tax rate (`doc/Tasks.md` area 8), and by `POST /v1/groups/{groupId}/product-departments` (step C1), and `$set`/`$unset` of the fields below from the department routes and from
+ * the realignment of the tax copy when a tax rate of the group changes. `medias` is written only below `medias.images.main` (the image chosen from the library). `groupId` and `trash` are keys of the
+ * onboarding, additive: the legacy ignores them, and the department routes never write them. The legacy creates no index on the collection and neither does this backend.
  */
 export const PRODUCTS_DEPARTMENTS_OWNED_FIELDS: readonly string[] = Object.freeze([
   'groupId',
@@ -248,12 +249,186 @@ export const PRODUCTS_DEPARTMENTS_OWNED_FIELDS: readonly string[] = Object.freez
   'tax',
   'name',
   'description',
+  'noDiscount',
+  'secondaryFiscalPrinter',
   'medias',
   'placesAvailability',
   'status',
   'trash',
   'insertDate',
   'updateDate',
+]);
+
+/**
+ * Fields of the legacy `products_brands` documents of a group database (step C1) this backend writes: whole new documents inserted by `POST /v1/groups/{groupId}/product-brands`, and `$set`/`$unset`
+ * of the fields below from the brand routes. `medias` is written only below `medias.images.main`. No field of a brand is ever written by anything else, and the collection has no index.
+ */
+export const PRODUCTS_BRANDS_OWNED_FIELDS: readonly string[] = Object.freeze(['name', 'description', 'placesAvailability', 'medias', 'status', 'insertDate', 'updateDate']);
+
+/**
+ * Fields of the legacy `products_attributes` documents of a group database, the groups of attributes (step C1), this backend writes: whole new documents inserted by
+ * `POST /v1/groups/{groupId}/product-attribute-groups`, and `$set` of the fields below from the attribute group routes. The attributes are the elements of `attributes`, replaced as a whole.
+ * The collection has no index.
+ */
+export const PRODUCTS_ATTRIBUTES_OWNED_FIELDS: readonly string[] = Object.freeze(['name', 'attributes', 'insertDate', 'updateDate']);
+
+/**
+ * The maps of the legacy `products_categories` documents whose keys are made at run time (`printStations.__<placeId>`, `printStationsNoRooms.__<placeId>`, a list of print station ids for each
+ * place): the backend owns every path below them, so a write may set or unset the entry of one place and nothing else of the map.
+ */
+export const PRODUCTS_CATEGORIES_OWNED_TREES: readonly string[] = Object.freeze(['printStations', 'printStationsNoRooms']);
+
+/**
+ * Fields of the legacy `products_categories` documents of a group database, the product categories (step C2), this backend writes: whole new documents inserted by
+ * `POST /v1/groups/{groupId}/product-categories` in the shape the legacy writes, and `$set`/`$unset` of the fields below from the category routes. The containers `availability`,
+ * `integrations`, `roomsSettings` and `tgm` are owned leaf by leaf (`integrations.easyappear` is written, as `false`, only in a new document: the key `easyAppear` some documents have and any other
+ * key the legacy or a later release adds stay untouched), `medias` is written only at `medias.images.main|icon|internalFileName|externalUrl` (or, when it is missing or has no `images`, as the smallest container that holds the
+ * path: `medias.images` or `medias`, which is why those two are listed), and only the {@link PRODUCTS_CATEGORIES_OWNED_TREES} are owned with everything below them: every other field is owned by exact equality. `trash`, which 22 real documents have and nothing reads, is never read nor written. No index.
+ */
+export const PRODUCTS_CATEGORIES_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'parentId',
+  'name',
+  'description',
+  'position',
+  'productionValue',
+  'availability.pos',
+  'availability.ecommerce',
+  'noDiscount',
+  'requiresGreaterAge',
+  'secondaryFiscalPrinter',
+  'featured',
+  'backgroundColor',
+  'textColor',
+  'integrations.floodOrders',
+  'integrations.easyappear',
+  'integrations.yellgo',
+  'integrations.leggimenu',
+  'roomsSettings.endMeal',
+  'roomsSettings.handheldHidden',
+  'roomsSettings.percentageFee',
+  'roomsSettings.printGroup',
+  'roomsSettings.alwaysFirstExit',
+  'roomsSettings.notAffiliatedMenu',
+  'roomsSettings.type',
+  'tgm.type',
+  'medias',
+  'medias.images',
+  'medias.images.main',
+  'medias.images.icon',
+  'medias.images.internalFileName',
+  'medias.images.externalUrl',
+  'placesAvailability',
+  'variants',
+  'variantsCategories',
+  ...PRODUCTS_CATEGORIES_OWNED_TREES,
+  'status',
+  'insertDate',
+  'updateDate',
+]);
+
+/**
+ * The maps of the legacy `products` documents whose keys are made at run time (`printStations.__<placeId>`, `printStationsNoRooms.__<placeId>`, a list of print station ids for each place): the
+ * backend owns every path below them, so a write may set or unset the entry of one place and nothing else of the map.
+ */
+export const PRODUCTS_OWNED_TREES: readonly string[] = Object.freeze(['printStations', 'printStationsNoRooms']);
+
+/**
+ * The only leaves of the stock of a product (`quantity.__<placeId>.__<storageId>.<leaf>`) the catalog writes: the minimum, the maximum and the location. The quantity itself (`value`) belongs to the
+ * warehouse, which moves it with `$inc`, and is never written from here.
+ */
+export const PRODUCTS_STOCK_LEAVES: readonly string[] = Object.freeze(['min', 'max', 'location']);
+
+/**
+ * Keys of a legacy `products` document that a new document has and a modification never writes (`quantity` is the empty stock of a new document, of which a modification writes only the {@link PRODUCTS_STOCK_LEAVES} leaves; `lastAveragePrice` is the zeroed cost the legacy writes in an insert and the warehouse then maintains;
+ * `tags`, `related` and `parentId` are always empty and nothing reads them; `integrations.easyappear` is written as `false` and never touched again). Apart from `quantity` and `lastAveragePrice`, which are shown but never written as a whole, they are never read, and none of them is part of the
+ * version of a product.
+ */
+export const PRODUCTS_INSERT_ONLY_FIELDS: readonly string[] = Object.freeze(['quantity', 'lastAveragePrice', 'tags', 'related', 'parentId', 'integrations.easyappear']);
+
+/**
+ * Fields of the legacy `products` documents of a group database (step C3) this backend writes: whole new documents inserted by `POST /v1/groups/{groupId}/products` in the shape the legacy writes, and
+ * `$set`/`$unset` of the fields below from the product routes and, for the prices, from the realignment of the tax copy when a tax rate of the group changes (a pipeline update of `prices` and
+ * `updateDate`). The containers (`availability`, `variant`, `modularBundle`, `colors.pos`, `shippingInfo`, `roomsSettings`, `integrations`) are owned leaf by leaf, `medias` below
+ * `medias.images` (the two containers are listed for a document that has neither), the {@link PRODUCTS_OWNED_TREES} are owned with everything below them, and `quantity` only at the
+ * {@link PRODUCTS_STOCK_LEAVES} of a storage of a place: the warehouse owns the quantities and the cost, and no write of the catalog reaches them. The keys of {@link PRODUCTS_INSERT_ONLY_FIELDS} are written in
+ * a new document only. Every key a document has that is not listed (the unknown ones of the POS and of the integrations) stays untouched. No index.
+ */
+export const PRODUCTS_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'type',
+  'time',
+  'max',
+  'code',
+  'barcode',
+  'brandId',
+  'name',
+  'shortName',
+  'description',
+  'shortDescription',
+  'favorite',
+  'favoriteHandheld',
+  'generic',
+  'toCheck',
+  'noDiscount',
+  ...PRODUCTS_OWNED_TREES,
+  'availability.pos',
+  'availability.warehouse',
+  'availability.scales',
+  'availability.ecommerce',
+  'plu',
+  'scaleType',
+  'variant.status',
+  'variant.type',
+  'variant.pricePercentagePlus',
+  'variant.pricePercentageMinus',
+  'variant.description',
+  'variantsRequired',
+  'variants',
+  'variantsExcluded',
+  'variantsCategories',
+  'bundleProducts',
+  'selectableBundleProducts',
+  'selectableVariantsBundleProducts',
+  'modularBundle.priceRule',
+  'measureLoad',
+  'measureDownload',
+  'measureConversionRatio',
+  'simpleCost',
+  'colors.pos.text',
+  'colors.pos.background',
+  'startDate',
+  'endDate',
+  'categories',
+  'placesAvailability',
+  'medias',
+  'medias.images',
+  'medias.images.main',
+  'medias.images.gallery',
+  'medias.images.internalFileName',
+  'medias.images.externalUrl',
+  'shippingInfo.width',
+  'shippingInfo.height',
+  'shippingInfo.depth',
+  'shippingInfo.weight',
+  'attributes',
+  'suppliers',
+  'prices',
+  'position',
+  'productionValue',
+  'roomsSettings.halfPortion',
+  'roomsSettings.percentageFee',
+  'roomsSettings.handheldHidden',
+  'roomsSettings.affiliatedMenu',
+  'roomsSettings.reversePrint',
+  'integrations.floodOrders',
+  'integrations.yellgo',
+  'integrations.leggimenu',
+  'featured',
+  'status',
+  'trash',
+  'trashDate',
+  'insertDate',
+  'updateDate',
+  ...PRODUCTS_INSERT_ONLY_FIELDS,
 ]);
 
 /**
@@ -357,13 +532,17 @@ export const COLLECTIONS = {
     places: { ownership: 'legacy-write', ownedFields: PLACES_OWNED_FIELDS },
     // The images of the media manager: the upload inserts whole documents (`FILES_OWNED_FIELDS`), the lists read them; the objects live in the storage bucket.
     files: { ownership: 'legacy-write', ownedFields: FILES_OWNED_FIELDS },
-    // The departments of a new customer (one per tax rate): whole new documents inserted by the onboarding inside the transaction that creates the group; the collection is created by that insert.
+    // The departments of the group: those of a new customer (one per tax rate, inserted by the onboarding inside the transaction that creates the group) and the ones of the department routes (step C1).
     products_departments: { ownership: 'legacy-write', ownedFields: PRODUCTS_DEPARTMENTS_OWNED_FIELDS },
     // The e-mail templates of the group (step T2): created, changed and deleted by the template routes; also read to check the ids the reservations and the appointments of a place refer to.
     email_templates: { ownership: 'legacy-write', ownedFields: EMAIL_TEMPLATES_OWNED_FIELDS },
-    // Read only, to check that the ids a catalog of the group refers to exist.
-    products: { ownership: 'legacy-read' },
-    products_categories: { ownership: 'legacy-read' },
+    // The products of the group (step C3): created, changed, trashed and deleted by the product routes; the prices also by the realignment of the tax copy; read to check what the catalogs refer to.
+    products: { ownership: 'legacy-write', ownedFields: PRODUCTS_OWNED_FIELDS },
+    // The product categories of the group (step C2): created, changed and deleted by the category routes; also read by the lookups, the catalogs and the catalog profile of the legacy tool.
+    products_categories: { ownership: 'legacy-write', ownedFields: PRODUCTS_CATEGORIES_OWNED_FIELDS },
+    // The brands and the groups of attributes of the catalog (step C1): created, changed and deleted by their routes; also read by the catalog profile of the legacy tool.
+    products_brands: { ownership: 'legacy-write', ownedFields: PRODUCTS_BRANDS_OWNED_FIELDS },
+    products_attributes: { ownership: 'legacy-write', ownedFields: PRODUCTS_ATTRIBUTES_OWNED_FIELDS },
     contacts: { ownership: 'legacy-read' },
     contacts_groups: { ownership: 'legacy-read' },
   },

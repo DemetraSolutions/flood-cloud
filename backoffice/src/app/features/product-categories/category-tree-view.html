@@ -1,0 +1,38 @@
+<ul role="tree" [attr.aria-label]="label()">
+  @for (row of rows(); track row.node.id) {
+    <li
+      role="treeitem"
+      [attr.data-id]="row.node.id"
+      [attr.aria-level]="row.level"
+      [attr.aria-setsize]="row.size"
+      [attr.aria-posinset]="row.position"
+      [attr.aria-expanded]="hasChildren(row.node) ? isOpen(row.node) : null"
+      [attr.tabindex]="row.node.id === stop() ? 0 : -1"
+      [style.padding-inline-start.rem]="(row.level - 1) * 1.5"
+      (keydown)="onKey($event, row)"
+      (click)="activate(row.node)"
+    >
+      @if (hasChildren(row.node)) {
+        <button
+          type="button"
+          class="toggle"
+          tabindex="-1"
+          [attr.aria-label]="
+            (isOpen(row.node) ? 'PRODUCT_CATEGORIES.TREE.COLLAPSE' : 'PRODUCT_CATEGORIES.TREE.EXPAND')
+              | t: { name: text(row.node) }
+          "
+          (keydown)="$event.stopPropagation()"
+          (click)="toggle(row.node, $event)"
+        >
+          <span aria-hidden="true">{{ isOpen(row.node) ? '−' : '+' }}</span>
+        </button>
+      } @else {
+        <span class="toggle" aria-hidden="true"></span>
+      }
+      <span class="name">{{ text(row.node) }}</span>
+      @if (!row.node.enabled) {
+        <fc-status-badge>{{ 'PRODUCT_CATALOG.STATE.DISABLED' | t }}</fc-status-badge>
+      }
+    </li>
+  }
+</ul>

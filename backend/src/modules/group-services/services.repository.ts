@@ -7,6 +7,8 @@ import type { ListPage, ListParams } from '../../shared/http/list.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { withScope } from '../../shared/security/scope/scope-filters.ts';
+import { categoriesVisibleTo } from '../product-categories/categories.availability.ts';
 import { SERVICES_LIST, SERVICE_NAME } from './services.list.ts';
 
 /** The services of a group: the products of type `service` that are not in the trash. */
@@ -46,7 +48,7 @@ export function createServicesRepository(databases: Databases): ServicesReposito
       const documents = await products(principal, access)
         .aggregate(
           [
-            { $match: SERVICE_FILTER },
+            { $match: withScope(categoriesVisibleTo(principal), SERVICE_FILTER) },
             // Only the names travel down the pipeline: a product document can be large, and nothing else of it is needed.
             { $project: { name: 1 } },
             { $addFields: { [SERVICE_NAME]: localizedName(language) } },
@@ -60,7 +62,7 @@ export function createServicesRepository(databases: Databases): ServicesReposito
 
     existing: async (principal, access, ids) => {
       const found = await products(principal, access)
-        .find({ ...SERVICE_FILTER, _id: { $in: [...ids] } }, { projection: { _id: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS })
+        .find(withScope(categoriesVisibleTo(principal), { ...SERVICE_FILTER, _id: { $in: [...ids] } }), { projection: { _id: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS })
         .toArray();
       return new Set(found.map((product) => product._id.toHexString()));
     },

@@ -26,6 +26,7 @@
   <fc-media-picker
     [groupId]="groupId()"
     [companyId]="companyId()"
+    [canUpload]="canUpload()"
     [open]="pickerOpen()"
     (openChange)="pickerOpen.set($event)"
     (picked)="choose($event)"

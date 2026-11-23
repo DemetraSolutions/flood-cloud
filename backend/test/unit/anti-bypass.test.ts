@@ -203,6 +203,17 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
     });
 
+    it('imports the reads of the places that the categories refer to (print stations, production centers, uses of a category) only in the categories places module (step C2)', async () => {
+      const importers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (path !== MIRROR && /import\s*(?:type\s*)?\{[^}]*\b(readPlaceSetups|findPlacesUsingCategory)\b[^}]*\}\s*from\s*'[^']*group-mirror\.ts'/.test(await readFile(file, 'utf8'))) {
+          importers.push(path);
+        }
+      }
+      assert.deepEqual(importers, ['modules/product-categories/categories.places.ts']);
+    });
+
     it('imports the read of the places that use a template only in the templates repository, and the copies are never read for appointment or roomsSettings anywhere else', async () => {
       const importers: string[] = [];
       for (const file of await filesUnder(SRC)) {
@@ -219,10 +230,10 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.ok(!/places: new Set\(\[[^\]]*(?:appointment|roomsSettings)/.test(fields));
     });
 
-    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups, the cross-group list of the copies, the three fixed reads of the diagnostics and the fixed read of the places that use a template and the fixed read of the companies and places that use a country', async () => {
+    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups, the cross-group list of the copies, the three fixed reads of the diagnostics and the fixed read of the places that use a template, the two fixed reads of the places the categories refer to (step C2) and the fixed read of the companies and places that use a country', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
-      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorList', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readCountryUsage']);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorList', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readPlaceSetups', 'findPlacesUsingCategory', 'readCountryUsage']);
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
       // The diagnostics (T1) add two more, each running a pipeline made by `mirror-devices.ts` (the whole of what leaves the copies: an allowlist of the fields of a device).
@@ -340,7 +351,18 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
       assert.deepEqual(issuers.sort(), ['composition.ts', 'shared/security/scope/group-access.ts']);
       assert.deepEqual(openers.sort(), ['modules/groups/onboarding.repository.ts', 'shared/legacy-write/companies-places.writer.ts', 'shared/security/scope/group-access.ts']);
-      assert.deepEqual(departments, ['modules/groups/onboarding.repository.ts']);
+      // The onboarding inserts the departments of a new customer; the department routes (step C1) and the realignment of the tax copies are the other readers and writers.
+      assert.deepEqual(departments.filter((path) => !path.startsWith('tools/')), ['modules/groups/onboarding.repository.ts', 'modules/product-departments/product-departments.repository.ts']);
+    });
+
+    it('opens the products of a group only in the product repository, the tax copies, the lookups, the services of the users and the reads of the catalog (step C3)', async () => {
+      const openers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        if (/\.collection(?:<[^>]*>)?\(\s*['"`]products['"`]/.test(await readFile(file, 'utf8')) && !posix(file).startsWith('tools/')) {
+          openers.push(posix(file));
+        }
+      }
+      assert.deepEqual(openers.sort(), ['modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts']);
     });
 
     it('prepares the administrator of a new group only from the onboarding service', async () => {

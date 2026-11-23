@@ -1,0 +1,61 @@
+<ul class="rows" [attr.aria-describedby]="error() ? errorId : null">
+  @for (place of places(); track place.id) {
+    @let row = rowOf(place.id);
+    <li>
+      <fc-checkbox
+        [label]="place.name"
+        [checked]="row !== undefined"
+        [disabled]="disabled()"
+        (checkedChange)="choose(place.id, $event)"
+      />
+      @if (row) {
+        <div class="grid">
+          <fc-checkbox
+            [label]="'PRODUCTS.AVAILABILITY.FAVORITE' | t: { place: place.name }"
+            [checked]="row.favorite"
+            [disabled]="disabled()"
+            (checkedChange)="change(place.id, { favorite: $event })"
+          />
+          @if (rooms()) {
+            <fc-checkbox
+              [label]="'PRODUCTS.AVAILABILITY.FAVORITE_HANDHELD' | t: { place: place.name }"
+              [checked]="row.favoriteHandheld"
+              [disabled]="disabled()"
+              (checkedChange)="change(place.id, { favoriteHandheld: $event })"
+            />
+          }
+          <fc-text-field
+            inputmode="numeric"
+            autocomplete="off"
+            [label]="'PRODUCTS.AVAILABILITY.POSITION' | t: { place: place.name }"
+            [value]="row.position"
+            [disabled]="disabled()"
+            [error]="positionError(row)"
+            (valueChange)="change(place.id, { position: $event })"
+          />
+          <fc-select
+            [label]="'PRODUCTS.AVAILABILITY.CENTER' | t: { place: place.name }"
+            [placeholder]="'PRODUCTS.AVAILABILITY.CENTER_NONE' | t"
+            [options]="centers(row)"
+            [value]="row.productionCenterId"
+            [disabled]="disabled()"
+            (valueChange)="change(place.id, { productionCenterId: $event })"
+          />
+        </div>
+        @if (failed(row)) {
+          <p class="problem" role="alert">{{ 'PRODUCTS.AVAILABILITY.CENTERS_ERROR' | t }}</p>
+          <div class="actions">
+            <button fc-button variant="secondary" type="button" (click)="retry(place.id)">
+              {{ 'COMMON.RETRY' | t }}
+            </button>
+          </div>
+        }
+      }
+    </li>
+  } @empty {
+    <li class="note">{{ 'PRODUCT_CATEGORIES.AVAILABILITY.NO_PLACES' | t }}</li>
+  }
+</ul>
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

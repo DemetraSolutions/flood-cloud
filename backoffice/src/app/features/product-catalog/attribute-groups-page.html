@@ -1,0 +1,68 @@
+<h1>{{ 'PRODUCT_CATALOG.ATTRIBUTES.TITLE' | t }}</h1>
+<fc-record-group [groupId]="groupId()" />
+<p class="hint">{{ 'PRODUCT_CATALOG.ATTRIBUTES.HINT' | t }}</p>
+
+@if (writable()) {
+  <section class="create" aria-labelledby="create-heading">
+    <h2 id="create-heading">{{ 'PRODUCT_CATALOG.ATTRIBUTES.NEW' | t }}</h2>
+    <form novalidate (submit)="onCreate($event)">
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+      }
+      @for (language of languages(); track language) {
+        <fc-text-field
+          [formField]="createForm.name[language]"
+          autocomplete="off"
+          [hint]="language === required() ? ('PRODUCT_CATALOG.FIELD.REQUIRED_LANGUAGE' | t) : null"
+          [label]="languageLabel(language)"
+          [error]="error(createForm.name[language])"
+          (blurred)="createForm.name[language]().markAsTouched()"
+        />
+      }
+      <div>
+        <button fc-button type="submit" [loading]="submitting()">
+          {{ 'PRODUCT_CATALOG.ATTRIBUTES.CREATE' | t }}
+        </button>
+      </div>
+    </form>
+  </section>
+} @else {
+  <p class="note" role="note">{{ 'PRODUCT_CATALOG.ATTRIBUTES.READ_ONLY' | t }}</p>
+}
+
+<section aria-labelledby="list-heading">
+  <h2 id="list-heading">{{ 'PRODUCT_CATALOG.ATTRIBUTES.LIST' | t }}</h2>
+  @if (first.error()) {
+    <fc-error-state
+      [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+      [message]="errorMessage()"
+      [requestId]="loadError()?.requestId ?? null"
+      (retry)="reload()"
+    />
+  } @else if (first.isLoading()) {
+    <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+  } @else if (groups().length === 0) {
+    <p class="note">{{ 'PRODUCT_CATALOG.ATTRIBUTES.EMPTY_GROUPS' | t }}</p>
+  } @else {
+    <div class="groups">
+      @for (group of groups(); track group.id) {
+        <fc-attribute-group-section
+          [groupId]="groupId()"
+          [group]="group"
+          [languages]="languages()"
+          [required]="required()"
+          [writable]="writable()"
+          (deleted)="onRemoved($event)"
+        />
+      }
+    </div>
+    @if (moreFailure(); as message) {
+      <fc-form-error [message]="message" />
+    }
+    @if (next() !== null) {
+      <button fc-button variant="secondary" [loading]="loadingMore()" (click)="loadMore()">
+        {{ 'PRODUCT_CATALOG.ATTRIBUTES.MORE' | t }}
+      </button>
+    }
+  }
+</section>

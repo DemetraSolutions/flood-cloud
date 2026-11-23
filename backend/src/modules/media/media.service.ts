@@ -62,6 +62,16 @@ export interface MediaService {
    * @returns The descriptor, `null` when the image does not exist in the group, is in the trash, is not the caller's to use, or lacks what a logo needs or holds something unsafe.
    */
   logoSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId, forCompany: ObjectId | null): Promise<MediaLogo | null>;
+  /**
+   * The descriptor an entry of the product catalog (a department, a brand) takes from an image of the library of the group, in the domain form: any image the caller may see in the list (a company
+   * administrator only the images of his own companies; none for a place administrator), since these entries do not belong to a company.
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   * @param imageId Id of the image.
+   * @returns The descriptor, `null` when the image does not exist in the group, is in the trash, is not the caller's to see, or lacks what an image needs or holds something unsafe.
+   */
+  imageSource(principal: AuthPrincipal, access: GroupAccess, imageId: ObjectId): Promise<MediaLogo | null>;
 }
 
 /** Collaborators of {@link createMediaService}. */
@@ -239,6 +249,15 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
       }
       const owner: Filter<Document> = restricted ? { companyId: forCompany } : {};
       const document = await repository.findImage(principal, access, imageId, owner);
+      return document === null ? null : toLogoSource(document);
+    },
+
+    imageSource: async (principal, access, imageId) => {
+      // A place administrator has no company in his scope (the server does not derive it here): he gets no image rather than every image of the group.
+      if (principal.scope.kind === 'places') {
+        return null;
+      }
+      const document = await repository.findImage(principal, access, imageId, visibleTo(principal));
       return document === null ? null : toLogoSource(document);
     },
   };

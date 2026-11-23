@@ -1,0 +1,166 @@
+<header class="page-header">
+  <h1>{{ ('PRODUCTS.FAMILY.' + settings().text + '.TITLE') | t }}</h1>
+  <span class="new" *fcCan="'products:update'">
+    <a [routerLink]="newRoute()">{{ ('PRODUCTS.FAMILY.' + settings().text + '.NEW') | t }}</a>
+    <a [routerLink]="newRoute()" [queryParams]="{ view: 'quick' }">{{ 'PRODUCTS.NEW_QUICK' | t }}</a>
+  </span>
+</header>
+<p class="hint">{{ ('PRODUCTS.FAMILY.' + settings().text + '.HINT') | t }}</p>
+
+@if (report(); as result) {
+  <section class="report" role="status" aria-labelledby="trash-report-heading">
+    <h2 id="trash-report-heading">{{ 'PRODUCTS.TRASH.REPORT_TITLE' | t }}</h2>
+    <p>{{ 'PRODUCTS.TRASH.REPORT_TRASHED' | t: { count: result.trashed } }}</p>
+    @if (result.skipped.length > 0) {
+      <p>{{ 'PRODUCTS.TRASH.REPORT_SKIPPED' | t: { count: result.skipped.length } }}</p>
+      <ul>
+        @for (item of result.skipped; track item.id) {
+          <li>{{ 'PRODUCTS.TRASH.REPORT_ITEM' | t: { name: item.name, issue: issueText(item.issue) } }}</li>
+        }
+      </ul>
+    }
+    <button fc-button variant="secondary" type="button" (click)="report.set(null)">
+      {{ 'COMMON.CLOSE' | t }}
+    </button>
+  </section>
+}
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field type="search" [label]="'PRODUCTS.SEARCH' | t" [hint]="'PRODUCTS.SEARCH_HINT' | t" [value]="searchText()" (valueChange)="onSearch($event)" />
+  <fc-select [label]="'PRODUCTS.FILTER.CATEGORY' | t" [options]="categoryOptions()" [value]="categoryValue()" (valueChange)="onCategory($event)" />
+  <fc-search-combobox
+    [label]="'PRODUCTS.FILTER.SUPPLIER' | t"
+    [value]="supplierValue()"
+    [valueLabel]="supplierLabel()"
+    [search]="searchSuppliers"
+    [minChars]="0"
+    [placeholder]="'PRODUCTS.FILTER.ALL_SUPPLIERS' | t"
+    [clearLabel]="'PRODUCTS.FILTER.SUPPLIER_CLEAR' | t"
+    (choice)="onSupplier($event)"
+  />
+  <fc-select [label]="'PRODUCTS.FILTER.PLACE' | t" [options]="placeOptions()" [value]="placeValue()" (valueChange)="onPlace($event)" />
+  <fc-select [label]="'PRODUCT_CATALOG.STATE.LABEL' | t" [options]="stateOptions()" [value]="stateValue()" (valueChange)="onState($event)" />
+  <fc-checkbox [label]="'PRODUCTS.FILTER.FAVORITES' | t" [checked]="favoriteOnly()" (checkedChange)="onFavorite($event)" />
+</form>
+
+@if (entries.error()) {
+  <fc-error-state
+    [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <div *fcCan="'products:update'" class="bulk">
+    @if (selectable().length > 0) {
+      <fc-checkbox [label]="'PRODUCTS.SELECT_ALL' | t" [checked]="allSelected()" (checkedChange)="toggleAll($event)" />
+    }
+    @if (selectedRows().length > 0) {
+      <span role="status">{{ 'PRODUCTS.SELECTED' | t: { count: selectedRows().length } }}</span>
+      <button fc-button variant="danger" type="button" [disabled]="busy()" (click)="trashOpen.set(true)">
+        {{ 'PRODUCTS.TRASH.SELECTED_ACTION' | t }}
+      </button>
+    }
+  </div>
+
+  <fc-data-table
+    [caption]="('PRODUCTS.FAMILY.' + settings().text + '.TITLE') | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    rowHeader="name"
+    [loading]="entries.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="('PRODUCTS.FAMILY.' + settings().text + '.EMPTY') | t"
+    [emptyMessage]="'PRODUCT_CATALOG.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'products:update'" fcEmptyAction [routerLink]="newRoute()">{{ ('PRODUCTS.FAMILY.' + settings().text + '.NEW') | t }}</a>
+    <ng-template fcCell="select" let-row>
+      <input
+        type="checkbox"
+        [checked]="isSelected(row)"
+        [attr.aria-label]="selectLabel(row)"
+        [disabled]="!row.editable"
+        (change)="toggleRow(row, $any($event.target).checked)"
+      />
+    </ng-template>
+    <ng-template fcCell="name" let-row>
+      @let link = detailRoute(row);
+      <span class="name">
+        <a [routerLink]="link.commands">{{ nameOf(row) }}</a>
+        @if (!row.editable) {
+          <fc-status-badge tone="warning">{{ (row.placeEditable ? 'PRODUCTS.PARTIAL_BADGE' : 'PRODUCTS.READ_ONLY_BADGE') | t }}</fc-status-badge>
+        }
+      </span>
+    </ng-template>
+    <ng-template fcCell="enabled" let-row>
+      @if (row.enabled) {
+        <fc-status-badge tone="success">{{ 'PRODUCT_CATALOG.STATE.ENABLED' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge>{{ 'PRODUCT_CATALOG.STATE.DISABLED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      @let open = detailRoute(row);
+      @let quickOpen = detailRoute(row, 'quick');
+      <a [routerLink]="open.commands" [attr.aria-label]="'PRODUCTS.EDIT_LABEL' | t: { name: nameOf(row) }">
+        {{ 'PRODUCT_CATEGORIES.EDIT' | t }}
+      </a>
+      <ng-container *fcCan="'products:update'">
+        <a [routerLink]="quickOpen.commands" [queryParams]="quickOpen.query" [attr.aria-label]="'PRODUCTS.QUICK_EDIT_LABEL' | t: { name: nameOf(row) }">
+          {{ 'PRODUCTS.QUICK_EDIT' | t }}
+        </a>
+        @if (row.editable) {
+          <button fc-button variant="ghost" type="button" [disabled]="busy()" [attr.aria-label]="'PRODUCTS.DUPLICATE.LABEL' | t: { name: nameOf(row) }" (click)="duplicate(row)">
+            {{ 'PRODUCTS.DUPLICATE.ACTION' | t }}
+          </button>
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [disabled]="busy()"
+            [attr.aria-label]="(row.enabled ? 'PRODUCTS.ENABLE.OFF_LABEL' : 'PRODUCTS.ENABLE.ON_LABEL') | t: { name: nameOf(row) }"
+            (click)="toggleEnabled(row)"
+          >
+            {{ (row.enabled ? 'PRODUCTS.ENABLE.OFF_ACTION' : 'PRODUCTS.ENABLE.ON_ACTION') | t }}
+          </button>
+          <button fc-button variant="ghost" type="button" [disabled]="busy()" [attr.aria-label]="'PRODUCTS.TRASH.LABEL' | t: { name: nameOf(row) }" (click)="askTrash(row)">
+            {{ 'PRODUCTS.TRASH.ACTION' | t }}
+          </button>
+        }
+      </ng-container>
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="entries.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-confirm-dialog
+  [heading]="'PRODUCTS.TRASH.TITLE' | t"
+  [message]="trashMessage()"
+  [confirmLabel]="'PRODUCTS.TRASH.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="trashOpen()"
+  (openChange)="trashOpen.set($event)"
+  (confirmed)="trashSelected()"
+/>
+<fc-confirm-dialog
+  [heading]="'PRODUCTS.TRASH.TITLE' | t"
+  [message]="targetMessage()"
+  [confirmLabel]="'PRODUCTS.TRASH.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="targetOpen()"
+  (openChange)="targetOpen.set($event)"
+  (confirmed)="trashTarget()"
+/>

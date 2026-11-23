@@ -1,0 +1,148 @@
+<p class="hint">{{ 'PRODUCTS.SUPPLIERS.HINT' | t }}</p>
+<ul class="rows" [attr.aria-describedby]="error() ? errorId : null">
+  @for (entry of rows(); track $index) {
+    <li>
+      <fieldset [disabled]="disabled()">
+        <legend>{{ 'PRODUCTS.SUPPLIERS.SUPPLIER' | t: { number: entry.index + 1 } }}</legend>
+        <div class="grid">
+          <fc-search-combobox
+            [label]="'PRODUCTS.SUPPLIERS.CONTACT' | t: { number: entry.index + 1 }"
+            [value]="entry.row.contactId"
+            [valueLabel]="entry.name"
+            [search]="search"
+            [minChars]="0"
+            [placeholder]="'PRODUCTS.SUPPLIERS.CONTACT_NONE' | t"
+            [clearLabel]="'PRODUCTS.SUPPLIERS.CONTACT_CLEAR' | t"
+            (choice)="choose(entry.index, $event)"
+          />
+          <fc-text-field
+            autocomplete="off"
+            [label]="'PRODUCTS.SUPPLIERS.CODE' | t: { number: entry.index + 1 }"
+            [value]="entry.row.code"
+            [error]="message(entry.issues.code)"
+            (valueChange)="change(entry.index, { code: $event })"
+          />
+          <fc-text-field
+            autocomplete="off"
+            [label]="'PRODUCTS.SUPPLIERS.NAME' | t: { number: entry.index + 1 }"
+            [value]="entry.row.name"
+            [error]="message(entry.issues.name)"
+            (valueChange)="change(entry.index, { name: $event })"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.SUPPLIERS.MIN_QUANTITY' | t: { number: entry.index + 1 }"
+            [value]="entry.row.minQuantity"
+            [error]="message(entry.issues.minQuantity)"
+            (valueChange)="change(entry.index, { minQuantity: $event })"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.SUPPLIERS.DELIVERY_TIME' | t: { number: entry.index + 1 }"
+            [value]="entry.row.deliveryTime"
+            [error]="message(entry.issues.deliveryTime)"
+            (valueChange)="change(entry.index, { deliveryTime: $event })"
+          />
+          <fc-select
+            [label]="'PRODUCTS.SUPPLIERS.DELIVERY_UNIT' | t: { number: entry.index + 1 }"
+            [options]="units()"
+            [value]="entry.row.deliveryTimeUnit"
+            (valueChange)="change(entry.index, { deliveryTimeUnit: $any($event) })"
+          />
+        </div>
+        <fc-checkbox
+          [label]="'PRODUCTS.SUPPLIERS.FAVORITE' | t: { number: entry.index + 1 }"
+          [checked]="entry.row.favorite"
+          (checkedChange)="setFavorite(entry.index, $event)"
+        />
+        @if (entry.cost; as facts) {
+          <dl class="facts">
+            @for (fact of facts; track fact.key) {
+              <dt>{{ 'PRODUCTS.STOCK.COST_' + fact.key | t }}</dt>
+              <dd>{{ fact.value }}</dd>
+            }
+          </dl>
+        }
+        @for (item of entry.lists; track $index) {
+          <fieldset>
+            <legend>{{ 'PRODUCTS.SUPPLIERS.LIST' | t: { name: item.label } }}</legend>
+            @if (item.gone) {
+              <p class="note">{{ 'PRODUCTS.SUPPLIERS.LIST_GONE' | t }}</p>
+            }
+            <div class="grid">
+              <fc-text-field
+                inputmode="decimal"
+                autocomplete="off"
+                [label]="'PRODUCTS.SUPPLIERS.LIST_PRICE' | t: { name: item.label }"
+                [value]="item.list.price"
+                [error]="message(item.issues.price)"
+                (valueChange)="changeList(entry.index, item.position, { price: $event })"
+              />
+              <fc-text-field
+                inputmode="decimal"
+                autocomplete="off"
+                [label]="'PRODUCTS.SUPPLIERS.LIST_DISCOUNT_1' | t: { name: item.label }"
+                [value]="item.list.discount1"
+                [error]="message(item.issues.discount1)"
+                (valueChange)="changeList(entry.index, item.position, { discount1: $event })"
+              />
+              <fc-text-field
+                inputmode="decimal"
+                autocomplete="off"
+                [label]="'PRODUCTS.SUPPLIERS.LIST_DISCOUNT_2' | t: { name: item.label }"
+                [value]="item.list.discount2"
+                [error]="message(item.issues.discount2)"
+                (valueChange)="changeList(entry.index, item.position, { discount2: $event })"
+              />
+              <fc-text-field
+                inputmode="decimal"
+                autocomplete="off"
+                [label]="'PRODUCTS.SUPPLIERS.LIST_DISCOUNT_3' | t: { name: item.label }"
+                [value]="item.list.discount3"
+                [error]="message(item.issues.discount3)"
+                (valueChange)="changeList(entry.index, item.position, { discount3: $event })"
+              />
+            </div>
+            <button fc-button variant="ghost" type="button" (click)="removeList(entry.index, item.position)">
+              {{ 'PRODUCTS.SUPPLIERS.LIST_REMOVE' | t: { name: item.label } }}
+            </button>
+          </fieldset>
+        }
+        @for (list of entry.missing; track list.id) {
+          <div class="actions">
+            <button fc-button variant="secondary" type="button" (click)="addList(entry.index, list.id)">
+              {{ 'PRODUCTS.SUPPLIERS.LIST_ADD' | t: { name: list.name || ('PRODUCTS.SUPPLIERS.LIST_NO_NAME' | t) } }}
+            </button>
+          </div>
+        }
+      </fieldset>
+      @if (!disabled()) {
+        <div class="actions">
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="'PRODUCTS.SUPPLIERS.REMOVE_LABEL' | t: { number: entry.index + 1 }"
+            (click)="remove(entry.index)"
+          >
+            {{ 'PRODUCTS.REMOVE' | t }}
+          </button>
+        </div>
+      }
+    </li>
+  } @empty {
+    <li class="note">{{ 'PRODUCTS.SUPPLIERS.EMPTY' | t }}</li>
+  }
+</ul>
+@if (!disabled()) {
+  <div class="actions">
+    <button fc-button variant="secondary" type="button" [disabled]="value().length >= limit" (click)="add()">
+      {{ 'PRODUCTS.SUPPLIERS.ADD' | t }}
+    </button>
+  </div>
+}
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

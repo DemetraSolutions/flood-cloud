@@ -1,0 +1,34 @@
+<div class="grid">
+  <fc-text-field
+    [formField]="form().shipping.width"
+    inputmode="decimal"
+    autocomplete="off"
+    [label]="'PRODUCTS.SHIPPING.WIDTH' | t"
+    [error]="error(form().shipping.width)"
+    (blurred)="form().shipping.width().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().shipping.height"
+    inputmode="decimal"
+    autocomplete="off"
+    [label]="'PRODUCTS.SHIPPING.HEIGHT' | t"
+    [error]="error(form().shipping.height)"
+    (blurred)="form().shipping.height().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().shipping.depth"
+    inputmode="decimal"
+    autocomplete="off"
+    [label]="'PRODUCTS.SHIPPING.DEPTH' | t"
+    [error]="error(form().shipping.depth)"
+    (blurred)="form().shipping.depth().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().shipping.weight"
+    inputmode="decimal"
+    autocomplete="off"
+    [label]="'PRODUCTS.SHIPPING.WEIGHT' | t"
+    [error]="error(form().shipping.weight)"
+    (blurred)="form().shipping.weight().markAsTouched()"
+  />
+</div>

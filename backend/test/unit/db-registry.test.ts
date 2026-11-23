@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { COLLECTIONS, GROUPS_INSERT_ONLY_FIELDS, GROUPS_OWNED_FIELDS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
+import { COLLECTIONS, GROUPS_INSERT_ONLY_FIELDS, PRODUCTS_CATEGORIES_OWNED_FIELDS, PRODUCTS_CATEGORIES_OWNED_TREES, GROUPS_OWNED_FIELDS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
 import { SESSIONS_INDEXES } from '../../src/db/sessions-schema.ts';
 import { DEALERS_INDEXES } from '../../src/db/dealers-schema.ts';
 import type { CollectionRegistry } from '../../src/db/collections.ts';
@@ -23,14 +23,14 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes', () => {
     assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'countries', 'dealers', 'groups', 'idempotencyKeys', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
-    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'email_templates', 'files', 'places', 'products', 'products_categories', 'products_departments']);
+    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'email_templates', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
       const isMirror = ['companies', 'places'].includes(name) && COLLECTIONS.common[name as 'companies' | 'places'] === spec;
       const expected = isMirror
         ? 'mirror'
         : ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'dealers', 'idempotencyKeys', 'rateLimits', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials'].includes(name)
           ? 'new'
-          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || name === 'countries' || (['companies', 'email_templates', 'files', 'places', 'products_departments'].includes(name) && !isMirror)
+          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || name === 'countries' || (['companies', 'email_templates', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments'].includes(name) && !isMirror)
             ? 'legacy-write'
             : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
@@ -47,7 +47,17 @@ describe('collection registry', () => {
     assert.deepEqual([...COLLECTIONS.common.countries.ownedFields].sort(), ['areas', 'code', 'insertDate', 'name', 'updateDate']);
     assert.equal('indexes' in COLLECTIONS.common.countries, false, 'no unique index on the code until the count of duplicates in production is done');
     assert.deepEqual([...COLLECTIONS.group.email_templates.ownedFields].sort(), ['html', 'insertDate', 'name', 'text', 'updateDate']);
-    assert.deepEqual([...COLLECTIONS.group.products_departments.ownedFields].sort(), ['code', 'description', 'groupId', 'insertDate', 'medias', 'name', 'placesAvailability', 'status', 'tax', 'trash', 'updateDate']);
+    assert.deepEqual([...COLLECTIONS.group.products_departments.ownedFields].sort(), ['code', 'description', 'groupId', 'insertDate', 'medias', 'name', 'noDiscount', 'placesAvailability', 'secondaryFiscalPrinter', 'status', 'tax', 'trash', 'updateDate']);
+    assert.deepEqual([...COLLECTIONS.group.products_brands.ownedFields].sort(), ['description', 'insertDate', 'medias', 'name', 'placesAvailability', 'status', 'updateDate']);
+    assert.deepEqual([...COLLECTIONS.group.products_categories.ownedFields].sort(), [...PRODUCTS_CATEGORIES_OWNED_FIELDS].sort());
+    for (const tree of PRODUCTS_CATEGORIES_OWNED_TREES) {
+      assert.ok(COLLECTIONS.group.products_categories.ownedFields.includes(tree), tree);
+    }
+    // The containers are owned leaf by leaf, `medias` below its images, `trash` never.
+    for (const field of ['integrations', 'roomsSettings', 'availability', 'tgm', 'trash', 'integrations.easyAppear']) {
+      assert.equal(COLLECTIONS.group.products_categories.ownedFields.includes(field), false, field);
+    }
+    assert.deepEqual([...COLLECTIONS.group.products_attributes.ownedFields].sort(), ['attributes', 'insertDate', 'name', 'updateDate']);
     assert.deepEqual([...COLLECTIONS.common.users.ownedFields].sort(), [...USERS_OWNED_FIELDS].sort());
     for (const field of ['name', 'surname', 'email', 'telephone', 'settings.language', 'settings.theme', 'settings.hiddenInStats', 'status', 'trash', 'role', 'groupId', 'dealerId', 'companyId', 'placeId', 'placesId', 'permissions.status', 'permissions.users.r', 'permissions.users.w', 'permissions.logs.r', 'permissions.stats.r', 'permissions.documents.w', 'description', 'avatar', 'pin', 'servicesId', 'shiftTime.status', 'shiftTime.weeksGeneric', 'shiftTime.daySpecial', 'permissions.apps.cash.status', 'permissions.apps.cash.sub.preblling', 'permissions.apps.cash.sub.automaticCash.glory.withdrawal', 'permissions.apps.cash.options.priceLists', 'password', 'tokens', 'userName', 'insertDate', 'updateDate']) {
       assert.ok(COLLECTIONS.common.users.ownedFields.includes(field), field);
@@ -86,7 +96,7 @@ describe('collection registry', () => {
     ]);
     assert.deepEqual(COLLECTIONS.common.storeActivationCodes.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null]), [['codeHash_1', true, null], ['placeId_1', true, null], ['expiresAt_1', false, 0]]);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'documents', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'documents', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
   });
 
   it('registers the documents of the legacy send queue as read only, with no index, and refuses anything else there', () => {

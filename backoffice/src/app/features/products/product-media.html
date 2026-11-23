@@ -1,0 +1,63 @@
+<fc-logo-slot
+  [label]="'PRODUCTS.MEDIA.IMAGE' | t"
+  [logo]="form().image().value()"
+  [groupId]="groupId()"
+  [canUpload]="canUpload()"
+  [disabled]="readOnly()"
+  (logoChange)="setImage($event)"
+/>
+@if (error(form().image); as problem) {
+  <p class="problem" role="alert">{{ problem }}</p>
+}
+
+@if (!imageOnly()) {
+  <fieldset>
+    <legend>{{ 'PRODUCTS.MEDIA.GALLERY' | t }}</legend>
+    <p class="hint">{{ 'PRODUCTS.MEDIA.GALLERY_HINT' | t: { max: limit } }}</p>
+    @for (image of gallery(); track $index) {
+      <fc-logo-slot
+        [label]="'PRODUCTS.MEDIA.GALLERY_IMAGE' | t: { number: $index + 1 }"
+        [logo]="image"
+        [groupId]="groupId()"
+        [canUpload]="canUpload()"
+        [disabled]="readOnly()"
+        (logoChange)="replace($index, $event)"
+      />
+    } @empty {
+      <p class="note">{{ 'PRODUCTS.MEDIA.GALLERY_EMPTY' | t }}</p>
+    }
+    @if (error(form().gallery); as problem) {
+      <p class="problem" role="alert">{{ problem }}</p>
+    }
+    @if (!readOnly()) {
+      <div class="actions">
+        <button fc-button variant="secondary" type="button" [disabled]="gallery().length >= limit" (click)="pickerOpen.set(true)">
+          {{ 'PRODUCTS.MEDIA.GALLERY_ADD' | t }}
+        </button>
+      </div>
+    }
+    <fc-media-picker
+      [groupId]="groupId()"
+      [canUpload]="canUpload()"
+      [open]="pickerOpen()"
+      (openChange)="pickerOpen.set($event)"
+      (picked)="addToGallery($event)"
+    />
+  </fieldset>
+  <fc-text-field
+    [formField]="form().internalFileName"
+    autocomplete="off"
+    [label]="'PRODUCT_CATEGORIES.MEDIA.INTERNAL_FILE_NAME' | t"
+    [error]="error(form().internalFileName)"
+    (blurred)="form().internalFileName().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().externalUrl"
+    type="url"
+    autocomplete="off"
+    [label]="'PRODUCT_CATEGORIES.MEDIA.EXTERNAL_URL' | t"
+    [hint]="'PRODUCT_CATEGORIES.MEDIA.EXTERNAL_URL_HINT' | t"
+    [error]="error(form().externalUrl)"
+    (blurred)="form().externalUrl().markAsTouched()"
+  />
+}

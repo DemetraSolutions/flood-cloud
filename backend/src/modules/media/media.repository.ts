@@ -2,6 +2,7 @@ import type { Document, Filter, ObjectId } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
 import { LIST_MAX_TIME_MS, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
 import type { ListPage, ListParams } from '../../shared/http/list.ts';
+import { bounded } from '../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
@@ -82,7 +83,7 @@ export function createMediaRepository(databases: Databases): MediaRepository {
       ),
 
     findImage: (principal, access, imageId, visible) =>
-      files(principal, access).findOne({ $and: [LIVE_IMAGES, visible, { _id: imageId }] }, { projection: { ...IMAGE_PROJECTION, ...LOGO_PROJECTION }, maxTimeMS: LIST_MAX_TIME_MS }),
+      bounded(() => files(principal, access).findOne({ $and: [LIVE_IMAGES, visible, { _id: imageId }] }, { projection: { ...IMAGE_PROJECTION, ...LOGO_PROJECTION }, maxTimeMS: LIST_MAX_TIME_MS })),
 
     hasFile: async (principal, access, imageId) => (await files(principal, access).findOne({ _id: imageId }, { projection: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS })) !== null,
 

@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 import type { Databases } from '../../../db/databases.ts';
 import { LIST_MAX_TIME_MS } from '../../../shared/http/list.ts';
+import { bounded } from '../../../shared/security/scope/bounded.ts';
 import { groupDatabaseFor } from '../../../shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../../shared/security/scope/group-access.ts';
 import { groupMirror } from '../../../shared/security/scope/group-mirror.ts';
@@ -49,10 +50,12 @@ export function createReferencesRepository(databases: Databases): ReferencesRepo
           documents = await groupMirror(principal, access, databases, 'places').find({ _id: { $in: wanted }, trash: { $ne: true } }, { projection: { _id: 1 }, limit: wanted.length });
         } else {
           const target = TARGETS[check.collection];
-          documents = await groupDatabaseFor(principal, access, databases)
-            .collection<{ _id: ObjectId }>(target.collection)
-            .find({ _id: { $in: wanted }, ...(target.trashable ? { trash: { $ne: true } } : {}) }, { projection: { _id: 1 }, limit: wanted.length, maxTimeMS: LIST_MAX_TIME_MS })
-            .toArray();
+          documents = await bounded(() =>
+            groupDatabaseFor(principal, access, databases)
+              .collection<{ _id: ObjectId }>(target.collection)
+              .find({ _id: { $in: wanted }, ...(target.trashable ? { trash: { $ne: true } } : {}) }, { projection: { _id: 1 }, limit: wanted.length, maxTimeMS: LIST_MAX_TIME_MS })
+              .toArray(),
+          );
         }
         for (const document of documents) {
           found.add((document._id as ObjectId).toHexString());

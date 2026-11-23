@@ -20,7 +20,13 @@ export function createLookupRoutes(controller: LookupController): RouteDefinitio
     defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/contact-groups', auth, middleware: [validateQuery(lookupQuery)], handler: controller.contactGroups }),
     // For the settings of a place (step 7D): the templates of the e-mails and the languages of the kiosk texts, for whoever may save a place (`places:update`: also CA and PA). The languages are also read with `groups:read`.
     defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/email-templates', auth: { kind: 'user', anyPermission: ['places:update'], group: true }, middleware: [validateQuery(lookupQuery)], handler: controller.emailTemplates }),
-    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/languages', auth: { kind: 'user', anyPermission: ['places:update', 'groups:read'], group: true }, handler: controller.languages }),
+    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/languages', auth: { kind: 'user', anyPermission: ['places:update', 'groups:read', 'products:read'], group: true }, handler: controller.languages }),
+    // The tax rates for the form of a department (step C1): whoever reads or updates the products reaches them without `groups:read`; only the compact fields of the rates, never anything else of the group.
+    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/taxes', auth: { kind: 'user', anyPermission: ['products:read', 'groups:read'], group: true }, handler: controller.taxes }),
+    // For the product form (step C4): the suppliers with their price lists, and the currencies and the units of measure of the group, for whoever reads the products (or the group).
+    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/suppliers', auth: { kind: 'user', anyPermission: ['products:read'], group: true }, middleware: [validateQuery(lookupQuery)], handler: controller.suppliers }),
+    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/currencies', auth: { kind: 'user', anyPermission: ['products:read', 'groups:read'], group: true }, handler: controller.currencies }),
+    defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/measure-units', auth: { kind: 'user', anyPermission: ['products:read', 'groups:read'], group: true }, handler: controller.measureUnits }),
     defineRoute({ method: 'GET', path: '/groups/:groupId/lookup/price-lists', auth: { kind: 'user', anyPermission: ['users:read', 'fidelity:read', 'groups:read'], group: true }, handler: controller.priceLists }),
   ];
 }

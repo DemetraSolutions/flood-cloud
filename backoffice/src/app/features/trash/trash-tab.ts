@@ -25,6 +25,7 @@ import { DealerRecord } from '../dealers/dealer.types';
 import { loadAll } from '../places/lookup-loader';
 import { abbreviateId } from '../activity-log/activity-log.types';
 import { apiErrorOf } from '../profile/sessions';
+import { FAMILIES } from '../products/product.types';
 import { UsersApi } from '../users/users-api';
 import { GroupCell, groupCell } from '../groups/group-cell';
 import { TrashApi } from './trash-api';
@@ -38,6 +39,7 @@ import {
   summarize,
   TrashedGroup,
   TrashedPlace,
+  TrashedProduct,
   TrashedUser,
   TrashItemResult,
   TrashOutcome,
@@ -59,6 +61,7 @@ const SORT: Readonly<Record<TrashKind, string>> = {
   companies: 'name',
   places: 'name',
   users: 'username',
+  products: 'name',
   groups: 'name',
 };
 /** Column that names the row, links to its detail and is its row header. */
@@ -66,6 +69,7 @@ const NAME_COLUMN: Readonly<Record<TrashKind, string>> = {
   companies: 'name',
   places: 'name',
   users: 'username',
+  products: 'name',
   groups: 'name',
 };
 
@@ -262,6 +266,19 @@ export class TrashTab {
             header: text('EMAIL'),
             hideNarrow: true,
             cell: (row) => (row as TrashedUser).email ?? '',
+          },
+          since,
+        ];
+      case 'products':
+        return [
+          select,
+          { key: 'name', header: text('NAME') },
+          { key: 'code', header: text('CODE'), cell: (row) => (row as TrashedProduct).code ?? '' },
+          {
+            key: 'family',
+            header: text('FAMILY'),
+            hideNarrow: true,
+            cell: (row) => this.i18n.t(`PRODUCTS.FAMILY.${FAMILIES[(row as TrashedProduct).family].text}.TITLE`),
           },
           since,
         ];

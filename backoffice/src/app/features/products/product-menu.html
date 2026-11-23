@@ -1,0 +1,89 @@
+<ul class="rows" [attr.aria-describedby]="error() ? errorId : null">
+  @for (group of groups(); track $index) {
+    <li>
+      <div class="grid">
+        <fc-select
+          [label]="'PRODUCTS.CHOICES.CATEGORY' | t: { number: group.index + 1 }"
+          [placeholder]="'PRODUCTS.CHOICES.CATEGORY_NONE' | t"
+          [options]="group.categories"
+          [value]="group.row.categoryId"
+          [disabled]="disabled()"
+          [error]="message(group.issues['categoryId'])"
+          (valueChange)="change(group.index, { categoryId: $event })"
+        />
+        @if (kind() === 'menu') {
+          <fc-text-field
+            inputmode="numeric"
+            autocomplete="off"
+            [label]="'PRODUCTS.CHOICES.QUANTITY' | t: { number: group.index + 1 }"
+            [value]="menuOf(group.row).quantity"
+            [disabled]="disabled()"
+            [error]="message(group.issues['quantity'])"
+            (valueChange)="change(group.index, { quantity: $event })"
+          />
+          @if (rooms()) {
+            <fc-text-field
+              inputmode="numeric"
+              autocomplete="off"
+              [label]="'PRODUCTS.CHOICES.COURSE' | t: { number: group.index + 1 }"
+              [value]="menuOf(group.row).course"
+              [disabled]="disabled()"
+              [error]="message(group.issues['course'])"
+              (valueChange)="change(group.index, { course: $event })"
+            />
+          }
+        } @else {
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'PRODUCTS.CHOICES.FREE_QUANTITY' | t: { number: group.index + 1 }"
+            [value]="choiceOf(group.row).freeQuantity"
+            [disabled]="disabled()"
+            [error]="message(group.issues['freeQuantity'])"
+            (valueChange)="change(group.index, { freeQuantity: $event })"
+          />
+          <fc-select
+            [label]="'PRODUCTS.CHOICES.PRICE_RULE' | t: { number: group.index + 1 }"
+            [options]="priceRules()"
+            [value]="choiceOf(group.row).priceRule"
+            [disabled]="disabled()"
+            (valueChange)="change(group.index, { priceRule: $any($event) })"
+          />
+        }
+      </div>
+      <fc-reference-picker
+        [label]="'PRODUCTS.CHOICES.PRODUCTS' | t: { number: group.index + 1 }"
+        [loader]="loaderFor(group.row.categoryId)"
+        [labels]="labels()"
+        [value]="group.row.productIds.slice()"
+        [disabled]="disabled()"
+        (valueChange)="change(group.index, { productIds: $event })"
+      />
+      @if (!disabled()) {
+        <div class="actions">
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="'PRODUCTS.CHOICES.REMOVE_LABEL' | t: { number: group.index + 1 }"
+            (click)="remove(group.index)"
+          >
+            {{ 'PRODUCTS.REMOVE' | t }}
+          </button>
+        </div>
+      }
+    </li>
+  } @empty {
+    <li class="note">{{ 'PRODUCTS.CHOICES.EMPTY' | t }}</li>
+  }
+</ul>
+@if (!disabled()) {
+  <div class="actions">
+    <button fc-button variant="secondary" type="button" [disabled]="value().length >= limit" (click)="add()">
+      {{ 'PRODUCTS.CHOICES.ADD' | t }}
+    </button>
+  </div>
+}
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

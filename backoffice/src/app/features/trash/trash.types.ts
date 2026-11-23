@@ -2,10 +2,11 @@ import { ApiError } from '../../core/api/api-error';
 import { CompanyListItem } from '../companies/company.types';
 import { GroupListItem } from '../groups/group.types';
 import { PlaceListItem, placeRoute } from '../places/place.types';
+import { ProductRow, productRoute } from '../products/product.types';
 import { userRoute, UserRecord } from '../users/user.types';
 
 /** The tabs of the trash page, in order. */
-export const TRASH_KINDS = ['companies', 'places', 'users', 'groups'] as const;
+export const TRASH_KINDS = ['companies', 'places', 'users', 'products', 'groups'] as const;
 
 /** A kind of item the trash holds. */
 export type TrashKind = (typeof TRASH_KINDS)[number];
@@ -18,6 +19,7 @@ export const READ_PERMISSION: Readonly<Record<TrashKind, string>> = {
   companies: 'companies:read',
   places: 'places:read',
   users: 'users:read',
+  products: 'products:read',
   groups: 'groups:trash',
 };
 
@@ -26,6 +28,7 @@ export const RESTORE_PERMISSION: Readonly<Record<TrashKind, string>> = {
   companies: 'companies:trash',
   places: 'places:trash',
   users: 'users:trash',
+  products: 'products:update',
   groups: 'groups:trash',
 };
 
@@ -34,6 +37,7 @@ export const DELETE_PERMISSION: Readonly<Record<GroupTrashKind, string>> = {
   companies: 'companies:delete',
   places: 'places:delete',
   users: 'users:delete',
+  products: 'products:update',
 };
 
 /** Permission to empty the trash of a kind (platform administrators only). */
@@ -88,9 +92,11 @@ export type TrashedCompany = CompanyListItem & Trashed;
 export type TrashedPlace = PlaceListItem & Trashed;
 export type TrashedUser = UserRecord & Trashed;
 export type TrashedGroup = GroupListItem & Trashed;
+/** A trashed product (of any family) as the list returns it with `trashed=true`. */
+export type TrashedProduct = ProductRow;
 
 /** A row of any tab. */
-export type TrashRow = TrashedCompany | TrashedPlace | TrashedUser | TrashedGroup;
+export type TrashRow = TrashedCompany | TrashedPlace | TrashedUser | TrashedProduct | TrashedGroup;
 
 /** The totals a bulk operation reports to the user. */
 export interface TrashSummary {
@@ -141,6 +147,8 @@ export function trashRowRoute(kind: TrashKind, groupId: string, row: TrashRow): 
       return placeRoute(groupId, row.id);
     case 'users':
       return userRoute(row as TrashedUser);
+    case 'products':
+      return productRoute(groupId, (row as TrashedProduct).family, row.id);
     case 'groups':
       return ['/groups', row.id, 'settings'];
   }
@@ -148,6 +156,10 @@ export function trashRowRoute(kind: TrashKind, groupId: string, row: TrashRow): 
 
 /** The text that names a row in the labels and in the summary. */
 export function trashRowLabel(kind: TrashKind, row: TrashRow): string {
+  if (kind === 'products') {
+    const product = row as TrashedProduct;
+    return product.name ?? product.code ?? product.id;
+  }
   return kind === 'users' ? (row as TrashedUser).username : (row as { name: string }).name;
 }
 

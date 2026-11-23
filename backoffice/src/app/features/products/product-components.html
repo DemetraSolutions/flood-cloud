@@ -1,0 +1,56 @@
+<p class="hint">{{ 'PRODUCTS.COMPONENTS.HINT' | t }}</p>
+<ul class="rows" [attr.aria-describedby]="error() ? errorId : null">
+  @for (entry of rows(); track $index) {
+    <li>
+      <p>
+        <strong>{{ entry.name }}</strong>
+      </p>
+      <div class="grid">
+        <fc-text-field
+          inputmode="decimal"
+          autocomplete="off"
+          [label]="'PRODUCTS.COMPONENTS.QUANTITY' | t: { name: entry.name }"
+          [value]="entry.row.quantity"
+          [disabled]="disabled()"
+          [error]="message(entry.issues.quantity)"
+          (valueChange)="change(entry.index, { quantity: $event })"
+        />
+        <fc-text-field
+          inputmode="decimal"
+          autocomplete="off"
+          [label]="'PRODUCTS.COMPONENTS.WASTE' | t: { name: entry.name }"
+          [value]="entry.row.waste"
+          [disabled]="disabled()"
+          [error]="message(entry.issues.waste)"
+          (valueChange)="change(entry.index, { waste: $event })"
+        />
+      </div>
+      @if (!disabled()) {
+        <div class="actions">
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="'PRODUCTS.COMPONENTS.REMOVE_LABEL' | t: { name: entry.name }"
+            (click)="remove(entry.index)"
+          >
+            {{ 'PRODUCTS.REMOVE' | t }}
+          </button>
+        </div>
+      }
+    </li>
+  } @empty {
+    <li class="note">{{ 'PRODUCTS.COMPONENTS.EMPTY' | t }}</li>
+  }
+</ul>
+@if (!disabled()) {
+  <fc-search-combobox
+    [label]="'PRODUCTS.COMPONENTS.ADD' | t"
+    [search]="search"
+    [clearLabel]="'PRODUCTS.COMPONENTS.CLEAR' | t"
+    (choice)="add($event)"
+  />
+}
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

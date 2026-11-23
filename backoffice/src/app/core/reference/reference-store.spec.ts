@@ -58,6 +58,7 @@ describe('ReferenceStore', () => {
       'products',
       'product-categories',
       'customers',
+      'suppliers',
       'contact-groups',
       'price-lists',
       'email-templates',

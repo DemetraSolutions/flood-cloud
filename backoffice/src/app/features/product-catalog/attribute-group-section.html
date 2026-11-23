@@ -1,0 +1,120 @@
+<h3 class="heading">
+  <button
+    type="button"
+    class="toggle"
+    [attr.aria-expanded]="expanded()"
+    [attr.aria-controls]="panelId"
+    (click)="toggle()"
+  >
+    <fc-icon [name]="expanded() ? 'chevron-up' : 'chevron-down'" />
+    <span>{{ title() }}</span>
+    <span class="count">{{
+      'PRODUCT_CATALOG.ATTRIBUTES.COUNT' | t: { count: current().attributes.length }
+    }}</span>
+  </button>
+</h3>
+
+<div class="panel" [id]="panelId" role="region" [attr.aria-label]="title()" [hidden]="!expanded()">
+  @if (loadFailed()) {
+    <p class="problem" role="alert">{{ loadErrorMessage() }}</p>
+    <button fc-button variant="secondary" (click)="reload()">{{ 'COMMON.RETRY' | t }}</button>
+  } @else if (loading()) {
+    <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+  } @else {
+    @if (blocked(); as refused) {
+      <section class="blocked" role="alert" aria-labelledby="{{ panelId }}-blocked">
+        <h4 [id]="panelId + '-blocked'">
+          {{ 'PRODUCT_CATALOG.ATTRIBUTES.BLOCKED_TITLE' | t: { name: refused.entry } }}
+        </h4>
+        <p>{{ 'PRODUCT_CATALOG.ATTRIBUTES.BLOCKED_MESSAGE' | t }}</p>
+        <ul>
+          @for (product of refused.products; track $index) {
+            <li>{{ product }}</li>
+          }
+        </ul>
+      </section>
+    }
+
+    <form novalidate (submit)="onSubmit($event)">
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+        @if (stale()) {
+          <button fc-button variant="secondary" (click)="reload()">
+            {{ 'PRODUCT_CATALOG.ATTRIBUTES.RELOAD' | t }}
+          </button>
+        }
+      }
+
+      @if (model().attributes.length === 0) {
+        <p class="note">{{ 'PRODUCT_CATALOG.ATTRIBUTES.EMPTY' | t }}</p>
+      }
+      @for (row of attributesForm.attributes; track $index; let index = $index) {
+        <fieldset class="attribute">
+          <legend>{{ rowLabel(index) }}</legend>
+          @for (language of formLanguages(); track language) {
+            <fc-text-field
+              [formField]="row.name[language]"
+              autocomplete="off"
+              [label]="'PRODUCT_CATALOG.ATTRIBUTES.NAME_IN' | t: { language: languageLabel(language) }"
+              [error]="error(row.name[language])"
+              (blurred)="row.name[language]().markAsTouched()"
+            />
+          }
+          @if (writable()) {
+            <button
+              fc-button
+              variant="ghost"
+              [attr.aria-label]="'PRODUCT_CATALOG.ATTRIBUTES.REMOVE_LABEL' | t: { number: index + 1 }"
+              (click)="remove(index)"
+            >
+              {{ 'PRODUCT_CATALOG.ATTRIBUTES.REMOVE' | t }}
+            </button>
+          }
+        </fieldset>
+      }
+
+      @if (writable()) {
+        <fieldset class="attribute">
+          <legend>{{ 'PRODUCT_CATALOG.ATTRIBUTES.ADD' | t }}</legend>
+          @for (language of formLanguages(); track language) {
+            <fc-text-field
+              [label]="'PRODUCT_CATALOG.ATTRIBUTES.NAME_IN' | t: { language: languageLabel(language) }"
+              [value]="newValue(language)"
+              [error]="
+                newProblem() && language === required()
+                  ? ('FORM.ISSUE.REQUIRED' | t)
+                  : null
+              "
+              (valueChange)="setNew(language, $event)"
+            />
+          }
+          <button fc-button variant="secondary" [disabled]="atLimit()" (click)="add()">
+            {{ 'PRODUCT_CATALOG.ATTRIBUTES.ADD_ACTION' | t }}
+          </button>
+          @if (atLimit()) {
+            <p class="note">{{ 'PRODUCT_CATALOG.ATTRIBUTES.LIMIT' | t }}</p>
+          }
+        </fieldset>
+        <div class="actions">
+          <button fc-button variant="ghost" (click)="confirmOpen.set(true)">
+            {{ 'PRODUCT_CATALOG.ATTRIBUTES.DELETE.ACTION' | t }}
+          </button>
+          <button fc-button type="submit" [loading]="submitting()" [disabled]="!unsaved()">
+            {{ 'COMMON.SAVE' | t }}
+          </button>
+        </div>
+      }
+    </form>
+  }
+</div>
+
+<fc-confirm-dialog
+  [heading]="'PRODUCT_CATALOG.ATTRIBUTES.DELETE.TITLE' | t"
+  [message]="'PRODUCT_CATALOG.ATTRIBUTES.DELETE.CONFIRM' | t: { name: title() }"
+  [confirmLabel]="'PRODUCT_CATALOG.ATTRIBUTES.DELETE.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="delete()"
+/>

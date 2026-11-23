@@ -1,0 +1,31 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+fieldset {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+legend {
+  padding-inline: var(--space-1);
+  font-weight: 600;
+}
+
+ul {
+  display: flex;
+  flex-direction: column;
+  max-block-size: 24rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.problem {
+  margin: var(--space-2) 0 0;
+  color: var(--color-danger);
+}

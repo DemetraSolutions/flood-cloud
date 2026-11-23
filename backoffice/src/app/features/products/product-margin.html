@@ -1,0 +1,42 @@
+<fc-text-field
+  [formField]="form().simpleCost"
+  inputmode="decimal"
+  autocomplete="off"
+  [label]="'PRODUCTS.MARGIN.SIMPLE_COST' | t"
+  [hint]="'PRODUCTS.MARGIN.SIMPLE_COST_HINT' | t"
+  [error]="error(form().simpleCost)"
+  (blurred)="form().simpleCost().markAsTouched()"
+/>
+@if (lines().length === 0) {
+  <p class="note">{{ 'PRODUCTS.MARGIN.NONE' | t }}</p>
+} @else {
+  <table class="summary">
+    <caption>{{ 'PRODUCTS.MARGIN.CAPTION' | t }}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{{ 'PRODUCTS.MARGIN.RULE' | t }}</th>
+        <th scope="col">{{ 'PRODUCTS.MARGIN.COST' | t }}</th>
+        <th scope="col">{{ 'PRODUCTS.MARGIN.PRICE' | t }}</th>
+        <th scope="col">{{ 'PRODUCTS.MARGIN.MARKUP' | t }}</th>
+        <th scope="col">{{ 'PRODUCTS.MARGIN.MARKUP_PERCENTAGE' | t }}</th>
+        @if (rooms()) {
+          <th scope="col">{{ 'PRODUCTS.MARGIN.FOOD_COST' | t }}</th>
+        }
+      </tr>
+    </thead>
+    <tbody>
+      @for (line of lines(); track $index) {
+        <tr>
+          <th scope="row">{{ 'PRODUCTS.MARGIN.RULE_NUMBER' | t: { number: line.rule } }}</th>
+          <td>{{ ('PRODUCTS.MARGIN.BASIS_' + line.basis | t) + ': ' + number(line.cost) }}</td>
+          <td class="number">{{ number(line.price) }}</td>
+          <td class="number">{{ number(line.markup) }}</td>
+          <td class="number">{{ number(line.markupPercentage) }}</td>
+          @if (rooms()) {
+            <td class="number">{{ number(line.foodCostPercentage) }}</td>
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+}

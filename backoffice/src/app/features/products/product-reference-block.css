@@ -1,0 +1,25 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+
+.blocked h2,
+.blocked h3,
+.blocked p {
+  margin: 0;
+}
+
+.note {
+  color: var(--color-text-muted);
+}

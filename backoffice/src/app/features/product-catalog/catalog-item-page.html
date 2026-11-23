@@ -1,0 +1,176 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ text('FORM.BACK') }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  <fc-page-header [heading]="text(isNew() ? 'FORM.NEW_TITLE' : 'FORM.EDIT_TITLE')">
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{ text('FORM.BACK') }}</a>
+      @if (canWrite()) {
+        <button
+          fc-button
+          type="submit"
+          form="catalog-item-form"
+          [loading]="submitting()"
+          [disabled]="!unsaved()"
+        >
+          {{ isNew() ? text('FORM.CREATE') : ('COMMON.SAVE' | t) }}
+        </button>
+      }
+    </ng-container>
+  </fc-page-header>
+  <fc-record-group [groupId]="groupId()" />
+
+  @if (item(); as current) {
+    <p class="meta">
+      {{ 'PRODUCT_CATALOG.FORM.UPDATED' | t: { date: date(current.updatedAt) } }}
+    </p>
+  }
+
+  @if (sharedReadOnly()) {
+    <p class="note" role="note">{{ 'PRODUCT_CATALOG.READ_ONLY_SHARED' | t }}</p>
+  }
+
+  <form id="catalog-item-form" novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (stale()) {
+        <button fc-button variant="secondary" (click)="reload()">
+          {{ 'PRODUCT_CATALOG.FORM.RELOAD' | t }}
+        </button>
+      }
+    }
+
+    <fc-tab-list
+      [label]="'PRODUCT_CATALOG.SECTIONS' | t"
+      idPrefix="catalog"
+      [tabs]="tabs()"
+      [active]="section()"
+      (activeChange)="select($event)"
+    />
+
+    <section
+      id="catalog-panel-general"
+      role="tabpanel"
+      aria-labelledby="catalog-tab-general"
+      [hidden]="section() !== 'general'"
+    >
+      <fc-checkbox
+        [formField]="itemForm.enabled"
+        [label]="'PRODUCT_CATALOG.FIELD.ENABLED' | t"
+        [hint]="'PRODUCT_CATALOG.FIELD.ENABLED_HINT' | t"
+      />
+      @if (isDepartments()) {
+        <fc-checkbox
+          [formField]="itemForm.noDiscount"
+          [label]="'PRODUCT_CATALOG.FIELD.NO_DISCOUNT' | t"
+        />
+        @if (hasMonopoly()) {
+          <fc-checkbox
+            [formField]="itemForm.secondaryFiscalPrinter"
+            [label]="'PRODUCT_CATALOG.FIELD.SECONDARY_PRINTER' | t"
+          />
+        }
+        <div class="grid">
+          <fc-text-field
+            [formField]="itemForm.code"
+            inputmode="numeric"
+            autocomplete="off"
+            [label]="'PRODUCT_CATALOG.FIELD.CODE' | t"
+            [hint]="'PRODUCT_CATALOG.FIELD.CODE_HINT' | t"
+            [error]="error(itemForm.code)"
+            (blurred)="itemForm.code().markAsTouched()"
+          />
+          <fc-select
+            [formField]="itemForm.taxId"
+            [label]="'PRODUCT_CATALOG.FIELD.TAX' | t"
+            [placeholder]="'PRODUCT_CATALOG.FIELD.TAX_NONE' | t"
+            [options]="taxOptions()"
+            [hint]="taxesFailed() ? ('PRODUCT_CATALOG.FIELD.TAX_FAILED' | t) : null"
+            [error]="error(itemForm.taxId)"
+            (blurred)="itemForm.taxId().markAsTouched()"
+          />
+        </div>
+      }
+      @for (language of languages(); track language) {
+        <fc-text-field
+          [formField]="itemForm.name[language]"
+          autocomplete="off"
+          [hint]="language === requiredLang() ? ('PRODUCT_CATALOG.FIELD.REQUIRED_LANGUAGE' | t) : null"
+          [label]="languageLabel('NAME', language)"
+          [error]="error(itemForm.name[language])"
+          (blurred)="itemForm.name[language]().markAsTouched()"
+        />
+      }
+      @for (language of languages(); track language) {
+        <fc-textarea
+          [formField]="itemForm.description[language]"
+          [rows]="3"
+          [label]="languageLabel('DESCRIPTION', language)"
+          [error]="error(itemForm.description[language])"
+          (blurred)="itemForm.description[language]().markAsTouched()"
+        />
+      }
+    </section>
+
+    <section
+      id="catalog-panel-availability"
+      role="tabpanel"
+      aria-labelledby="catalog-tab-availability"
+      [hidden]="section() !== 'availability'"
+    >
+      @if (restricted()) {
+        <p class="note" role="note">{{ 'PRODUCT_CATALOG.AVAILABILITY.RESTRICTED' | t }}</p>
+      } @else {
+        <p class="note">{{ 'PRODUCT_CATALOG.AVAILABILITY.HINT' | t }}</p>
+      }
+      <fc-reference-picker
+        [formField]="itemForm.placeIds"
+        [label]="'PRODUCT_CATALOG.AVAILABILITY.PLACES' | t"
+        [loader]="placeLoader()"
+        [labels]="placeLabels()"
+        [error]="error(itemForm.placeIds)"
+        (blurred)="itemForm.placeIds().markAsTouched()"
+      />
+    </section>
+
+    @if (hasMedia()) {
+      <section
+        id="catalog-panel-media"
+        role="tabpanel"
+        aria-labelledby="catalog-tab-media"
+        [hidden]="section() !== 'media'"
+      >
+        <fc-logo-slot
+          [label]="'PRODUCT_CATALOG.MEDIA.IMAGE' | t"
+          [logo]="model().image"
+          [groupId]="groupId()"
+          [canUpload]="!restricted()"
+          [disabled]="!canWrite()"
+          (logoChange)="setImage($event)"
+        />
+        @if (error(itemForm.image); as problem) {
+          <p class="problem" role="alert">{{ problem }}</p>
+        }
+      </section>
+    }
+  </form>
+}
+
+<fc-confirm-dialog
+  [heading]="'PRODUCT_CATALOG.LEAVE.TITLE' | t"
+  [message]="'PRODUCT_CATALOG.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'PRODUCT_CATALOG.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>

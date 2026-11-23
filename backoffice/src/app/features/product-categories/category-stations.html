@@ -1,0 +1,51 @@
+<div class="stores" [attr.aria-describedby]="error() ? errorId : null">
+  @for (place of places(); track place.id) {
+    <details [open]="opened().has(place.id)" (toggle)="onToggle(place.id, $event)">
+      <summary>
+        {{ place.name }}
+        @if (count(place.id) > 0) {
+          <span class="count">{{ 'PRODUCT_CATEGORIES.STATIONS.CHOSEN' | t: { count: count(place.id) } }}</span>
+        }
+      </summary>
+      @let state = states().get(place.id);
+      @if (state === undefined || state.status === 'loading') {
+        <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+      } @else if (state.status === 'error') {
+        <p class="problem" role="alert">{{ 'PRODUCT_CATEGORIES.STATIONS.LOAD_ERROR' | t }}</p>
+        <button fc-button variant="secondary" type="button" (click)="retry(place.id)">
+          {{ 'COMMON.RETRY' | t }}
+        </button>
+      } @else if (state.setup.stations.length === 0) {
+        <p class="note">{{ 'PRODUCT_CATEGORIES.STATIONS.NONE' | t }}</p>
+      } @else {
+        <div class="kinds">
+          <fieldset [disabled]="disabled()">
+            <legend>{{ 'PRODUCT_CATEGORIES.STATIONS.ROOMS' | t: { place: place.name } }}</legend>
+            @for (station of state.setup.stations; track station.id) {
+              <fc-checkbox
+                [label]="station.name"
+                [checked]="has('rooms', place.id, station.id)"
+                (checkedChange)="toggle('rooms', place.id, station.id, $event)"
+              />
+            }
+          </fieldset>
+          <fieldset [disabled]="disabled()">
+            <legend>{{ 'PRODUCT_CATEGORIES.STATIONS.COUNTER' | t: { place: place.name } }}</legend>
+            @for (station of state.setup.stations; track station.id) {
+              <fc-checkbox
+                [label]="station.name"
+                [checked]="has('counter', place.id, station.id)"
+                (checkedChange)="toggle('counter', place.id, station.id, $event)"
+              />
+            }
+          </fieldset>
+        </div>
+      }
+    </details>
+  } @empty {
+    <p class="note">{{ 'PRODUCT_CATEGORIES.STATIONS.NO_PLACES' | t }}</p>
+  }
+</div>
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

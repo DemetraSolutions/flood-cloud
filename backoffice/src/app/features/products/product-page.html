@@ -1,0 +1,338 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ 'PRODUCTS.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  <fc-page-header [heading]="(isNew() ? ('PRODUCTS.FAMILY.' + familySettings().text + '.NEW_TITLE') : ('PRODUCTS.FAMILY.' + familySettings().text + '.EDIT_TITLE')) | t">
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{ 'PRODUCTS.FORM.BACK' | t }}</a>
+      @if (canWrite()) {
+        <button fc-button type="submit" form="product-form" [loading]="submitting()" [disabled]="!unsaved()">
+          {{ isNew() ? ('PRODUCTS.FORM.CREATE' | t) : ('COMMON.SAVE' | t) }}
+        </button>
+      }
+      @if (canRestoreOrDelete()) {
+        <button fc-button variant="secondary" type="button" [disabled]="busy()" (click)="restore()">
+          {{ 'PRODUCTS.RESTORE.ACTION' | t }}
+        </button>
+        <button fc-button variant="danger" type="button" [disabled]="busy()" (click)="deleteOpen.set(true)">
+          {{ 'PRODUCTS.DELETE.ACTION' | t }}
+        </button>
+      }
+    </ng-container>
+  </fc-page-header>
+  <fc-record-group [groupId]="groupId()" />
+
+  @if (item(); as current) {
+    <p class="meta">
+      {{ 'PRODUCT_CATALOG.FORM.UPDATED' | t: { date: date(current.updatedAt) } }}
+    </p>
+  }
+  @if (trashed()) {
+    <p class="note" role="note">{{ 'PRODUCTS.TRASHED_NOTE' | t }}</p>
+  } @else if (sharedNote()) {
+    <p class="note" role="note">
+      {{ (localEdit() ? 'PRODUCTS.READ_ONLY_PARTIAL' : 'PRODUCTS.READ_ONLY_SHARED') | t }}
+    </p>
+  }
+  @if (blocked(); as refused) {
+    <fc-product-reference-block [block]="refused" (closed)="blocked.set(null)" />
+  }
+
+  <div class="views" role="group" [attr.aria-label]="'PRODUCTS.VIEW.LABEL' | t">
+    <button
+      fc-button
+      type="button"
+      [variant]="quick() ? 'primary' : 'secondary'"
+      [attr.aria-pressed]="quick()"
+      (click)="setView('quick')"
+    >
+      {{ 'PRODUCTS.VIEW.QUICK' | t }}
+    </button>
+    <button
+      fc-button
+      type="button"
+      [variant]="quick() ? 'secondary' : 'primary'"
+      [attr.aria-pressed]="!quick()"
+      (click)="setView('full')"
+    >
+      {{ 'PRODUCTS.VIEW.FULL' | t }}
+    </button>
+  </div>
+
+  <form id="product-form" novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (stale()) {
+        <button fc-button variant="secondary" type="button" (click)="reload()">
+          {{ 'PRODUCT_CATALOG.FORM.RELOAD' | t }}
+        </button>
+      }
+    }
+
+    <fc-tab-list
+      [label]="'PRODUCT_CATALOG.SECTIONS' | t"
+      idPrefix="product"
+      [tabs]="tabs()"
+      [active]="activeSection()"
+      (activeChange)="select($event)"
+    />
+
+    <section id="product-panel-general" role="tabpanel" aria-labelledby="product-tab-general" [hidden]="activeSection() !== 'general'">
+      <fc-product-general
+        [form]="productForm.core"
+        [groupId]="groupId()"
+        [features]="features()"
+        [languages]="languages()"
+        [requiredLang]="requiredLang()"
+        [types]="types()"
+        [modifier]="isModifier()"
+        [service]="service()"
+        [quick]="quick()"
+        [readOnly]="!fullEdit()"
+        [brands]="brandOptions()"
+        [units]="unitOptions()"
+        [warnings]="warnings()"
+      />
+      @if (quick()) {
+        @if (!service()) {
+          <h2>{{ 'PRODUCTS.SECTION.BARCODES' | t }}</h2>
+          <fc-product-barcodes
+            [formField]="productForm.core.barcodes"
+            [groupId]="groupId()"
+            [warehouse]="features().warehouse"
+            [ratio]="model().core.conversionRatio === '' ? null : +model().core.conversionRatio"
+            [warnings]="warnings()"
+            [error]="error(productForm.core.barcodes)"
+          />
+        }
+        <h2>{{ 'PRODUCTS.SECTION.PRICES' | t }}</h2>
+        <fc-product-price-rules
+          [formField]="productForm.core.prices"
+          [priceLists]="priceListOptions()"
+          [currencies]="currencies()"
+          [taxes]="taxes()"
+          [error]="error(productForm.core.prices)"
+        />
+        @if (features().media) {
+          <h2>{{ 'PRODUCTS.SECTION.MEDIA' | t }}</h2>
+          <fc-product-media [form]="productForm.core" [groupId]="groupId()" [canUpload]="!restricted()" [imageOnly]="true" />
+        }
+      }
+    </section>
+
+    @if (shown().barcodes) {
+      <section id="product-panel-barcodes" role="tabpanel" aria-labelledby="product-tab-barcodes" [hidden]="activeSection() !== 'barcodes'">
+        <fc-product-barcodes
+          [formField]="productForm.core.barcodes"
+          [groupId]="groupId()"
+          [warehouse]="features().warehouse"
+          [ratio]="model().core.conversionRatio === '' ? null : +model().core.conversionRatio"
+          [warnings]="warnings()"
+          [error]="error(productForm.core.barcodes)"
+        />
+      </section>
+    }
+
+    @if (shown().prices) {
+      <section id="product-panel-prices" role="tabpanel" aria-labelledby="product-tab-prices" [hidden]="activeSection() !== 'prices'">
+        @if (features().scales) {
+          <p class="note">{{ 'PRODUCTS.PRICES.SCALES_NOTE' | t }}</p>
+        }
+        <fc-product-price-rules
+          [formField]="productForm.core.prices"
+          [priceLists]="priceListOptions()"
+          [currencies]="currencies()"
+          [taxes]="taxes()"
+          [error]="error(productForm.core.prices)"
+        />
+      </section>
+    }
+
+    <section id="product-panel-categories" role="tabpanel" aria-labelledby="product-tab-categories" [hidden]="activeSection() !== 'categories'">
+      @if (treeFailed()) {
+        <p class="note" role="alert">{{ 'PRODUCT_CATEGORIES.FIELD.PARENT_FAILED' | t }}</p>
+      }
+      <fc-category-check-list
+        [formField]="productForm.core.categoryIds"
+        [label]="'PRODUCTS.CATEGORIES.LABEL' | t"
+        [entries]="treeEntries()"
+        [error]="error(productForm.core.categoryIds)"
+      />
+    </section>
+
+    <section id="product-panel-availability" role="tabpanel" aria-labelledby="product-tab-availability" [hidden]="activeSection() !== 'availability'">
+      @if (placesLocked()) {
+        <p class="note" role="note">{{ 'PRODUCTS.AVAILABILITY.LOCKED' | t }}</p>
+      } @else if (restricted()) {
+        <p class="note" role="note">{{ 'PRODUCTS.AVAILABILITY.RESTRICTED' | t }}</p>
+      } @else {
+        <p class="note">{{ (isNew() ? 'PRODUCTS.AVAILABILITY.HINT_NEW' : 'PRODUCTS.AVAILABILITY.HINT') | t }}</p>
+      }
+      @if (placesFailed()) {
+        <p class="note" role="alert">{{ 'PRODUCT_CATEGORIES.PLACES_FAILED' | t }}</p>
+      }
+      <fc-product-availability
+        [formField]="productForm.local.places"
+        [groupId]="groupId()"
+        [places]="placeList()"
+        [rooms]="features().rooms"
+        [error]="error(productForm.local.places)"
+      />
+    </section>
+
+    @if (shown().variants) {
+      <section id="product-panel-variants" role="tabpanel" aria-labelledby="product-tab-variants" [hidden]="activeSection() !== 'variants'">
+        <fc-product-variants
+          [form]="productForm.core"
+          [groupId]="groupId()"
+          [entries]="treeEntries()"
+          [chosenIds]="chosenModifiers()"
+        />
+      </section>
+    }
+
+    @if (shown().stations) {
+      <section id="product-panel-stations" role="tabpanel" aria-labelledby="product-tab-stations" [hidden]="activeSection() !== 'stations'">
+        <p class="note">{{ 'PRODUCTS.STATIONS.HINT' | t }}</p>
+        @if (placesFailed()) {
+          <p class="note" role="alert">{{ 'PRODUCT_CATEGORIES.PLACES_FAILED' | t }}</p>
+        }
+        <fc-category-stations
+          [formField]="productForm.local.stations"
+          [groupId]="groupId()"
+          [places]="placeList()"
+          [error]="error(productForm.local.stations)"
+        />
+      </section>
+    }
+
+    @if (shown().stock) {
+      <section id="product-panel-stock" role="tabpanel" aria-labelledby="product-tab-stock" [hidden]="activeSection() !== 'stock'">
+        <p class="note">{{ 'PRODUCTS.STOCK.HINT' | t }}</p>
+        <fc-product-stock
+          [formField]="productForm.local.stock"
+          [groupId]="groupId()"
+          [places]="placeList()"
+          [quantities]="item()?.stock ?? {}"
+          [costs]="item()?.costs"
+          [error]="error(productForm.local.stock)"
+        />
+      </section>
+    }
+
+    @if (shown().attributes) {
+      <section id="product-panel-attributes" role="tabpanel" aria-labelledby="product-tab-attributes" [hidden]="activeSection() !== 'attributes'">
+        @if (attributesTruncated()) {
+          <p class="note" role="note">{{ 'PRODUCTS.ATTRIBUTES.TRUNCATED' | t }}</p>
+        }
+        <fc-product-attributes
+          [formField]="productForm.core.attributeIds"
+          [groups]="attributeGroups()"
+          [error]="error(productForm.core.attributeIds)"
+        />
+      </section>
+    }
+
+    @if (shown().composition) {
+      <section id="product-panel-composition" role="tabpanel" aria-labelledby="product-tab-composition" [hidden]="activeSection() !== 'composition'">
+        <h2>{{ 'PRODUCTS.COMPOSITION.COMPONENTS' | t }}</h2>
+        <fc-product-components
+          [formField]="productForm.core.components"
+          [groupId]="groupId()"
+          [error]="error(productForm.core.components)"
+        />
+        @if (!isModifier()) {
+          <h2>{{ 'PRODUCTS.COMPOSITION.MENU' | t }}</h2>
+          <fc-product-menu
+            [formField]="productForm.core.menu"
+            [groupId]="groupId()"
+            kind="menu"
+            [entries]="treeEntries()"
+            [rooms]="features().rooms"
+            [error]="error(productForm.core.menu)"
+          />
+          @if (features().productsVariants) {
+            <h2>{{ 'PRODUCTS.COMPOSITION.CHOICES' | t }}</h2>
+            <fc-product-menu
+              [formField]="productForm.core.modifierChoices"
+              [groupId]="groupId()"
+              kind="choices"
+              [entries]="treeEntries()"
+              [error]="error(productForm.core.modifierChoices)"
+            />
+          }
+          <h2>{{ 'PRODUCTS.COMPOSITION.MODULAR' | t }}</h2>
+          <fc-select
+            [formField]="productForm.core.modularPriceRule"
+            [label]="'PRODUCTS.COMPOSITION.MODULAR_RULE' | t"
+            [placeholder]="'PRODUCTS.COMPOSITION.MODULAR_NONE' | t"
+            [options]="modularOptions()"
+          />
+        }
+      </section>
+    }
+
+    @if (shown().media) {
+      <section id="product-panel-media" role="tabpanel" aria-labelledby="product-tab-media" [hidden]="activeSection() !== 'media'">
+        <fc-product-media [form]="productForm.core" [groupId]="groupId()" [canUpload]="!restricted()" />
+      </section>
+    }
+
+    @if (shown().margin) {
+      <section id="product-panel-margin" role="tabpanel" aria-labelledby="product-tab-margin" [hidden]="activeSection() !== 'margin'">
+        <fc-product-margin
+          [form]="productForm.core"
+          [prices]="model().core.prices"
+          [costs]="item()?.costs"
+          [rooms]="features().rooms"
+        />
+      </section>
+    }
+
+    @if (shown().suppliers) {
+      <section id="product-panel-suppliers" role="tabpanel" aria-labelledby="product-tab-suppliers" [hidden]="activeSection() !== 'suppliers'">
+        <fc-product-suppliers
+          [groupId]="groupId()"
+          [formField]="productForm.core.suppliers"
+          [costs]="item()?.costs"
+          [error]="error(productForm.core.suppliers)"
+        />
+      </section>
+    }
+
+    @if (shown().shipping) {
+      <section id="product-panel-shipping" role="tabpanel" aria-labelledby="product-tab-shipping" [hidden]="activeSection() !== 'shipping'">
+        <fc-product-shipping [form]="productForm.core" />
+      </section>
+    }
+  </form>
+}
+
+<fc-confirm-dialog
+  [heading]="'PRODUCT_CATALOG.LEAVE.TITLE' | t"
+  [message]="'PRODUCT_CATALOG.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'PRODUCT_CATALOG.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>
+<fc-confirm-dialog
+  [heading]="'PRODUCTS.DELETE.TITLE' | t"
+  [message]="'PRODUCTS.DELETE.CONFIRM' | t"
+  [confirmLabel]="'PRODUCTS.DELETE.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="deleteOpen()"
+  (openChange)="deleteOpen.set($event)"
+  (confirmed)="remove()"
+/>

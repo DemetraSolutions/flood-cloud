@@ -206,3 +206,36 @@ describe('GET /v1/groups/{groupId}/lookup/price-lists', () => {
     assert.equal(as.failure(await as.call(nobody.id, 'GET', path(0, 'price-lists'))).status, 403);
   });
 });
+
+describe('GET /v1/groups/{groupId}/lookup/taxes and the languages for whoever reads the products', () => {
+  it('lists the compact tax rates, as /taxes does, to whoever has products:read or groups:read, and nothing else of the group', async () => {
+    const full = await as.call(g(0).sa, 'GET', `/groups/${g(0).groupId.toHexString()}/taxes`);
+    assert.ok(full.body.data.length > 0);
+    for (const caller of [g(0).sa, g(0).ca, g(0).pa, office.cluster.psa]) {
+      const reply = await as.call(caller, 'GET', path(0, 'taxes'));
+      assert.equal(reply.status, 200, JSON.stringify(reply.body));
+      assert.deepEqual(reply.body, { data: full.body.data });
+      for (const item of reply.body.data) {
+        assert.deepEqual(Object.keys(item).sort(), ['department', 'description', 'id', 'rate', 'vatNature']);
+      }
+    }
+    const none = { r: false, w: false };
+    const only = async (grant: 'products' | 'groups') => (await addUser(ctx, office, { permissions: { status: false, users: none, products: none, groups: none, [grant]: { r: true, w: false } } })).id;
+    for (const grant of ['products', 'groups'] as const) {
+      assert.equal((await as.call(await only(grant), 'GET', path(0, 'taxes'))).status, 200, grant);
+    }
+    // The languages open to whoever reads the products too.
+    assert.equal((await as.call(await only('products'), 'GET', path(0, 'languages'))).status, 200);
+  });
+
+  it('keeps the groups apart and refuses whoever has neither permission', async () => {
+    assert.equal(as.failure(await as.call(g(0).sa, 'GET', path(1, 'taxes'))).status, 404);
+    assert.equal(as.failure(await as.call(g(1).ca, 'GET', path(0, 'taxes'))).status, 404);
+    assert.equal(as.failure(await as.call(office.cluster.dealerB, 'GET', path(0, 'taxes'))).status, 404);
+    const none = { r: false, w: false };
+    const nobody = await addUser(ctx, office, { permissions: { status: false, products: none, groups: none, places: none } });
+    assert.equal(as.failure(await as.call(nobody.id, 'GET', path(0, 'taxes'))).status, 403);
+    assert.equal(as.failure(await as.call(nobody.id, 'GET', path(0, 'languages'))).status, 403);
+    assert.equal((await office.call('GET', path(0, 'taxes'), undefined)).status, 401);
+  });
+});

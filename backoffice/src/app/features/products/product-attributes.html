@@ -1,0 +1,19 @@
+@for (group of groups(); track group.id) {
+  <fieldset [disabled]="disabled()" [attr.aria-describedby]="error() ? errorId : null">
+    <legend>{{ nameOf(group.name) }}</legend>
+    @for (attribute of group.attributes; track attribute.id) {
+      <fc-checkbox
+        [label]="nameOf(attribute.name)"
+        [checked]="has(attribute.id)"
+        (checkedChange)="toggle(attribute.id, $event)"
+      />
+    } @empty {
+      <p class="note">{{ 'PRODUCTS.ATTRIBUTES.NONE_IN_GROUP' | t }}</p>
+    }
+  </fieldset>
+} @empty {
+  <p class="note">{{ 'PRODUCTS.ATTRIBUTES.NONE' | t }}</p>
+}
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

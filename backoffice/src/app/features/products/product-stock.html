@@ -1,0 +1,73 @@
+<dl class="facts">
+  <dt>{{ 'PRODUCTS.STOCK.TOTAL' | t }}</dt>
+  <dd>{{ total() === null ? ('PRODUCTS.STOCK.NONE' | t) : numberText(total()) }}</dd>
+  @for (fact of costFacts(); track fact.key) {
+    <dt>{{ 'PRODUCTS.STOCK.COST_' + fact.key | t }}</dt>
+    <dd>{{ fact.value === null ? ('PRODUCTS.STOCK.NONE' | t) : numberText(fact.value) }}</dd>
+  }
+  @if (costs(); as shown) {
+    <dt>{{ 'PRODUCTS.STOCK.LAST_SUPPLIER' | t }}</dt>
+    <dd>{{ shown.lastSupplierId ?? ('PRODUCTS.STOCK.NONE' | t) }}</dd>
+  }
+</dl>
+<div [attr.aria-describedby]="error() ? errorId : null">
+  @for (place of places(); track place.id) {
+    <details [open]="opened().has(place.id)" (toggle)="onToggle(place.id, $event)">
+      <summary>{{ place.name }}</summary>
+      @let state = states().get(place.id);
+      @if (state === undefined || state.status === 'loading') {
+        <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+      } @else if (state.status === 'error') {
+        <p class="problem" role="alert">{{ 'PRODUCTS.STOCK.LOAD_ERROR' | t }}</p>
+        <button fc-button variant="secondary" type="button" (click)="retry(place.id)">
+          {{ 'COMMON.RETRY' | t }}
+        </button>
+      } @else if (state.setup.storages.length === 0) {
+        <p class="note">{{ 'PRODUCTS.STOCK.NO_STORAGES' | t }}</p>
+      } @else {
+        @for (storage of state.setup.storages; track storage.id) {
+          @let row = rowOf(place.id, storage.id);
+          <fieldset [disabled]="disabled()">
+            <legend>{{ storage.name }}</legend>
+            <div class="grid">
+              <fc-text-field
+                autocomplete="off"
+                [label]="'PRODUCTS.STOCK.QUANTITY' | t: { storage: storage.name }"
+                [value]="quantityOf(place.id, storage.id)"
+                [readonly]="true"
+              />
+              <fc-text-field
+                inputmode="decimal"
+                autocomplete="off"
+                [label]="'PRODUCTS.STOCK.MIN' | t: { storage: storage.name }"
+                [value]="row.min"
+                [error]="message(place.id, storage.id, 'min')"
+                (valueChange)="change(place.id, storage.id, { min: $event })"
+              />
+              <fc-text-field
+                inputmode="decimal"
+                autocomplete="off"
+                [label]="'PRODUCTS.STOCK.MAX' | t: { storage: storage.name }"
+                [value]="row.max"
+                [error]="message(place.id, storage.id, 'max')"
+                (valueChange)="change(place.id, storage.id, { max: $event })"
+              />
+              <fc-text-field
+                autocomplete="off"
+                [label]="'PRODUCTS.STOCK.LOCATION' | t: { storage: storage.name }"
+                [value]="row.location"
+                [error]="message(place.id, storage.id, 'location')"
+                (valueChange)="change(place.id, storage.id, { location: $event })"
+              />
+            </div>
+          </fieldset>
+        }
+      }
+    </details>
+  } @empty {
+    <p class="note">{{ 'PRODUCT_CATEGORIES.STATIONS.NO_PLACES' | t }}</p>
+  }
+</div>
+@if (error()) {
+  <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+}

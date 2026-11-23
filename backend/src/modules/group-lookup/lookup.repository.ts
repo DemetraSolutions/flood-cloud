@@ -1,4 +1,7 @@
+import { withScope } from '../../shared/security/scope/scope-filters.ts';
+import { categoriesVisibleTo } from '../product-categories/categories.availability.ts';
 import type { Collection, Document, Filter, ObjectId } from 'mongodb';
+import { bounded } from '../../shared/security/scope/bounded.ts';
 import type { Databases } from '../../db/databases.ts';
 import { localizedName } from '../../db/localized-name.ts';
 import { LIST_MAX_TIME_MS, listPipeline, listSearch, pageOf } from '../../shared/http/list.ts';
@@ -24,6 +27,10 @@ interface LookupSource {
 export interface ProductsNarrowing {
   /** Legacy product type, from an allowlist. */
   readonly type?: string;
+  /** `true`: only the variant products (`variant.status` exactly `true`, the modifiers of a category); `false`: only the others. Absent: both. */
+  readonly modifier?: boolean;
+  /** Only the products that have this category (`categories`, as an `ObjectId` or as the text some older clients wrote). */
+  readonly categoryId?: ObjectId;
 }
 
 /** The legacy encrypted format of a personal text (`<ciphertext hex>$<iv hex>`): never shown, since the key is not ours. */
@@ -44,7 +51,7 @@ function clearText(field: string): Document {
  * The display name of a contact: the company name when it has one, else name and surname (the parts that are in clear), else `null`. Personal
  * data in the legacy encrypted format are never shown.
  */
-function contactName(): Document {
+export function contactName(): Document {
   return {
     $let: {
       vars: { company: clearText('$companyName'), first: clearText('$name'), last: clearText('$surname') },
@@ -73,13 +80,15 @@ export interface LookupRepository {
    * @param params Validated list parameters.
    * @param language Language of the name to show.
    * @param ids Restricts the read to these ids, or `null`.
-   * @param narrowing Optional narrowing by type.
+   * @param narrowing Optional narrowing by type and by being a variant product.
    */
   products(principal: AuthPrincipal, access: GroupAccess, params: ListParams, language: string, ids: readonly ObjectId[] | null, narrowing: ProductsNarrowing): Promise<ListPage>;
-  /** A page of the product categories of a group that are not in the trash (same parameters as `products`, without narrowing). */
+  /** A page of the product categories of a group that are not in the trash and that the caller reaches: a company or place administrator sees only the categories for every place or for a place of his perimeter (same parameters as `products`, without narrowing). */
   categories(principal: AuthPrincipal, access: GroupAccess, params: ListParams, language: string, ids: readonly ObjectId[] | null): Promise<ListPage>;
   /** A page of the customers of a group that are not in the trash, by display name (company name, else name and surname). */
   customers(principal: AuthPrincipal, access: GroupAccess, params: ListParams, ids: readonly ObjectId[] | null): Promise<ListPage>;
+  /** A page of the suppliers of a group (contacts with `supplier: true`, not in the trash), by display name, with the name and id of the price lists the contact has (`companyLists`); nothing else of the contact is read. */
+  suppliers(principal: AuthPrincipal, access: GroupAccess, params: ListParams, ids: readonly ObjectId[] | null): Promise<ListPage>;
   /** A page of the contact groups of a group (they have no trash), by name. */
   contactGroups(principal: AuthPrincipal, access: GroupAccess, params: ListParams, ids: readonly ObjectId[] | null): Promise<ListPage>;
   /** A page of the e-mail templates of a group that are not in the trash, by name (only `_id` and `name` are read: never the text or the HTML). */
@@ -119,19 +128,31 @@ export function createLookupRepository(databases: Databases): LookupRepository {
   const group = (principal: AuthPrincipal, access: GroupAccess) => groupDatabaseFor(principal, access, databases);
   const NOT_TRASHED = { trash: { $ne: true } };
   return {
-    products: (principal, access, params, language, ids, narrowing) =>
-      readPage(
+    products: async (principal, access, params, language, ids, narrowing) => {
+      // A category the caller does not reach is answered like one that does not exist: nothing.
+      if (narrowing.categoryId !== undefined && (await bounded(() => group(principal, access).collection('products_categories').findOne(withScope(categoriesVisibleTo(principal), { _id: narrowing.categoryId! }), { projection: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS }))) === null) {
+        return pageOf([], params);
+      }
+      return readPage(
         group(principal, access).collection('products'),
-        { filter: { ...NOT_TRASHED, ...(narrowing.type === undefined ? {} : { type: narrowing.type }) }, fields: { name: 1 }, extra: { type: 1 }, name: localizedName(language) },
+        { filter: withScope(categoriesVisibleTo(principal), { ...NOT_TRASHED, ...(narrowing.type === undefined ? {} : { type: narrowing.type }), ...(narrowing.modifier === undefined ? {} : { 'variant.status': narrowing.modifier ? true : { $ne: true } }), ...(narrowing.categoryId === undefined ? {} : { categories: { $in: [narrowing.categoryId, narrowing.categoryId.toHexString()] } }) }), fields: { name: 1 }, extra: { type: 1 }, name: localizedName(language) },
         params,
         ids,
-      ),
+      );
+    },
     categories: (principal, access, params, language, ids) =>
-      readPage(group(principal, access).collection('products_categories'), { filter: NOT_TRASHED, fields: { name: 1 }, extra: {}, name: localizedName(language) }, params, ids),
+      readPage(group(principal, access).collection('products_categories'), { filter: withScope(categoriesVisibleTo(principal), NOT_TRASHED), fields: { name: 1 }, extra: {}, name: localizedName(language) }, params, ids),
     customers: (principal, access, params, ids) =>
       readPage(
         group(principal, access).collection('contacts'),
         { filter: { ...NOT_TRASHED, customer: true }, fields: { companyName: 1, name: 1, surname: 1 }, extra: {}, name: contactName() },
+        params,
+        ids,
+      ),
+    suppliers: (principal, access, params, ids) =>
+      readPage(
+        group(principal, access).collection('contacts'),
+        { filter: { ...NOT_TRASHED, supplier: true }, fields: { companyName: 1, name: 1, surname: 1, 'companyLists.id': 1, 'companyLists.name': 1 }, extra: { 'companyLists.id': 1, 'companyLists.name': 1 }, name: contactName() },
         params,
         ids,
       ),

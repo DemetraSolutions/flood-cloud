@@ -56,8 +56,11 @@ export class TrashPage {
       : undefined;
   });
 
+  // The products are managed by group: the cross-group trash has no tab for them.
   private readonly kinds = computed(() =>
-    TRASH_KINDS.filter((kind) => this.session.can(READ_PERMISSION[kind])),
+    TRASH_KINDS.filter(
+      (kind) => this.session.can(READ_PERMISSION[kind]) && !(this.isAll() && kind === 'products'),
+    ),
   );
   protected readonly tabs = computed<TabItem[]>(() =>
     this.kinds().map((kind) => ({

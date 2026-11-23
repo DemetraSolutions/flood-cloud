@@ -83,6 +83,28 @@ import { createCatalogRoutes } from './modules/groups/catalogs/catalogs.routes.t
 import { createCatalogsService } from './modules/groups/catalogs/catalogs.service.ts';
 import { newElementId } from './modules/groups/catalogs/kit.ts';
 import { createReferencesRepository } from './modules/groups/catalogs/references.repository.ts';
+import { createEntityController } from './modules/product-catalog/entity.controller.ts';
+import { createGroupLanguages } from './modules/product-catalog/group-languages.ts';
+import { createProductReferences } from './modules/product-catalog/product-references.ts';
+import { createAttributeGroupsRepository } from './modules/product-attribute-groups/product-attribute-groups.repository.ts';
+import { createProductAttributeGroupsRoutes } from './modules/product-attribute-groups/product-attribute-groups.routes.ts';
+import { createAttributeGroupsService } from './modules/product-attribute-groups/product-attribute-groups.service.ts';
+import { createBrandsRepository } from './modules/product-brands/product-brands.repository.ts';
+import { createProductBrandsRoutes } from './modules/product-brands/product-brands.routes.ts';
+import { createBrandsService } from './modules/product-brands/product-brands.service.ts';
+import { createDepartmentsRepository, createTaxDepartments } from './modules/product-departments/product-departments.repository.ts';
+import { createProductDepartmentsRoutes } from './modules/product-departments/product-departments.routes.ts';
+import { createDepartmentsService } from './modules/product-departments/product-departments.service.ts';
+import { createCategoriesController } from './modules/product-categories/categories.controller.ts';
+import { createCategoryPlaces } from './modules/product-categories/categories.places.ts';
+import { createCategoriesRepository } from './modules/product-categories/categories.repository.ts';
+import { createProductCategoriesRoutes } from './modules/product-categories/categories.routes.ts';
+import { createCategoriesService } from './modules/product-categories/categories.service.ts';
+import { createProductsController } from './modules/products/products.controller.ts';
+import { createProductLinks } from './modules/products/products.links.ts';
+import { createProductsRepository } from './modules/products/products.repository.ts';
+import { createProductsRoutes } from './modules/products/products.routes.ts';
+import { createProductsService } from './modules/products/products.service.ts';
 import { createGroupsController } from './modules/groups/groups.controller.ts';
 import { createManagedGroupsRepository } from './modules/groups/groups.repository.ts';
 import { createGroupsRoutes } from './modules/groups/groups.routes.ts';
@@ -234,13 +256,15 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const groupsService = createGroupsService({ groups: managedGroups, users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now });
   const groupsController = createGroupsController(groupsService);
   const groupServices = createGroupServicesController(createGroupServicesService({ services, users }));
+  const referencesRepository = createReferencesRepository(databases);
   const catalogsService = createCatalogsService({
     catalogs: catalogsRepository,
-    references: createReferencesRepository(databases),
+    references: referencesRepository,
     activityLog,
     logger,
     newId: newElementId,
     now,
+    taxDepartments: createTaxDepartments(databases),
   });
   const lookup = createLookupController(createLookupService({ lookup: createLookupRepository(databases), users, catalogs: catalogsService }));
   const referenceService = createReferenceService(createReferenceRepository(databases));
@@ -317,14 +341,41 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     newId: () => newPaymentTypeId(now),
   });
   const places = createPlacesController(placesService);
+  // The product catalog of a group (steps C1, C2 and C3): what the departments, the brands, the groups of attributes, the categories and the products share.
+  const productReferences = createProductReferences(databases);
+  const groupLanguages = createGroupLanguages(databases);
+  const catalogDeps = { references: referencesRepository, images: mediaService, languages: groupLanguages, users, activityLog, logger, versionKey, now };
+  const categoryPlaces = createCategoryPlaces(databases);
+  const productsService = createProductsService({
+    repository: createProductsRepository(databases),
+    links: createProductLinks(databases),
+    places: categoryPlaces,
+    references: referencesRepository,
+    catalogs: catalogsService,
+    images: mediaService,
+    languages: groupLanguages,
+    users,
+    activityLog,
+    logger,
+    versionKey,
+    now,
+  });
   // The trash page: bulk operations that call the single-item operations of the domains above.
   const trash = createTrashController(
-    createTrashService({ companies: companiesService, places: placesService, users: usersService, groups: groupsService, activityLog }),
+    createTrashService({ companies: companiesService, places: placesService, users: usersService, groups: groupsService, products: productsService, activityLog }),
   );
   const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
   const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
   const errorDocuments = createErrorDocumentsController(createErrorDocumentsService({ repository: createErrorDocumentsRepository(databases), dealerGroups: createDealerGroupsRepository(databases) }), now);
   const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
+  const productDepartments = createEntityController(createDepartmentsService({ ...catalogDeps, repository: createDepartmentsRepository(databases), catalogs: catalogsService, products: productReferences }));
+  const productBrands = createEntityController(createBrandsService({ ...catalogDeps, repository: createBrandsRepository(databases), products: productReferences }));
+  const productCategories = createCategoriesController(
+    createCategoriesService({ repository: createCategoriesRepository(databases), places: categoryPlaces, catalogs: catalogsService, products: productReferences, ...catalogDeps }),
+  );
+  const productAttributeGroups = createEntityController(
+    createAttributeGroupsService({ repository: createAttributeGroupsRepository(databases), products: productReferences, languages: groupLanguages, users, activityLog, versionKey, now, newAttributeId: newElementId }),
+  );
   const countries = createCountriesController(createCountriesService({ repository: createCountriesRepository(databases, logger), activityLog, versionKey, now }));
   const tobaccos = createTobaccosController(createTobaccosService({ repository: createTobaccosRepository(databases), activityLog, now }));
   const vatLookups = createVatLookupsController(
@@ -343,6 +394,11 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createDiagnosticsRoutes(diagnostics, rules),
       ...createErrorDocumentsRoutes(errorDocuments, rules),
       ...createEmailTemplatesRoutes(emailTemplates, idempotency),
+      ...createProductDepartmentsRoutes(productDepartments, idempotency),
+      ...createProductBrandsRoutes(productBrands, idempotency),
+      ...createProductCategoriesRoutes(productCategories, idempotency),
+      ...createProductsRoutes(createProductsController(productsService), idempotency),
+      ...createProductAttributeGroupsRoutes(productAttributeGroups, idempotency),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createCountriesRoutes(countries, rules),
       ...createSettingsRoutes(settings, rules),

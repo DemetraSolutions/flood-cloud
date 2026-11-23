@@ -18,7 +18,7 @@ export interface Failure {
 }
 
 /** The creations of companies, places and groups (and the duplication of a place) need an `Idempotency-Key`: a request of the tests gets a fresh one unless it brings its own. */
-const IDEMPOTENT = /\/(?:companies|places|groups|email-templates)(?:\/[0-9a-f]{24}\/duplicate)?$/;
+const IDEMPOTENT = /\/(?:companies|places|groups|email-templates|product-departments|product-brands|product-attribute-groups|product-categories)(?:\/[0-9a-f]{24}\/duplicate)?$/;
 function withKey(method: string, path: string, headers: Record<string, string> | undefined): Record<string, string> | undefined {
   return method === 'POST' && IDEMPOTENT.test(path) && !Object.keys(headers ?? {}).some((name) => name.toLowerCase() === 'idempotency-key') ? { ...headers, 'idempotency-key': randomUUID() } : headers;
 }

@@ -6,8 +6,15 @@ import { listParamsOf } from '../../shared/http/list.ts';
 import type { ListPage } from '../../shared/http/list.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import { currencies } from '../groups/catalogs/currencies.ts';
+import type { Currency } from '../groups/catalogs/currencies.ts';
+import { measureUnits } from '../groups/catalogs/measure-units.ts';
+import type { MeasureUnit } from '../groups/catalogs/measure-units.ts';
+import { isRecord, recordsOf, textOf } from '../groups/catalogs/kit.ts';
 import { priceLists } from '../groups/catalogs/price-lists.ts';
 import type { PriceList } from '../groups/catalogs/price-lists.ts';
+import { taxes } from '../groups/catalogs/taxes.ts';
+import type { Tax } from '../groups/catalogs/taxes.ts';
 import type { CatalogsService } from '../groups/catalogs/catalogs.service.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import { LOOKUP_LIST, LOOKUP_NAME } from './lookup.list.ts';
@@ -28,6 +35,11 @@ export interface LookupProductItem extends LookupItem {
   readonly type: string | null;
 }
 
+/** A supplier in the compact form: the contact and the price lists it has (the lists the product form offers for each supplier). */
+export interface LookupSupplierItem extends LookupItem {
+  readonly priceLists: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+}
+
 /** A page of compact elements. */
 export interface LookupPage<T extends LookupItem> {
   readonly items: readonly T[];
@@ -40,6 +52,12 @@ export interface LookupService {
   products(principal: AuthPrincipal, access: GroupAccess, query: LookupProductsQuery): Promise<LookupPage<LookupProductItem>>;
   /** Product categories of the group, by name in the language of the caller; `NOT_FOUND` if the caller disappeared since the authentication. */
   categories(principal: AuthPrincipal, access: GroupAccess, query: LookupQuery): Promise<LookupPage<LookupItem>>;
+  /** Suppliers of the group (contacts with the supplier flag), by display name, with the `id` and `name` of their price lists and nothing else of the contact. */
+  suppliers(principal: AuthPrincipal, access: GroupAccess, query: LookupQuery): Promise<LookupPage<LookupSupplierItem>>;
+  /** The currencies of the group (`code`, `symbol`), tolerant, not paginated (at most 10). */
+  currencies(access: GroupAccess): Promise<Array<Pick<Currency, 'code' | 'symbol'>>>;
+  /** The measure units of the group (`id`, `value` and `name`, which is the value), not paginated (at most 50). */
+  measureUnits(access: GroupAccess): Promise<Array<{ readonly id: string; readonly value: string; readonly name: string }>>;
   /** Customers of the group, by display name. */
   customers(principal: AuthPrincipal, access: GroupAccess, query: LookupQuery): Promise<LookupPage<LookupItem>>;
   /** Contact groups of the group, by name. */
@@ -49,6 +67,10 @@ export interface LookupService {
    * without any other field. The catalog is bounded (at most 50 lists), so the answer is not paginated; `NOT_FOUND` if the group does not exist.
    */
   priceLists(access: GroupAccess): Promise<PriceList[]>;
+  /**
+   * The tax rates of the group (`id`, `rate`, `department`, `vatNature`, `description`, the names of `/taxes`), read tolerantly from the group document and without any other field. Bounded (at most 30), not paginated.
+   */
+  taxes(access: GroupAccess): Promise<Tax[]>;
   /** E-mail templates of the group (`id`, `name`), by name. */
   emailTemplates(principal: AuthPrincipal, access: GroupAccess, query: LookupQuery): Promise<LookupPage<LookupItem>>;
   /** The languages of the group as `[{ code }]` (the codes that are texts, as stored; `it` when the group lists none). Bounded by the document of the group. */
@@ -94,13 +116,24 @@ export function createLookupService(deps: LookupDeps): LookupService {
   return {
     products: async (principal, access, query) => {
       const params = listParamsOf(query, LOOKUP_LIST);
-      const read = await deps.lookup.products(principal, access, params, await languageOf(principal), idsOf(query), query.type === undefined ? {} : { type: query.type });
+      const read = await deps.lookup.products(principal, access, params, await languageOf(principal), idsOf(query), {
+        ...(query.type === undefined ? {} : { type: query.type }),
+        ...(query.modifier === undefined ? {} : { modifier: query.modifier === 'true' }),
+        ...(query.categoryId === undefined ? {} : { categoryId: ObjectId.createFromHexString(query.categoryId) }),
+      });
       return pageOfItems(read, (document) => ({ ...itemOf(document), type: typeof document['type'] === 'string' ? document['type'] : null }));
     },
     categories: async (principal, access, query) => {
       const params = listParamsOf(query, LOOKUP_LIST);
       return pageOfItems(await deps.lookup.categories(principal, access, params, await languageOf(principal), idsOf(query)), itemOf);
     },
+    suppliers: async (principal, access, query) =>
+      pageOfItems(await deps.lookup.suppliers(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), (document) => ({
+        ...itemOf(document),
+        priceLists: recordsOf(document['companyLists']).flatMap((list) => (isRecord(list) && textOf(list['id']) !== null ? [{ id: list['id'] as string, name: textOf(list['name']) ?? '' }] : [])),
+      })),
+    currencies: async (access) => ((await deps.catalogs.list(currencies, access)) as Currency[]).map(({ code, symbol }) => ({ code, symbol })),
+    measureUnits: async (access) => ((await deps.catalogs.list(measureUnits, access)) as MeasureUnit[]).map(({ id, value }) => ({ id, value, name: value })),
     customers: async (principal, access, query) => pageOfItems(await deps.lookup.customers(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
     contactGroups: async (principal, access, query) => pageOfItems(await deps.lookup.contactGroups(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
     emailTemplates: async (principal, access, query) => pageOfItems(await deps.lookup.emailTemplates(principal, access, listParamsOf(query, LOOKUP_LIST), idsOf(query)), itemOf),
@@ -108,6 +141,7 @@ export function createLookupService(deps: LookupDeps): LookupService {
       const codes = ((await deps.lookup.languages(access)) ?? []).filter((code): code is string => typeof code === 'string' && code !== '');
       return (codes.length === 0 ? ['it'] : codes).map((code) => ({ code }));
     },
+    taxes: async (access) => ((await deps.catalogs.list(taxes, access)) as Tax[]).map(({ id, rate, department, vatNature, description }) => ({ id, rate, department, vatNature, description })),
     priceLists: async (access) =>
       ((await deps.catalogs.list(priceLists, access)) as PriceList[]).map(({ id, name, enabled, isDefault }) => ({ id, name, enabled, isDefault })),
   };

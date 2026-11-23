@@ -19,6 +19,7 @@ export const REFERENCE_ENDPOINTS = {
   products: 'lookup/products',
   'product-categories': 'lookup/product-categories',
   customers: 'lookup/customers',
+  suppliers: 'lookup/suppliers',
   'contact-groups': 'lookup/contact-groups',
   'price-lists': 'lookup/price-lists',
   'email-templates': 'lookup/email-templates',

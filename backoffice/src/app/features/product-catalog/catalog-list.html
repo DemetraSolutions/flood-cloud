@@ -1,0 +1,102 @@
+<header class="page-header">
+  <h1>{{ text('TITLE') }}</h1>
+  <a *fcCan="'products:update'" class="new" [routerLink]="newRoute()">{{ text('NEW') }}</a>
+</header>
+<p class="hint">{{ text('HINT') }}</p>
+
+@if (blocked(); as refused) {
+  <section class="blocked" role="alert" aria-labelledby="blocked-heading">
+    <h2 id="blocked-heading">{{ text('DELETE.BLOCKED_TITLE', { name: refused.entry }) }}</h2>
+    <p>{{ text('DELETE.BLOCKED_MESSAGE') }}</p>
+    <ul>
+      @for (product of refused.products; track $index) {
+        <li>{{ product }}</li>
+      }
+    </ul>
+    <button fc-button variant="secondary" (click)="blocked.set(null)">
+      {{ 'COMMON.CLOSE' | t }}
+    </button>
+  </section>
+}
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    [label]="'PRODUCT_CATALOG.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+  <fc-select
+    [label]="'PRODUCT_CATALOG.STATE.LABEL' | t"
+    [options]="stateOptions()"
+    [value]="stateValue()"
+    (valueChange)="onState($event)"
+  />
+</form>
+
+@if (entries.error()) {
+  <fc-error-state
+    [title]="'PRODUCT_CATALOG.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="text('TITLE')"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="entries.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="text('EMPTY')"
+    [emptyMessage]="'PRODUCT_CATALOG.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'products:update'" fcEmptyAction [routerLink]="newRoute()">{{ text('NEW') }}</a>
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="detailRoute(row)">{{ nameOf(row) }}</a>
+    </ng-template>
+    <ng-template fcCell="enabled" let-row>
+      @if (row.enabled) {
+        <fc-status-badge tone="success">{{ 'PRODUCT_CATALOG.STATE.ENABLED' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge>{{ 'PRODUCT_CATALOG.STATE.DISABLED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+    <ng-template fcRowActions let-row>
+      @if (editable(row)) {
+      <button
+        *fcCan="'products:update'"
+        fc-button
+        variant="ghost"
+        [attr.aria-label]="text('DELETE.LABEL', { name: nameOf(row) })"
+        (click)="askDelete(row)"
+      >
+        {{ 'PRODUCT_CATALOG.DELETE.ACTION' | t }}
+      </button>
+      }
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="entries.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}
+
+<fc-confirm-dialog
+  [heading]="text('DELETE.TITLE')"
+  [message]="confirmMessage()"
+  [confirmLabel]="'PRODUCT_CATALOG.DELETE.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="delete()"
+/>

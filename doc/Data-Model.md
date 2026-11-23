@@ -250,21 +250,126 @@ Le immagini del Media Manager. Collection `legacy-write` del database del gruppo
 
 Chiavi e ordine come nel legacy; `createdBy` e `companyId` seguono `updateDate`. Sono **additive**: il legacy le ignora (legge solo le chiavi che conosce) e non le tocca. Un documento legacy può mancare di campi (nessuno schema): la lettura è tollerante. Gli oggetti stanno nel bucket in `<groupId>/media/image/<xs|s|m|l|xl>/<basename>` e si raggiungono con `groups.filesHost` (letto, mai scritto: `https` valido, altrimenti nessun URL). **Descrittore nei loghi dell'azienda** (`companies.medias.images.customersAppLogoLight|Dark`): `{ _id (string esadecimale), dirname, basename, extension, filename (= name), mimetype, filectime (double), mmThumb ({}), type ('image'), title, alt }` in quest'ordine. Il backend non si fida di un documento `files`, che il legacy lascia riscrivere a qualunque utente: per un logo la directory è sempre `/media/image`, il `basename` deve essere un nome semplice (un solo segmento, senza `/`, `\`, `..`, `?`, `#`, `%`, caratteri di controllo né punto iniziale), `mimetype` un `image/*` e l'estensione lettere e cifre, altrimenti l'immagine non è utilizzabile (`422`).
 
-## products_departments — reparti del gruppo (database del gruppo, solo inserimento)
-I reparti che il POS legge senza guardia (`department.tax.value`). Collection `legacy-write` del database del gruppo (`PRODUCTS_DEPARTMENTS_OWNED_FIELDS`): in questo passo (8A) il backend **inserisce documenti interi** nella transazione che crea il gruppo, uno per aliquota; non li legge né li modifica (la loro gestione è del dominio dei prodotti). La collection non si crea prima: nasce con l'inserimento. Nessun indice, come nel legacy.
+## products_departments — reparti del gruppo (database del gruppo)
+I reparti che il POS legge senza guardia (`department.tax.value`) e che il backoffice gestisce dal passo C1. Collection `legacy-write` del database del gruppo (`PRODUCTS_DEPARTMENTS_OWNED_FIELDS`): il backend **inserisce documenti interi** (alla creazione del gruppo, uno per aliquota, nel passo 8A; con `POST /v1/groups/{groupId}/product-departments`, passo C1), **modifica** solo i campi posseduti con `$set`/`$unset` (ogni altra chiave del documento resta) ed **elimina** (definitivamente). La collection non si crea prima: nasce con l'inserimento. Nessun indice, come nel legacy (la regola `ensureIndexes` vieta gli indici sulle collection dei gruppi): l'unicità del codice è un controllo applicativo.
 
-| Campo | Tipo BSON | Valore alla creazione |
+| Campo | Tipo BSON | Dati reali (profilo di produzione, 150 gruppi: 351 reparti, 1–8 per gruppo) e valore alla creazione |
 |---|---|---|
 | `_id` | ObjectId | nuovo |
-| `groupId` | ObjectId | il gruppo nuovo (chiave **aggiuntiva**: il legacy non la scrive, e la ignora) |
-| `code` | Int32 | il reparto dell'aliquota (1–99); nel legacy era `undefined` per le aliquote diverse da 4, 10 e 22 |
-| `tax` | oggetto | copia dell'aliquota di `groups.taxes`: `{ id, value, department, description: null, natura: null }` (`value` Int32 se intero, Double altrimenti) |
-| `name` | oggetto | `{ it: "Reparto <code>" }` |
-| `description` | oggetto | `{ it: "" }` |
-| `medias` | oggetto | `{ images: {} }` |
-| `placesAvailability` | array | `[]` |
-| `status`, `trash` | booleani | `true`, `false` |
-| `insertDate`, `updateDate` | Date | istante della creazione |
+| `groupId` | ObjectId | solo nei documenti dell'onboarding (chiave **aggiuntiva**: il legacy non la scrive); i reparti creati dalle route non la scrivono e non la toccano |
+| `code` | Int32 (anche stringa, Double, `NaN`) | Int32 in 235 documenti, **stringa in 110**, Double `NaN` in 6; nessun codice duplicato nel gruppo. Le route scrivono un Int32 da 1 a 99, unico nel gruppo **per valore numerico**; la lettura è tollerante (stringa di cifre → numero, `NaN`/non numerico/assente → `null`) |
+| `tax` | oggetto | sempre `{ id, value, department, description, natura }`: copia dell'aliquota di `groups.taxes` (`value` Int32 se intero, Double altrimenti); il POS legge `tax.value` e `tax.department`. Si **riallinea** quando l'aliquota del gruppo cambia (`updateMany` sui reparti con lo stesso `tax.id`, solo se la copia differisce, con `$set` delle sole cinque chiavi `tax.id`, `tax.value`, `tax.department`, `tax.description`, `tax.natura`: le altre chiavi di `tax` restano) |
+| `name`, `description` | oggetti per lingua | `{ it: "Reparto <code>" }` e `{ it: "" }` dall'onboarding; dalle route le lingue del gruppo |
+| `noDiscount`, `secondaryFiscalPrinter` | booleani | presenti solo in 65 documenti; assenti = `false`; le route li scrivono sempre nei documenti nuovi |
+| `medias` | oggetto | `{ images: {} }`; **nessuna immagine salvata** nei dati reali (`medias.images.images` è un oggetto vuoto lasciato da un bug del vecchio form: non si legge né si tocca). Con la feature `media` l'immagine scelta dalla libreria sta in `medias.images.main` (descrittore come quello dei loghi delle aziende: `_id` testo, `dirname`, `basename`, `extension`, `filename`, `mimetype`, `filectime` Double, `mmThumb: {}`, `type`, `title`, `alt`); se `medias` o `medias.images` mancano o non sono oggetti si scrive il contenitore più piccolo che contiene il percorso |
+| `placesAvailability` | array di ObjectId | vuoto o assente in 331 documenti (= tutti i punti vendita); gli elementi sono ObjectId semplici; **assente, `null` o vuoto** vuol dire tutti i punti vendita (e solo questo), ogni altro elemento (anche il testo esadecimale) è anomalo: non è un punto vendita, si conserva e rende la voce di sola lettura per CA e PA |
+| `status` | booleano | stato del reparto (`enabled` nell'API); il POS non lo filtra |
+| `trash` | booleano | presente in 276 documenti dall'onboarding, **mai letto dal legacy** e mai letto né scritto dalle route |
+| `insertDate`, `updateDate` | Date | istante della creazione; `updateDate` si aggiorna a ogni modifica (anche da un riallineamento dell'aliquota) e protegge la scrittura da modifiche concorrenti |
+
+Chiavi che il backend non gestisce restano intatte in ogni modifica. Un reparto con `tax` non oggetto (reparti del codice morto del legacy) si legge con `tax: null`.
+
+## products_brands — marche del gruppo (database del gruppo)
+Collection `legacy-write` (`PRODUCTS_BRANDS_OWNED_FIELDS`, passo C1): il backend inserisce documenti interi (`POST /v1/groups/{groupId}/product-brands`), modifica i campi posseduti con `$set`/`$unset` ed elimina. 4 documenti nei dati reali. Nessun cestino, nessun indice.
+
+| Campo | Tipo BSON | Note |
+|---|---|---|
+| `_id` | ObjectId | |
+| `name`, `description` | oggetti per lingua | `name` obbligatorio nella lingua richiesta |
+| `placesAvailability` | array di ObjectId | vuoto = tutti i punti vendita (come i reparti) |
+| `medias` | oggetto | `{ images: {} }`; immagine in `medias.images.main` come nei reparti |
+| `status` | booleano | `enabled` nell'API |
+| `insertDate`, `updateDate` | Date | |
+
+I tre interruttori che il vecchio form mostrava (disponibile per cassa, per e-commerce, in evidenza) non erano salvati e non esistono. Una marca è usata da `products.brandId` (ObjectId): non si elimina se un prodotto non cestinato la ha.
+
+## products_attributes — gruppi di attributi (database del gruppo)
+Collection `legacy-write` (`PRODUCTS_ATTRIBUTES_OWNED_FIELDS`, passo C1): il backend inserisce documenti interi (`POST /v1/groups/{groupId}/product-attribute-groups`), imposta i campi posseduti con `$set` (la lista `attributes` si sostituisce per intero) ed elimina. 2 documenti nei dati reali. Nessun indice.
+
+| Campo | Tipo BSON | Note |
+|---|---|---|
+| `_id` | ObjectId | |
+| `name` | oggetto per lingua | nome del **gruppo** |
+| `attributes` | array di `{ id, name }` | `id` testo generato dal server (22 caratteri base64url, come gli id degli altri elenchi); `name` oggetto per lingua; al più 200 elementi. Gli elementi con altre chiavi le conservano finché il nome non cambia; gli elementi senza `id` testuale (o non oggetti) non si mostrano e si conservano in coda a ogni sostituzione della lista |
+| `insertDate` | Date | **assente** nei gruppi nati dall'upsert del vecchio sistema |
+| `updateDate` | Date | |
+
+L'uso dei prodotti: `products.attributes` è un array di testi, gli `id` degli elementi di `attributes`; né un attributo né un gruppo si eliminano se un prodotto non cestinato ne usa uno.
+
+## products_categories — categorie di prodotto (database del gruppo)
+Collection `legacy-write` (`PRODUCTS_CATEGORIES_OWNED_FIELDS` e `PRODUCTS_CATEGORIES_OWNED_TREES`, passo C2): il backend inserisce documenti interi nella forma del legacy (`POST /v1/groups/{groupId}/product-categories`), modifica solo i campi posseduti con `$set`/`$unset` ed elimina (definitivamente). Dati reali (150 gruppi): 3.867 categorie, al massimo 101 per gruppo. Nessun indice, nessun cestino (`trash` c'è in 22 documenti, mai usato: non si legge né si scrive).
+
+| Campo | Tipo BSON | Dati reali e scrittura |
+|---|---|---|
+| `parentId` | ObjectId o `null` | albero; nessun genitore orfano, **cicli in 11 gruppi**. Le route impediscono nuovi cicli; la lettura è tollerante (vedi `doc/API.md`) |
+| `name`, `description` | oggetti per lingua | `name` obbligatorio nella lingua richiesta |
+| `position`, `productionValue` | Int32 o `null` | `position`: Double (con `NaN`) in 1.098, Int32 in 1.993, `null` in 776; `productionValue`: Double (`NaN`) in 2.602. Le route scrivono Int32 o `null`, mai `NaN`; la lettura rende `null` un `NaN` o un valore non numerico |
+| `availability.pos`, `availability.ecommerce` | booleani | `ecommerce` assente in 1.127 documenti (assente = `false`) |
+| `noDiscount`, `requiresGreaterAge`, `secondaryFiscalPrinter`, `featured` | booleani | chiavi non sempre presenti (assente = `false`) |
+| `backgroundColor`, `textColor` | testo `#RRGGBB` | predefinito `#000000`; il legacy accetta qualunque testo, la lettura rende `null` ciò che non è un colore |
+| `integrations.floodOrders`, `.yellgo`, `.leggimenu`, `.easyappear` | booleani | `easyappear` (anche `easyAppear` in 51 documenti): conservato e mai esposto né modificato; i nuovi documenti lo scrivono `false`; `integrations` assente in 58 documenti |
+| `roomsSettings.endMeal`, `.handheldHidden`, `.percentageFee`, `.printGroup`, `.alwaysFirstExit`, `.notAffiliatedMenu`, `.type` | booleani, numero o `null`, testo | `percentageFee` Int32 se intero, Double con decimali (il legacy usa `parseFloat`); `printGroup` Int32 o `null`; `type` `other`/`food`/`beverage` |
+| `tgm.type` | booleano | `tgm` assente in 1.522 documenti |
+| `medias.images.main`, `.icon`, `.internalFileName`, `.externalUrl` | descrittore, testo | posseduti per percorso esatto (più i contenitori di ripiego `medias.images` e `medias`); `externalUrl` solo `https`; descrittori come nei loghi delle aziende; il residuo `medias.images.images` non si legge né si tocca; se `medias` o `medias.images` mancano o non sono oggetti si scrive il contenitore più piccolo che contiene il percorso |
+| `placesAvailability` | array | **due forme**: elementi `{ id: ObjectId, position: Int32 o null, productionCenterId: testo o null }` (3.535) oppure ObjectId semplici, formato storico (307); vuoto o assente = tutti i punti vendita. Le route scrivono sempre la forma attuale (gli elementi di un punto vendita già presente conservano le loro altre chiavi) e riscrivono il formato storico a ogni salvataggio; elementi anomali si conservano |
+| `variants` | array di ObjectId | modificatori: prodotti con `variant.status` vero |
+| `variantsCategories` | array di ObjectId | categorie di modificatori |
+| `printStations`, `printStationsNoRooms` | mappe `{ "__<placeId>": [idPostazione] }` | possedute come alberi (`PRODUCTS_CATEGORIES_OWNED_TREES`): si scrive o si toglie la voce di un solo punto vendita; le chiavi che non sono `__` e un id si conservano e non si mostrano |
+| `status` | booleano | `enabled` nell'API |
+| `insertDate`, `updateDate` | Date | `updateDate` protegge la scrittura da modifiche concorrenti |
+
+Riferimenti alla categoria (controllati prima di eliminarla, vedi `doc/API.md`): `products_categories.parentId` e `variantsCategories`; `products.categories`, `products.variantsCategories`, `products.selectableBundleProducts[].categoryId`, `products.selectableVariantsBundleProducts[].categoryId`; `groups.promotions[]` (`conditions.categories.ids`, `actions.categoriesIds`); nei punti vendita (letti dalle copie in `common.places`) `printStations[].summaryCategoriesIds`, `kiosk.upsellingCategoryId`, `kiosk.productsCategories[]._id`, `selfOrdering.priceListsConfig.<listino>.productsCategories[]._id`, `integrations.tsh.categoriesMap.<idCategoria>`. Degli id dei punti vendita (postazioni di stampa, centri di produzione) si leggono solo `printStations[].id` e `productionCenter[].id`.
+
+## products — prodotti del gruppo (database del gruppo)
+Collection `legacy-write` (`PRODUCTS_OWNED_FIELDS`, `PRODUCTS_OWNED_TREES`, `PRODUCTS_STOCK_LEAVES` e `PRODUCTS_INSERT_ONLY_FIELDS`, passo C3): il backend inserisce documenti interi nella forma che scrive il backoffice legacy (`POST /v1/groups/{groupId}/products`, 58 chiavi, array sempre presenti), modifica solo i campi posseduti con `$set`/`$unset` (per **percorso foglia** dentro `availability`, `variant`, `modularBundle`, `colors.pos`, `shippingInfo`, `roomsSettings`, `integrations`, `medias.images`; le mappe `printStations` e `printStationsNoRooms` come alberi, una voce per punto vendita; `quantity` solo alle foglie `quantity.__<placeId>.__<storageId>.min|max|location`), imposta `trash`/`trashDate` ed elimina (definitivamente, solo dal cestino). **Mai scritti**: `quantity.*.value`, `quantity` come oggetto intero (nel registro è solo-inserimento e lettura, come `lastAveragePrice`: l'ultima barriera rifiuta `quantity`, `quantity.__p`, `quantity.__p.__s` e `quantity.__p.__s.value`; si scrivono solo le foglie `min|max|location`) e `lastAveragePrice` (li muove il magazzino; `lastAveragePrice` si scrive solo azzerato in un documento nuovo), `tags`, `related`, `parentId` (sempre vuoti, solo in un documento nuovo), `integrations.easyappear` (`false` in un documento nuovo), e ogni chiave che il registro non elenca (quelle del POS e delle integrazioni restano). I prezzi (`prices`) sono scritti dalle route del prodotto e, nella sola copia dell'aliquota, dal riallineamento di un'aliquota del gruppo (`prices[].tax` e `prices[].taxData`, con `price` ricalcolato). Nessun indice (a oggi in 29 database su 150 ci sono `barcode.value_1` e `code_1`, creati altrove; le ricerche per `code`, barcode e PLU sono scansioni limitate con `maxTimeMS`). Dati reali del 2026-11-23: 94.437 prodotti, fino a 5.172 per gruppo e 28 KB per documento, 16.159 nel cestino.
+
+Mapping campo API ↔ campo del documento (le chiavi senza funzione del gruppo non compaiono nell'API; "tollerante" = lettura che rende `null`, `false` o lista vuota per `NaN`, tipo sbagliato o chiave assente):
+
+| Campo API | Campo del documento | Tipo BSON e dati reali |
+|---|---|---|
+| `id` | `_id` | ObjectId |
+| `type`, `family`, `isModifier` | `type`; calcolata; `variant.status` | `type`: `product` 81.455, `tobaccos` 12.738, `games` 122, `service` 38, `exempt` 14, `null` 70 (letto `null`); `variant.status` vero in 14.020, assente in 285; `isModifier` non cambia dopo la creazione |
+| `enabled` | `status` | booleano |
+| `code` | `code` | testo; `null` in 2.393 (letto `null`); `""` in un documento nuovo |
+| `plu` | `plu` | testo (40.578), `null` (52.506), assente (1.353); scritto come testo di cifre senza zeri iniziali o `null` (il POS lo confronta come stringa) |
+| `barcodes[]` `{ value, loadQuantity, saleQuantity }` | `barcode[] { value, qtLoad, qtSale }` | array; `qtLoad` solo con `warehouse`; elementi che non sono oggetti con `value` testo si ignorano |
+| `name`, `shortName`, `description`, `shortDescription` | stessi nomi | oggetti per lingua; `shortName` fino a 18 caratteri |
+| `favorite`, `favoriteHandheld`, `generic`, `toCheck`, `noDiscount`, `featured` | stessi nomi | booleani; assenti = `false` |
+| `brandId` | `brandId` | ObjectId o `null` |
+| `categoryIds[]` | `categories[]` | ObjectId (o testo esadecimale, letto): 3.706 riferimenti orfani, mostrati per id |
+| `attributeIds[]` | `attributes[]` | testi (id di `products_attributes.attributes[]`) |
+| `position`, `productionValue` | stessi nomi | Int32 o `null` |
+| `duration`, `maxConcurrent` | `time`, `max` | `HH:mm` o `""`/`null`; `max` Int32 o `null` (`NaN` in 2.307, letto `null`) |
+| `validFrom`, `validTo` | `startDate`, `endDate` | `Date` o `null` (in lettura anche testo ISO) |
+| `availability.pos\|warehouse\|scales\|ecommerce` | `availability.pos\|warehouse\|scales\|ecommerce` | booleani |
+| `integrations.floodOrders\|yellgo\|leggimenu` | `integrations.floodOrders\|yellgo\|leggimenu` | booleani; `integrations.easyappear` non esposta né toccata |
+| `scaleType` | `scaleType` | Int32 `0` (`weight`) o `1` (`piece`); `NaN` in 8.416 (letto `null`) |
+| `loadUnit`, `unloadUnit`, `conversionRatio` | `measureLoad`, `measureDownload`, `measureConversionRatio` | testi (il `value` di `groups.measureUnits[]`, non l'id), numero (`NaN` possibile) |
+| `colors.text`, `colors.background` | `colors.pos.text`, `colors.pos.background` | `#RRGGBB` |
+| `dining.halfPortion`, `.hiddenOnHandheld`, `.affiliatedMenu`, `.reversePrint`, `.feePercentage` | `roomsSettings.halfPortion`, `.handheldHidden`, `.affiliatedMenu`, `.reversePrint`, `.percentageFee` | booleani, numero o `null` |
+| `modifier.type`, `.pricePercentagePlus`, `.pricePercentageMinus`, `.description` | `variant.type`, `.pricePercentagePlus`, `.pricePercentageMinus`, `.description` | `pm`/`p`/`m`/`i` ↔ `addRemove`/`add`/`remove`/`info`; `variant.type` `null`, assente (13.156) e altri testi (438) si leggono `null`; numeri o `null` |
+| `requiredModifierIds`, `modifierIds`, `excludedModifierIds`, `modifierCategoryIds` | `variantsRequired`, `variants`, `variantsExcluded`, `variantsCategories` | array di ObjectId; assenti in molti documenti |
+| `components[] { productId, quantity, waste }` | `bundleProducts[] { _id, quantity, waste }` | `quantity` nell'unità di carico del componente |
+| `menu[] { categoryId, quantity, course, productIds }` | `selectableBundleProducts[] { categoryId, quantity, exit, products[{ _id }] }` | `exit` `NaN` in 13 (letto `null`); si scrive solo con `rooms` |
+| `modifierChoices[] { categoryId, freeQuantity, priceRule, productIds }` | `selectableVariantsBundleProducts[] { categoryId, freeQt, priceType, products[{ _id }] }` | `h`/`l` ↔ `highest`/`lowest` |
+| `modularPriceRule` | `modularBundle.priceRule` | `average` ↔ **`avarage`** (refuso conservato), `sum`, `fixed`, `null` |
+| `prices[]` | `prices[] { id, listId, currency, tax, taxData{ id, value, department, description, natura }, price, taxed, discount, startDate, endDate, startTimeDaily, endTimeDaily, weekDays, fromQt, maxQtSell }` | vedi sotto |
+| `places[] { placeId, favorite, favoriteHandheld, position, productionCenterId }` | `placesAvailability[] { id, favorite, favoriteHandheld, position, productionCenterId }` | **due forme**: oggetti (69.305 elementi) e ObjectId semplici (78, formato storico, riscritti nella forma attuale solo quando si scrive `places`); vuota o assente in 30.996 documenti = per tutti; 78 riferimenti a punti vendita inesistenti |
+| `printStations`, `counterPrintStations` | `printStations`, `printStationsNoRooms` | mappe `{ "__<placeId>": [idPostazione] }` |
+| `stock { <placeId> { <storageId> { quantity, min, max, location } } }` | `quantity { "__<placeId>" { "__<storageId>" { value, min, max, location } } }` | `value` sola lettura (`$inc` del magazzino); si scrivono `min`, `max`, `location` |
+| `costs` | `lastAveragePrice { lastSupplierId, total{ lastPrice, averagePrice, weightedAveragePrice, … }, suppliers{ <id> { … } } }` | solo lettura; zero in un documento nuovo |
+| `simpleCost` | `simpleCost` | numero o `null` |
+| `suppliers[] { contactId, code, name, minQuantity, deliveryTime, deliveryTimeUnit, favorite, priceLists[] }` | `suppliers[] { id, code, name, minQt, deliveryTime, deliveryTimeUnit, favorite, companyLists[{ id, price, discount1, discount2, discount3 }] }` | `id` ObjectId (o testo, scritto dal magazzino), `delivetyTime` (refuso del magazzino) letto come `deliveryTime`; le chiavi sconosciute di un elemento restano |
+| `shipping.width\|height\|depth\|weight` | `shippingInfo.width\|height\|depth\|weight` | numeri o `null` |
+| `image`, `gallery[]`, `internalFileName`, `externalUrl` | `medias.images.main`, `.gallery[]`, `.internalFileName`, `.externalUrl` | descrittori come i loghi delle aziende; contenitori di ripiego `medias.images` e `medias` |
+| `trashed`, `trashedAt` | `trash`, `trashDate` | `trash` booleano (16.159 veri); `trashDate` solo nei documenti cestinati da questo backend |
+| `createdAt`, `updatedAt` | `insertDate`, `updateDate` | Date; `updateDate` è la versione per il POS |
+
+**Prezzi.** `price` è il netto (8 decimali), `taxed` il prezzo con IVA (2 decimali dal form, fino a 8 dall'import), in **unità di valuta decimali**; `tax` la percentuale; `taxData` la copia dell'aliquota del gruppo (`id`, `value`, `department`, `description`, `natura`). `listId` e `taxData.id` sono sempre testi; `startDate`/`endDate` sono **`Date` (735) o testo ISO (784)** o `null`, e le route scrivono il testo ISO come il backoffice legacy. 6 prezzi hanno `price`/`taxed` `NaN` (letti `null`); più prezzi per lo stesso listino in 2.008 prodotti; 44 listini e 2 aliquote inesistenti; `taxData` diversa dall'aliquota attuale in 528 prezzi (la riallinea una modifica dell'aliquota). L'indice dell'array è stabile (il POS modifica `prices.<n>`).
+
+**Guardie di concorrenza.** `updateDate` (e `placesAvailability`) devono essere ancora quelli letti, e ogni campo che la scrittura imposta deve avere ancora il valore letto (`sameAs`): il POS scrive i prezzi per indice senza toccare `updateDate`. I contenitori di ogni foglia scritta devono essere mancanti o oggetti. La versione (`ETag`) copre i campi scritti dal backend tranne `quantity` (di cui entrano solo `min`, `max` e `location`), `lastAveragePrice`, `tags`, `related`, `parentId` e `integrations.easyappear`.
+
+Riferimenti al prodotto (controllati prima di eliminarlo, vedi `doc/API.md`): `products.bundleProducts[]._id`, `products.selectableBundleProducts[].products[]._id`, `products.selectableVariantsBundleProducts[].products[]._id`, `products.variantsRequired`, `products.variants`, `products.variantsExcluded`, `products_categories.variants`, `users.servicesId`, `groups.productsFavorites[].favorites[]._id`, `groups.promotions[].conditions.products.ids` e `actions.productsIds`. Un prodotto fa riferimento a: `brandId` (`products_brands`), `categories`, `variantsCategories`, `selectableBundleProducts[].categoryId` e `selectableVariantsBundleProducts[].categoryId` (`products_categories`), `attributes` (`products_attributes.attributes[].id`), `suppliers[].id` (`contacts` con `supplier: true`), `placesAvailability[].id`, `printStations`, `quantity` (copie dei punti vendita in `common.places`: `printStations[].id`, `productionCenter[].id`, `storages[].id`), `prices[].listId` (`groups.priceLists`), `prices[].currency` (`groups.currencies`), `prices[].taxData.id` (`groups.taxes`), `measureLoad`/`measureDownload` (`groups.measureUnits[].value`), `medias.images.main|gallery` (`files`).
 
 ## tobaccos — listino nazionale dei tabacchi (database common, collection legacy condivisa)
 Il listino ufficiale ADM, **unico per la piattaforma**, che il legacy sostituisce per intero a ogni importazione (`ms-tgm-service`) e che legge la sincronizzazione del catalogo. Collection `legacy-write` (`TOBACCOS_OWNED_FIELDS`): il nuovo backend **inserisce documenti interi** e **cancella tutto**, sempre insieme, in una transazione (passo T3); non modifica mai un documento. Nessuna chiave aggiuntiva, nessun validatore (i documenti del legacy possono avere tipi diversi).
@@ -318,8 +423,8 @@ Non si leggono mai `XML`, `hubId`, `sent`, `dealerId` né gli altri dati della c
 Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul cluster del gruppo:
 | Collection | Perché | Campi usati |
 |---|---|---|
-| `products` | esistenza degli id di preferiti e promozioni; servizi del gruppo e verifica di `serviceIds`; letture compatte `lookup/products` | `_id`, `trash`, `type` (`product`, `service`, `exempt`, `tobaccos`, `games`, `monopoly`), `name` (oggetto per lingua) |
-| `products_categories` | esistenza delle categorie nelle promozioni; lettura compatta `lookup/product-categories` | `_id`, `trash`, `name` (oggetto per lingua) |
+| `products` | esistenza degli id di preferiti e promozioni; servizi del gruppo e verifica di `serviceIds`; letture compatte `lookup/products`; controllo dei riferimenti prima di eliminare un reparto, una marca o un attributo (passo C1: al massimo 20 prodotti, solo `_id`, `trash` diverso da `true`); dal passo C3 collection `legacy-write` (`PRODUCTS_OWNED_FIELDS`, sezione `products`) | `_id`, `trash`, `type` (`product`, `service`, `exempt`, `tobaccos`, `games`, `monopoly`), `name` (oggetto per lingua), `brandId` (ObjectId), `attributes` (array di id di attributi), `prices[].taxData.department` (numero del reparto dell'aliquota) |
+| `products_categories` | esistenza delle categorie nei cataloghi del gruppo; lettura compatta `lookup/product-categories`; dal passo C2 collection `legacy-write` gestita da `/product-categories` (vedi la sua sezione) | `_id`, `trash`, `name` (oggetto per lingua) |
 | `contacts` | esistenza dei clienti nelle promozioni; lettura compatta `lookup/customers` | `_id`, `trash`, `customer`, `companyName`, `name`, `surname` (mai email, telefoni, indirizzi) |
 | `contacts_groups` | esistenza dei gruppi di contatti nelle promozioni; lettura compatta `lookup/contact-groups` | `_id`, `name` (stringa; nessun flag di cestino) |
 

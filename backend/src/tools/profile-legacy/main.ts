@@ -6,6 +6,7 @@ import { createMongoClient } from '../../db/client.ts';
 import { closeClusters, createClusterClients } from '../../db/clusters.ts';
 import type { ClusterRegistry } from '../../db/clusters.ts';
 import { createDatabases } from '../../db/databases.ts';
+import { profileCatalog } from './catalog.ts';
 import { profileLegacy } from './profile.ts';
 import { profileSubobjects } from './subobjects.ts';
 
@@ -29,26 +30,33 @@ export interface MainDeps {
   readonly createClient?: typeof createMongoClient;
 }
 
-const USAGE = 'Usage: node src/tools/profile-legacy/cli.ts [--env development|production] [--out <report.json>] [--focus subobjects]';
+const USAGE = 'Usage: node src/tools/profile-legacy/cli.ts [--env development|production] [--out <report.json>] [--focus subobjects|catalog] [--sample <group databases>]';
+
+/** Targeted profiles selectable with `--focus`. */
+type Focus = 'subobjects' | 'catalog';
 
 /** The validated command line. */
 interface Args {
   /** Environment the operator asked for; `development` unless `--env` says otherwise. */
   env: AppEnv;
   out?: string;
-  /** `true` for `--focus subobjects`: the targeted sub-object profile instead of the full one. */
-  subobjects: boolean;
+  /** `--focus` value: the targeted sub-object or catalog profile instead of the full one. */
+  focus: Focus | undefined;
+  /** `--sample` value: how many group databases the catalog profile reads (only with `--focus catalog`). */
+  sample: number | undefined;
 }
 
 /**
- * Reads the command line: any order of `--out <path>` and `--env <development|production>`, each at most once.
+ * Reads the command line: any order of `--out <path>`, `--env <development|production>`, `--focus <subobjects|catalog>` and
+ * `--sample <positive integer>` (only with `--focus catalog`), each at most once.
  *
  * @returns The arguments, or `undefined` for anything else.
  */
 function parseArgs(argv: readonly string[]): Args | undefined {
   let out: string | undefined;
   let env: AppEnv = 'development';
-  let subobjects = false;
+  let focus: Focus | undefined;
+  let sample: number | undefined;
   const seen = new Set<string>();
   for (let index = 0; index < argv.length; index += 2) {
     const flag = argv[index] as string;
@@ -61,13 +69,18 @@ function parseArgs(argv: readonly string[]): Args | undefined {
       out = value;
     } else if (flag === '--env' && (APP_ENVS as readonly string[]).includes(value)) {
       env = value as AppEnv;
-    } else if (flag === '--focus' && value === 'subobjects') {
-      subobjects = true;
+    } else if (flag === '--focus' && (value === 'subobjects' || value === 'catalog')) {
+      focus = value;
+    } else if (flag === '--sample' && /^[1-9][0-9]{0,5}$/.test(value)) {
+      sample = Number(value);
     } else {
       return undefined;
     }
   }
-  return out === undefined ? { env, subobjects } : { env, subobjects, out };
+  if (sample !== undefined && focus !== 'catalog') {
+    return undefined;
+  }
+  return out === undefined ? { env, focus, sample } : { env, focus, sample, out };
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -105,7 +118,7 @@ interface Destination {
 /**
  * Chooses the report path. Inside the repository only `backend/reports/` is allowed (it is git-ignored);
  * outside the repository any path is. Without `--out` the report goes to
- * `backend/reports/legacy-profile-<env>-<timestamp>.json` (`legacy-subobjects-…` with `--focus subobjects`).
+ * `backend/reports/legacy-profile-<env>-<timestamp>.json` (`legacy-subobjects-…` and `legacy-catalog-…` with `--focus`).
  *
  * @returns The destination, or an error message.
  */
@@ -183,7 +196,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
   }
   const secrets = [...config.clusters.values()].flatMap((cluster) => [cluster.uri.reveal(), ...(cluster.analyticsUri === null ? [] : [cluster.analyticsUri.reveal()])]);
 
-  const destination = await chooseDestination(parsed.out, deps.cwd, config.appEnv, parsed.subobjects ? 'subobjects' : 'profile');
+  const destination = await chooseDestination(parsed.out, deps.cwd, config.appEnv, parsed.focus ?? 'profile');
   if (typeof destination === 'string') {
     deps.error(destination);
     return 1;
@@ -204,7 +217,19 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     await Promise.all([...registry.clusters.values()].map((clients) => clients.main.connect()));
     const databases = createDatabases(registry, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
     let report: unknown;
-    if (parsed.subobjects) {
+    if (parsed.focus === 'catalog') {
+      let found = 0;
+      for (const clusterId of databases.clusterIds) {
+        found += (await databases.listGroupIds(clusterId)).length;
+      }
+      deps.error(`Profiling catalog of ${config.appEnv}: ${found} group databases found on ${databases.clusterIds.length} cluster(s), read-only${parsed.sample === undefined ? '' : `, sample of ${Math.min(parsed.sample, found)}`}`);
+      report = await profileCatalog(databases, {
+        appEnv: config.appEnv,
+        ...(parsed.sample === undefined ? {} : { sample: parsed.sample }),
+        ...(deps.progressEvery === undefined ? {} : { progressEvery: deps.progressEvery }),
+        onProgress: (done, total) => deps.error(`profiled ${done}/${total} group databases`),
+      });
+    } else if (parsed.focus === 'subobjects') {
       deps.error(`Profiling sub-objects of ${config.appEnv}: common users and groups, read-only`);
       report = await profileSubobjects(databases.common(), { appEnv: config.appEnv });
     } else {

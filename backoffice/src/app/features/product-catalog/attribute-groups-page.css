@@ -1,0 +1,21 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 60rem;
+}
+
+.hint,
+.note {
+  color: var(--color-text-muted);
+}
+
+.create form,
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.create {
+  margin-block-end: var(--space-4);
+}

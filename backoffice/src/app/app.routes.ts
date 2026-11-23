@@ -16,7 +16,11 @@ import {
 import { Shell } from './core/layout/shell';
 import { leaveCompany } from './features/companies/company-leave';
 import { leaveEmailTemplate } from './features/email-templates/email-template-leave';
+import { leaveCatalogItem } from './features/product-catalog/catalog-item-leave';
 import { leavePlace } from './features/places/place-leave';
+import { leaveCategory } from './features/product-categories/category-leave';
+import { leaveProduct } from './features/products/product-leave';
+import { FAMILIES, FAMILY_ORDER, ProductFamily } from './features/products/product.types';
 
 /**
  * Creation and detail of users under a path prefix (the group area and the platform area; the
@@ -272,6 +276,126 @@ const emailTemplateRoutes: Routes = [
 ];
 
 /**
+ * Departments, brands and attribute groups of the products of a group (`doc/Tasks.md` step C1).
+ * Reading needs `products:read`, writing (`products:update`) is checked by the pages and the
+ * server; the departments also need the `cash` feature of the group. The departments and the
+ * brands share the list and the page (the kind is route data). Leaving a page with unsaved
+ * changes asks for confirmation.
+ */
+function catalogItemRoutes(
+  kind: 'departments' | 'brands',
+  segment: string,
+  text: string,
+  guards: CanMatchFn[],
+): Routes {
+  const data = { kind };
+  const page = () => import('./features/product-catalog/catalog-item-page').then((m) => m.CatalogItemPage);
+  return [
+    {
+      path: `groups/:groupId/${segment}`,
+      canMatch: [permission('products:read'), ...guards],
+      title: `PRODUCT_CATALOG.${text}.TITLE`,
+      data,
+      loadComponent: () =>
+        import('./features/product-catalog/catalog-list').then((m) => m.CatalogList),
+    },
+    {
+      path: `groups/:groupId/${segment}/new`,
+      canMatch: [permission('products:update'), ...guards],
+      canDeactivate: [leaveCatalogItem],
+      title: `PRODUCT_CATALOG.${text}.FORM.NEW_TITLE`,
+      data,
+      loadComponent: page,
+    },
+    {
+      path: `groups/:groupId/${segment}/:itemId`,
+      canMatch: [permission('products:read'), ...guards],
+      canDeactivate: [leaveCatalogItem],
+      title: `PRODUCT_CATALOG.${text}.FORM.EDIT_TITLE`,
+      data,
+      loadComponent: page,
+    },
+  ];
+}
+
+const productCatalogRoutes: Routes = [
+  {
+    path: 'groups/:groupId/product-categories',
+    canMatch: [permission('products:read')],
+    title: 'PRODUCT_CATEGORIES.TITLE',
+    loadComponent: () =>
+      import('./features/product-categories/category-list').then((m) => m.CategoryList),
+  },
+  {
+    path: 'groups/:groupId/product-categories/new',
+    canMatch: [permission('products:update')],
+    canDeactivate: [leaveCategory],
+    title: 'PRODUCT_CATEGORIES.FORM.NEW_TITLE',
+    loadComponent: () =>
+      import('./features/product-categories/category-page').then((m) => m.CategoryPage),
+  },
+  {
+    path: 'groups/:groupId/product-categories/:categoryId',
+    canMatch: [permission('products:read')],
+    canDeactivate: [leaveCategory],
+    title: 'PRODUCT_CATEGORIES.FORM.EDIT_TITLE',
+    loadComponent: () =>
+      import('./features/product-categories/category-page').then((m) => m.CategoryPage),
+  },
+  ...catalogItemRoutes('departments', 'product-departments', 'DEPARTMENTS', [feature('cash')]),
+  ...catalogItemRoutes('brands', 'product-brands', 'BRANDS', []),
+  {
+    path: 'groups/:groupId/product-attribute-groups',
+    canMatch: [permission('products:read')],
+    title: 'PRODUCT_CATALOG.ATTRIBUTES.TITLE',
+    loadComponent: () =>
+      import('./features/product-catalog/attribute-groups-page').then((m) => m.AttributeGroupsPage),
+  },
+];
+
+/**
+ * The products of a group, one section for each family (products, services, modifiers, tobacco,
+ * games and monopoly): the list, the page of a new product and the page of a product share their
+ * components and differ by the family (route data). Reading needs `products:read`, writing
+ * (`products:update`) is checked by the pages and the server; a family that needs a feature of the
+ * group (services, variants, tobacco) is guarded by it. Leaving a page with unsaved changes asks
+ * for confirmation.
+ */
+function productFamilyRoutes(family: ProductFamily): Routes {
+  const { segment, text, feature: required } = FAMILIES[family];
+  const guards: CanMatchFn[] = required === null ? [] : [feature(required)];
+  const data = { family };
+  const page = () => import('./features/products/product-page').then((m) => m.ProductPage);
+  return [
+    {
+      path: `groups/:groupId/${segment}`,
+      canMatch: [permission('products:read'), ...guards],
+      title: `PRODUCTS.FAMILY.${text}.TITLE`,
+      data,
+      loadComponent: () => import('./features/products/product-list').then((m) => m.ProductList),
+    },
+    {
+      path: `groups/:groupId/${segment}/new`,
+      canMatch: [permission('products:update'), ...guards],
+      canDeactivate: [leaveProduct],
+      title: `PRODUCTS.FAMILY.${text}.NEW_TITLE`,
+      data,
+      loadComponent: page,
+    },
+    {
+      path: `groups/:groupId/${segment}/:productId`,
+      canMatch: [permission('products:read'), ...guards],
+      canDeactivate: [leaveProduct],
+      title: `PRODUCTS.FAMILY.${text}.EDIT_TITLE`,
+      data,
+      loadComponent: page,
+    },
+  ];
+}
+
+const productRoutes: Routes = FAMILY_ORDER.flatMap((family) => productFamilyRoutes(family));
+
+/**
  * Trash of a group (`groups/:groupId/trash`): one page with a tab per kind of item. It needs the
  * read permission of at least one of companies, places and users; the page shows only the tabs the
  * user may read, and the server checks the group against the perimeter of the user.
@@ -282,7 +406,7 @@ const trashRoutes: Routes = [
     path: 'trash',
     canMatch: [
       role('PSA', 'D'),
-      anyPermission('companies:read', 'places:read', 'users:read'),
+      anyPermission('companies:read', 'places:read', 'users:read', 'products:read'),
       trashLanding,
     ],
     title: 'TRASH.TITLE',
@@ -291,7 +415,7 @@ const trashRoutes: Routes = [
   },
   {
     path: 'groups/:groupId/trash',
-    canMatch: [anyPermission('companies:read', 'places:read', 'users:read')],
+    canMatch: [anyPermission('companies:read', 'places:read', 'users:read', 'products:read')],
     title: 'TRASH.TITLE',
     loadComponent: () => import('./features/trash/trash-page').then((m) => m.TrashPage),
   },
@@ -572,6 +696,8 @@ export const routes: Routes = [
           },
           ...groupSettingsRoutes,
           ...groupCatalogRoutes,
+          ...productCatalogRoutes,
+          ...productRoutes,
           ...companyRoutes,
           ...placeRoutes,
           ...trashRoutes,
