@@ -8,7 +8,6 @@ import { createApiKeysRepository } from '../../src/modules/api-keys/api-keys.rep
 import type { ApiKeysRepository, NewApiKey } from '../../src/modules/api-keys/api-keys.repository.ts';
 import type { UsageIncrement } from '../../src/modules/api-keys/api-keys.types.ts';
 import { hashSecret } from '../../src/shared/security/secrets.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
@@ -44,7 +43,7 @@ const increment = (overrides: Partial<UsageIncrement> = {}): UsageIncrement => (
 
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+  await ensureIndexes(ctx.databases, COLLECTIONS);
   repository = createApiKeysRepository(ctx.databases);
 });
 after(() => ctx.cleanup());
@@ -56,15 +55,11 @@ describe('the collections of the public API keys (real MongoDB)', () => {
     assert.deepEqual((await indexes('apiUsage')).filter(([name]) => name !== '_id_'), [['keyId_1_day_1_route_1', true, undefined], ['expireAt_1', false, 0]]);
   });
 
-  it('refuse a document that does not follow the schema: another field, a permission outside the catalog, a hash that is not SHA-256, a role that does not manage keys', async () => {
+  it('refuse a second key with the same hash', async () => {
     const good = newKey();
-    for (const bad of [{ extra: 1 }, { permissions: ['products:read'] }, { permissions: [] }, { hash: 'abc' }, { prefix: 'short' }, { createdBy: { userId: new ObjectId(), role: 'SA' } }, { status: 'paused' }, { rateLimitPerMinute: 0 }, { dailyQuota: 10_000_001 }, { name: '' }, { restrictions: { companyIds: [], placeIds: null, other: 1 } }]) {
-      await assert.rejects(keys().insertOne({ ...good, ...bad } as Document), /Document failed validation/, JSON.stringify(bad));
-    }
     await keys().insertOne({ ...good });
     await assert.rejects(keys().insertOne({ ...good }), /duplicate key/);
     assert.equal(await keys().countDocuments({ hash: good.hash }), 1);
-    await assert.rejects(usage().insertOne({ keyId: new ObjectId(), groupId: GROUP, day: '17/11/2026', route: 'GET /x', calls: 1, errors4xx: 0, errors5xx: 0, rateLimited: 0, expireAt: NOW }), /Document failed validation/);
   });
 });
 
@@ -174,11 +169,12 @@ describe('the repository of the keys (real MongoDB)', () => {
     ]);
     const stored = (await usage().findOne({ keyId, route: 'GET /public/v1/me' }))!;
     assert.deepEqual([stored['groupId'], stored['expireAt']], [GROUP, new Date(Date.parse('2026-11-17T00:00:00.000Z') + 401 * 86_400_000)]);
-    // A row the schema refuses is given back; the others are written all the same, so a retry never counts them twice.
-    const bad = increment({ keyId, route: 'GET /public/v1/taxes', calls: -5 });
+    // A row the database refuses (here a stored counter that is not a number) is given back; the others are written all the same, so a retry never counts them twice.
+    const bad = increment({ keyId, route: 'GET /public/v1/taxes' });
+    await usage().insertOne({ keyId, groupId: GROUP, day: bad.day, route: bad.route, calls: 'broken' });
     const good = increment({ keyId, route: 'GET /public/v1/companies', calls: 1 });
-    assert.deepEqual(await repository.addUsage([bad, good]), { failed: [{ row: bad, code: 121 }], unacknowledged: false });
-    assert.equal((await repository.usage(GROUP, keyId, '2026-11-17', '2026-11-17')).length, 3);
+    assert.deepEqual(await repository.addUsage([bad, good]), { failed: [{ row: bad, code: 14 }], unacknowledged: false });
+    assert.equal(await usage().countDocuments({ keyId, route: good.route, calls: 1 }), 1);
   });
 
   it('reads the usage of a key in a range, by day and route, and of no other key or group', async () => {

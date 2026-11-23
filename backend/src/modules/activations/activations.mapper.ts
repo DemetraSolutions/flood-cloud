@@ -220,7 +220,7 @@ export function totalsOf(rows: readonly RowView[]): TotalsView {
 /**
  * A stored closure document as a {@link Closure}. A document read without its lines gets empty lists.
  *
- * @param document The stored document (the collection has a strict validator, so the stored types are trusted).
+ * @param document The stored document (this backend is the only writer of the collection, so the stored types are trusted).
  */
 export function closureOf(document: Document): Closure {
   const activations = document['activations'] as { lines?: Line[]; totals: ActivationTotals };

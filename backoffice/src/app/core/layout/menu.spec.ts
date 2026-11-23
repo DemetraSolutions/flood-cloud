@@ -344,7 +344,7 @@ describe('visibleMenu', () => {
     const idsFor = (role: Role, hasGroup: boolean) =>
       ids(visibleMenu(MENU, allowAll, allowAll, role, hasGroup));
 
-    it('flags exactly Fidelity, Prodotti and Promozioni', () => {
+    it('flags exactly Fidelity, Catalogo and Promozioni', () => {
       expect(MENU.filter((i) => i.requiresGroup).map((i) => i.id)).toEqual(GROUP_ONLY);
     });
 

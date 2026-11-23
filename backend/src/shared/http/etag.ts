@@ -56,7 +56,19 @@ function matches(header: string | undefined, etag: string): boolean {
  * @param data Payload; it must already be mapped to its public representation.
  */
 export function sendRevalidated(req: Request, res: Response, data: unknown): void {
-  if (!revalidate(req, res, etagOf(data))) {
+  sendRevalidatedWith(req, res, data, etagOf(data));
+}
+
+/**
+ * Like {@link sendRevalidated}, with the tag the caller chose (the strong version of a stored document, for the resources that have one) instead of the content tag.
+ *
+ * @param req Express request.
+ * @param res Express response.
+ * @param data Payload; it must already be mapped to its public representation.
+ * @param etag The complete tag, quotes (and `W/`) included.
+ */
+export function sendRevalidatedWith(req: Request, res: Response, data: unknown, etag: string): void {
+  if (!revalidate(req, res, etag)) {
     sendData(res, data);
   }
 }

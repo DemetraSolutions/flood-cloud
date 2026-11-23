@@ -140,13 +140,12 @@ describe('migrate-dealers --apply', () => {
     assert.equal(stored.has(fixtureId('user', 10).toHexString()) || stored.has(fixtureId('user', 11).toHexString()), false);
   });
 
-  it('creates the collection with its validator and unique VAT index, and no other collection of the registry', async () => {
+  it('creates the collection with its unique VAT index, and no other collection of the registry', async () => {
     assert.equal((await run(['--apply'])).code, 0);
     const names = (await common().listCollections({}, { nameOnly: true }).toArray()).map((entry) => entry.name).sort();
     assert.deepEqual(names, ['dealers', 'groups', 'users']);
     const index = (await dealers().indexes()).find((entry) => entry.name === 'vatNumber_1')!;
     assert.deepEqual([index.unique, index.partialFilterExpression], [true, { vatNumber: { $type: 'string' } }]);
-    await assert.rejects(dealers().insertOne({ _id: new ObjectId(), businessName: '' }), { code: 121 });
   });
 
   it('is idempotent: running it again changes nothing, and it never overwrites a dealer the owner completed', async () => {
@@ -173,33 +172,6 @@ describe('migrate-dealers --apply', () => {
     for (const secret of secrets) {
       assert.ok(!output.includes(secret), secret);
     }
-  });
-
-  it('does not stop when the database user lacks collMod: the problem is reported and the dealers are still written', async () => {
-    await common().createCollection('dealers');
-    const info: string[] = [];
-    const errors: string[] = [];
-    const code = await main(['--apply'], {
-      env: env(),
-      loadEnvFile: () => undefined,
-      info: (line) => info.push(line),
-      error: (line) => errors.push(line),
-      createClient: (config, options) => {
-        const client = createMongoClient(config, options);
-        const open = client.db.bind(client);
-        client.db = ((name?: string) => {
-          const db = open(name);
-          const command = db.command.bind(db);
-          db.command = ((body: Document, ...rest: unknown[]) =>
-            'collMod' in body ? Promise.reject(Object.assign(new Error('not allowed'), { code: 13 })) : (command as (...args: unknown[]) => Promise<Document>)(body, ...rest)) as typeof db.command;
-          return db;
-        }) as typeof client.db;
-        return client;
-      },
-    });
-    assert.equal(code, 0, errors.join());
-    assert.deepEqual(errors, ['validator out of date for dealers: the database user needs the collMod privilege; application-level validation still applies']);
-    assert.match(info.join(), /created 8/);
   });
 
   it('writes only to dealers: the sources touch no other collection', async () => {

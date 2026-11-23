@@ -9,7 +9,6 @@ import { countByGroupPipeline } from '../../src/shared/security/scope/group-coun
 import { createReferenceRepository } from '../../src/modules/reference/reference.repository.ts';
 import { createReferenceService } from '../../src/modules/reference/reference.service.ts';
 import type { AuthPrincipal } from '../../src/shared/security/scope/principal.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { fixtureId, legacyCompany, legacyGroup, legacyPlace, legacyUser } from '../helpers/legacy-fixtures.ts';
 import { insertCopies } from '../helpers/mirror.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
@@ -25,7 +24,7 @@ let ctx: TestDatabases;
 
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+  await ensureIndexes(ctx.databases, COLLECTIONS);
   const company = fixtureId('company', 1);
   await ctx.databases.common().collection('groups').insertMany([g1, g2, g3, g4, empty].map((id, index) => ({ ...legacyGroup(index + 1), _id: id })));
   await insertCopies(ctx.databases, 'companies', [

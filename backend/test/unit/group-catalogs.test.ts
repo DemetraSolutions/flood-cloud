@@ -38,7 +38,7 @@ import { productFavorites } from '../../src/modules/groups/catalogs/product-favo
 import { CATALOGS, DETAIL_CATALOG_PATHS } from '../../src/modules/groups/catalogs/registry.ts';
 import { taxes } from '../../src/modules/groups/catalogs/taxes.ts';
 import { warehouseRules } from '../../src/modules/groups/catalogs/warehouse-rules.ts';
-import { ACTION_CATALOG, ACTIVITY_ACTION_NAMES, GROUP_CATALOG_NAMES, GROUP_CATALOG_VERBS } from '../../src/shared/activity-log/catalog.ts';
+import { ACTION_CATALOG, GROUP_CATALOG_NAMES, GROUP_CATALOG_VERBS } from '../../src/shared/activity-log/catalog.ts';
 import { INVALID, validate } from '../../src/shared/validation/schema.ts';
 import type { AppError } from '../../src/shared/http/errors.ts';
 
@@ -114,7 +114,7 @@ describe('the activity log catalog', () => {
     for (const name of GROUP_CATALOG_NAMES) {
       for (const verb of GROUP_CATALOG_VERBS) {
         assert.deepEqual(ACTION_CATALOG.get(`group.${name}.${verb}`), { categories: ['data'], metadataKeys: ['changesTotal', 'changesTruncated'] });
-        assert.ok(ACTIVITY_ACTION_NAMES.includes(`group.${name}.${verb}`));
+        assert.ok(ACTION_CATALOG.has(`group.${name}.${verb}`));
       }
     }
     assert.deepEqual([...GROUP_CATALOG_NAMES].sort(), CATALOGS.map((catalog) => catalog.name).sort());

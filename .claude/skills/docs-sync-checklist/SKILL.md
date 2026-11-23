@@ -11,6 +11,7 @@ Un passo sembra finito quando il codice funziona, ma non lo è finché questa li
 - [ ] **`doc/Technical-Guide.md`**: aggiornate le sezioni toccate dal passo (configurazione, struttura, pipeline, moduli, database, sicurezza, test) e aggiunta una riga al registro dei passi.
 - [ ] **`doc/API.md`**: ogni endpoint aggiunto o modificato è descritto (metodo, percorso, autenticazione, permesso, parametri, risposta, errori). Si aggiorna senza richiesta esplicita (`GEMINI.md` §7), solo per riflettere ciò che è stato realizzato.
 - [ ] **`doc/Public-API.md`**: ogni endpoint di `/public/v1` aggiunto o modificato è descritto per gli integratori esterni, con esempi completi; **nessun** riferimento a superfici interne, collection, struttura dei database o dettagli implementativi.
+- [ ] **`doc/Store-API.md`**: ogni route aperta o modificata per la chiave di negozio (`store: true` o `auth: { kind: 'store' }`) è descritta per chi sviluppa il server di punto vendita, con esempi, errori e registro delle modifiche aggiornato; nessuna route non aperta al negozio, nessun nome di collection o dettaglio implementativo.
 - [ ] **`doc/Data-Model.md`**: ogni collection o campo aggiunto o modificato è descritto con tipi, indici e vincoli (stessa eccezione di `doc/API.md`).
 - [ ] **`.env.example`**: ogni nuova variabile d'ambiente è elencata con descrizione e senza valore reale.
 - [ ] **Tipi e test**: `npm run typecheck` e `npm test` nel backend e `ng test` con copertura nel backoffice passano con le soglie al 100%.

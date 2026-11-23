@@ -127,7 +127,7 @@ export async function run(
     ({ background: clusterConnections } = await connectClusters(clusters, ({ clusterId, role, errorName }) =>
       logger.error('database cluster not reachable at startup', { clusterId, role, errorName }),
     ));
-    await deps.ensureIndexes(databases, COLLECTIONS, logger);
+    await deps.ensureIndexes(databases, COLLECTIONS);
     await warmUpPasswordVerifier();
   } catch (error) {
     logger.error('database startup failed', { errorName: error instanceof Error ? error.name : typeof error });

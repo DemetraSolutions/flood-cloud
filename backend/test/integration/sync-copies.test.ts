@@ -97,7 +97,6 @@ function options(overrides: Partial<SyncOptions> = {}): SyncOptions {
     runId: new ObjectId(),
     now: () => NOW,
     limits: DEFAULT_BLOCK_LIMITS,
-    logger: { error: () => undefined },
     onGroupError: () => undefined,
     ...overrides,
   };

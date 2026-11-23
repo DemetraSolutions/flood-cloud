@@ -59,8 +59,8 @@ function plansOf(raw: unknown): Record<string, number> {
 }
 
 /**
- * The price list of a stored value, read tolerantly: the plans that are well formed, and for every service its price or, when the value holds none, the default one. The database validator makes anything else impossible,
- * so this only protects the arithmetic from a document that was changed behind the back of the application.
+ * The price list of a stored value, read tolerantly: the plans that are well formed, and for every service its price or, when the value holds none, the default one. This backend is the only writer, so anything else is unexpected;
+ * this only protects the arithmetic from a document that was changed behind the back of the application.
  *
  * @param raw The stored `value`, or `null` when no price list is stored.
  * @returns The price list, `DEFAULT_PRICE_LIST` for `null`.

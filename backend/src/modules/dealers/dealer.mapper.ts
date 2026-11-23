@@ -42,8 +42,7 @@ export function minimalCompany(username: string): Company {
 }
 
 /**
- * The document to insert in `common.dealers`. Every field is present (absent values are `null`), as the
- * database validator requires.
+ * The document to insert in `common.dealers`. Every field is present (absent values are `null`), the shape every reader expects.
  *
  * @param id Id of the dealer's user.
  * @param company The company data.
@@ -55,7 +54,7 @@ export function toNewDocument(id: ObjectId, company: Company, source: DealerSour
   return { _id: id, ...companyOf(company), createdAt: now, updatedAt: now, createdBy, source };
 }
 
-/** Reads a stored dealer. The collection has a strict validator, so the stored types are trusted. */
+/** Reads a stored dealer. This backend is the only writer of the collection, so the stored types are trusted. */
 export function fromDocument(document: Document): Dealer {
   return {
     id: document['_id'] as ObjectId,

@@ -22,7 +22,7 @@ export const API_KEY_PROJECTION = Object.freeze({
 } as const);
 
 /**
- * Reads a stored key. The collection has a `$jsonSchema` validator and this backend is its only writer, so the shape is trusted; the hash is empty when the read did not project it.
+ * Reads a stored key. This backend is the only writer of the collection, so the shape is trusted; the hash is empty when the read did not project it.
  *
  * @param document The stored document.
  * @returns The key.

@@ -31,7 +31,7 @@ export const createProductBody = {
   additionalProperties: false,
 } as const;
 ```
-Mantieni il formato vicino a JSON Schema: è leggibile, documentabile in `doc/API.md` e riusabile come `$jsonSchema` lato MongoDB dove ha senso.
+Mantieni il formato vicino a JSON Schema: è leggibile, documentabile in `doc/API.md` (nessun validatore `$jsonSchema` va messo sulle collection, D-32).
 
 ## Ricerca testuale
 Mai `new RegExp(input)`: esegui l'escape (`input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`), limita la lunghezza e ancorare a prefisso (`^`) quando possibile per usare gli indici.

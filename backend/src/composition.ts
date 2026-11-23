@@ -111,6 +111,10 @@ import { createReferenceRoutes } from './modules/reference/reference.routes.ts';
 import { createReferenceService } from './modules/reference/reference.service.ts';
 import { createSessionsRepository } from './modules/sessions/sessions.repository.ts';
 import { createAuthenticateStore } from './modules/store-keys/authenticate-store.ts';
+import { createStoreContextController } from './modules/store-context/store-context.controller.ts';
+import { createStoreContextRepository } from './modules/store-context/store-context.repository.ts';
+import { createStoreContextRoutes } from './modules/store-context/store-context.routes.ts';
+import { createStoreContextService } from './modules/store-context/store-context.service.ts';
 import { createStoreKeysController } from './modules/store-keys/store-keys.controller.ts';
 import { createStoreKeysRepository } from './modules/store-keys/store-keys.repository.ts';
 import { createStoreKeysRoutes } from './modules/store-keys/store-keys.routes.ts';
@@ -286,6 +290,16 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   });
   const authenticateStore = createAuthenticateStore({ repository: storeKeysRepository, state: storeKeysState, activityLog, rateLimiter, logger, apiRule: rules.apiPerStore, now });
   const storeKeys = createStoreKeysController(storeKeysService, now);
+  const storeContext = createStoreContextController(
+    createStoreContextService({
+      groups: managedGroups,
+      repository: createStoreContextRepository(databases),
+      catalogs: catalogsService,
+      readerFor: (store, access) => companiesPlacesReader(store, access, databases, { versionKey }),
+      logger,
+    }),
+    versionKey,
+  );
   const placesService = createPlacesService({
     repository: createPlacesRepository(databases, companiesRepository),
     writerFor: (principal, access) => companiesPlacesWriter(principal, access, databases, { now: () => new Date(now()), versionKey }),
@@ -316,7 +330,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const apiKeys = createApiKeysController(createApiKeysService({ repository: createApiKeysRepository(databases, publicApiLimitsOf(config)), groups: managedGroups, activityLog, now }));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
-    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createApiKeysRoutes(apiKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
+    routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createStoreContextRoutes(storeContext), ...createApiKeysRoutes(apiKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
       ...createCatalogRoutes(catalogsService, CATALOGS),
       ...createGroupServicesRoutes(groupServices),
       ...createLookupRoutes(lookup),

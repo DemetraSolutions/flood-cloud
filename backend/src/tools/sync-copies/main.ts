@@ -132,7 +132,6 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
       runId: new ObjectId(),
       now: deps.now ?? (() => new Date()),
       limits: deps.limits ?? DEFAULT_BLOCK_LIMITS,
-      logger: { error: deps.error },
       onGroupError: (groupHex, error) => deps.error(`Group ${groupHex} failed: ${safeMessage(error, secrets)}`),
     });
     for (const line of formatReport(result, { apply: parsed.apply, appEnv: config.appEnv })) {

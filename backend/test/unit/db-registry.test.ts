@@ -4,10 +4,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { COLLECTIONS, GROUPS_INSERT_ONLY_FIELDS, GROUPS_OWNED_FIELDS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
-import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from '../../src/db/sessions-schema.ts';
-import { DEALERS_INDEXES, DEALERS_VALIDATOR } from '../../src/db/dealers-schema.ts';
-import { STORE_ACTIVATION_CODES_VALIDATOR, STORE_KEYS_VALIDATOR } from '../../src/db/store-keys-schema.ts';
-import { USER_CREDENTIALS_VALIDATOR } from '../../src/db/user-credentials-schema.ts';
+import { SESSIONS_INDEXES } from '../../src/db/sessions-schema.ts';
+import { DEALERS_INDEXES } from '../../src/db/dealers-schema.ts';
 import type { CollectionRegistry } from '../../src/db/collections.ts';
 
 const SRC = fileURLToPath(new URL('../../src', import.meta.url));
@@ -23,7 +21,7 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 }
 
 describe('collection registry', () => {
-  it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes and validators', () => {
+  it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes', () => {
     assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'countries', 'dealers', 'groups', 'idempotencyKeys', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
     assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'email_templates', 'files', 'places', 'products', 'products_categories', 'products_departments']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
@@ -58,25 +56,21 @@ describe('collection registry', () => {
     for (const field of ['shiftTime', 'permissions', 'permissions.apps', 'permissions.apps.cash', 'permissions.apps.cash.sub', 'permissions.logs.w', 'permissions.apps.cash.sub.productsStatus', 'permissions.apps.cash.options.service', 'permissions.hiddenInStats']) {
       assert.equal(COLLECTIONS.common.users.ownedFields.includes(field), false, field);
     }
-    assert.equal(COLLECTIONS.common.userCredentials.validator, USER_CREDENTIALS_VALIDATOR);
     assert.deepEqual(
       COLLECTIONS.common.activityEvents.indexes.map((index) => index.name),
       ['at_-1__id_-1', 'groupId_1_at_-1__id_-1', 'actor.id_1_at_-1__id_-1', 'category_1_at_-1__id_-1', 'requestId_1', 'expiresAt_1'],
     );
     assert.deepEqual(COLLECTIONS.common.rateLimits.indexes, [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }]);
-    assert.equal(COLLECTIONS.common.sessions.validator, SESSIONS_VALIDATOR);
-    assert.equal(COLLECTIONS.common.dealers.validator, DEALERS_VALIDATOR);
     assert.equal(COLLECTIONS.common.dealers.indexes, DEALERS_INDEXES);
     assert.equal(COLLECTIONS.common.sessions.indexes, SESSIONS_INDEXES);
     assert.deepEqual(
       SESSIONS_INDEXES.map(({ name, unique, expireAfterSeconds }) => [name, unique ?? false, expireAfterSeconds ?? null]),
       [['accessTokenHash_1', true, null], ['refreshTokenHash_1', true, null], ['previousRefreshHashes_1', false, null], ['userId_1_revokedAt_1', false, null], ['expiresAt_1', false, 0]],
     );
-    // The copies of the group documents: non-unique indexes only, no validator; the issues collection has a 180-day TTL and no validator.
+    // The copies of the group documents: non-unique indexes only; the issues collection has a 180-day TTL.
     assert.deepEqual(COLLECTIONS.common.companies.indexes.map((index) => [index.name, index.key]), [['groupId_1__id_1', { groupId: 1, _id: 1 }], ['groupId_1_name_1', { groupId: 1, name: 1 }], ['groupId_1_status_1', { groupId: 1, status: 1 }], ['groupId_1_code_1', { groupId: 1, code: 1 }]]);
     assert.deepEqual(COLLECTIONS.common.places.indexes.map((index) => index.name), ['groupId_1__id_1', 'groupId_1_name_1', 'groupId_1_companyId_1', 'groupId_1_status_1']);
     for (const spec of [COLLECTIONS.common.companies, COLLECTIONS.common.places]) {
-      assert.equal('validator' in spec, false);
       assert.equal(spec.indexes.some((index) => 'unique' in index || 'expireAfterSeconds' in index), false);
     }
     assert.deepEqual(COLLECTIONS.common.syncIssues.indexes.map(({ name, key, expireAfterSeconds }) => [name, key, expireAfterSeconds ?? null]), [
@@ -84,9 +78,6 @@ describe('collection registry', () => {
       ['kind_1_detectedAt_-1', { kind: 1, detectedAt: -1 }, null],
       ['detectedAt_ttl', { detectedAt: 1 }, 180 * 86400],
     ]);
-    assert.equal('validator' in COLLECTIONS.common.syncIssues, false);
-    assert.equal(COLLECTIONS.common.storeKeys.validator, STORE_KEYS_VALIDATOR);
-    assert.equal(COLLECTIONS.common.storeActivationCodes.validator, STORE_ACTIVATION_CODES_VALIDATOR);
     assert.deepEqual(COLLECTIONS.common.storeKeys.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null, 'partialFilterExpression' in index ? index.partialFilterExpression : null]), [
       ['keyHash_1', true, null, null],
       ['placeId_1_active', true, null, { status: 'active' }],
@@ -98,7 +89,7 @@ describe('collection registry', () => {
     assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'documents', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
   });
 
-  it('registers the documents of the legacy send queue as read only, with no index and no validator, and refuses anything else there', () => {
+  it('registers the documents of the legacy send queue as read only, with no index, and refuses anything else there', () => {
     assert.deepEqual(COLLECTIONS.queue, { documents: { ownership: 'legacy-read' } });
     const bad: CollectionRegistry = {
       common: {},
@@ -106,15 +97,14 @@ describe('collection registry', () => {
       queue: {
         a: { ownership: 'legacy-write', ownedFields: ['x'] },
         b: { ownership: 'legacy-read', indexes: [{ name: 'x_1', key: { x: 1 } }] },
-        c: { ownership: 'legacy-read', validator: { bsonType: 'object' } },
-        d: { ownership: 'legacy-read' },
+        c: { ownership: 'legacy-read' },
       },
     };
     assert.throws(() => validateRegistry(bad), (error: Error) => {
-      for (const where of ['queue.a', 'queue.b', 'queue.c']) {
+      for (const where of ['queue.a', 'queue.b']) {
         assert.ok(error.message.includes(where), where);
       }
-      assert.ok(!error.message.includes('queue.d'));
+      assert.ok(!error.message.includes('queue.c'));
       return true;
     });
     assert.deepEqual([...registeredCollectionNames({ common: { a: { ownership: 'legacy-read' } }, group: {}, queue: { q: { ownership: 'legacy-read' } } })].sort(), ['a', 'q']);
@@ -154,17 +144,13 @@ describe('collection registry', () => {
         e: { ownership: 'legacy-read', indexes: [{ name: 'u', key: { x: 1 }, unique: true }] },
         f: { ownership: 'legacy-write', ownedFields: ['x'], indexes: [{ name: 't', key: { x: 1 }, expireAfterSeconds: 10 }] },
         g: { ownership: 'new', indexes: [{ name: ' ', key: { x: 1 } }] },
-        h: { ownership: 'legacy-read', validator: { bsonType: 'object' } },
-        i: { ownership: 'legacy-write', ownedFields: ['x'], validator: { bsonType: 'object' } },
-        j: { ownership: 'new', validator: { bsonType: 'object' } },
       },
       group: {},
     };
     assert.throws(() => validateRegistry(bad), (error: Error) => {
-      for (const where of ['common.a', 'common.b', 'common.c', 'common.d', 'common.e', 'common.f', 'common.g', 'common.h', 'common.i']) {
+      for (const where of ['common.a', 'common.b', 'common.c', 'common.d', 'common.e', 'common.f', 'common.g']) {
         assert.ok(error.message.includes(where), where);
       }
-      assert.ok(!error.message.includes('common.j'));
       return true;
     });
   });
@@ -175,7 +161,6 @@ describe('collection registry', () => {
       common: {
         a: { ownership: 'mirror', indexes: [{ name: 'u', key: { x: 1 }, unique: true }] },
         b: { ownership: 'mirror', indexes: [{ name: 't', key: { x: 1 }, expireAfterSeconds: 10 }] },
-        c: { ownership: 'mirror', validator: { bsonType: 'object' } },
         d: { ownership: 'mirror', ownedFields: ['x'] },
         e: { ownership: 'mirror' },
       },
@@ -184,7 +169,6 @@ describe('collection registry', () => {
     assert.throws(() => validateRegistry(bad), (error: Error) => {
       assert.match(error.message, /common\.a: unique and TTL indexes are forbidden on mirror collections \(u\)/);
       assert.match(error.message, /common\.b: unique and TTL indexes are forbidden on mirror collections \(t\)/);
-      assert.match(error.message, /common\.c: a mirror collection takes no validator/);
       assert.match(error.message, /common\.d: ownedFields is allowed only on legacy-write/);
       assert.match(error.message, /group\.f: a mirror collection must live in the common database/);
       assert.ok(!error.message.includes('common.e'));

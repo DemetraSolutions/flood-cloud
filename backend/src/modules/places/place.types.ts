@@ -340,3 +340,12 @@ export type PlaceCreation = PlacePatch & {
   readonly companyId: string;
   readonly address: { readonly street: string; readonly postcode: string; readonly city: string; readonly country: string; readonly province?: string };
 };
+
+declare const clearCredentials: unique symbol;
+
+/**
+ * The place as the server of its own point of sale reads it: the representation of the backoffice with the credentials of integrations and devices in clear instead of their `<key>Set`
+ * flags. It is deliberately a different type, not assignable to {@link Place} (an opaque tree with a brand), so the compiler refuses it wherever a `Place` is accepted (a response of the
+ * backoffice, an activity event, a comparison with a request).
+ */
+export type StorePlace = Readonly<Record<string, unknown>> & { readonly [clearCredentials]: true };

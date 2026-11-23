@@ -67,8 +67,8 @@ function parseArgs(argv: readonly string[]): Args | undefined {
 /**
  * Entry point of the dealer migration (D-09): gives every existing user `D` a document in `common.dealers`.
  * It is a dry run unless `--apply` is given, refuses to run unless `APP_ENV` equals `--env` (`development` by
- * default), and works on the common cluster only. With `--apply` it first creates the collection, its validator
- * and its indexes (and nothing else), then writes one upsert per missing dealer: running it again changes nothing.
+ * default), and works on the common cluster only. With `--apply` it first creates the indexes of the collection
+ * (and nothing else), then writes one upsert per missing dealer: running it again changes nothing.
  * It never writes `users` or `groups`. Output is counts only: no user name, no id, no connection string.
  *
  * @param argv Arguments after the script name.
@@ -115,9 +115,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     await registry.clusters.get(config.commonCluster)!.main.connect();
     const databases = createDatabases(registry, { prefix: config.dbNamePrefix, appEnv: config.appEnv });
     if (parsed.apply) {
-      await ensureIndexes(databases, { common: { dealers: COLLECTIONS.common.dealers }, group: {} }, {
-        error: (message) => deps.error(message),
-      });
+      await ensureIndexes(databases, { common: { dealers: COLLECTIONS.common.dealers }, group: {} });
     }
     const report = await migrateDealers(databases.common(), {
       apply: parsed.apply,

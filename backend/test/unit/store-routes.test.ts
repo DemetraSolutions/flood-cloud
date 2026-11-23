@@ -57,6 +57,7 @@ const routes: RouteDefinition[] = [
   defineRoute({ method: 'GET', path: '/groups/:groupId/places', auth: { kind: 'user', permission: 'places:read', group: true }, handler: who }),
   defineRoute({ method: 'GET', path: '/things', auth: { kind: 'user', permission: 'places:read' }, handler: who }),
   defineRoute({ method: 'GET', path: '/store-only', auth: { kind: 'store' }, handler: who }),
+  defineRoute({ method: 'GET', path: '/store-grouped', auth: { kind: 'store', group: true }, handler: (_req, res) => void res.json({ data: { group: (res.locals.groupAccess as { groupId: { toHexString(): string } } | undefined)?.groupId.toHexString() ?? null } }) }),
   defineRoute({ method: 'GET', path: '/public', auth: { kind: 'anonymous', reason: 'test route' }, rateLimit: testIpLimit, handler: who }),
 ];
 
@@ -119,6 +120,9 @@ describe('the route builder and the store key', () => {
     const store = await asStore('/store-only');
     assert.deepEqual([store.status, await store.json()], [200, { data: { caller: 'store' } }]);
     assert.equal((await asUser('/store-only')).status, 403, 'a user is not a store');
+    assert.deepEqual((await (await asStore('/store-grouped')).json()).data, { group: GROUP.toHexString() }, 'the builder issues the access to the group of the store, and only where the route asks');
+    assert.equal((await (await asStore('/store-only')).json()).data.group, undefined);
+    assert.equal((await asUser('/store-grouped')).status, 403);
     assert.equal((await call('/store-only', {})).status, 401);
   });
 
@@ -203,7 +207,9 @@ describe('mountRoutes: the declarations about store keys', () => {
   it('keeps a store route to its kind: no permission, group, feature, path parameter', () => {
     const only = (auth: Record<string, unknown>, path = '/store-context') => defineRoute({ method: 'GET', path, auth, handler: who } as unknown as RouteDefinition);
     assert.match(problem([only({ kind: 'store', permission: 'places:read' })]), /declares nothing but its kind/);
-    assert.match(problem([only({ kind: 'store', group: true })]), /declares nothing but its kind/);
+    assert.match(problem([only({ kind: 'store', group: false })]), /group can only be true/);
+    assert.match(problem([only({ kind: 'store', group: true })], { ...dependencies, groupAccess: undefined }), /needs the groupAccess dependencies/);
+    assert.doesNotThrow(() => mountRoutes(express.Router(), [only({ kind: 'store', group: true })], dependencies));
     assert.match(problem([only({ kind: 'store', store: true })]), /declares nothing but its kind/);
     assert.match(problem([only({ kind: 'store' }, '/store/:id')]), /no path parameter/);
     const { storeKeys: _unused, ...withoutFlag } = dependencies;

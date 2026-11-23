@@ -9,9 +9,8 @@ import { recordDataChange } from '../../src/shared/activity-log/data-change.ts';
 import { memoryLogger } from '../helpers/app.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { COLLECTIONS } from '../../src/db/collections.ts';
-import { ACTION_CATALOG, ACTIVITY_ACTION_NAMES } from '../../src/shared/activity-log/catalog.ts';
+import { ACTION_CATALOG } from '../../src/shared/activity-log/catalog.ts';
 
 let ctx: TestDatabases;
 before(async () => {
@@ -40,8 +39,8 @@ const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
 
 describe('activityEvents collection (real MongoDB)', () => {
   it('is created without validator, with the expected indexes, idempotently (two startups)', async () => {
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+    await ensureIndexes(ctx.databases, COLLECTIONS);
+    await ensureIndexes(ctx.databases, COLLECTIONS);
     const [info] = await ctx.databases.common().listCollections({ name: 'activityEvents' }).toArray();
     assert.ok(info !== undefined);
     const options = (info as unknown as { options?: Record<string, unknown> }).options ?? {};
@@ -60,8 +59,9 @@ describe('activityEvents collection (real MongoDB)', () => {
   });
 
   it('stores every action of the catalog, whatever the database knows about the catalog', async () => {
-    assert.ok(ACTIVITY_ACTION_NAMES.length >= 75);
-    const probe = ACTIVITY_ACTION_NAMES.map((action, index) => ({ action, requestId: `req-catalog-${index}` }));
+    const actionNames = [...ACTION_CATALOG.keys()];
+    assert.ok(actionNames.length >= 75);
+    const probe = actionNames.map((action, index) => ({ action, requestId: `req-catalog-${index}` }));
     for (const { action, requestId } of probe) {
       const definition = ACTION_CATALOG.get(action);
       assert.ok(definition !== undefined, action);

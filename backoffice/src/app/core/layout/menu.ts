@@ -148,7 +148,7 @@ export const MENU: readonly MenuItem[] = [
   {
     id: 'products',
     requiresGroup: true,
-    labelKey: 'MENU.PRODUCTS',
+    labelKey: 'MENU.CATALOG',
     icon: 'tag',
     route: '/groups',
     groupPath: 'product-favorites',

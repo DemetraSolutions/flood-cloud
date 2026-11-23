@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
 import { SETTING_FIELDS } from '../../shared/legacy-write/place-settings.ts';
 import type { SettingKind, WholeName } from '../../shared/legacy-write/place-settings.ts';
-import { flag, isPlain, logo, minimumOrder, nonEmptyOrNull, numberOf } from '../companies/company.mapper.ts';
+import { flag, isPlain, logo, minimumOrder, nonEmptyOrNull, numberOf, optionalText } from '../companies/company.mapper.ts';
 import type { Codec, Leaf } from '../companies/company.mapper.ts';
 
 const FONT = /^[1-3]-[1-3]$/;
@@ -180,15 +180,36 @@ export function codecOf(kind: SettingKind): Codec {
   }
 }
 
-/** The leaves of the settings blocks, for `PLACE_LEAVES`: the domain path, the stored path and the codec of every key, and the deprecated copies (not part of the domain) left out. */
-export const SETTING_LEAVES: readonly Leaf[] = Object.freeze(
-  SETTING_FIELDS.map(
-    (field): Leaf => ({
-      domain: field.domain,
-      legacy: field.legacy,
-      codec: codecOf(field.kind),
-      ...(field.readOnly === true || field.kind.t === 'secretFlag' ? { readOnly: true as const } : {}),
-      ...(field.kind.t === 'secret' ? { writeOnly: true as const } : {}),
+/**
+ * The leaves of the settings blocks: the domain path, the stored path and the codec of every key, and the deprecated copies (not part of the domain) left out.
+ *
+ * @param clear `true` for the leaves of the server of a store: a credential is read as the key itself (its stored text, `null` when there is none) and its `<key>Set` flag does not exist.
+ *   The credential keys are always the `secret` kinds of the table, so the two forms can never drift.
+ */
+function leavesOf(clear: boolean): readonly Leaf[] {
+  return Object.freeze(
+    SETTING_FIELDS.flatMap((field): Leaf[] => {
+      if (clear && field.kind.t === 'secretFlag') {
+        return [];
+      }
+      if (clear && field.kind.t === 'secret') {
+        return [{ domain: field.domain, legacy: field.legacy, codec: optionalText, readOnly: true }];
+      }
+      return [
+        {
+          domain: field.domain,
+          legacy: field.legacy,
+          codec: codecOf(field.kind),
+          ...(field.readOnly === true || field.kind.t === 'secretFlag' ? { readOnly: true as const } : {}),
+          ...(field.kind.t === 'secret' ? { writeOnly: true as const } : {}),
+        },
+      ];
     }),
-  ),
-);
+  );
+}
+
+/** The leaves of the settings blocks, for `PLACE_LEAVES`. */
+export const SETTING_LEAVES: readonly Leaf[] = leavesOf(false);
+
+/** The same leaves for the server of the store itself: the credentials are in clear and have no flag. Only the store context reads through them. */
+export const STORE_SETTING_LEAVES: readonly Leaf[] = leavesOf(true);

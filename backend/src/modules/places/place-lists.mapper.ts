@@ -46,8 +46,12 @@ export function defaultOf(kind: ItemFieldKind): unknown {
   }
 }
 
-/** The domain value of a stored one: tolerant, a value that is missing or has the wrong type is the default of its kind. */
-function readValue(kind: ItemFieldKind, stored: unknown): unknown {
+/**
+ * The domain value of a stored one: tolerant, a value that is missing or has the wrong type is the default of its kind.
+ *
+ * @param clear `true` for the representation of the server of a store, which carries the credentials themselves (see {@link readFields}).
+ */
+function readValue(kind: ItemFieldKind, stored: unknown, clear: boolean): unknown {
   switch (kind.t) {
     case 'text':
     case 'ref':
@@ -65,27 +69,30 @@ function readValue(kind: ItemFieldKind, stored: unknown): unknown {
     case 'terminals':
       return terminalsOf(stored);
     case 'object':
-      return readFields(kind.fields, isPlain(stored) ? stored : {});
+      return readFields(kind.fields, isPlain(stored) ? stored : {}, clear);
     case 'list':
-      return readItems(kind.item, stored);
+      return readItems(kind.item, stored, clear);
     case 'secret':
-      return typeof stored === 'string' && stored !== '';
+      return clear ? (typeof stored === 'string' && stored !== '' ? stored : null) : typeof stored === 'string' && stored !== '';
   }
 }
 
-/** The keys of a definition read from a stored object; a credential is the flag `<key>Set`, never its value. */
-function readFields(fields: Readonly<Record<string, ItemFieldKind>>, stored: Document): DomainItem {
-  return Object.fromEntries(Object.entries(fields).map(([key, kind]) => [kind.t === 'secret' ? `${key}Set` : key, readValue(kind, stored[key])]));
+/**
+ * The keys of a definition read from a stored object. A credential is the flag `<key>Set`, never its value, except in the representation of the server of a store (`clear`), where it
+ * is the key itself with its stored value (`null` when there is none) and there is no flag: the credential keys are always the `secret` kinds of the definition, in both forms.
+ */
+function readFields(fields: Readonly<Record<string, ItemFieldKind>>, stored: Document, clear: boolean): DomainItem {
+  return Object.fromEntries(Object.entries(fields).map(([key, kind]) => [kind.t === 'secret' && !clear ? `${key}Set` : key, readValue(kind, stored[key], clear)]));
 }
 
 /**
  * The items of a stored list in the domain form. An item without an id is returned too, read only, with `id: ''` and `withoutId: true` (the list is then not writable, see `isEditable`);
  * what is not an object is left out.
  */
-function readItems(def: ItemDef, stored: unknown): DomainItem[] {
+function readItems(def: ItemDef, stored: unknown, clear: boolean): DomainItem[] {
   return (Array.isArray(stored) ? (stored as unknown[]) : []).filter(isPlain).map((item) => {
     const id = itemKey(item);
-    return id === undefined ? { id: '', withoutId: true, ...readFields(def.fields, item) } : { id, ...readFields(def.fields, item) };
+    return id === undefined ? { id: '', withoutId: true, ...readFields(def.fields, item, clear) } : { id, ...readFields(def.fields, item, clear) };
   });
 }
 
@@ -106,7 +113,7 @@ const itemOf = (stored: unknown, id: string): Document | undefined => (Array.isA
 function fragmentOf(def: ItemDef, idKind: 'text' | 'objectId', item: DomainItem, before: Document | undefined, init?: () => Document): Document {
   const id = item['id'] as string;
   const fragment: Document = { id: idKind === 'objectId' && ObjectId.isValid(id) && id.length === 24 ? ObjectId.createFromHexString(id) : id };
-  const was = before === undefined ? undefined : readFields(def.fields, before);
+  const was = before === undefined ? undefined : readFields(def.fields, before, false);
   for (const [key, kind] of Object.entries(def.fields)) {
     const value = item[key];
     if (kind.t === 'secret') {
@@ -132,13 +139,19 @@ function fragmentOf(def: ItemDef, idKind: 'text' | 'objectId', item: DomainItem,
 }
 
 /**
- * The codec of a list of items (`place-lists.ts`): the read gives the items in the domain form, the write gives the fragments the writer lays over the stored items inside the transaction.
+ * The codec of a list of items (`place-lists.ts`): the read gives the items in the domain form (a credential as its `<key>Set` flag), the write gives the fragments the writer lays over
+ * the stored items inside the transaction.
  *
  * @param list The definition of the list.
  */
 export function listCodec(list: ListDef): Codec {
+  return codecOf(list, false);
+}
+
+/** The codec of a list, in the form of the backoffice (`clear` false) or of the server of a store (`clear` true: credentials in clear). The write is the same in both. */
+function codecOf(list: ListDef, clear: boolean): Codec {
   return {
-    read: (stored) => readItems(list, stored),
+    read: (stored) => readItems(list, stored, clear),
     write: (value, stored) => (value as DomainItem[]).map((item) => fragmentOf(list, list.idKind, item, itemOf(stored, item['id'] as string), list.init)),
   };
 }
@@ -157,16 +170,24 @@ export function newItem(def: ItemDef): DomainItem {
   return Object.fromEntries(Object.entries(def.fields).flatMap(([key, kind]) => (kind.t === 'secret' ? [] : [[key, defaultOf(kind)]])));
 }
 
-/** The leaves of the lists, for `PLACE_LEAVES`: the devices, the print stations and the production centers, the rooms and the storages, each a whole list of items. */
-export const LIST_LEAVES: readonly Leaf[] = Object.freeze([
-  { domain: 'devices.items', legacy: 'devices', codec: listCodec(PLACE_LISTS.devices) },
-  { domain: 'devices.editable', legacy: 'devices', codec: editableCodec(PLACE_LISTS.devices), readOnly: true },
-  { domain: 'printStations.stations', legacy: 'printStations', codec: listCodec(PLACE_LISTS.printStations) },
-  { domain: 'printStations.stationsEditable', legacy: 'printStations', codec: editableCodec(PLACE_LISTS.printStations), readOnly: true },
-  { domain: 'printStations.productionCenters', legacy: 'productionCenter', codec: listCodec(PLACE_LISTS.productionCenter) },
-  { domain: 'printStations.productionCentersEditable', legacy: 'productionCenter', codec: editableCodec(PLACE_LISTS.productionCenter), readOnly: true },
-  { domain: 'rooms.items', legacy: 'rooms', codec: listCodec(PLACE_LISTS.rooms) },
-  { domain: 'rooms.editable', legacy: 'rooms', codec: editableCodec(PLACE_LISTS.rooms), readOnly: true },
-  { domain: 'storages.items', legacy: 'storages', codec: listCodec(PLACE_LISTS.storages) },
-  { domain: 'storages.editable', legacy: 'storages', codec: editableCodec(PLACE_LISTS.storages), readOnly: true },
-]);
+/** The leaves of the lists: the devices, the print stations and the production centers, the rooms and the storages, each a whole list of items. */
+function leavesOf(clear: boolean): readonly Leaf[] {
+  return Object.freeze([
+    { domain: 'devices.items', legacy: 'devices', codec: codecOf(PLACE_LISTS.devices, clear) },
+    { domain: 'devices.editable', legacy: 'devices', codec: editableCodec(PLACE_LISTS.devices), readOnly: true },
+    { domain: 'printStations.stations', legacy: 'printStations', codec: codecOf(PLACE_LISTS.printStations, clear) },
+    { domain: 'printStations.stationsEditable', legacy: 'printStations', codec: editableCodec(PLACE_LISTS.printStations), readOnly: true },
+    { domain: 'printStations.productionCenters', legacy: 'productionCenter', codec: codecOf(PLACE_LISTS.productionCenter, clear) },
+    { domain: 'printStations.productionCentersEditable', legacy: 'productionCenter', codec: editableCodec(PLACE_LISTS.productionCenter), readOnly: true },
+    { domain: 'rooms.items', legacy: 'rooms', codec: codecOf(PLACE_LISTS.rooms, clear) },
+    { domain: 'rooms.editable', legacy: 'rooms', codec: editableCodec(PLACE_LISTS.rooms), readOnly: true },
+    { domain: 'storages.items', legacy: 'storages', codec: codecOf(PLACE_LISTS.storages, clear) },
+    { domain: 'storages.editable', legacy: 'storages', codec: editableCodec(PLACE_LISTS.storages), readOnly: true },
+  ]);
+}
+
+/** The leaves of the lists, for `PLACE_LEAVES`. */
+export const LIST_LEAVES: readonly Leaf[] = leavesOf(false);
+
+/** The same leaves for the server of the store itself: the credentials of the items are in clear. Only the store context reads through them. */
+export const STORE_LIST_LEAVES: readonly Leaf[] = leavesOf(true);

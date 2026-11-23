@@ -499,11 +499,4 @@ describe('the dealers collection', () => {
     await assert.rejects(seedDealer({ vatNumber: number }), { code: 11000 });
   });
 
-  it('refuses documents that break the validator', async () => {
-    const valid = { businessName: 'V', vatNumber: null, fiscalCode: null, address: null, pec: null, sdiCode: null, email: null, phone: null, createdAt: new Date(), updatedAt: new Date(), createdBy: null, source: 'manual' };
-    for (const broken of [{ ...valid, extra: 1 }, { ...valid, businessName: '' }, { ...valid, source: 'other' }, { ...valid, address: { street: 'x' } }, { ...valid, vatNumber: 5 }]) {
-      await assert.rejects(dealers().insertOne({ ...broken }), { code: 121 });
-    }
-    await dealers().insertOne({ ...valid });
-  });
 });

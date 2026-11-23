@@ -21,6 +21,7 @@ Documentazione di progetto da conoscere prima di agire:
 | `doc/Technical-Guide.md` | documentazione tecnica del backend realizzato (mantenuta a ogni passo) |
 | `doc/API.md` | riferimento di tutte le API (mantenuto a ogni passo) |
 | `doc/Public-API.md` | documentazione delle API pubbliche per gli integratori esterni (mantenuta a ogni passo) |
+| `doc/Store-API.md` | API aperte al server di punto vendita con la chiave di negozio (mantenuta a ogni passo) |
 | `doc/Tasks.md` | piano dei task, decisioni (D-nn) e stato dei passi |
 
 **Il progetto legacy è solo un riferimento funzionale.** Si consulta per capire *cosa* faceva il sistema (`doc/Legacy-Analysis.md`), mai per copiarne il *come*:
@@ -51,6 +52,7 @@ Regole:
 - I tipi TypeScript sono la documentazione dei contratti: precisi, senza `any`, allineati al JSDoc.
 - `doc/Public-API.md` è un documento **pubblicabile**: non deve mai contenere superfici interne (`/v1`), dettagli implementativi, nomi di collection, struttura dei database o informazioni utili a un attaccante. Si scrive per chi integra, con esempi completi di richiesta e risposta.
 - Un endpoint pubblico va descritto in **entrambi** `doc/API.md` e `doc/Public-API.md`.
+- Una route aperta alla chiave di negozio (`store`) va descritta anche in `doc/Store-API.md`, scritto per chi sviluppa il server di punto vendita: solo ciò che il negozio può chiamare.
 
 ## 4. Test: Copertura Totale
 Il progetto è **interamente coperto dai test**. È un vincolo, non un obiettivo.
@@ -74,7 +76,7 @@ Se trovi incongruenze, parti incomplete o poco chiare nella documentazione o nel
 
 ## 7. Divieto di Modifica della Documentazione
 **Non modificare mai** i documenti esistenti in `doc/` senza una richiesta esplicita dell'utente dopo un'analisi congiunta.
-**Uniche eccezioni:** i documenti mantenuti a ogni passo — **`doc/Technical-Guide.md`**, **`doc/API.md`**, **`doc/Public-API.md`** (§3) e **`doc/Data-Model.md`** — si aggiornano nello stesso passo (skill `docs-sync-checklist`), limitandosi a riflettere ciò che è stato realizzato.
+**Uniche eccezioni:** i documenti mantenuti a ogni passo — **`doc/Technical-Guide.md`**, **`doc/API.md`**, **`doc/Public-API.md`**, **`doc/Store-API.md`** (§3) e **`doc/Data-Model.md`** — si aggiornano nello stesso passo (skill `docs-sync-checklist`), limitandosi a riflettere ciò che è stato realizzato.
 
 ## 8. Lingua del Codice e Commenti
 Nomi di variabili, funzioni, classi, file, collection e campi in **Inglese**. **JSDoc e commenti nel codice in Inglese.** Documentazione in `doc/` e kit AI in **Italiano**.

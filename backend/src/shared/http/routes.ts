@@ -11,7 +11,7 @@ import { requirePermission } from '../security/rbac/require-permission.ts';
 import { guardAuthentication, rateLimit } from '../security/rate-limit/rate-limit.ts';
 import type { RateLimitMount, RateLimitRule } from '../security/rate-limit/rate-limit.ts';
 import { requireApiKeyPermission } from '../security/scope/api-key-guards.ts';
-import { reportCrossGroupAccess, requireGroupAccess } from '../security/scope/group-access.ts';
+import { reportCrossGroupAccess, requireGroupAccess, requireStoreGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { requireFeature } from '../security/scope/require-feature.ts';
 import { refuseStore, requireStore, requireStorePermission, requireStorePlace } from '../security/scope/store-guards.ts';
@@ -69,6 +69,11 @@ export interface UserAuth {
  */
 export interface StoreAuth {
   readonly kind: 'store';
+  /**
+   * `true` for a route that reads the group database of the store: the builder then issues the verified access to the one group of the store key (`requireStoreGroupAccess`) right after the
+   * authentication, so the access is never a middleware a route can place by hand, and a `user` route can never have it. Needs a surface with the group access dependencies.
+   */
+  readonly group?: true;
 }
 
 /**
@@ -173,8 +178,13 @@ function storeProblems(label: string, route: RouteDefinition, auth: AuthFields, 
 /** The problems of a route reserved to the server of a point of sale (`kind: 'store'`). */
 function storeOnlyProblems(label: string, route: RouteDefinition, auth: AuthFields, options: MountOptions): string[] {
   const problems: string[] = [];
-  if (['permission', 'anyPermission', 'group', 'feature', 'allowWithPendingPasswordChange', 'store'].some((name) => (auth as Record<string, unknown>)[name] !== undefined)) {
-    problems.push(`${label}: a store route declares nothing but its kind`);
+  if (['permission', 'anyPermission', 'feature', 'allowWithPendingPasswordChange', 'store'].some((name) => (auth as Record<string, unknown>)[name] !== undefined)) {
+    problems.push(`${label}: a store route declares nothing but its kind and, when it reads the group, group: true`);
+  }
+  if (auth.group !== undefined && auth.group !== true) {
+    problems.push(`${label}: a store route's group can only be true`);
+  } else if (auth.group === true && options.groupAccess === undefined) {
+    problems.push(`${label}: a store route that asks for the group needs the groupAccess dependencies`);
   }
   if (/:/.test(String(route.path))) {
     problems.push(`${label}: a store route has no path parameter`);
@@ -476,7 +486,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         middleware.push(refuseStore, ...userChain);
       }
     } else if (route.auth.kind === 'store') {
-      middleware.push(guardAuthentication(authenticate!, rateLimitOptions!), requireStore, ...beforeBody);
+      middleware.push(guardAuthentication(authenticate!, rateLimitOptions!), requireStore, ...(route.auth.group === true ? [requireStoreGroupAccess(groupAccess!.groups)] : []), ...beforeBody);
     } else if (route.auth.kind === 'apiKey') {
       // The per-key rate limit and the daily quota are the authentication's own (the limits are the key's, not a constant of the rule).
       middleware.push(guardAuthentication(authenticate!, { ...rateLimitOptions!, authFailureRule: rateLimitOptions!.apiKeyAuthFailureRule }), requireApiKeyPermission(route.auth.permission), ...beforeBody);

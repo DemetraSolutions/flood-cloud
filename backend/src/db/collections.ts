@@ -5,14 +5,13 @@ import { PROVIDERS } from '../modules/groups/group.types.ts';
 import { LEGACY_MODULES, READ_ONLY_MODULE } from '../shared/security/rbac/permission-matrix.ts';
 import { POS_OWNED_FIELDS, POS_PRICE_LISTS_PATH } from '../modules/users/pos.catalog.ts';
 import { SHIFT_SPECIAL_PATH, SHIFT_TIME_OWNED_FIELDS } from '../modules/users/shift-time.ts';
-import { API_KEYS_INDEXES, API_KEYS_VALIDATOR, API_USAGE_INDEXES, API_USAGE_VALIDATOR } from './api-keys-schema.ts';
+import { API_KEYS_INDEXES, API_USAGE_INDEXES } from './api-keys-schema.ts';
 import { ACTIVITY_EVENTS_INDEXES } from './activity-events-schema.ts';
-import { BILLING_CLOSURES_INDEXES, BILLING_CLOSURES_VALIDATOR } from './billing-closures-schema.ts';
-import { DEALERS_INDEXES, DEALERS_VALIDATOR } from './dealers-schema.ts';
-import { SETTINGS_INDEXES, SETTINGS_VALIDATOR } from './settings-schema.ts';
-import { SESSIONS_INDEXES, SESSIONS_VALIDATOR } from './sessions-schema.ts';
-import { STORE_ACTIVATION_CODES_INDEXES, STORE_ACTIVATION_CODES_VALIDATOR, STORE_KEYS_INDEXES, STORE_KEYS_VALIDATOR } from './store-keys-schema.ts';
-import { USER_CREDENTIALS_VALIDATOR } from './user-credentials-schema.ts';
+import { BILLING_CLOSURES_INDEXES } from './billing-closures-schema.ts';
+import { DEALERS_INDEXES } from './dealers-schema.ts';
+import { SETTINGS_INDEXES } from './settings-schema.ts';
+import { SESSIONS_INDEXES } from './sessions-schema.ts';
+import { STORE_ACTIVATION_CODES_INDEXES, STORE_KEYS_INDEXES } from './store-keys-schema.ts';
 import { COMPANIES_MIRROR_INDEXES, PLACES_MIRROR_INDEXES, SYNC_ISSUES_INDEXES } from './mirror-schema.ts';
 
 /**
@@ -20,7 +19,7 @@ import { COMPANIES_MIRROR_INDEXES, PLACES_MIRROR_INDEXES, SYNC_ISSUES_INDEXES } 
  *
  * `mirror` marks the collections of the common database that hold exact copies of documents of the group databases
  * (`doc/Tasks.md` D-20): written only by the copy block, with `replaceOne` of the whole document. They admit
- * non-unique indexes only, no validator and no TTL, so a copy can never be refused or expire.
+ * non-unique indexes only and no TTL, so a copy can never be refused or expire.
  */
 export type Ownership = 'new' | 'legacy-read' | 'legacy-write' | 'mirror';
 
@@ -48,8 +47,6 @@ export interface CollectionSpec {
   readonly indexes?: readonly IndexSpec[];
   /** Names of indexes this backend created in the past and replaced; dropped after the new ones exist (`new` collections only). */
   readonly obsoleteIndexes?: readonly string[];
-  /** `$jsonSchema` applied at startup (strict, errors on violation); allowed only on `new` collections. */
-  readonly validator?: Readonly<Record<string, unknown>>;
 }
 
 /** The kinds of database that hold the data of this backend (the common database and the group databases). */
@@ -325,24 +322,24 @@ export const COLLECTIONS = {
     },
     rateLimits: { ownership: 'new', indexes: [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }] },
     activityEvents: { ownership: 'new', indexes: ACTIVITY_EVENTS_INDEXES },
-    dealers: { ownership: 'new', indexes: DEALERS_INDEXES, validator: DEALERS_VALIDATOR },
+    dealers: { ownership: 'new', indexes: DEALERS_INDEXES },
     // The settings of the platform, one document per key (now only the price list of the activations), and the closures of the billing of the dealers (frozen renewal bases and invoice months). Ours alone.
-    settings: { ownership: 'new', indexes: SETTINGS_INDEXES, validator: SETTINGS_VALIDATOR },
-    billingClosures: { ownership: 'new', indexes: BILLING_CLOSURES_INDEXES, validator: BILLING_CLOSURES_VALIDATOR },
-    // Exact copies of the documents of the group databases (D-20), without validator (no collMod dependency).
+    settings: { ownership: 'new', indexes: SETTINGS_INDEXES },
+    billingClosures: { ownership: 'new', indexes: BILLING_CLOSURES_INDEXES },
+    // Exact copies of the documents of the group databases (D-20).
     companies: { ownership: 'mirror', indexes: COMPANIES_MIRROR_INDEXES },
     places: { ownership: 'mirror', indexes: PLACES_MIRROR_INDEXES },
-    // Discrepancies found by the reconciliation; no validator, ids only (no personal data), TTL of 180 days.
+    // Discrepancies found by the reconciliation; ids only (no personal data), TTL of 180 days.
     syncIssues: { ownership: 'new', indexes: SYNC_ISSUES_INDEXES },
-    userCredentials: { ownership: 'new', validator: USER_CREDENTIALS_VALIDATOR },
-    sessions: { ownership: 'new', indexes: SESSIONS_INDEXES, validator: SESSIONS_VALIDATOR },
+    userCredentials: { ownership: 'new' },
+    sessions: { ownership: 'new', indexes: SESSIONS_INDEXES },
     // The server of a point of sale (D-24): the pending activation code of a place and its store keys, hashes only. Ours alone: the legacy knows nothing of them.
-    storeActivationCodes: { ownership: 'new', indexes: STORE_ACTIVATION_CODES_INDEXES, validator: STORE_ACTIVATION_CODES_VALIDATOR },
-    storeKeys: { ownership: 'new', indexes: STORE_KEYS_INDEXES, validator: STORE_KEYS_VALIDATOR },
+    storeActivationCodes: { ownership: 'new', indexes: STORE_ACTIVATION_CODES_INDEXES },
+    storeKeys: { ownership: 'new', indexes: STORE_KEYS_INDEXES },
     // The public API keys of the groups (step 9A), hashes only, and the daily usage counters of each key and route. Ours alone: the legacy knows nothing of them.
-    apiKeys: { ownership: 'new', indexes: API_KEYS_INDEXES, validator: API_KEYS_VALIDATOR },
-    apiUsage: { ownership: 'new', indexes: API_USAGE_INDEXES, validator: API_USAGE_VALIDATOR },
-    // The national tobacco price list (step T3): replaced as a whole by the import, read by the list; the legacy writes it too (same documents), so no unique index and no validator.
+    apiKeys: { ownership: 'new', indexes: API_KEYS_INDEXES },
+    apiUsage: { ownership: 'new', indexes: API_USAGE_INDEXES },
+    // The national tobacco price list (step T3): replaced as a whole by the import, read by the list; the legacy writes it too (same documents), so no unique index.
     tobaccos: {
       ownership: 'legacy-write',
       ownedFields: TOBACCOS_OWNED_FIELDS,
@@ -371,7 +368,7 @@ export const COLLECTIONS = {
     contacts_groups: { ownership: 'legacy-read' },
   },
   // The legacy send queue (`<prefix><env>_queue`, step 9-ter/3): written only by the legacy services and by its `CronEngine`; read here, only by the error documents repository, through `Databases.queue()`.
-  // No index, no validator: this backend never creates anything in that database.
+  // No index: this backend never creates anything in that database.
   queue: {
     documents: { ownership: 'legacy-read' },
   },
@@ -383,9 +380,8 @@ export const COLLECTIONS = {
  * - `legacy-write` needs a non-empty `ownedFields`; the other kinds must not declare it.
  * - Legacy collections cannot have unique or TTL indexes.
  * - Every index has a non-empty explicit name.
- * - Only `new` collections can have a validator.
- * - The `queue` database (legacy send queue) holds `legacy-read` collections with no index and no validator.
- * - `mirror` collections live in the common database only, take no `ownedFields`, no validator, and only non-unique,
+ * - The `queue` database (legacy send queue) holds `legacy-read` collections with no index.
+ * - `mirror` collections live in the common database only, take no `ownedFields` and only non-unique,
  *   non-TTL indexes: a copy must always be writable and never expire.
  *
  * @param registry Registry to validate (the real one by default).
@@ -394,8 +390,8 @@ export const COLLECTIONS = {
 export function validateRegistry(registry: CollectionRegistry = COLLECTIONS): void {
   const problems: string[] = [];
   for (const [name, spec] of Object.entries(registry.queue ?? {})) {
-    if (spec.ownership !== 'legacy-read' || spec.indexes !== undefined || spec.validator !== undefined) {
-      problems.push(`queue.${name}: the legacy send queue is read only: legacy-read, no index and no validator`);
+    if (spec.ownership !== 'legacy-read' || spec.indexes !== undefined) {
+      problems.push(`queue.${name}: the legacy send queue is read only: legacy-read and no index`);
     }
   }
   for (const kind of ['common', 'group'] as const) {
@@ -411,11 +407,6 @@ export function validateRegistry(registry: CollectionRegistry = COLLECTIONS): vo
       }
       if (spec.ownership === 'mirror' && kind !== 'common') {
         problems.push(`${where}: a mirror collection must live in the common database`);
-      }
-      if (spec.validator !== undefined && spec.ownership !== 'new') {
-        problems.push(
-          spec.ownership === 'mirror' ? `${where}: a mirror collection takes no validator` : `${where}: a validator is allowed only on new collections`,
-        );
       }
       for (const index of spec.indexes ?? []) {
         if (index.name.trim() === '') {

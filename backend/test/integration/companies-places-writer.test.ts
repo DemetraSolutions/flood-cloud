@@ -80,7 +80,7 @@ const setSentinel = (): Promise<unknown> => common().collection('groups').update
 const groupPlaces = async (): Promise<unknown> => (await common().collection('groups').findOne({ _id: G1 }))?.['places'];
 
 function options(): SyncOptions {
-  return { apply: true, groupId: null, runId: new ObjectId(), now: () => new Date(), limits: DEFAULT_BLOCK_LIMITS, logger: { error: () => undefined }, onGroupError: (_hex, error) => { throw error; } };
+  return { apply: true, groupId: null, runId: new ObjectId(), now: () => new Date(), limits: DEFAULT_BLOCK_LIMITS, onGroupError: (_hex, error) => { throw error; } };
 }
 
 /** Group 1: an active company, a trashed one, a rich place and a place trashed by the legacy (null registry data). Group 2: one company and one place. */

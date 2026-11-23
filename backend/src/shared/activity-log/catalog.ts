@@ -170,8 +170,5 @@ export const ACTION_CATALOG: ReadonlyMap<string, ActionDefinition> = (() => {
   return catalog;
 })();
 
-/** Every action name, for the database validator. */
-export const ACTIVITY_ACTION_NAMES: readonly string[] = Object.freeze([...ACTION_CATALOG.keys()]);
-
 /** Roles an actor may have. */
 export const ACTOR_ROLES: readonly Role[] = ROLES;

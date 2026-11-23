@@ -5,7 +5,6 @@ import { COLLECTIONS } from '../../src/db/collections.ts';
 import { ensureIndexes } from '../../src/db/indexes.ts';
 import { createActivityLog } from '../../src/shared/activity-log/activity-log.ts';
 import { auditApiKey } from '../../src/modules/api-keys/api-keys.audit.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { memoryLogger } from '../helpers/app.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
@@ -13,7 +12,7 @@ import type { TestDatabases } from '../helpers/mongo.ts';
 let ctx: TestDatabases;
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+  await ensureIndexes(ctx.databases, COLLECTIONS);
 });
 after(() => ctx.cleanup());
 

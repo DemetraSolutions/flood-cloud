@@ -4,7 +4,6 @@ import type { ClusterId } from '../../config.ts';
 import { COLLECTIONS } from '../../db/collections.ts';
 import type { Databases } from '../../db/databases.ts';
 import { ensureIndexes } from '../../db/indexes.ts';
-import type { Logger } from '../../shared/logging/logger.ts';
 import { createIssueSink } from './issues.ts';
 import type { IssueSink, SyncCollection } from './issues.ts';
 import { planGroups } from './plan.ts';
@@ -25,8 +24,6 @@ export interface SyncOptions {
   readonly now: () => Date;
   /** Size of the blocks of repairs. */
   readonly limits: BlockLimits;
-  /** Receives the warning of `ensureIndexes` about a validator it cannot update (none of these collections has one). */
-  readonly logger: Pick<Logger, 'error'>;
   /** Called when the work on a group fails: the other groups go on. Receives the group id (hex) and the error. */
   readonly onGroupError: (groupHex: string, error: unknown) => void;
 }
@@ -123,7 +120,7 @@ export async function syncCopies(databases: Databases, options: SyncOptions): Pr
   }
   const common = databases.common();
   if (options.apply) {
-    await ensureIndexes(databases, { common: { companies: COLLECTIONS.common.companies, places: COLLECTIONS.common.places, syncIssues: COLLECTIONS.common.syncIssues }, group: {} }, options.logger);
+    await ensureIndexes(databases, { common: { companies: COLLECTIONS.common.companies, places: COLLECTIONS.common.places, syncIssues: COLLECTIONS.common.syncIssues }, group: {} });
   }
   const sink = createIssueSink(options.apply ? common.collection('syncIssues') : null, options.runId, options.now);
   const summaries = new Map<string, GroupSummary>();

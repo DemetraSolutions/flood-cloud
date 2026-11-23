@@ -462,7 +462,7 @@ describe('what the key leaves behind', () => {
     assert.ok(!everything.includes('fc_sk_'), 'no key, however short, in any log or entry');
   });
 
-  it('has its indexes and its validators: one active key per place guaranteed by the database, hashes only', async () => {
+  it('has its indexes: one active key per place guaranteed by the database', async () => {
     const keys = common().collection('storeKeys');
     const names = (await keys.indexes()).map((index) => index.name).sort();
     assert.deepEqual(names, ['_id_', 'groupId_1_placeId_1_activatedAt_-1', 'keyHash_1', 'placeId_1_active', 'purgeAt_1']);
@@ -471,8 +471,6 @@ describe('what the key leaves behind', () => {
     const document = (await world.activeKey(own()))!;
     const { _id, ...rest } = document;
     await assert.rejects(() => keys.insertOne({ ...rest, keyHash: 'f'.repeat(64) } as never), (error: { code?: number }) => error.code === 11000, 'a second active key of the place');
-    await assert.rejects(() => keys.insertOne({ ...rest, placeId: new ObjectId(), keyHash: 'not-a-hash' } as never), (error: { code?: number }) => error.code === 121, 'a hash that is not a hash');
-    await assert.rejects(() => keys.insertOne({ ...rest, placeId: new ObjectId(), keyHash: 'e'.repeat(64), extra: 1 } as never), (error: { code?: number }) => error.code === 121, 'an unknown field');
     await keys.insertOne({ ...rest, placeId: new ObjectId(), keyHash: 'd'.repeat(64), status: 'revoked', revokedAt: new Date(), revokedBy: { kind: 'system' }, revokeReason: 'revoked' } as never);
     const codes = common().collection('storeActivationCodes');
     assert.deepEqual((await codes.indexes()).map((index) => [index.name, index.unique ?? false, index.expireAfterSeconds ?? null]).sort(), [['_id_', false, null], ['codeHash_1', true, null], ['expiresAt_1', false, 0], ['placeId_1', true, null]]);

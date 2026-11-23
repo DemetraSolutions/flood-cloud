@@ -3,8 +3,9 @@ import type { Document } from 'mongodb';
 import { WEEK_DAYS } from '../../shared/legacy-write/place-paths.ts';
 import { flag, instant, isPlain, nonEmptyOrNull, optionalText, readLeaves, status, stringOrNull, text } from '../companies/company.mapper.ts';
 import type { Codec, Leaf } from '../companies/company.mapper.ts';
-import { LIST_LEAVES } from './place-lists.mapper.ts';
-import { SETTING_LEAVES } from './place-settings.mapper.ts';
+import { LIST_LEAVES, STORE_LIST_LEAVES } from './place-lists.mapper.ts';
+import { SETTING_LEAVES, STORE_SETTING_LEAVES } from './place-settings.mapper.ts';
+import type { StorePlace } from './place.types.ts';
 import type { CrossGroupPlace, Place, PlacePriceList, PlaceSummary, SpecialDays, WeekHours } from './place.types.ts';
 
 /** A key of the special days of the document: `YYYY-MM-DD`. Any other key of the stored map is one the backend keeps untouched and never returns. */
@@ -77,7 +78,8 @@ const priceLists: Codec = {
  * Every key of the place, domain and stored, in the order the representation is built: the general data, the license and the opening hours. It is the only table of the mapping:
  * the read, the comparison with a request and the choice of the keys to write all follow it. The settings blocks of step 7B are added here, with their schemas and their `PUT` routes.
  */
-export const PLACE_LEAVES: readonly Leaf[] = Object.freeze([
+function placeLeaves(settings: readonly Leaf[], lists: readonly Leaf[]): readonly Leaf[] {
+  return Object.freeze([
   { domain: 'name', legacy: 'name', codec: text },
   { domain: 'companyId', legacy: 'companyId', codec: companyRef },
   { domain: 'address.street', legacy: 'address', codec: text },
@@ -105,10 +107,22 @@ export const PLACE_LEAVES: readonly Leaf[] = Object.freeze([
   { domain: 'openingHours.deliveryTime.week', legacy: 'delivery.time.weekGeneric', codec: week },
   { domain: 'openingHours.deliveryTime.special', legacy: 'delivery.time.daySpecial', codec: special },
   // The settings blocks (step 7B), the integrations and the dealer settings (step 7F), from the table of `place-settings.ts`.
-  ...SETTING_LEAVES,
+  ...settings,
   // The lists of items (step 7F): the devices, the print stations and production centers, the rooms and the storages.
-  ...LIST_LEAVES,
-]);
+  ...lists,
+  ]);
+}
+
+/**
+ * The leaves of the place, from the one table of the mapping, with the credentials of the integrations and of the devices as flags (`<key>Set`): the table of the backoffice.
+ */
+export const PLACE_LEAVES: readonly Leaf[] = placeLeaves(SETTING_LEAVES, LIST_LEAVES);
+
+/**
+ * The same table for the server of the point of sale itself (`doc/Security-Model.md` section 5): every credential is the key with its stored value and there are no flags. Built from the same
+ * tables, so which keys are credentials is decided in one place only.
+ */
+const STORE_PLACE_LEAVES: readonly Leaf[] = placeLeaves(STORE_SETTING_LEAVES, STORE_LIST_LEAVES);
 
 /**
  * Maps a stored place to its representation: every key by its codec, so a value that is missing or has the wrong type is `null` (or the neutral value of its kind: `false`, `[]`, a
@@ -120,9 +134,26 @@ export const PLACE_LEAVES: readonly Leaf[] = Object.freeze([
  * @returns The place.
  */
 export function toPlace(document: Document, groupId: ObjectId): Place {
+  return placeFrom(PLACE_LEAVES, document, groupId);
+}
+
+/** Reads a stored place through a table of leaves. */
+function placeFrom(leaves: readonly Leaf[], document: Document, groupId: ObjectId): Place {
   const place: Record<string, unknown> = { id: idOrNull(document['_id']) ?? '', groupId: groupId.toHexString() };
-  readLeaves(PLACE_LEAVES, document, place);
+  readLeaves(leaves, document, place);
   return place as unknown as Place;
+}
+
+/**
+ * Maps a stored place to the representation of the server of that place: exactly {@link toPlace}, but with the credentials of the integrations and of the devices in clear (the key with its
+ * stored text, `null` when there is none) instead of their `<key>Set` flags. Only for a caller that authenticated with the store key of the place.
+ *
+ * @param document The place as stored, read with the exact types.
+ * @param groupId The group the place was read from (the verified one).
+ * @returns The place with its credentials, as a type that is not a {@link Place}: it can never be passed where the representation of the backoffice is expected.
+ */
+export function toStorePlace(document: Document, groupId: ObjectId): StorePlace {
+  return placeFrom(STORE_PLACE_LEAVES, document, groupId) as unknown as StorePlace;
 }
 
 /** The fields the list reads from the copies, the only ones ever loaded for it. */

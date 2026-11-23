@@ -11,7 +11,7 @@ import type { PermissionDecisionHook } from '../rbac/require-permission.ts';
 import type { GroupsRepository } from './groups.repository.ts';
 import type { AuthPrincipal, ScopeHolder } from './principal.ts';
 
-/** A group the caller was verified to reach. Only {@link requireGroupAccess} and {@link requireGroupAccesses} create one. */
+/** A group the caller was verified to reach. Only {@link requireGroupAccess}, {@link requireGroupAccesses} and {@link requireStoreGroupAccess} create one. */
 export interface GroupAccess {
   readonly groupId: ObjectId;
   /** Cluster that holds the group's operational database, resolved from `groups.dataCluster`. */
@@ -24,7 +24,7 @@ export interface GroupAccess {
 
 const GROUP_ID_PATTERN = /^[0-9a-f]{24}$/;
 
-/** Every access issued by {@link requireGroupAccess} and {@link requireGroupAccesses}; {@link groupDatabaseFor} accepts nothing else. */
+/** Every access issued by {@link requireGroupAccess}, {@link requireGroupAccesses} and {@link requireStoreGroupAccess}; {@link groupDatabaseFor} accepts nothing else. */
 const issued = new WeakSet<GroupAccess>();
 
 /** The outcome of the perimeter check: who may reach which group, before the cluster is known. */
@@ -94,7 +94,7 @@ export interface GroupAccessDeps {
 
 /**
  * Verifies a raw group id against the principal's scope and against `common.groups`, and issues the access to it: the one step both {@link requireGroupAccess} (the group of the
- * path) and {@link requireGroupAccesses} (the groups of a body) go through, so a group is never reached by a rule of its own. Not exported: an access is issued only by those two middleware.
+ * path) and {@link requireGroupAccesses} (the groups of a body) go through, so a group is never reached by a rule of its own. Not exported: an access is issued only by those two middleware and by {@link requireStoreGroupAccess} (for the routes only a store may call).
  *
  * @param groups Group lookup.
  * @param principal The caller.
@@ -137,6 +137,28 @@ export function requireGroupAccess(
       throw new AppError('UNAUTHENTICATED');
     }
     const access = await resolveGroupAccess(groups, principal, req.params['groupId'] as string);
+    if (access === null) {
+      throw new AppError('NOT_FOUND');
+    }
+    res.locals.groupAccess = access;
+    next();
+  };
+}
+
+/**
+ * Middleware of the routes only the server of a point of sale calls (`auth: { kind: 'store' }`), which have no `:groupId`: it issues the access to the one group the store key belongs to
+ * (the group of the principal, never a value of the client), checked against `common.groups` like the group of a path. The result goes in `res.locals.groupAccess`.
+ *
+ * @param groups Group lookup.
+ * @returns The handler: `401 UNAUTHENTICATED` without a store principal, `404 NOT_FOUND` when the group is no longer reachable (it disappeared since the key was authenticated).
+ */
+export function requireStoreGroupAccess(groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'>): RequestHandler {
+  return async (_req, res, next) => {
+    const store = res.locals.store;
+    if (store === undefined) {
+      throw new AppError('UNAUTHENTICATED');
+    }
+    const access = await resolveGroupAccess(groups, store, store.groupId.toHexString());
     if (access === null) {
       throw new AppError('NOT_FOUND');
     }
@@ -194,11 +216,11 @@ export function reportCrossGroupAccess(onCrossGroupAccess: CrossGroupAccessHandl
 }
 
 /**
- * Checks that an access was issued by {@link requireGroupAccess} or {@link requireGroupAccesses} and belongs to the principal.
+ * Checks that an access was issued by {@link requireGroupAccess}, {@link requireGroupAccesses} or {@link requireStoreGroupAccess} and belongs to the principal.
  *
  * @param principal The authenticated caller.
  * @param access A group access.
- * @throws {Error} If the access was not issued by {@link requireGroupAccess} or {@link requireGroupAccesses} or does not belong to the principal.
+ * @throws {Error} If the access was not issued by {@link requireGroupAccess}, {@link requireGroupAccesses} or {@link requireStoreGroupAccess} or does not belong to the principal.
  */
 export function assertVerifiedGroupAccess(principal: ScopeHolder, access: GroupAccess): void {
   if (!issued.has(access) || checkPerimeter(principal, access.groupId.toHexString()) === null) {
@@ -208,14 +230,14 @@ export function assertVerifiedGroupAccess(principal: ScopeHolder, access: GroupA
 
 /**
  * Opens the database of a group. The only inputs are a principal and an access issued by
- * {@link requireGroupAccess} or {@link requireGroupAccesses}; the access is checked again against the
+ * {@link requireGroupAccess}, {@link requireGroupAccesses} or {@link requireStoreGroupAccess}; the access is checked again against the
  * principal, and the database is opened on the cluster the access carries.
  *
  * @param principal The authenticated caller.
  * @param access A verified group access.
  * @param databases Database accessor.
  * @returns The group's database.
- * @throws {Error} If the access was not issued by {@link requireGroupAccess} or {@link requireGroupAccesses} or does not belong to the principal.
+ * @throws {Error} If the access was not issued by {@link requireGroupAccess}, {@link requireGroupAccesses} or {@link requireStoreGroupAccess} or does not belong to the principal.
  * @throws {UnknownClusterError} If the access's cluster is not configured.
  */
 export function groupDatabaseFor(principal: ScopeHolder, access: GroupAccess, databases: Databases): Db {

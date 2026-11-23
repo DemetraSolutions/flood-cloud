@@ -7,7 +7,6 @@ import { LAST_SEEN_RESOLUTION_MS, createStoreKeysRepository } from '../../src/mo
 import type { StoreKeysRepository } from '../../src/modules/store-keys/store-keys.repository.ts';
 import type { NewStoreKey } from '../../src/modules/store-keys/store-keys.types.ts';
 import { hashSecret } from '../../src/shared/security/secrets.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
 
@@ -21,7 +20,7 @@ let counter = 0;
 
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+  await ensureIndexes(ctx.databases, COLLECTIONS);
   repository = createStoreKeysRepository(ctx.databases);
 });
 after(() => ctx.cleanup());

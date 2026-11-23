@@ -10,7 +10,6 @@ import { Secret } from '../../src/shared/security/secret.ts';
 import { freePort, startApp } from '../helpers/app.ts';
 import { openTestDatabases, singleCluster, TEST_CLUSTER } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { COLLECTIONS } from '../../src/db/collections.ts';
 
 const REGISTRY: CollectionRegistry = {
@@ -37,8 +36,8 @@ after(async () => {
 
 describe('ensureIndexes (real MongoDB)', () => {
   it('creates the declared indexes with explicit names, idempotently', async () => {
-    await ensureIndexes(ctx.databases, REGISTRY, quietLogger);
-    await ensureIndexes(ctx.databases, REGISTRY, quietLogger);
+    await ensureIndexes(ctx.databases, REGISTRY);
+    await ensureIndexes(ctx.databases, REGISTRY);
     const indexes = await ctx.databases.common().collection('probes').indexes();
     const byName = new Map(indexes.map((index) => [index.name, index]));
     assert.deepEqual([...byName.keys()].sort(), ['_id_', 'code_unique', 'owner_created', 'ttl_expires']);
@@ -49,7 +48,7 @@ describe('ensureIndexes (real MongoDB)', () => {
   });
 
   it('really enforces the unique index', async () => {
-    await ensureIndexes(ctx.databases, REGISTRY, quietLogger);
+    await ensureIndexes(ctx.databases, REGISTRY);
     const probes = ctx.databases.common().collection('probes');
     await probes.insertOne({ code: 'A' });
     await assert.rejects(probes.insertOne({ code: 'A' }), (error: { code?: number }) => error.code === 11000);
@@ -59,8 +58,8 @@ describe('ensureIndexes (real MongoDB)', () => {
     const users = ctx.databases.common().collection('users');
     // As in production: the legacy unique index on userName already exists before the backend starts.
     await users.createIndex({ userName: 1 }, { name: 'userName_1', unique: true });
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+    await ensureIndexes(ctx.databases, COLLECTIONS);
+    await ensureIndexes(ctx.databases, COLLECTIONS);
     // The legacy send queue is registered but never touched: no database, no collection and no index is created there.
     const { databases: existing } = await ctx.client.db().admin().listDatabases({ nameOnly: true });
     assert.ok(!existing.some((entry) => entry.name === `${ctx.prefix}development_queue`));
@@ -69,23 +68,20 @@ describe('ensureIndexes (real MongoDB)', () => {
     assert.equal(byName.get('userName_1')?.unique, true);
     assert.deepEqual(byName.get('groupId_1_role_1')?.key, { groupId: 1, role: 1 });
     assert.deepEqual(byName.get('dealerId_1')?.key, { dealerId: 1 });
-    // Nothing unique or TTL was added by us, and no validator was put on the shared collection.
+    // Nothing unique or TTL was added by us.
     for (const name of ['groupId_1_role_1', 'dealerId_1']) {
       assert.equal(byName.get(name)?.unique, undefined);
       assert.equal(byName.get(name)?.expireAfterSeconds, undefined);
     }
-    const [usersInfo] = await ctx.databases.common().listCollections({ name: 'users' }).toArray();
-    assert.equal((usersInfo as { options?: { validator?: unknown } }).options?.validator, undefined);
-    const [credentialsInfo] = await ctx.databases.common().listCollections({ name: 'userCredentials' }).toArray();
-    assert.ok((credentialsInfo as { options?: { validator?: unknown } }).options?.validator !== undefined);
-    assert.deepEqual((await ctx.databases.common().collection('userCredentials').indexes()).map((index) => index.name), ['_id_']);
+    // No collection gets a database validator: validation lives in the application only.
+    for (const info of await ctx.databases.common().listCollections().toArray()) {
+      assert.equal((info as { options?: { validator?: unknown } }).options?.validator, undefined, info.name);
+    }
     const sessionIndexes = new Map((await ctx.databases.common().collection('sessions').indexes()).map((index) => [index.name, index]));
     assert.deepEqual([...sessionIndexes.keys()].sort(), ['_id_', 'accessTokenHash_1', 'expiresAt_1', 'previousRefreshHashes_1', 'refreshTokenHash_1', 'userId_1_revokedAt_1']);
     assert.equal(sessionIndexes.get('accessTokenHash_1')?.unique, true);
     assert.equal(sessionIndexes.get('refreshTokenHash_1')?.unique, true);
     assert.equal(sessionIndexes.get('expiresAt_1')?.expireAfterSeconds, 0);
-    const [sessionsInfo] = await ctx.databases.common().listCollections({ name: 'sessions' }).toArray();
-    assert.ok((sessionsInfo as { options?: { validator?: unknown } }).options?.validator !== undefined);
   });
 
   it('drops, after the replacements exist, the obsolete indexes of a collection (and ignores the ones already gone)', async () => {
@@ -95,8 +91,8 @@ describe('ensureIndexes (real MongoDB)', () => {
       common: { obsoleteThings: { ownership: 'new', indexes: [{ name: 'a_1_b_1', key: { a: 1, b: 1 } }], obsoleteIndexes: ['a_1', 'never_existed'] } },
       group: {},
     };
-    await ensureIndexes(ctx.databases, registry, quietLogger);
-    await ensureIndexes(ctx.databases, registry, quietLogger);
+    await ensureIndexes(ctx.databases, registry);
+    await ensureIndexes(ctx.databases, registry);
     assert.deepEqual((await things.indexes()).map((index) => index.name).sort(), ['_id_', 'a_1_b_1']);
   });
 
@@ -105,7 +101,7 @@ describe('ensureIndexes (real MongoDB)', () => {
       common: { legacyProbe: { ownership: 'legacy-read', indexes: [{ name: 'u', key: { userName: 1 }, unique: true }] } },
       group: {},
     };
-    await assert.rejects(ensureIndexes(ctx.databases, legacyUnique, quietLogger), /unique and TTL indexes are forbidden/);
+    await assert.rejects(ensureIndexes(ctx.databases, legacyUnique), /unique and TTL indexes are forbidden/);
     const names = (await ctx.databases.common().listCollections({ name: 'legacyProbe' }).toArray()).length;
     assert.equal(names, 0);
   });
@@ -115,7 +111,7 @@ describe('ensureIndexes (real MongoDB)', () => {
       common: {},
       group: { things: { ownership: 'new', indexes: [{ name: 'x', key: { x: 1 } }] } },
     };
-    await assert.rejects(ensureIndexes(ctx.databases, groupIndex, quietLogger), /group\.things: indexes on group databases are not supported yet/);
+    await assert.rejects(ensureIndexes(ctx.databases, groupIndex), /group\.things: indexes on group databases are not supported yet/);
   });
 });
 
@@ -267,24 +263,5 @@ describe('database listing (real MongoDB)', () => {
     const standalone = { db: () => ({ admin: () => ({ command: async () => ({ isWritablePrimary: true }) }) }) } as unknown as MongoClient;
     const databases = createDatabases(singleCluster(standalone), { prefix: ctx.prefix, appEnv: 'development' });
     assert.equal(await databases.replicaSetName(TEST_CLUSTER), null);
-  });
-});
-
-describe('ensureIndexes on collections that already have the validators (real MongoDB)', () => {
-  it('runs no collMod the second time: the server returns the validators as they were sent', async () => {
-    await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
-    const commands: string[] = [];
-    const real = ctx.databases.common();
-    const spy = new Proxy(real, {
-      get: (target, property) =>
-        property === 'command'
-          ? (command: Record<string, unknown>) => {
-              commands.push(Object.keys(command)[0]!);
-              return target.command(command);
-            }
-          : (target as unknown as Record<string | symbol, unknown>)[property],
-    });
-    await ensureIndexes({ ...ctx.databases, common: () => spy } as typeof ctx.databases, COLLECTIONS, quietLogger);
-    assert.deepEqual(commands, []);
   });
 });

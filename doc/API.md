@@ -58,7 +58,7 @@ Fuori dalle superfici API, per le sonde di GKE.
 > **Password provvisoria.** Quando un amministratore crea l'utente o ne reimposta la password, il login risponde con `passwordChangeRequired: true` (come `GET /v1/me`). Finché la password non è cambiata, tutte le route con Bearer rispondono `403 PASSWORD_CHANGE_REQUIRED`, **tranne** `GET /v1/me`, `PUT /v1/me/password`, `POST /v1/auth/logout`, `POST /v1/auth/logout-all` e `POST /v1/client-errors`. Il client porta l'utente alla schermata di cambio password; dopo il cambio la sessione corrente resta valida e il flag torna `false`.
 > Le risposte che contengono token non sono mai compresse.
 > **Header comuni:** dove è applicato un rate limit la risposta porta `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` (secondi alla riapertura della finestra); oltre il limite `429 RATE_LIMITED` aggiunge `Retry-After` (secondi).
-> **Server di punto vendita.** L'app del negozio chiama le stesse route con una **chiave di negozio** (`Authorization: Bearer fc_sk_…`, sezione "Chiave di negozio" più sotto), ma solo quelle che la ammettono (oggi `GET /v1/groups/{groupId}/places/{placeId}` e `GET /v1/store-context`): ogni altra route risponde `403 FORBIDDEN` a una chiave di negozio. Una chiave valida con un punto vendita non operativo riceve `403 STORE_DISABLED`.
+> **Server di punto vendita.** L'app del negozio chiama le stesse route con una **chiave di negozio** (`Authorization: Bearer fc_sk_…`, sezione "Chiave di negozio" più sotto), ma solo quelle che la ammettono (oggi `GET /v1/groups/{groupId}/places/{placeId}`, `GET /v1/store-context` e le tre di configurazione completa `GET /v1/store-context/group|company|place`): ogni altra route risponde `403 FORBIDDEN` a una chiave di negozio. Una chiave valida con un punto vendita non operativo riceve `403 STORE_DISABLED`.
 > **Errori delle route con Bearer:** `401 UNAUTHENTICATED` (token assente, malformato, sconosciuto o revocato), `401 TOKEN_EXPIRED` (access token scaduto: il client esegue il refresh), `403 FORBIDDEN` (permesso mancante).
 
 ### POST /v1/auth/login
@@ -922,12 +922,26 @@ La credenziale con cui il **server di punto vendita** (app separata, D-22) chiam
 - **Errori:** `401 INVALID_CREDENTIALS`, **identico** per ogni fallimento (codice malformato, sconosciuto, scaduto, già usato, o punto vendita non operativo: in quest'ultimo caso il codice è comunque consumato); `413`; `415`; `422` (body malformato nella forma: proprietà sconosciute, tipi, dichiarazioni non ammesse; mai con il valore ricevuto); `429`
 
 ### GET /v1/store-context
-- **Autenticazione e permesso:** solo la **chiave di negozio**; nessun permesso del catalogo (il profilo del negozio è fisso: oggi la sola lettura del proprio punto vendita). Un access token di un utente è `403 FORBIDDEN`.
+- **Autenticazione e permesso:** solo la **chiave di negozio**; nessun permesso del catalogo (il profilo del negozio è fisso: la lettura del proprio punto vendita). Un access token di un utente è `403 FORBIDDEN`.
 - **Risposta:** `200`; serve all'app per verificare la chiave e per ricavare l'azienda attuale del punto vendita senza leggere dati
   ```json
   { "data": { "groupId": "665f…", "companyId": "665f…", "placeId": "665f…", "keyId": "6650…", "activatedAt": "2026-11-13T10:00:00.000Z" } }
   ```
 - **Errori:** `401`; `403 STORE_DISABLED`; `403 FORBIDDEN` (non è una chiave di negozio); `429`
+
+### GET /v1/store-context/group · /company · /place
+La **configurazione completa** del gruppo, dell'azienda e del punto vendita della chiave, per il server di negozio (casse e palmari ne combinano le impostazioni). Senza parametri di percorso: gli id vengono dal principal della chiave (l'azienda è quella **attuale** del punto vendita), mai dal client.
+- **Autenticazione e permesso:** solo la **chiave di negozio**; nessun permesso del catalogo. Un access token di un utente, di qualunque ruolo, è `403 FORBIDDEN`.
+- **Risposta:** `200 { "data": … }`, sempre `Cache-Control: no-store`, **mai compressa** (contiene credenziali in chiaro), con `ETag` e `304` su `If-None-Match` corrispondente (valutato dopo l'autenticazione). L'`ETag` è quello **forte** della versione del documento per azienda e punto vendita (lo stesso del dettaglio del backoffice); per il gruppo, che non ha una versione, è un tag **forte calcolato con HMAC-SHA-256 sul contenuto** con la chiave segreta delle versioni (mai un hash semplice del corpo, che contiene credenziali: non si può ricalcolare dal solo corpo). Un errore (`401`, `403`, `404`, `429`) non porta mai `ETag` e non è mai un `304`. L'azienda è quella indicata ora dal documento del punto vendita nel database del gruppo.
+  - **`/place`:** la stessa rappresentazione del dettaglio del punto vendita (anagrafica, licenza, orari, i tredici blocchi di impostazioni, dispositivi, postazioni e centri di produzione, sale con tavoli, depositi, integrazioni) più `dealerSettings`, ma con le **credenziali in chiaro**: dove il backoffice ha `<chiave>Set: true|false` il negozio ha la chiave stessa (testo, o `null` se assente o vuota) e **nessun flag** (integrazioni: `integrations.dojo.apiKey`, `…satispay.keyId`, `…floodPay.stripe.privateKey` e le altre; dispositivi: `automaticCashUsername`, `automaticCashPassword`).
+  - **`/company`:** la stessa rappresentazione del dettaglio dell'azienda, completa. Oggi il modello dell'azienda non contiene credenziali, quindi coincide con quella del backoffice.
+  - **`/group`:** `id`, `name`, `description`, `status`, `trashed`, `trashedAt`, `demo`, `features`, `languages`, `statsSettings`, `integrations` (per ogni provider `{ enabled, apiKey }`, la chiave in chiaro o `null`), `legacyApiKey` (**temporaneo**: la chiave di gruppo del legacy; sarà rimosso quando le chiamate ai vecchi servizi saranno migrate), `createdAt`, `updatedAt` e tutti i cataloghi del documento del gruppo, ciascuno nei limiti del proprio massimo: `priceLists`, `taxes`, `currencies`, `measureUnits`, `warehouseRules`, `fidelityCardRules`, `cardTypes`, `pointsCollections`, `prizeCatalogues`, `productFavorites`, `promotions` (con i nomi delle rispettive sotto-risorse).
+  - **Mai restituiti, nemmeno al negozio:** `publicApi` e tutto ciò che riguarda le API pubbliche, `dealerId`, `dataCluster`, `databaseHost`, `filesHost`, chiavi di negozio, hash, utenti, i campi del documento che il backend non modella. Le letture vanno ai documenti del database del gruppo (azienda e punto vendita) e di quello comune (gruppo), con tempo massimo; i valori assenti o non validi arrivano come `null`, `false`, `[]`.
+  - **Esempio** (`/place`, estratto):
+    ```json
+    { "data": { "id": "665f…", "name": "Bar Roma", "integrations": { "dojo": { "status": true, "apiKey": "…" } }, "devices": { "items": [{ "id": "d1", "name": "Cassa", "automaticCashUsername": "…", "automaticCashPassword": "…" }] }, "dealerSettings": { "sentry": false, "serverIp": "10.0.0.1", "connectorAddress": "" } } }
+    ```
+- **Errori:** `401`; `403 STORE_DISABLED`; `403 FORBIDDEN` (non è una chiave di negozio); `404` (il documento non esiste più); `429`. Nessun segreto compare in log, registro delle attività o messaggi d'errore; non si registra un evento per ogni lettura.
 
 ## Chiavi delle API pubbliche (`/v1`)
 

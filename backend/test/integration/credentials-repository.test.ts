@@ -6,7 +6,6 @@ import { LOCK_THRESHOLD, createCredentialsRepository } from '../../src/modules/u
 import type { CredentialsRepository } from '../../src/modules/users/credentials.repository.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { COLLECTIONS } from '../../src/db/collections.ts';
 
 let ctx: TestDatabases;
@@ -16,7 +15,7 @@ const minutes = (n: number): Date => new Date(T0.getTime() + n * 60_000);
 
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+  await ensureIndexes(ctx.databases, COLLECTIONS);
   repository = createCredentialsRepository(ctx.databases);
 });
 after(() => ctx.cleanup());
@@ -98,13 +97,10 @@ describe('credentials: progressive lock', () => {
   });
 });
 
-describe('userCredentials validator and indexes', () => {
-  it('rejects documents of the wrong shape and has no index besides _id', async () => {
+describe('userCredentials indexes', () => {
+  it('has no index besides _id', async () => {
     const collection = ctx.databases.common().collection('userCredentials');
-    const base = { failedLogins: 0, createdAt: T0, updatedAt: T0 };
-    for (const bad of [{ ...base, failedLogins: -1 }, { ...base, extra: 1 }, { ...base, passwordHash: '' }, { ...base, lockedUntil: 'x' }, { failedLogins: 0 }]) {
-      await assert.rejects(collection.insertOne({ _id: new ObjectId(), ...bad }), /validation/i);
-    }
+    await repository.upsertPassword(new ObjectId(), { passwordHash: 'scrypt$1', legacyHashFingerprint: null, passwordChanged: true, now: T0 });
     assert.deepEqual((await collection.indexes()).map((index) => index.name), ['_id_']);
   });
 });

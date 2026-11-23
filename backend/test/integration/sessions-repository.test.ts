@@ -8,7 +8,6 @@ import type { NewSession, SessionsRepository } from '../../src/modules/sessions/
 import { hashSecret } from '../../src/shared/security/secrets.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
-import { quietLogger } from '../helpers/indexes.ts';
 import { COLLECTIONS } from '../../src/db/collections.ts';
 
 let ctx: TestDatabases;
@@ -22,7 +21,7 @@ const hash = (): string => hashSecret(`token-${String(counter++)}`);
 
 before(async () => {
   ctx = await openTestDatabases();
-  await ensureIndexes(ctx.databases, COLLECTIONS, quietLogger);
+  await ensureIndexes(ctx.databases, COLLECTIONS);
   repository = createSessionsRepository(ctx.databases);
 });
 after(() => ctx.cleanup());
@@ -58,13 +57,11 @@ describe('create and find', () => {
     assert.equal('previousRefreshHashes' in (await repository.findByAccessHash(input.accessTokenHash))!, false);
   });
 
-  it('keeps token hashes unique and validates the document', async () => {
+  it('keeps token hashes unique', async () => {
     const first = newSession();
     await repository.create(first);
     await assert.rejects(repository.create(newSession({ accessTokenHash: first.accessTokenHash })), { code: 11000 });
     await assert.rejects(repository.create(newSession({ refreshTokenHash: first.refreshTokenHash })), { code: 11000 });
-    await assert.rejects(repository.create(newSession({ accessTokenHash: 'not-a-sha256' })), { code: 121 });
-    await assert.rejects(sessions().insertOne({ ...newSession(), extra: true } as never), { code: 121 });
   });
 
   it('stores a missing user agent and address as null', async () => {

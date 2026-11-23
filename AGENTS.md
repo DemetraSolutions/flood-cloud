@@ -42,6 +42,7 @@ Verifica senza scrivere (prima di un commit): `./scripts/sync-agents.sh --check`
 | `doc/Technical-Guide.md` | Documentazione tecnica del backend realizzato (mantenuta a ogni passo) |
 | `doc/API.md` | Riferimento di tutte le API delle due superfici (mantenuto a ogni passo) |
 | `doc/Public-API.md` | Documentazione delle API pubbliche per gli integratori esterni (mantenuta a ogni passo) |
+| `doc/Store-API.md` | API aperte al server di punto vendita con la chiave di negozio (mantenuta a ogni passo) |
 | `doc/Tasks.md` | Piano dei task, decisioni (D-nn) e stato dei passi |
 
 ## Sottoagenti disponibili
@@ -54,7 +55,7 @@ Server Node.js 24 + Express 5 in TypeScript (type stripping nativo, nessuna comp
 ### 2. DB Expert (`db_expert`)
 MongoDB con il driver ufficiale, senza ODM.
 - Database common (identità e tenancy) + un database per gruppo, nomi dipendenti dall'ambiente.
-- Repository con scope, indici idempotenti (univoci, TTL), `$jsonSchema`.
+- Repository con scope, indici idempotenti (univoci, TTL); nessun validatore `$jsonSchema` sulle collection (D-32).
 - Paginazione a cursore, update atomici, transazioni dove servono.
 
 ### 3. Security Expert (`security_expert`)
