@@ -17,9 +17,15 @@ import { toCompany } from '../companies/company.mapper.ts';
 import type { Company } from '../companies/company.types.ts';
 import { toStorePlace } from '../places/place.mapper.ts';
 import type { StorePlace } from '../places/place.types.ts';
-import { toStoreGroup } from './store-context.mapper.ts';
+import { listParamsOf } from '../../shared/http/list.ts';
+import type { PageInfo } from '../../shared/http/envelope.ts';
+import type { UsersRepository } from '../users/users.repository.ts';
+import { USERS_LIST } from '../users/users.list.ts';
+import { toStoreGroup, toStoreUser } from './store-context.mapper.ts';
+import { storeUsersFilter } from './store-context.users.ts';
+import type { StoreUsersQuery } from './store-context.users.ts';
 import type { StoreContextRepository } from './store-context.repository.ts';
-import type { ExtraGroupCatalogs, StoreGroup } from './store-context.types.ts';
+import type { ExtraGroupCatalogs, StoreGroup, StoreUser } from './store-context.types.ts';
 
 /** The group as the server of a store reads it. A group has no stored version: the controller tags it with a keyed digest of the content. */
 export interface StoreGroupResult {
@@ -36,6 +42,14 @@ export interface StoreCompanyResult {
 export interface StorePlaceResult {
   readonly place: StorePlace;
   readonly version: string;
+}
+
+/** A page of the users of the place of the store, with the PIN in clear. */
+export interface StoreUsersResult {
+  readonly users: readonly StoreUser[];
+  /** The company the place has now, the one the filter used (for the audit). */
+  readonly companyId: ObjectId;
+  readonly page: PageInfo;
 }
 
 /** The complete configuration of the group, the company and the place of a store key, for the server of that point of sale. */
@@ -65,12 +79,23 @@ export interface StoreContextService {
    * @throws {AppError} `NOT_FOUND` if the place is gone.
    */
   getPlace(store: StorePrincipal, access: GroupAccess): Promise<StorePlaceResult>;
+  /**
+   * A page of the users involved in the place of the store, with their PIN in clear: the `E` and `PA` of the place, the `CA` of the company the place has now (read from the place document
+   * of the group database) and the `SA` of the group, in the default order of the users list; never a PSA or a dealer, a trashed user or one of another group. Disabled users are included.
+   *
+   * @param store The store principal (the only source of the group and the place).
+   * @param access Verified access to the group of the store.
+   * @param query The validated `limit` and `cursor`.
+   * @throws {AppError} `NOT_FOUND` if the place is gone or has no company id; `VALIDATION_ERROR` for a cursor that does not fit.
+   */
+  getUsers(store: StorePrincipal, access: GroupAccess, query: StoreUsersQuery): Promise<StoreUsersResult>;
 }
 
 /** Collaborators of {@link createStoreContextService}. */
 export interface StoreContextServiceDeps {
   readonly groups: ManagedGroupsRepository;
   readonly repository: StoreContextRepository;
+  readonly users: Pick<UsersRepository, 'listForStore'>;
   readonly catalogs: Pick<CatalogsService, 'list'>;
   /** The read of the companies and places of the store's own perimeter. */
   readonly readerFor: (store: StorePrincipal, access: GroupAccess) => Pick<CompaniesPlacesWriter, 'read'>;
@@ -87,7 +112,7 @@ const EXTRA_CATALOGS: { readonly [Name in keyof ExtraGroupCatalogs]: Catalog } =
  * @param deps Repositories, the catalogs service, the reader of companies and places, and the logger.
  */
 export function createStoreContextService(deps: StoreContextServiceDeps): StoreContextService {
-  const { groups, repository, catalogs, readerFor, logger } = deps;
+  const { groups, repository, catalogs, readerFor, logger, users } = deps;
   const orNotFound = <T>(value: T | null): T => {
     if (value === null) {
       throw new AppError('NOT_FOUND');
@@ -100,6 +125,16 @@ export function createStoreContextService(deps: StoreContextServiceDeps): StoreC
     return Object.fromEntries(names.map((name, index) => [name, lists[index]])) as unknown as ExtraGroupCatalogs;
   };
   const read = async (store: StorePrincipal, access: GroupAccess, kind: 'companies' | 'places', id: ObjectId) => orNotFound(await readerFor(store, access).read(kind, id));
+  /** The company the place has now, from the place document of the group database, and the store principal that names only that company. */
+  const currentCompany = async (store: StorePrincipal, access: GroupAccess): Promise<{ readonly current: StorePrincipal; readonly companyId: ObjectId }> => {
+    const { document: place } = await read(store, access, 'places', store.placeId);
+    const companyId = place['companyId'];
+    if (!(companyId instanceof ObjectId)) {
+      throw new AppError('NOT_FOUND');
+    }
+    // The same store, with the company the place has now in the group database: nothing but the company of its own place can be named.
+    return { current: Object.freeze({ ...store, companyId, scope: Object.freeze({ ...store.scope, companyId }) }), companyId };
+  };
   return {
     getGroup: async (store, access) => {
       const mapped = orNotFound(await groups.findById(store.groupId));
@@ -111,15 +146,15 @@ export function createStoreContextService(deps: StoreContextServiceDeps): StoreC
     },
 
     getCompany: async (store, access) => {
-      const { document: place } = await read(store, access, 'places', store.placeId);
-      const companyId = place['companyId'];
-      if (!(companyId instanceof ObjectId)) {
-        throw new AppError('NOT_FOUND');
-      }
-      // The same store, with the company the place has now in the group database: nothing but the company of its own place can be named.
-      const current: StorePrincipal = Object.freeze({ ...store, companyId, scope: Object.freeze({ ...store.scope, companyId }) });
+      const { current, companyId } = await currentCompany(store, access);
       const { document, version } = await read(current, access, 'companies', companyId);
       return { company: toCompany(document, access.groupId), version };
+    },
+
+    getUsers: async (store, access, query) => {
+      const { companyId } = await currentCompany(store, access);
+      const { users: found, page } = await users.listForStore(storeUsersFilter(store.groupId, store.placeId, companyId), listParamsOf(query, USERS_LIST));
+      return { users: found.map(toStoreUser), page, companyId };
     },
 
     getPlace: async (store, access) => {

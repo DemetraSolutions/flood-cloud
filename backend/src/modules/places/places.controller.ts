@@ -63,8 +63,7 @@ export function createPlacesController(service: PlacesService): PlacesController
       sendRevalidatedPage(req, res, items, page);
     },
     get: async (_req, res) => {
-      // A store key reads its own place through the same route as a user: the caller is whichever principal the request carries.
-      sendPlace(res, await service.get((res.locals.store ?? res.locals.auth)!, res.locals.groupAccess!, placeIdOf(res)));
+      sendPlace(res, await service.get(res.locals.auth!, res.locals.groupAccess!, placeIdOf(res)));
     },
     invoiceSeries: async (req, res) => {
       sendRevalidated(req, res, await service.invoiceSeries(res.locals.auth!, res.locals.groupAccess!, placeIdOf(res)));

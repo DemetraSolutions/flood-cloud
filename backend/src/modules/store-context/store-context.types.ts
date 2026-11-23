@@ -1,3 +1,4 @@
+import type { UserResponse } from '../users/user.types.ts';
 import type { Provider, GroupResponse } from '../groups/group.types.ts';
 import type { CardType } from '../groups/catalogs/card-types.ts';
 import type { PointsCollection } from '../groups/catalogs/points-collections.ts';
@@ -39,3 +40,10 @@ export interface StoreGroup
   /** The legacy group key, still needed to call the old services; it will be removed when those calls are migrated. */
   readonly legacyApiKey: string | null;
 }
+
+/**
+ * A user as the server of a store reads him: the representation of the backoffice detail (`UserResponse`) without the reference to the dealer and without the picture (only `hasAvatar`),
+ * with `pin`, the stored PIN in clear (`null` when there is none), instead of `pinSet`. Not assignable to `UserResponse` (`pinSet` is missing), so the compiler refuses it wherever the
+ * representation of the backoffice is expected; the mapper builds it field by field, so a field added to the backoffice user never reaches the store by itself.
+ */
+export type StoreUser = Omit<UserResponse, 'dealerId' | 'avatar' | 'pinSet'> & { readonly pin: string | null };

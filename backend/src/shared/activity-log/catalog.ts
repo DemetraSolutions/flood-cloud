@@ -122,7 +122,7 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
   'store.activationFailed': ['reason'],
   'store.keyRevoked': ['reason', 'keyHint'],
   'store.revokedKeyPresented': [],
-  // The server of a store read the configuration that carries credentials: which one (`group` or `place`) and the ids of its company and place, never a value.
+  // The server of a store read the configuration that carries credentials: which one (`group`, `place` or `users`) and the ids of its company and place, never a value.
   'store.configurationRead': ['resource', 'companyId', 'placeId'],
   // A public API key is recorded by its name and the characters of its prefix after `fc_pk_` (`keyHint`: the log redacts any text that starts like a key), never the key; an update lists the names of the fields it changed.
   'apiKey.created': ['name', 'keyHint'],

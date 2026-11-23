@@ -50,9 +50,8 @@ describe('the routes of the store keys', () => {
     assert.deepEqual(opened, []);
   });
 
-  it('opens to a store, among the routes of the places, the detail alone', () => {
+  it('opens no route of the places to a store: the store reads its place only through /store-context/place', () => {
     const places = createPlacesRoutes({ replace: {} } as never, {} as never);
-    const open = places.filter((route) => (route.auth as { store?: unknown }).store === true).map((route) => `${route.method} ${route.path}`);
-    assert.deepEqual(open, ['GET /groups/:groupId/places/:placeId']);
+    assert.deepEqual(places.filter((route) => (route.auth as { store?: unknown }).store !== undefined).map((route) => `${route.method} ${route.path}`), []);
   });
 });

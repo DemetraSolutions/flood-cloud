@@ -13,6 +13,10 @@ import { STORE_PROFILE } from '../../src/shared/security/rbac/policy.ts';
 import { requireStoreGroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import type { StorePrincipal } from '../../src/shared/security/scope/principal.ts';
+import { toStoreUser } from '../../src/modules/store-context/store-context.mapper.ts';
+import { storeUsersFilter, storeUsersQuery } from '../../src/modules/store-context/store-context.users.ts';
+import type { UserResponse } from '../../src/modules/users/user.types.ts';
+import { fromLegacy } from '../../src/modules/users/user.mapper.ts';
 import { createConfigurationReadAudit } from '../../src/modules/store-context/store-context.audit.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { toPlace, toStorePlace } from '../../src/modules/places/place.mapper.ts';
@@ -119,16 +123,21 @@ describe('the representation of the group for a store', () => {
 
 describe('the routes of the store context', () => {
   const noop = () => undefined;
-  const routes = createStoreContextRoutes({ group: noop, company: noop, place: noop });
+  const routes = createStoreContextRoutes({ group: noop, company: noop, place: noop, countries: noop, users: noop });
 
-  it('declares three store-only routes without path parameters, never compressed, that ask the builder for the group access of the store', () => {
-    assert.deepEqual(routes.map((route) => `${route.method} ${route.path}`), ['GET /store-context/group', 'GET /store-context/company', 'GET /store-context/place']);
-    for (const route of routes) {
+  it('declares five store-only routes without path parameters: four that carry credentials (never compressed, with the group access of the store) and the countries (platform data, default compression, no group)', () => {
+    assert.deepEqual(routes.map((route) => `${route.method} ${route.path}`), ['GET /store-context/group', 'GET /store-context/company', 'GET /store-context/place', 'GET /store-context/users', 'GET /store-context/countries']);
+    for (const route of routes.slice(0, 4)) {
       assert.deepEqual(route.auth, { kind: 'store', group: true });
       assert.equal(route.compress, false);
-      assert.equal(route.middleware, undefined);
     }
+    assert.deepEqual(routes.slice(0, 3).map((route) => route.middleware), [undefined, undefined, undefined]);
+    assert.equal(routes[3]!.middleware?.length, 1, 'the page parameters are validated');
+    assert.deepEqual(routes[4]!.auth, { kind: 'store' });
+    assert.equal(routes[4]!.compress, undefined);
+    assert.equal(routes[4]!.middleware, undefined);
   });
+
 });
 
 describe('the group access of a store', () => {
@@ -160,10 +169,12 @@ describe('the service of the store context', () => {
   let mapped: { group: unknown; anomalies: unknown[] } | null;
   let stored: unknown;
   let read: { document: Record<string, unknown>; version: string } | null;
+  const listed: Array<{ filter: unknown; params: unknown }> = [];
   const deps = (): StoreContextServiceDeps =>
     ({
       groups: { findById: async () => mapped },
       repository: { groupCredentials: async () => stored },
+      users: { listForStore: async (filter: unknown, params: unknown) => (listed.push({ filter, params }), { users: [], page: { limit: 50, next: null } }) },
       catalogs: { list: async () => [] },
       readerFor: () => ({ read: async () => read }),
       logger: { warn: (_message: string, fields: unknown) => warnings.push(fields) },
@@ -216,6 +227,18 @@ describe('the service of the store context', () => {
       `places:${c(PLACE)}:${c(COMPANY)}:${c(COMPANY)}`,
     ]);
   });
+
+  it('lists with the default order of the users and the page asked, the filter built from the store', async () => {
+    mapped = groupDocument;
+    read = { document: { _id: PLACE, companyId: COMPANY }, version: 'v1' };
+    listed.length = 0;
+    const service = createStoreContextService(deps());
+    const result = await service.getUsers(STORE, ACCESS, { limit: 7 });
+    assert.deepEqual(result, { users: [], page: { limit: 50, next: null }, companyId: COMPANY });
+    assert.deepEqual(listed[0]!.filter, storeUsersFilter(GROUP, PLACE, COMPANY));
+    assert.equal((listed[0]!.params as { limit: number; sort: string }).limit, 7);
+    assert.equal((listed[0]!.params as { sort: string }).sort, 'username');
+  });
 });
 
 describe('the place of a store', () => {
@@ -266,10 +289,37 @@ describe('the audit of the reads of the configuration', () => {
 
   it('counts one an hour per key and resource, and records the event once the counter allows it', async () => {
     const { recorded, consumed } = await run(async () => ({ allowed: true }));
-    assert.deepEqual(consumed, [['storeConfigurationRead:key', `${STORE.keyId.toHexString()}:place`, 1, 3600]]);
+    assert.deepEqual(consumed, [['storeConfigurationRead:key', `${STORE.keyId.toHexString()}:place:10.0.0.9`, 1, 3600]]);
     assert.equal(recorded.length, 1);
     assert.equal(recorded[0]!['action'], 'store.configurationRead');
     assert.equal((await run(async () => ({ allowed: false }))).recorded.length, 0);
+  });
+
+  it('throttles per address too: the same key from a new address is a new counter, from the same one it is not; an unknown address has one token of its own', async () => {
+    const keys: string[] = [];
+    const audit = createConfigurationReadAudit({
+      activityLog: { record: async () => undefined },
+      rateLimiter: { consume: async (_bucket: string, key: string) => (keys.push(key), { allowed: true }) } as never,
+      logger: { error: () => undefined } as never,
+    });
+    for (const ip of ['10.0.0.1', '10.0.0.2', '10.0.0.1', null]) {
+      await audit.record(STORE, { requestId: 'r', ip, userAgent: null }, 'users');
+    }
+    const key = STORE.keyId.toHexString();
+    assert.deepEqual(keys, [`${key}:users:10.0.0.1`, `${key}:users:10.0.0.2`, `${key}:users:10.0.0.1`, `${key}:users:unknown`]);
+  });
+
+  it('records the company the read used when the caller names one, the principal\'s otherwise', async () => {
+    const recorded: Array<Record<string, unknown>> = [];
+    const audit = createConfigurationReadAudit({
+      activityLog: { record: async (entry) => void recorded.push(entry as never) },
+      rateLimiter: { consume: async () => ({ allowed: true }) } as never,
+      logger: { error: () => undefined } as never,
+    });
+    const used = fixtureId('company', 9);
+    await audit.record(STORE, client, 'users', used);
+    await audit.record(STORE, client, 'group');
+    assert.deepEqual(recorded.map((entry) => (entry['metadata'] as Record<string, unknown>)['companyId']), [used.toHexString(), COMPANY.toHexString()]);
   });
 
   it('leaves out the address when the request has none', async () => {
@@ -282,5 +332,66 @@ describe('the audit of the reads of the configuration', () => {
     });
     assert.equal(recorded.length, 1);
     assert.equal(errors.length, 1);
+  });
+});
+
+describe('the users of the place of a store', () => {
+  const groupId = GROUP;
+  const stored = {
+    _id: fixtureId('user', 5),
+    userName: 'cassiere',
+    name: 'Mario',
+    role: 'E',
+    groupId,
+    placeId: PLACE,
+    placesId: [PLACE],
+    status: true,
+    pin: '4321', // gitleaks:allow (fake test value)
+    password: 'PASSWORD-SENTINEL', // gitleaks:allow (fake test value)
+    tokens: ['TOKEN-SENTINEL'], // gitleaks:allow (fake test value)
+    avatar: 'data:image/png;base64,AAAA',
+    unknownKey: 'UNKNOWN-USER-KEY-SENTINEL', // gitleaks:allow (fake test value)
+    dealerId: fixtureId('user', 77),
+  };
+  const record = (document: Record<string, unknown>, pin: string | null) => ({ mapped: fromLegacy(document as never, { summary: true }), pin });
+
+  it('is the backoffice representation with the PIN in clear instead of the flag, and without dealer, picture or anything stored that is not modelled', () => {
+    const user = toStoreUser(record(stored, '4321')) as Record<string, unknown>;
+    assert.equal(user['pin'], '4321');
+    for (const absent of ['pinSet', 'avatar', 'dealerId', 'password', 'tokens', 'unknownKey']) {
+      assert.ok(!(absent in user), absent);
+    }
+    assert.deepEqual([user['id'], user['username'], user['role'], user['status'], user['hasAvatar']], [fixtureId('user', 5).toHexString(), 'cassiere', 'E', 'active', true]);
+    assert.ok('pos' in user && 'permissions' in user && 'shiftTime' in user && 'serviceIds' in user);
+    const text = JSON.stringify(user);
+    for (const hidden of ['PASSWORD-SENTINEL', 'TOKEN-SENTINEL', 'UNKNOWN-USER-KEY-SENTINEL']) {
+      assert.ok(!text.includes(hidden), hidden);
+    }
+  });
+
+  it('is built field by field: a field added to the source is not copied', () => {
+    const base = record(stored, '4321');
+    const widened = { ...base, mapped: { ...base.mapped, user: { ...base.mapped.user, futureField: 'FUTURE-SENTINEL', dealerId: 'dealer-sentinel' } } } as never;
+    const text = JSON.stringify(toStoreUser(widened));
+    assert.ok(!text.includes('FUTURE-SENTINEL') && !text.includes('dealer-sentinel'));
+  });
+
+  it('has a null PIN when there is none', () => {
+    assert.equal((toStoreUser(record(stored, null)) as Record<string, unknown>)['pin'], null);
+  });
+
+  it('is not a UserResponse, for the compiler', () => {
+    // @ts-expect-error the representation with the PIN is not assignable to the one of the backoffice
+    const asResponse: UserResponse = toStoreUser(record(stored, null));
+    assert.ok(asResponse !== undefined);
+  });
+
+  it('selects by the principal alone: the group, not trashed, E and PA of the place, the CA of the company, the SA', () => {
+    const company = fixtureId('company', 3);
+    assert.deepEqual(storeUsersFilter(GROUP, PLACE, company), {
+      groupId: GROUP,
+      trash: { $ne: true },
+      $or: [{ role: { $in: ['E', 'PA', null] }, $or: [{ placeId: PLACE }, { placesId: PLACE }] }, { role: 'CA', companyId: company }, { role: 'SA' }],
+    });
   });
 });

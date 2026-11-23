@@ -326,13 +326,21 @@ describe('loadConfig', () => {
       }
     });
 
-    it('requires https except for loopback in development', () => {
+    it('refuses look-alike hosts of loopback (a name that merely starts with localhost or 127.0.0.1), in production and in development', () => {
+      for (const appEnv of ['production', 'development']) {
+        for (const origin of ['http://localhost.evil.example', 'http://127.0.0.1.example.com', 'http://localhost.evil.example:4200']) {
+          assert.match(reasonFor(validEnv({ APP_ENV: appEnv, CORS_ALLOWED_ORIGINS: origin }), 'CORS_ALLOWED_ORIGINS') ?? '', /https is required/, `${appEnv} ${origin}`);
+        }
+      }
+    });
+
+    it('requires https except for loopback, in every environment', () => {
       assert.match(
         reasonFor(validEnv({ CORS_ALLOWED_ORIGINS: 'http://a.example.com' }), 'CORS_ALLOWED_ORIGINS') ?? '',
         /https is required/,
       );
-      assert.ok(reasonFor(validEnv({ APP_ENV: 'production', CORS_ALLOWED_ORIGINS: 'http://localhost:4200' }), 'CORS_ALLOWED_ORIGINS'));
-      assert.ok(reasonFor(validEnv({ APP_ENV: undefined, CORS_ALLOWED_ORIGINS: 'http://localhost:4200' }), 'CORS_ALLOWED_ORIGINS'));
+      assert.ok(reasonFor(validEnv({ APP_ENV: 'production', CORS_ALLOWED_ORIGINS: 'http://a.example.com' }), 'CORS_ALLOWED_ORIGINS'));
+      assert.equal(reasonFor(validEnv({ APP_ENV: 'production', CORS_ALLOWED_ORIGINS: 'http://localhost:4200' }), 'CORS_ALLOWED_ORIGINS'), undefined);
       assert.ok(reasonFor(validEnv({ CORS_ALLOWED_ORIGINS: 'ftp://localhost' }), 'CORS_ALLOWED_ORIGINS'));
       const config = loadConfig(validEnv({ CORS_ALLOWED_ORIGINS: 'http://localhost:4200,http://127.0.0.1:4200' }));
       assert.deepEqual(config.corsAllowedOrigins, ['http://localhost:4200', 'http://127.0.0.1:4200']);

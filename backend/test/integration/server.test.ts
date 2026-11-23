@@ -311,6 +311,29 @@ describe('run: database lifecycle', () => {
     assert.match(fake.err.join(''), /\.env file exists/);
   });
 
+  it('starts in production with a .env file only when ALLOW_ENV_FILE_IN_PRODUCTION is exactly true, and warns', async () => {
+    for (const value of ['TRUE', '1', 'yes', '']) {
+      const refused = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', ALLOW_ENV_FILE_IN_PRODUCTION: value }));
+      assert.equal(await run(refused.proc, { createClusters: () => { throw new Error('must not be reached'); }, ensureIndexes: noIndexes, dotEnvExists: () => true }), undefined, value);
+      assert.match(refused.err.join(''), /ALLOW_ENV_FILE_IN_PRODUCTION=true/);
+    }
+    const fake = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', PORT: '0', SHUTDOWN_DRAIN_MS: '0', ALLOW_ENV_FILE_IN_PRODUCTION: 'true' }));
+    const { client } = fakeClient();
+    const running = (await run(fake.proc, { createClusters: () => singleCluster(client), ensureIndexes: noIndexes, dotEnvExists: () => true })) as RunningServer;
+    assert.ok(running);
+    assert.match(fake.out.join(''), /"level":"warn","msg":"running in production with a \.env file/);
+    assert.ok(!fake.out.join('').includes('local http origin'));
+    await closed(running);
+    const local = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', PORT: '0', SHUTDOWN_DRAIN_MS: '0', CORS_ALLOWED_ORIGINS: 'https://app.example.com,http://localhost:4200' }));
+    const withLocal = (await run(local.proc, { createClusters: () => singleCluster(fakeClient().client), ensureIndexes: noIndexes, dotEnvExists: () => false })) as RunningServer;
+    assert.match(local.out.join(''), /"level":"warn","msg":"CORS_ALLOWED_ORIGINS lists a local http origin in production/);
+    await closed(withLocal);
+    const without = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', PORT: '0', SHUTDOWN_DRAIN_MS: '0', ALLOW_ENV_FILE_IN_PRODUCTION: 'true' }));
+    const other = (await run(without.proc, { createClusters: () => singleCluster(fakeClient().client), ensureIndexes: noIndexes, dotEnvExists: () => false })) as RunningServer;
+    assert.ok(!without.out.join('').includes('running in production with a .env file'));
+    await closed(other);
+  });
+
   it('starts in production when no .env file exists', async () => {
     const fake = fakeProcess(mongoEnv({ APP_ENV: 'production', MONGODB_URI: 'mongodb://127.0.0.1:1/?tls=true', PORT: '0', SHUTDOWN_DRAIN_MS: '0' }));
     const { client } = fakeClient();

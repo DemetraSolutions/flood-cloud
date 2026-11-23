@@ -243,7 +243,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     now,
   });
   const lookup = createLookupController(createLookupService({ lookup: createLookupRepository(databases), users, catalogs: catalogsService }));
-  const reference = createReferenceController(createReferenceService(createReferenceRepository(databases)));
+  const referenceService = createReferenceService(createReferenceRepository(databases));
+  const reference = createReferenceController(referenceService);
   const companiesRepository = createCompaniesRepository(databases, catalogsRepository);
   const mediaService = createMediaService({
     repository: createMediaRepository(databases),
@@ -295,12 +296,14 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     createStoreContextService({
       groups: managedGroups,
       repository: createStoreContextRepository(databases),
+      users,
       catalogs: catalogsService,
       readerFor: (store, access) => companiesPlacesReader(store, access, databases, { versionKey }),
       logger,
     }),
     versionKey,
     createConfigurationReadAudit({ activityLog, rateLimiter, logger }),
+    referenceService,
   );
   const placesService = createPlacesService({
     repository: createPlacesRepository(databases, companiesRepository),

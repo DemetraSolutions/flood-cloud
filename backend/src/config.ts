@@ -298,7 +298,7 @@ function tlsProblem(uri: string): string | undefined {
  *
  * @returns A reason when the entry is not acceptable, `undefined` when it is.
  */
-function checkOrigin(entry: string, appEnv: string | undefined): string | undefined {
+function checkOrigin(entry: string): string | undefined {
   let url: URL;
   try {
     url = new URL(entry);
@@ -311,10 +311,12 @@ function checkOrigin(entry: string, appEnv: string | undefined): string | undefi
   if (url.protocol === 'https:') {
     return undefined;
   }
-  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname) && appEnv === 'development') {
+  // A loopback origin is the developer's own browser, in any environment: the production configuration can be run locally as it is. CORS carries no credentials here
+  // (no cookies, no Allow-Credentials: the tokens live in the memory of the page), so such an origin gains nothing a request without CORS would not have.
+  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) {
     return undefined;
   }
-  return 'https is required (http is allowed only for localhost and 127.0.0.1 when APP_ENV=development)';
+  return 'https is required (http is allowed only for localhost and 127.0.0.1)';
 }
 
 /**
@@ -636,7 +638,7 @@ export function loadConfig(env: Env): Config {
   const corsRaw = env['CORS_ALLOWED_ORIGINS'] ?? '';
   const corsAllowedOrigins = corsRaw.trim() === '' ? [] : corsRaw.split(',').map((entry) => entry.trim());
   for (const entry of corsAllowedOrigins) {
-    const reason = checkOrigin(entry, appEnv);
+    const reason = checkOrigin(entry);
     if (reason !== undefined) {
       issues.push({ variable: 'CORS_ALLOWED_ORIGINS', reason });
       break;

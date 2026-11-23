@@ -60,34 +60,25 @@ describe('the requests of a store key', () => {
     assert.equal((await world.asStore(store.key, 'GET', '/store-context')).body.data.companyId, hex(moved));
   });
 
-  it('reads its own place through the route of the backoffice, with its ETag, and nothing of the credentials of the integrations', async () => {
-    const reply = await world.asStore(store.key, 'GET', placeUrl(own()));
-    assert.equal(reply.status, 200, JSON.stringify(reply.body));
-    assert.equal(reply.body.data.id, hex(own()));
-    assert.match(reply.headers.get('etag') ?? '', /^"[A-Za-z0-9_-]+"$/);
-    const asUser = await call(world.office.cluster.psa, 'GET', placeUrl(own()));
-    // The same representation the backoffice sees, but for the dealer settings (the address of the server of the store and of the connector), which only a PSA or a dealer gets.
-    const { dealerSettings, ...visible } = asUser.body.data;
-    assert.ok(dealerSettings !== undefined);
-    assert.deepEqual(reply.body.data, visible);
-    assert.equal(reply.body.data.dealerSettings, undefined);
-    assert.ok(!JSON.stringify(reply.body).includes('fixture-integration-secret'));
-  });
-
-  it('is 404 for any other place, of the same group or of another, and for an id of a place that does not exist: one and the same answer', async () => {
+  it('has one call for its place: the detail route of the backoffice is 403 to it (own place, any other, or none), the full configuration is /store-context/place', async () => {
     const answers = new Set<string>();
-    for (const path of [placeUrl(other()), placeUrl(world.group(1).ownPlaceId, 1), placeUrl(own(), 1), placeUrl(new ObjectId()), `/groups/${hex(group().groupId)}/places/${hex(own()).toUpperCase().replace(/[0-9]/g, '0')}`, `/groups/${hex(group().groupId)}/places/${hex(own())}%20`]) {
+    for (const path of [placeUrl(own()), placeUrl(other()), placeUrl(world.group(1).ownPlaceId, 1), placeUrl(own(), 1), placeUrl(new ObjectId()), `/groups/${hex(group().groupId)}/places/not-an-id`]) {
       const reply = await world.asStore(store.key, 'GET', path);
-      assert.equal(reply.status, 404, path);
+      assert.deepEqual([reply.status, reply.body.error.code], [403, 'FORBIDDEN'], path);
+      assert.equal(reply.headers.get('etag'), null);
       answers.add(JSON.stringify(reply.body));
     }
     assert.equal(answers.size, 1);
+    const place = await world.asStore(store.key, 'GET', '/store-context/place');
+    assert.deepEqual([place.status, place.body.data.id], [200, hex(own())]);
+    assert.ok(JSON.stringify(place.body).includes('fixture-integration-secret'), 'with the credentials, which the detail of the backoffice never carries');
   });
 
   it('is 403 on everything that was not opened to it: lists, other resources, the profile, the sessions, writes on its own place', async () => {
     const g = hex(group().groupId);
     const attempts: Array<[string, string, unknown?]> = [
       ['GET', `/groups/${g}/places`],
+      ['GET', `/groups/${g}/places/${hex(own())}`],
       ['GET', `/groups/${g}/companies`],
       ['GET', `/groups/${g}`],
       ['GET', `/groups/${g}/users`],
@@ -123,7 +114,7 @@ describe('the requests of a store key', () => {
       const reply = await world.asStore(store.key, method, path, body);
       assert.deepEqual([reply.status, reply.body?.error?.code], [403, 'FORBIDDEN'], `${method} ${path}`);
     }
-    assert.equal((await world.asStore(store.key, 'GET', '/groups/not-a-group/places/x')).status, 404);
+    assert.equal((await world.asStore(store.key, 'GET', '/groups/not-a-group/places/x')).status, 403, 'no route is opened to a store key for now: not even the detail of its own place');
     assert.equal(await common().collection('storeActivationCodes').countDocuments({}), 0, 'nothing was created');
     assert.equal(await common().collection('tobaccos').countDocuments({}), 0, 'no list was written');
     assert.equal(await common().collection('idempotencyKeys').countDocuments({}), 0, 'the import did not even begin');
@@ -281,7 +272,7 @@ describe('a store that is not operational: 403 STORE_DISABLED, nothing revoked, 
       const savedCompany = await common().collection('companies').findOne({ _id: company });
       const mark = world.office.activity.entries.length;
       await break_();
-      for (const path of ['/store-context', placeUrl(own())]) {
+      for (const path of ['/store-context', '/store-context/place']) {
         const reply = await world.asStore(store.key, 'GET', path);
         assert.deepEqual([reply.status, reply.body], [403, disabled], `${name} ${path}`);
       }
@@ -386,7 +377,7 @@ describe('a place that leaves the operation revokes its key', () => {
     const copyBefore = await world.copyOfPlace(other());
     const k = await world.activate(other());
     for (let i = 0; i < 3; i += 1) {
-      await world.asStore(k.key, 'GET', placeUrl(other()));
+      await world.asStore(k.key, 'GET', '/store-context/place');
     }
     await call(world.office.cluster.psa, 'DELETE', world.keyPath(0, other()));
     assert.deepEqual(await world.storedPlace(0, other()), before);

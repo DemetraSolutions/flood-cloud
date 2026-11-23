@@ -1,6 +1,7 @@
 import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { fixtureId, legacyUser } from '../helpers/legacy-fixtures.ts';
 import { canonicalJson, etagOf } from '../../src/shared/http/etag.ts';
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
@@ -488,6 +489,321 @@ describe('what a store cannot choose or do', () => {
     }
     const text = JSON.stringify([world.office.activity.entries, world.office.logEvents]);
     for (const secret of [LEGACY_KEY, YELLGO_KEY, DOJO_KEY, STRIPE_KEY, DEVICE_USER, DEVICE_PASSWORD, store.key]) {
+      assert.ok(!text.includes(secret), secret);
+    }
+  });
+});
+
+describe('GET /v1/store-context/countries', () => {
+  it('gives the same list as the backoffice, with a weak content tag and a 304 on a match, and ignores the query exactly as the user route does', async () => {
+    const reply = await world.asStore(store.key, 'GET', '/store-context/countries');
+    const asUser = await psaGet('/countries');
+    assert.deepEqual([reply.status, asUser.status], [200, 200]);
+    assert.ok(reply.body.data.length > 0 && Array.isArray(reply.body.data[0].areas));
+    assert.deepEqual(reply.body, asUser.body);
+    const tag = reply.headers.get('etag') ?? '';
+    assert.match(tag, /^W\/"[A-Za-z0-9_-]+"$/);
+    assert.equal(tag, asUser.headers.get('etag'));
+    assert.equal(reply.headers.get('cache-control'), 'no-store');
+    assert.deepEqual((await world.asStore(store.key, 'GET', '/store-context/countries', undefined, { 'if-none-match': tag })).status, 304);
+    assert.deepEqual((await world.asStore(store.key, 'GET', '/store-context/countries?limit=1&cursor=x&groupId=1')).body, reply.body);
+  });
+
+  it('is refused like the other routes of the store: 401, 403 to a user, STORE_DISABLED, 405 to a write, and nothing is recorded', async () => {
+    const mark = world.office.activity.entries.length;
+    const path = '/store-context/countries';
+    assert.equal((await world.asStore(undefined, 'GET', path)).status, 401);
+    assert.equal((await world.asStore('fc_sk_nothing', 'GET', path)).status, 401);
+    assert.equal((await world.as.call(world.office.cluster.psa, 'GET', path)).body.error.code, 'FORBIDDEN');
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      assert.equal((await world.asStore(store.key, method, path, method === 'DELETE' ? undefined : {})).status, 405, method);
+    }
+    await common().collection('places').updateOne({ _id: own() }, { $set: { status: false } });
+    assert.equal((await world.asStore(store.key, 'GET', path)).body.error.code, 'STORE_DISABLED');
+    await common().collection('places').updateOne({ _id: own() }, { $set: { status: true } });
+    assert.equal((await world.asStore(store.key, 'GET', path)).status, 200);
+    assert.deepEqual(world.office.activity.entries.slice(mark), []);
+  });
+
+  it('is the only thing of the countries a store reads: the list of the backoffice, the detail and the writes are 403', async () => {
+    for (const [method, path, body] of [
+      ['GET', '/countries'],
+      ['GET', '/countries/IT'],
+      ['POST', '/countries', { code: 'ZZ', name: 'Zed' }],
+      ['PATCH', '/countries/IT', { name: 'x' }],
+      ['DELETE', '/countries/IT'],
+      ['POST', '/countries/IT/areas', { code: 'ZZ', name: 'Zed' }],
+      ['PATCH', '/countries/IT/areas/MI', { name: 'x' }],
+      ['DELETE', '/countries/IT/areas/MI'],
+    ] as Array<[string, string, unknown?]>) {
+      const reply = await world.asStore(store.key, method, path, body);
+      assert.deepEqual([reply.status, reply.body.error.code], [403, 'FORBIDDEN'], `${method} ${path}`);
+    }
+    assert.equal(await common().collection('countries').countDocuments({ code: 'ZZ' }), 0);
+  });
+
+  it('is 429 over the limit of the key', async () => {
+    const small = await openTestDatabases();
+    const office = await startStoreWorld(small, { env: { RATE_LIMIT_API_PER_STORE: '1' }, rateLimiter: memoryRateLimiter() });
+    try {
+      const key = await office.activate(office.group(0).ownPlaceId);
+      assert.equal((await office.asStore(key.key, 'GET', '/store-context/countries')).status, 200);
+      assert.equal((await office.asStore(key.key, 'GET', '/store-context/countries')).status, 429);
+    } finally {
+      await office.office.close();
+      await small.cleanup();
+    }
+  });
+});
+
+describe('GET /v1/store-context/users', () => {
+  const PIN = '73914'; // gitleaks:allow (fake test value)
+  const PASSWORD = 'USER-PASSWORD-SENTINEL'; // gitleaks:allow (fake test value)
+  const base = (n: number, role: string, extra: Document = {}): Document =>
+    legacyUser(n, { groupId: world.group(0).groupId, role, dealerId: world.group(0).dealerId, pin: PIN, password: PASSWORD, tokens: ['TOKEN-USER-SENTINEL'], userName: `store-user-${String(n)}`, ...extra }); // gitleaks:allow (fake test value)
+  const id = (n: number): ObjectId => fixtureId('user', n);
+  const other0 = () => world.group(0).otherPlaceId;
+  let otherCompany: ObjectId;
+  /** The users planted: who is returned and who is not. */
+  const planted = (): Document[] => [
+    base(900, 'E', { placeId: own(), placesId: [own()] }),
+    base(901, 'PA', { placeId: other0(), placesId: [other0(), own()] }),
+    base(902, 'PA', { placeId: other0(), placesId: [other0()] }),
+    base(903, 'E', { placeId: other0(), placesId: [other0()] }),
+    base(904, 'CA', { companyId: ownCompany, placeId: null, placesId: [] }),
+    base(905, 'CA', { companyId: otherCompany, placeId: null, placesId: [] }),
+    base(906, 'SA'),
+    base(907, 'E', { placeId: own(), placesId: [own()], status: false }),
+    base(908, 'PA', { placeId: own(), placesId: [own()], trash: true }),
+    base(909, 'PSA', { groupId: null, placeId: own(), placesId: [own()] }),
+    base(910, 'D', { groupId: null, placeId: own(), placesId: [own()] }),
+    base(911, 'E', { groupId: world.group(1).groupId, placeId: own(), placesId: [own()] }),
+    base(912, 'E', { role: null, placeId: own(), placesId: [own()] }),
+    base(913, 'E', { placeId: own(), placesId: [own()], pin: null }),
+    base(914, 'E', { placeId: own(), placesId: [own()], pin: 5 }),
+    base(915, 'weird', { placeId: own(), placesId: [own()] }),
+    base(916, 'SA', { groupId: world.group(1).groupId }),
+    base(917, 'PA', { placeId: null, placesId: 'single' }),
+  ];
+  const seeded = () => [world.group(0).sa, world.group(0).ca, world.group(0).pa];
+  const expectedIds = (): string[] => [...seeded(), id(900), id(901), id(904), id(906), id(907), id(912), id(913), id(914)].map(hex).sort();
+  const idsOf = (reply: { body: { data: Array<{ id: string }> } }): string[] => reply.body.data.map((user) => user.id);
+
+  beforeEach(async () => {
+    otherCompany = (await common().collection('companies').findOne({ _id: { $ne: ownCompany }, groupId: world.group(0).groupId }))!['_id'] as ObjectId;
+    await common().collection('users').deleteMany({ _id: { $in: planted().map((user) => user['_id'] as ObjectId) } });
+    await common().collection('users').insertMany(planted());
+  });
+
+  it('gives exactly the users involved in the place: its E and PA, the CA of its company, the SA of the group; disabled ones too, never a PSA, a D, a trashed one, another group or another place', async () => {
+    const reply = await world.asStore(store.key, 'GET', '/store-context/users?limit=200');
+    assert.equal(reply.status, 200, JSON.stringify(reply.body));
+    assert.deepEqual(idsOf(reply).sort(), expectedIds());
+    assert.deepEqual(reply.body.page, { limit: 200, next: null });
+    const byId = new Map<string, Document>(reply.body.data.map((user: Document) => [user['id'], user]));
+    assert.equal(byId.get(hex(id(907)))!['status'], 'disabled');
+    assert.equal(byId.get(hex(id(912)))!['role'], 'E');
+  });
+
+  it('has the PIN in clear when it is set and null when it is missing or junk, and nothing of the credentials anywhere', async () => {
+    const reply = await world.asStore(store.key, 'GET', '/store-context/users?limit=200');
+    const byId = new Map<string, Document>(reply.body.data.map((user: Document) => [user['id'], user]));
+    assert.equal(byId.get(hex(id(900)))!['pin'], PIN);
+    assert.equal(byId.get(hex(id(913)))!['pin'], null);
+    assert.equal(byId.get(hex(id(914)))!['pin'], null);
+    for (const user of reply.body.data) {
+      assert.ok(!('pinSet' in user) && !('password' in user) && !('avatar' in user) && !('dealerId' in user), user.id);
+    }
+    const text = JSON.stringify(reply.body);
+    for (const secret of [PASSWORD, 'TOKEN-USER-SENTINEL', store.key]) {
+      assert.ok(!text.includes(secret), secret);
+    }
+  });
+
+  it('is the representation of the backoffice detail, but for the PIN, the picture and the dealer', async () => {
+    const detail = (await psaGet(`/groups/${g()}/users/${hex(id(900))}`)).body.data;
+    const { pinSet, avatar: _avatar, dealerId: _dealer, ...shared } = detail;
+    assert.equal(pinSet, true);
+    const mine = (await world.asStore(store.key, 'GET', '/store-context/users?limit=200')).body.data.find((user: Document) => user['id'] === hex(id(900)));
+    const { pin, ...rest } = mine;
+    assert.equal(pin, PIN);
+    assert.deepEqual(rest, shared);
+  });
+
+  it('follows the company of the place: when the place moves, the CA of the old company goes out and the one of the new comes in', async () => {
+    await common().collection('places').updateOne({ _id: own() }, { $set: { companyId: otherCompany } });
+    await groupDb().collection('places').updateOne({ _id: own() }, { $set: { companyId: otherCompany } });
+    const ids = idsOf(await world.asStore(store.key, 'GET', '/store-context/users?limit=200'));
+    assert.ok(ids.includes(hex(id(905))) && !ids.includes(hex(id(904))));
+    const event = world.office.activity.entries.filter((entry) => entry.action === 'store.configurationRead' && entry.metadata?.['resource'] === 'users').at(-1)!;
+    assert.equal(event.metadata?.['companyId'], hex(otherCompany), 'the audit names the company the filter used, not the one of the principal');
+  });
+
+  it('is only the users of the key: two stores of the same group, and of two groups, never see each other', async () => {
+    const second = await world.activate(other());
+    const theirs = idsOf(await world.asStore(second.key, 'GET', '/store-context/users?limit=200'));
+    assert.ok(theirs.includes(hex(id(902))) && theirs.includes(hex(id(903))) && !theirs.includes(hex(id(900))));
+    const far = await world.activate(world.group(1).ownPlaceId, 1);
+    const farIds = idsOf(await world.asStore(far.key, 'GET', '/store-context/users?limit=200'));
+    assert.ok(farIds.includes(hex(id(916))) && !farIds.includes(hex(id(900))) && !farIds.includes(hex(world.group(0).sa)));
+  });
+
+  it('pages by cursor in a stable order, and refuses a bad cursor and any other parameter', async () => {
+    const all = idsOf(await world.asStore(store.key, 'GET', '/store-context/users?limit=200'));
+    const collected: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const reply = await world.asStore(store.key, 'GET', `/store-context/users?limit=3${cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`}`);
+      assert.equal(reply.status, 200);
+      assert.ok(reply.body.data.length <= 3 && reply.body.page.limit === 3);
+      collected.push(...idsOf(reply));
+      cursor = reply.body.page.next;
+      pages += 1;
+    } while (cursor !== null);
+    assert.ok(pages >= 3);
+    assert.deepEqual(collected, all);
+    assert.equal((await world.asStore(store.key, 'GET', '/store-context/users')).body.page.limit, 50);
+    for (const query of ['cursor=not-a-cursor', 'limit=0', 'limit=201', 'limit=x', 'sort=-username', 'q=a', 'role=SA', 'status=active', 'groupId=1']) {
+      const reply = await world.asStore(store.key, 'GET', `/store-context/users?${query}`);
+      assert.equal(reply.status, 422, query);
+    }
+  });
+
+  it('has a keyed strong tag per page, not derivable from the body, a 304 on a match and a new tag when a PIN changes', async () => {
+    const first = await world.asStore(store.key, 'GET', '/store-context/users?limit=200');
+    const tag = first.headers.get('etag') ?? '';
+    assert.match(tag, /^"[A-Za-z0-9_-]{43}"$/);
+    const body = { data: first.body.data, page: first.body.page };
+    assert.notEqual(tag, etagOf(body));
+    assert.notEqual(tag, `"${createHash('sha256').update(canonicalJson(body)).digest('base64url')}"`);
+    assert.equal(first.headers.get('cache-control'), 'no-store');
+    assert.equal(first.headers.get('content-encoding'), null);
+    assert.equal((await world.asStore(store.key, 'GET', '/store-context/users?limit=200', undefined, { 'if-none-match': tag })).status, 304);
+    const otherPage = await world.asStore(store.key, 'GET', '/store-context/users?limit=2');
+    assert.notEqual(otherPage.headers.get('etag'), tag);
+    await common().collection('users').updateOne({ _id: id(900) }, { $set: { pin: '11111' } }); // gitleaks:allow (fake test value)
+    const changed = await world.asStore(store.key, 'GET', '/store-context/users?limit=200', undefined, { 'if-none-match': tag });
+    assert.deepEqual([changed.status, changed.headers.get('etag') !== tag], [200, true]);
+  });
+
+  it('is refused like every route of the store, and never answers a 304 to a refusal', async () => {
+    const path = '/store-context/users';
+    const tag = (await world.asStore(store.key, 'GET', path)).headers.get('etag')!;
+    assert.equal((await world.asStore(undefined, 'GET', path)).status, 401);
+    assert.equal((await world.as.call(world.office.cluster.psa, 'GET', path)).body.error.code, 'FORBIDDEN');
+    assert.equal((await world.as.call(world.group(0).sa, 'GET', path)).body.error.code, 'FORBIDDEN');
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      assert.equal((await world.asStore(store.key, method, path, method === 'DELETE' ? undefined : {})).status, 405, method);
+    }
+    await common().collection('places').updateOne({ _id: own() }, { $set: { status: false } });
+    const disabled = await world.asStore(store.key, 'GET', path, undefined, { 'if-none-match': tag });
+    assert.deepEqual([disabled.status, disabled.body.error.code, disabled.headers.get('etag')], [403, 'STORE_DISABLED', null]);
+    await common().collection('places').updateOne({ _id: own() }, { $set: { status: true } });
+    await world.as.call(world.office.cluster.psa, 'DELETE', world.keyPath(0, own()));
+    assert.equal((await world.asStore(store.key, 'GET', path, undefined, { 'if-none-match': tag })).status, 401);
+  });
+
+  it('never returns a user outside the lawful set, whatever the cursor: forged ones are 422 or a subset, operator-shaped parameters are 422, other credentials are 401', async () => {
+    const lawful = new Set(expectedIds());
+    const real = (await world.asStore(store.key, 'GET', '/store-context/users?limit=1')).body.page.next as string;
+    const decoded = JSON.parse(Buffer.from(real, 'base64url').toString('utf8')) as Record<string, unknown>;
+    const forge = (changes: Record<string, unknown>): string => Buffer.from(JSON.stringify({ ...decoded, ...changes }), 'utf8').toString('base64url');
+    const forged = [forge({ id: hex(new ObjectId()) }), forge({ id: hex(id(909)), value: 'aaa' }), forge({ id: hex(id(910)), value: null }), forge({ v: 99 }), forge({ id: 'x' }), forge({ value: { $ne: 1 } }), Buffer.from('{"v":1,"s":"createdAt","value":1,"id":"010000000000000000000001"}').toString('base64url')];
+    for (const cursor of forged) {
+      const reply = await world.asStore(store.key, 'GET', `/store-context/users?limit=200&cursor=${cursor}`);
+      assert.ok([200, 422].includes(reply.status), `${String(reply.status)} ${cursor}`);
+      if (reply.status === 200) {
+        assert.ok(idsOf(reply).every((userId) => lawful.has(userId)), 'only lawful users');
+      }
+    }
+    for (const query of ['cursor[$ne]=1', 'limit[$gt]=0', 'limit[]=1', 'cursor[]=a&cursor[]=b']) {
+      assert.equal((await world.asStore(store.key, 'GET', `/store-context/users?${query}`)).status, 422, query);
+    }
+    for (const credential of [`fc_pk_${'a'.repeat(43)}`, `fc_sk_${'a'.repeat(43)}`]) {
+      assert.equal((await world.asStore(credential, 'GET', '/store-context/users')).status, 401);
+    }
+  });
+
+  it('classifies the odd documents: a group id or a company id stored as text grants nothing, a lone scalar placeId does', async () => {
+    const odd = [
+      base(920, 'E', { groupId: hex(world.group(0).groupId), placeId: own(), placesId: [own()] }),
+      base(921, 'CA', { companyId: hex(ownCompany), placeId: null, placesId: [] }),
+      base(922, 'E', { placeId: own(), placesId: undefined }),
+    ];
+    await common().collection('users').deleteMany({ _id: { $in: odd.map((user) => user['_id'] as ObjectId) } });
+    await common().collection('users').insertMany(odd);
+    try {
+      const ids = idsOf(await world.asStore(store.key, 'GET', '/store-context/users?limit=200'));
+      assert.ok(!ids.includes(hex(id(920))), 'a group id stored as text: excluded');
+      assert.ok(!ids.includes(hex(id(921))), 'a company id stored as text: excluded');
+      assert.ok(ids.includes(hex(id(922))), 'only the scalar placeId: included');
+    } finally {
+      await common().collection('users').deleteMany({ _id: { $in: odd.map((user) => user['_id'] as ObjectId) } });
+    }
+  });
+
+  it('is STORE_DISABLED while the group is suspended', async () => {
+    await common().collection('groups').updateOne({ _id: world.group(0).groupId }, { $set: { status: false } });
+    assert.equal((await world.asStore(store.key, 'GET', '/store-context/users')).body.error.code, 'STORE_DISABLED');
+  });
+
+  it('is 429 over the limit of the key', async () => {
+    const small = await openTestDatabases();
+    const office = await startStoreWorld(small, { env: { RATE_LIMIT_API_PER_STORE: '1' }, rateLimiter: memoryRateLimiter() });
+    try {
+      const key = await office.activate(office.group(0).ownPlaceId);
+      assert.equal((await office.asStore(key.key, 'GET', '/store-context/users')).status, 200);
+      assert.equal((await office.asStore(key.key, 'GET', '/store-context/users')).status, 429);
+    } finally {
+      await office.office.close();
+      await small.cleanup();
+    }
+  });
+
+  it('is 404 when the place is gone, and has no use for another place or company in the query', async () => {
+    const plain = await world.asStore(store.key, 'GET', '/store-context/users?limit=200');
+    const place = (await groupDb().collection('places').findOne({ _id: own() }))!;
+    try {
+      await groupDb().collection('places').deleteOne({ _id: own() });
+      assert.equal((await world.asStore(store.key, 'GET', '/store-context/users')).status, 404);
+      await groupDb().collection('places').updateOne({ _id: own() }, { $set: { companyId: 'x' } }, { upsert: true });
+      assert.equal((await world.asStore(store.key, 'GET', '/store-context/users')).status, 404);
+    } finally {
+      await groupDb().collection('places').replaceOne({ _id: own() }, place, { upsert: true });
+    }
+    assert.deepEqual((await world.asStore(store.key, 'GET', '/store-context/users?limit=200')).body, plain.body);
+  });
+
+  it('is never a PIN in the backoffice: the lists and the details of the users show only whether it is set', async () => {
+    for (const path of [`/groups/${g()}/users?limit=200`, `/groups/${g()}/users/${hex(id(900))}`, `/users/${hex(id(900))}`]) {
+      const reply = await psaGet(path);
+      assert.equal(reply.status === 200 || reply.status === 404, true, path);
+      const text = JSON.stringify(reply.body);
+      assert.ok(!text.includes(PIN) && !text.includes('"pin"') && !text.includes(PASSWORD), path);
+    }
+    assert.equal((await psaGet(`/groups/${g()}/users/${hex(id(900))}`)).body.data.pinSet, true);
+  });
+
+  it('writes the audit event once an hour for `users`, apart from the group and the place, and never on a 304 or an error, nor a PIN anywhere', async () => {
+    const events = () => world.office.activity.entries.filter((entry) => entry.action === 'store.configurationRead');
+    const before = events().length;
+    const first = await world.asStore(store.key, 'GET', '/store-context/users');
+    await world.asStore(store.key, 'GET', '/store-context/users?limit=2');
+    assert.equal(events().length - before, 1);
+    assert.deepEqual(events()[before]!.metadata, { resource: 'users', companyId: hex(ownCompany), placeId: hex(own()) });
+    await world.asStore(store.key, 'GET', '/store-context/group');
+    await world.asStore(store.key, 'GET', '/store-context/place');
+    assert.equal(events().length - before, 3, 'the group and the place are apart');
+    limiter.reset();
+    await world.asStore(store.key, 'GET', '/store-context/users', undefined, { 'if-none-match': first.headers.get('etag')! });
+    await world.asStore(store.key, 'GET', '/store-context/users?cursor=bad');
+    await world.asStore(undefined, 'GET', '/store-context/users');
+    assert.equal(events().length - before, 3, 'a 304, a 422 and a 401 write nothing');
+    await world.asStore(store.key, 'GET', '/store-context/users');
+    assert.equal(events().length - before, 4, 'a new hour, a new event');
+    const text = JSON.stringify([world.office.activity.entries, world.office.logEvents]);
+    for (const secret of [PIN, PASSWORD, 'TOKEN-USER-SENTINEL', store.key]) {
       assert.ok(!text.includes(secret), secret);
     }
   });

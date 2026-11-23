@@ -15,7 +15,7 @@ import type { NewPlaceFields } from '../../shared/legacy-write/fields.ts';
 import { WEEK_DAYS } from '../../shared/legacy-write/place-paths.ts';
 import { SETTING_FIELDS } from '../../shared/legacy-write/place-settings.ts';
 import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
-import type { AuthPrincipal, ScopeHolder } from '../../shared/security/scope/principal.ts';
+import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { assertCrossGroupAccess } from '../../shared/security/scope/cross-group.ts';
 import { companyInScope } from '../../shared/security/scope/scope-filters.ts';
 import { settleItem } from '../../shared/trash/trash.ts';
@@ -80,11 +80,11 @@ export interface PlacesService {
   listAll(principal: AuthPrincipal, query: AllPlacesQuery): Promise<AllPlacesListing>;
   /**
    * Reads one place from the document of the group database (so the version is the one `If-Match` expects). A place that does not exist, is of another group or is outside the
-   * perimeter of the caller is one and the same `404`. The caller may also be the server of the place itself (a store key: its perimeter is its own place).
+   * perimeter of the caller is one and the same `404`.
    *
    * @throws {AppError} `NOT_FOUND`.
    */
-  get(principal: ScopeHolder, access: GroupAccess, placeId: ObjectId): Promise<PlaceResult>;
+  get(principal: AuthPrincipal, access: GroupAccess, placeId: ObjectId): Promise<PlaceResult>;
   /**
    * The invoice series (`name`, `cash`) of the company the place has now, for whoever may save the place: scoped like the place (a place outside the perimeter is `404`), and read through
    * the write service, so a place administrator, who has no `companies:read`, still picks the series. `[]` when the company is missing.
@@ -162,8 +162,8 @@ export interface PlacesServiceDeps {
   readonly repository: PlacesRepository;
   /** Opens the write service for a group the caller was verified to reach: only for a backoffice user (the type keeps a store out of every write). */
   readonly writerFor: (principal: AuthPrincipal, access: GroupAccess) => CompaniesPlacesWriter;
-  /** Opens the read of the places for a caller with a perimeter, a backoffice user or a store. */
-  readonly readerFor: (principal: ScopeHolder, access: GroupAccess) => Pick<CompaniesPlacesWriter, 'read'>;
+  /** Opens the read of the places for a backoffice user (a store reads its place through the store context, not through this service). */
+  readonly readerFor: (principal: AuthPrincipal, access: GroupAccess) => Pick<CompaniesPlacesWriter, 'read'>;
   readonly logger: Logger;
   /** Ends the store key of a place that goes to the trash or is deleted (step 7C): the place document is never touched. */
   readonly storeKeys: Pick<StoreKeysService, 'revokeForPlace'>;
@@ -221,11 +221,11 @@ const RESERVED_SETTINGS: readonly string[] = SETTING_FIELDS.filter((field) => fi
 /** The keys of the integrations that receive payments: a PSA or a dealer sets, changes or clears them (any other role is `notAllowed`, even for a clear). */
 const PAYMENT_SETTINGS: readonly string[] = SETTING_FIELDS.filter((field) => field.payment === true).map((field) => field.domain);
 
-/** Whether the caller is a PSA or a dealer (a store key is neither). */
-const isPrivileged = (caller: ScopeHolder): boolean => 'role' in caller && (caller.role === 'PSA' || caller.role === 'D');
+/** Whether the caller is a PSA or a dealer. */
+const isPrivileged = (caller: AuthPrincipal): boolean => caller.role === 'PSA' || caller.role === 'D';
 
 /** The place as the caller may see it: the dealer settings are for a PSA or a dealer only. */
-function shownTo(caller: ScopeHolder, place: Place): Place {
+function shownTo(caller: AuthPrincipal, place: Place): Place {
   if (isPrivileged(caller)) {
     return place;
   }
@@ -292,7 +292,7 @@ export function createPlacesService(deps: PlacesServiceDeps): PlacesService {
   };
 
   /** The place as it is after a write, as the caller may see it. */
-  const reload = async (writer: Pick<CompaniesPlacesWriter, 'read'>, access: GroupAccess, placeId: ObjectId, caller: ScopeHolder): Promise<PlaceResult> => {
+  const reload = async (writer: Pick<CompaniesPlacesWriter, 'read'>, access: GroupAccess, placeId: ObjectId, caller: AuthPrincipal): Promise<PlaceResult> => {
     const { place, version } = await load(writer, access, placeId);
     return { place: shownTo(caller, place), version };
   };

@@ -102,13 +102,25 @@ export async function run(
     return undefined;
   }
 
-  if (config.appEnv === 'production' && (deps.dotEnvExists ?? (() => existsSync('.env')))()) {
-    proc.stderr.write('A .env file exists in the working directory: in production secrets come from the secret manager, remove it\n');
+  // A `.env` next to a production process is refused (a deployed image must take its secrets from the secret manager), unless the operator says so explicitly: running
+  // the production configuration on a developer's machine. Only the exact value `true` opens it.
+  const dotEnvInProduction = config.appEnv === 'production' && (deps.dotEnvExists ?? (() => existsSync('.env')))();
+  if (dotEnvInProduction && proc.env['ALLOW_ENV_FILE_IN_PRODUCTION'] !== 'true') {
+    proc.stderr.write(
+      'A .env file exists in the working directory: in production secrets come from the secret manager, remove it (or set ALLOW_ENV_FILE_IN_PRODUCTION=true to run production on a local machine)\n',
+    );
     proc.exit(1);
     return undefined;
   }
 
   const logger = createLogger({ write: (line) => proc.stdout.write(`${line}\n`) });
+  if (dotEnvInProduction) {
+    logger.warn('running in production with a .env file (ALLOW_ENV_FILE_IN_PRODUCTION=true): meant for a local machine only, never for a deployed server');
+  }
+  // Only a loopback origin can be `http` (see `checkOrigin`): fine on a developer's machine, never in the configuration of a deployed server.
+  if (config.appEnv === 'production' && config.corsAllowedOrigins.some((origin) => origin.startsWith('http://'))) {
+    logger.warn('CORS_ALLOWED_ORIGINS lists a local http origin in production: meant for a local machine only, never for a deployed server');
+  }
   if (config.appEnv === 'production' && config.trustProxy === 0) {
     logger.warn('TRUST_PROXY is 0 in production: behind a load balancer every client would share its address, and the per-IP rate limits would count them together');
   }

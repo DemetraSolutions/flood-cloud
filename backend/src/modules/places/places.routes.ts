@@ -39,8 +39,7 @@ export function createPlacesRoutes(controller: PlacesController, idempotency: Id
     defineRoute({ method: 'GET', path: '/places', auth: { kind: 'user', permission: 'places:read' }, middleware: [validateQuery(allPlacesQuery)], handler: controller.listAll }),
     defineRoute({ method: 'GET', path: '/groups/:groupId/places', auth: group('places:read'), middleware: [validateQuery(placesQuery)], handler: controller.list }),
     defineRoute({ method: 'POST', path: '/groups/:groupId/places', auth: group('places:create'), bodyLimit: PLACES_BODY_LIMIT, middleware: [validateBody(createPlaceBody)], handler: idempotent(idempotency, controller.create) }),
-    // The one route a store key may call here: its own place (the server of a point of sale reads its place through the same route the backoffice does).
-    defineRoute({ method: 'GET', path: one, auth: { kind: 'user', permission: 'places:read', group: true, store: true }, middleware: [validateParams(placeParams)], handler: controller.get }),
+    defineRoute({ method: 'GET', path: one, auth: group('places:read'), middleware: [validateParams(placeParams)], handler: controller.get }),
     defineRoute({
       method: 'PATCH',
       path: one,

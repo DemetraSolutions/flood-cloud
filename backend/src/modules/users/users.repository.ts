@@ -99,6 +99,18 @@ const MANAGE_PROJECTION: Projection = Object.freeze({
   permissions: 1,
 });
 
+/**
+ * What the server of a store reads on top of {@link USER_PROJECTION}: the PIN itself (stored in clear for the legacy POS, which compares it itself). Only
+ * {@link UsersRepository.listForStore} loads it; the picture, the password and the tokens are never in it.
+ */
+const STORE_USER_PROJECTION: Projection = Object.freeze({ ...USER_PROJECTION, pin: 1 });
+
+/** A user read for the server of a store: the mapped user (without picture) and his PIN as stored (`null` when it is missing, empty or not a text). */
+export interface StoreUserRecord {
+  readonly mapped: MappedUser;
+  readonly pin: string | null;
+}
+
 /** A page of users. */
 export interface UserPage {
   readonly users: readonly MappedUser[];
@@ -167,6 +179,14 @@ export interface UsersRepository {
    * @returns The users of the page and its `{ limit, next }`.
    */
   list(scopeFilter: Filter<Document>, filter: Filter<Document>, params: ListParams): Promise<UserPage>;
+  /**
+   * Reads a page of users for the server of a store, with the same list machinery and order as {@link UsersRepository.list} but with the PIN in clear. The filter is built by the caller
+   * from the store principal alone (the group, the place, the company), never from a request value; it is the only filter, and nothing is searched.
+   *
+   * @param filter The filter of who the store may read.
+   * @param params Validated list parameters (`limit` and `cursor`).
+   */
+  listForStore(filter: Filter<Document>, params: ListParams): Promise<{ readonly users: readonly StoreUserRecord[]; readonly page: PageInfo }>;
   /**
    * The ids of the users that match a filter, in `_id` order (a stable order, so a bulk operation that repeats finds the next ones), at most `limit`. The filter carries the scope
    * (`usersScopeFilter`) and the trash condition: callers build it with `withScope`.
@@ -354,6 +374,15 @@ export function createUsersRepository(databases: Databases): UsersRepository {
       const documents = await users().aggregate(listPipeline(match, params, USERS_LIST, USER_PROJECTION), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
       const { items, page } = pageOf(documents, params);
       return { users: items.map((document) => fromLegacy(document as LegacyUserDocument, { summary: true })), page };
+    },
+
+    listForStore: async (filter, params) => {
+      const documents = await users().aggregate(listPipeline(filter, params, USERS_LIST, STORE_USER_PROJECTION), { maxTimeMS: LIST_MAX_TIME_MS }).toArray();
+      const { items, page } = pageOf(documents, params);
+      return {
+        users: items.map((document) => ({ mapped: fromLegacy(document as LegacyUserDocument, { summary: true }), pin: typeof document['pin'] === 'string' && document['pin'] !== '' ? document['pin'] : null })),
+        page,
+      };
     },
 
     findTrashedIds: async (filter, limit) =>

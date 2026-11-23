@@ -1,6 +1,8 @@
 import { PROVIDERS } from '../groups/group.types.ts';
+import { toResponse } from '../users/user.mapper.ts';
+import type { StoreUserRecord } from '../users/users.repository.ts';
 import type { GroupResponse, Provider } from '../groups/group.types.ts';
-import type { ExtraGroupCatalogs, GroupCredentials, StoreGroup, StoreIntegrationState } from './store-context.types.ts';
+import type { ExtraGroupCatalogs, GroupCredentials, StoreGroup, StoreIntegrationState, StoreUser } from './store-context.types.ts';
 
 /** The stored paths of the credentials of a group: the legacy key and the key of every provider (and the capitalized variant of `easyappear` the legacy has on some groups). */
 export const GROUP_CREDENTIAL_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
@@ -70,5 +72,43 @@ export function toStoreGroup(group: GroupResponse, credentials: GroupCredentials
     promotions: catalogs.promotions,
     createdAt: group.createdAt,
     updatedAt: group.updatedAt,
+  };
+}
+
+/**
+ * Builds the representation of a user for the server of a store, field by field (an allowlist: a field later added to the backoffice user is not here until someone decides it should be):
+ * the one of the backoffice (`toResponse`, which has no password, hash, token or credential state) without the reference to the dealer, without the picture (`hasAvatar` stays) and with the
+ * stored PIN in clear instead of `pinSet`.
+ *
+ * @param record The user as read for the store, with his PIN.
+ */
+export function toStoreUser(record: StoreUserRecord): StoreUser {
+  const user = toResponse(record.mapped.user);
+  return {
+    id: user.id,
+    username: user.username,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    groupId: user.groupId,
+    companyIds: user.companyIds,
+    placeIds: user.placeIds,
+    status: user.status,
+    trashed: user.trashed,
+    trashedAt: user.trashedAt,
+    language: user.language,
+    theme: user.theme,
+    hiddenInStats: user.hiddenInStats,
+    description: user.description,
+    hasAvatar: user.hasAvatar,
+    pin: record.pin,
+    serviceIds: user.serviceIds,
+    permissions: user.permissions,
+    pos: user.pos,
+    shiftTime: user.shiftTime,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }

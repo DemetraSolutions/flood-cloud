@@ -101,6 +101,21 @@ export function sendRevalidatedPage(req: Request, res: Response, items: readonly
   }
 }
 
+/**
+ * Like {@link sendRevalidatedPage}, with the tag the caller chose (a keyed digest, for a page that holds secrets) instead of the content tag.
+ *
+ * @param req Express request.
+ * @param res Express response.
+ * @param items Items of the page, already mapped to their public representation.
+ * @param page Pagination metadata.
+ * @param etag The complete tag.
+ */
+export function sendRevalidatedPageWith(req: Request, res: Response, items: readonly unknown[], page: PageInfo, etag: string): void {
+  if (!revalidate(req, res, etag)) {
+    sendPage(res, items, page);
+  }
+}
+
 /** Sets `ETag` and `Cache-Control`; answers `304` and returns `true` when `If-None-Match` matches, otherwise returns `false`. */
 function revalidate(req: Request, res: Response, etag: string): boolean {
   res.setHeader('ETag', etag);
