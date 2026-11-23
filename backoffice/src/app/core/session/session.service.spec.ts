@@ -111,8 +111,11 @@ describe('SessionService', () => {
   describe('login', () => {
     it('signs in, then loads the profile with the new token', async () => {
       const { session } = setup();
+      sessionStorage.setItem('fc.lastGroupId', '665f1c2e9b1d4a0012ab34a1');
+      sessionStorage.setItem('fc.lastGroupName', 'Left by an earlier session');
       const done = session.login('mario.rossi', 'Secret-1234');
       const login = backend().expectOne(`${API}/v1/auth/login`);
+      expect(sessionStorage.getItem('fc.lastGroupId')).not.toBeNull();
       expect(login.request.method).toBe('POST');
       expect(login.request.body).toEqual({ username: 'mario.rossi', password: 'Secret-1234' });
       expect(login.request.headers.has('Authorization')).toBe(false);
@@ -128,6 +131,8 @@ describe('SessionService', () => {
       expect(session.can('profile:read')).toBe(true);
       expect(session.can('users:read')).toBe(false);
       expect(session.bearerToken()).toBe('fc_at_1');
+      expect(sessionStorage.getItem('fc.lastGroupId')).toBeNull();
+      expect(sessionStorage.getItem('fc.lastGroupName')).toBeNull();
     });
 
     it('keeps only the refresh token in sessionStorage, never the access token', async () => {
@@ -256,10 +261,12 @@ describe('SessionService', () => {
     it('ends the session and rethrows when the refresh is refused', async () => {
       const { session, navigate } = await signedIn();
       vi.spyOn(TestBed.inject(Router), 'url', 'get').mockReturnValue('/profile?tab=1');
+      sessionStorage.setItem('fc.lastGroupId', '665f1c2e9b1d4a0012ab34a1');
       const done = session.refreshOnce();
       failRequest(backend(), '/v1/auth/refresh', 'UNAUTHENTICATED');
       await expect(done).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
       expect(session.status()).toBe('anonymous');
+      expect(sessionStorage.getItem('fc.lastGroupId')).toBeNull();
       expect(session.bearerToken()).toBeNull();
       expect(session.me()).toBeNull();
       expect(sessionStorage.getItem('fc.session')).toBeNull();

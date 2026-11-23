@@ -1,11 +1,13 @@
 import { computed, effect, inject, linkedSignal, Service } from '@angular/core';
-import { readSessionStorage, removeSessionStorage, writeSessionStorage } from '../storage';
+import { readSessionStorage, writeSessionStorage } from '../storage';
 import { SessionService } from '../session/session.service';
+import {
+  forgetWorkingGroup,
+  LAST_GROUP_ID_KEY,
+  LAST_GROUP_NAME_KEY,
+} from './working-group-storage';
 
-/** `sessionStorage` key of the last group chosen by a platform admin or dealer. */
-export const LAST_GROUP_ID_KEY = 'fc.lastGroupId';
-/** `sessionStorage` key of that group's name (display only). */
-export const LAST_GROUP_NAME_KEY = 'fc.lastGroupName';
+export { LAST_GROUP_ID_KEY, LAST_GROUP_NAME_KEY } from './working-group-storage';
 
 const OBJECT_ID = /^[0-9a-f]{24}$/;
 
@@ -26,7 +28,7 @@ function readPreference(): WorkingGroup | null {
 /**
  * The working group (decision D-10). Users bound to a group (SA, CA, PA, E) always work on
  * theirs; PSA and dealers choose one with the header selector. The choice is only a
- * navigation preference kept in `sessionStorage` (cleared on sign-out): the group in the URL
+ * navigation preference kept in `sessionStorage` (cleared when a session ends and at every new sign-in): the group in the URL
  * and the backend decide what the user may see.
  */
 @Service()
@@ -57,8 +59,7 @@ export class GroupContext {
   constructor() {
     effect(() => {
       if (this.session.status() === 'anonymous') {
-        removeSessionStorage(LAST_GROUP_ID_KEY);
-        removeSessionStorage(LAST_GROUP_NAME_KEY);
+        forgetWorkingGroup();
       }
     });
   }
@@ -93,8 +94,7 @@ export class GroupContext {
   /** Forgets the working group ("all groups"), including the stored preference. */
   clear(): void {
     this.chosen.set(null);
-    removeSessionStorage(LAST_GROUP_ID_KEY);
-    removeSessionStorage(LAST_GROUP_NAME_KEY);
+    forgetWorkingGroup();
   }
 
   /** Remembers the group chosen with the selector. */

@@ -10,6 +10,7 @@ import { isSupportedLanguage, Language } from '../i18n/language';
 import { isThemeChoice, ThemeService } from '../theme/theme.service';
 import { ToastService } from '../../shared/ui/toast/toast.service';
 import { Profile, SessionStatus, TokenPair } from './session.types';
+import { forgetWorkingGroup } from '../groups/working-group-storage';
 import { clearStoredSession, readStoredSession, writeStoredSession } from './session-storage';
 
 /** Validates a login or refresh response and keeps only the fields the client uses. */
@@ -127,7 +128,7 @@ export class SessionService {
 
   /**
    * Signs in and loads the profile. On success {@link status} is `authenticated` or
-   * `passwordChangeRequired`.
+   * `passwordChangeRequired`. The working group remembered by an earlier session is forgotten.
    *
    * @throws ApiError `INVALID_CREDENTIALS`, `RATE_LIMITED`, `NETWORK_ERROR`…
    */
@@ -135,6 +136,9 @@ export class SessionService {
     const body = await firstValueFrom(
       this.http.post<ApiData<unknown>>('/v1/auth/login', { username, password }),
     );
+    // A new session never inherits the working group of an earlier one: it could be a group of
+    // another user or of another environment, which the lists would answer with a 404.
+    forgetWorkingGroup();
     this.storeTokens(parseTokenPair(body));
     try {
       await this.loadProfile();
@@ -341,5 +345,6 @@ export class SessionService {
     this.meState.set(null);
     this.statusState.set('anonymous');
     clearStoredSession();
+    forgetWorkingGroup();
   }
 }
