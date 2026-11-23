@@ -55,6 +55,11 @@ export interface Computation {
   /** Whether to keep the lines (a summary needs the totals only). */
   readonly keepLines: boolean;
   readonly limits: EngineLimits;
+  /**
+   * The detail view's own rule for the months: the year of "now" (Rome) when set. A place activated in an earlier year counts a full year (12, it is a renewal now); one of that year or a later one counts the months
+   * left of its year. `null` for the statements, the closures and the summary, which count the months left of the activation year whatever it is.
+   */
+  readonly referenceYear?: number | null;
 }
 
 function lineOf(computation: Computation, place: Document, company: Document, group: GroupFacts, prices: PriceList): Line {
@@ -72,7 +77,9 @@ function lineOf(computation: Computation, place: Document, company: Document, gr
     ['companyDisabled', company['status'] === false],
   ];
   // The month of the activation is never paid: an activation of May pays June to December; a place of the renewals pays one instalment.
-  const months = computation.section === 'activations' ? monthsLeft(monthOf(activatedAt)) : 1;
+  const activation = monthOf(activatedAt);
+  const fullYear = computation.referenceYear != null && activation.year < computation.referenceYear;
+  const months = computation.section === 'activations' ? (fullYear ? 12 : monthsLeft(activation)) : 1;
   return {
     groupId: group.id,
     groupName: group.name,

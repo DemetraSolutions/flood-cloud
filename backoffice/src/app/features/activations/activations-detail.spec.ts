@@ -54,6 +54,7 @@ function detail(data: DetailLine[], next: string | null = null, anomalies = 0): 
     },
     from: '2026-05',
     to: '2026-06',
+    referenceYear: 2026,
   };
 }
 
@@ -193,10 +194,13 @@ describe('ActivationsDetail', () => {
       expect(totals).toEqual([
         'ACTIVATIONS.DETAIL.TOTAL_PLACES2',
         'ACTIVATIONS.DETAIL.TOTAL_MONTHLY50,00 €',
-        'ACTIVATIONS.DETAIL.TOTAL_AMOUNT350,00 €',
+        'ACTIVATIONS.DETAIL.TOTAL_AMOUNT {"year":2026}350,00 €',
         'ACTIVATIONS.COLUMN.PROJECTION600,00 €',
         'ACTIVATIONS.COLUMN.ANOMALIES3',
       ]);
+      const amount = root.querySelectorAll('.totals div')[2];
+      expect(amount.getAttribute('title')).toBe('ACTIVATIONS.DETAIL.TOTAL_AMOUNT_HINT');
+      expect(amount.getAttribute('aria-description')).toBe('ACTIVATIONS.DETAIL.TOTAL_AMOUNT_HINT');
       const cards = [...root.querySelectorAll('.place')];
       expect(cards).toHaveLength(2);
       const first = cards[0];
@@ -285,9 +289,6 @@ describe('ActivationsDetail', () => {
     it('reads the new period once both months are right, and says what is wrong before', async () => {
       const { root, flush, type, view, request, search } = await render();
       await flush();
-      await type('ACTIVATIONS.DETAIL.FROM', '2026-7');
-      expect(root.textContent).toContain('ACTIVATIONS.DETAIL.ERROR.MONTH');
-      backend().expectNone((r) => r.url === LINES);
       await type('ACTIVATIONS.DETAIL.FROM', '2026-08');
       expect(root.textContent).toContain('ACTIVATIONS.DETAIL.ERROR.ORDER');
       backend().expectNone((r) => r.url === LINES);
@@ -301,8 +302,60 @@ describe('ActivationsDetail', () => {
       await type('ACTIVATIONS.DETAIL.TO', 'bad');
       expect(root.textContent).toContain('ACTIVATIONS.DETAIL.ERROR.MONTH');
       await type('ACTIVATIONS.DETAIL.TO', '2029-09');
-      expect(root.textContent).toContain('ACTIVATIONS.DETAIL.ERROR.SPAN');
-      backend().expectNone((r) => r.url === LINES);
+      expect(root.textContent).not.toContain('ACTIVATIONS.DETAIL.ERROR');
+      const long = request();
+      expect(long.request.params.get('from')).toBe('2026-08');
+      expect(long.request.params.get('to')).toBe('2029-09');
+      long.flush(detail([]));
+      await view();
+    });
+
+    it('reads everything up to the end month when the start is empty, with no from anywhere', async () => {
+      const { root, flush, type, request, search, view, field } = await render();
+      await flush();
+      expect(root.textContent).toContain('ACTIVATIONS.DETAIL.FROM_HINT');
+      await type('ACTIVATIONS.DETAIL.FROM', '');
+      expect(root.textContent).not.toContain('ACTIVATIONS.DETAIL.ERROR');
+      expect(search().has('from')).toBe(false);
+      expect(search().get('to')).toBe('2026-06');
+      const req = request();
+      expect(req.request.params.has('from')).toBe(false);
+      expect(req.request.params.get('to')).toBe('2026-06');
+      req.flush({ ...detail([]), from: null });
+      await view();
+      expect(field('ACTIVATIONS.DETAIL.FROM').value).toBe('');
+      await type('ACTIVATIONS.DETAIL.TO', '2026-09');
+      const next = request();
+      expect(next.request.params.has('from')).toBe(false);
+      next.flush({ ...detail([]), from: null });
+      await view();
+      await type('ACTIVATIONS.DETAIL.FROM', '2026-01');
+      expect(search().get('from')).toBe('2026-01');
+      request().flush(detail([]));
+      await view();
+    });
+
+    it('opens a link with the end month only on an empty start', async () => {
+      const { request, field, view } = await render('/activations?to=2026-06');
+      const req = request();
+      expect(req.request.params.has('from')).toBe(false);
+      expect(req.request.params.get('to')).toBe('2026-06');
+      req.flush({ ...detail([]), from: null });
+      await view();
+      expect(field('ACTIVATIONS.DETAIL.FROM').value).toBe('');
+      expect(field('ACTIVATIONS.DETAIL.TO').value).toBe('2026-06');
+    });
+
+    it('explains how to narrow the period when there are too many lines', async () => {
+      const { root, request, view } = await render('/activations?to=2026-06');
+      request().flush(errorBody('CONFLICT', [{ field: 'to', issue: 'tooManyLines' }]), {
+        status: 409,
+        statusText: 'Conflict',
+      });
+      await view();
+      expect(root.querySelector('fc-error-state')?.textContent).toContain(
+        'ACTIVATIONS.DETAIL.TOO_MANY_LINES',
+      );
     });
 
     it('does not read a wrong period of the URL', async () => {
@@ -439,8 +492,20 @@ describe('ActivationsDetail', () => {
       req.flush(new Blob(['a;b']));
       await view();
       expect(created).toHaveLength(1);
-      expect(clicked[0].download).toBe('activations-detail_2026-05_2026-06.csv');
+      expect(clicked[0].download).toBe('attivazioni-dettaglio_2026-05_2026-06.csv');
       expect(root.querySelector('.download-status')?.textContent?.trim()).toBe('');
+    });
+
+    it('downloads the CSV with no start: no from, and the file name says so', async () => {
+      const { flush, button, view } = await render('/activations?to=2026-06');
+      await flush({ ...detail([line()]), from: null });
+      button('ACTIVATIONS.DOWNLOAD').click();
+      await view();
+      const req = backend().expectOne((r) => r.url === CSV);
+      expect(req.request.params.keys()).toEqual(['to']);
+      req.flush(new Blob(['a;b']));
+      await view();
+      expect(clicked[0].download).toBe('attivazioni-dettaglio_inizio_2026-06.csv');
     });
 
     it.each([

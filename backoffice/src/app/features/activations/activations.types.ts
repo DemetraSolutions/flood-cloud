@@ -359,9 +359,6 @@ export const ACTION_TEXTS: Readonly<
   },
 };
 
-/** Most months a detail period can span (the same as the backend). */
-export const MAX_DETAIL_MONTHS = 24;
-
 /** Tabs of the activations page. */
 export const ACTIVATION_TABS = ['invoices', 'detail'] as const;
 
@@ -379,19 +376,14 @@ function monthIndex(month: string): number {
 }
 
 /**
- * Why a period of activation months is refused.
+ * Whether a period of activation months is in order (there is no limit on its length).
  *
  * @param from First month, a valid `YYYY-MM`.
  * @param to Last month, a valid `YYYY-MM`.
- * @returns `order` when it ends before it starts, `span` when it is longer than 24 months,
- *   `undefined` when it is fine.
+ * @returns `false` when it ends before it starts.
  */
-export function rangeIssue(from: string, to: string): 'order' | 'span' | undefined {
-  const months = monthIndex(to) - monthIndex(from) + 1;
-  if (months < 1) {
-    return 'order';
-  }
-  return months > MAX_DETAIL_MONTHS ? 'span' : undefined;
+export function isPeriodInOrder(from: string, to: string): boolean {
+  return monthIndex(to) >= monthIndex(from);
 }
 
 /** A place of the detail view: a statement line with its dealer. */
@@ -408,13 +400,18 @@ export interface DetailTotals {
   readonly anomalies: number;
 }
 
-/** `GET /v1/activations/lines`: a page of places, the totals of the whole period and the period. */
+/**
+ * `GET /v1/activations/lines`: a page of places, the totals of the whole period and the period
+ * (`from` is `null` when the query had no start: everything up to `to`).
+ */
 export interface DetailResponse {
   readonly data: readonly DetailLine[];
   readonly page: { readonly limit: number; readonly next: string | null };
   readonly totals: DetailTotals;
-  readonly from: string;
+  readonly from: string | null;
   readonly to: string;
+  /** The current year the months of the lines are counted in (earlier years count 12). */
+  readonly referenceYear: number;
 }
 
 /** Dictionary key of the name of each provider behind the `api` item. */

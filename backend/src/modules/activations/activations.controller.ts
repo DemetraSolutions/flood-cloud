@@ -30,9 +30,9 @@ export function csvFileName(month: string, section: string, dealer: ObjectId | '
   return `attivazioni_${month}_${section}_${dealer === 'none' ? 'none' : dealer.toHexString()}.csv`;
 }
 
-/** The name of the exported detail: `attivazioni-dettaglio_<from>_<to>.csv`. */
-export function detailFileName(from: string, to: string): string {
-  return `attivazioni-dettaglio_${from}_${to}.csv`;
+/** The name of the exported detail: `attivazioni-dettaglio_<from>_<to>.csv`, or `attivazioni-dettaglio_inizio_<to>.csv` when the query had no `from`. */
+export function detailFileName(from: string | undefined, to: string): string {
+  return `attivazioni-dettaglio_${from ?? 'inizio'}_${to}.csv`;
 }
 
 /** `ERR_STREAM_PREMATURE_CLOSE`: the client went away while the file was being written. */

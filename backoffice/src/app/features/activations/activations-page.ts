@@ -111,6 +111,15 @@ export class ActivationsPage {
   });
   private readonly language = computed(() => this.i18n.language() ?? DEFAULT_LANGUAGE);
 
+  /** "Riepilogo per rivenditore: fatture di giugno 2026 (attivazioni di maggio 2026)": the table names its months. */
+  protected readonly tableTitle = computed(() => {
+    const month = this.selected();
+    return this.i18n.t('ACTIVATIONS.TABLE', {
+      invoice: monthLabel(month, this.language()),
+      activity: monthLabel(previousMonth(month), this.language()),
+    });
+  });
+
   /** "Fatture di giugno 2026: attivazioni di maggio 2026 e rata di giugno dei rinnovi 2026". */
   protected readonly explanation = computed(() => {
     const month = this.selected();

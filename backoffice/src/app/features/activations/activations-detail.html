@@ -4,6 +4,7 @@
   <fc-text-field
     type="month"
     [label]="'ACTIVATIONS.DETAIL.FROM' | t"
+    [hint]="'ACTIVATIONS.DETAIL.FROM_HINT' | t"
     [value]="fromText()"
     [error]="fromError()"
     (valueChange)="onFrom($event)"
@@ -63,8 +64,11 @@
       <dt>{{ 'ACTIVATIONS.DETAIL.TOTAL_MONTHLY' | t }}</dt>
       <dd>{{ money(sum.monthlyCents) }}</dd>
     </div>
-    <div>
-      <dt>{{ 'ACTIVATIONS.DETAIL.TOTAL_AMOUNT' | t }}</dt>
+    <div
+      [attr.title]="'ACTIVATIONS.DETAIL.TOTAL_AMOUNT_HINT' | t"
+      [attr.aria-description]="'ACTIVATIONS.DETAIL.TOTAL_AMOUNT_HINT' | t"
+    >
+      <dt>{{ 'ACTIVATIONS.DETAIL.TOTAL_AMOUNT' | t: { year: referenceYear() } }}</dt>
       <dd>{{ money(sum.amountCents) }}</dd>
     </div>
     <div>

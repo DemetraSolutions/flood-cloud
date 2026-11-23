@@ -159,6 +159,9 @@ describe('ActivationsPage', () => {
       expect(root.querySelector('.explanation')?.textContent).toBe(
         'ACTIVATIONS.EXPLANATION {"invoice":"giugno 2026","activity":"maggio 2026","month":"giugno","year":2026}',
       );
+      expect(root.querySelector('caption')?.textContent?.trim()).toBe(
+        'ACTIVATIONS.TABLE {"invoice":"giugno 2026","activity":"maggio 2026"}',
+      );
       expect(root.querySelector<HTMLInputElement>('input[type=month]')?.value).toBe('2026-06');
     });
 

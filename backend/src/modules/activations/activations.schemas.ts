@@ -63,30 +63,24 @@ export const monthParams = object({ month: month() });
 export type MonthParams = Infer<typeof monthParams>;
 
 
-/** The longest span of the detail view, in months, both ends included. */
-export const DETAIL_MAX_MONTHS = 24;
-
-/** The months since year 0 of a month text already validated: it orders and measures spans. */
+/** The months since year 0 of a month text already validated: it orders spans. */
 function monthIndex(text: string): number {
   const value = parseMonth(text)!;
   return value.year * 12 + value.month;
 }
 
-/** The span, in months, from the first to the last month of a validated query (negative when it is reversed). */
-function spanMonths(value: unknown): number {
-  const { from, to } = value as { from: string; to: string };
-  return monthIndex(to) - monthIndex(from);
-}
-
 /**
- * An object with the span of the detail view: the first and the last activation month, and one dealer, plus whatever else the route takes. A start after the end is `minimum` on `to`; a longer span than
- * {@link DETAIL_MAX_MONTHS} is `maximum` on `to`.
+ * An object with the span of the detail view: the optional first activation month (absent = from the beginning), the last one, and one dealer, plus whatever else the route takes. A start after the end is
+ * `minimum` on `to`. There is no longest span: the engine limits bound the answer.
  */
 function spanOf<E extends Record<string, Schema<unknown>>>(extra: E) {
   return refine(
-    refine(object({ from: month(), to: month(), dealerId: optional(dealerRef()), ...extra }), (value) => (spanMonths(value) < 0 ? ['to'] : []), 'minimum'),
-    (value) => (spanMonths(value) >= DETAIL_MAX_MONTHS ? ['to'] : []),
-    'maximum',
+    object({ from: optional(month()), to: month(), dealerId: optional(dealerRef()), ...extra }),
+    (value) => {
+      const { from, to } = value as { from?: string; to: string };
+      return from !== undefined && monthIndex(to) < monthIndex(from) ? ['to'] : [];
+    },
+    'minimum',
   );
 }
 

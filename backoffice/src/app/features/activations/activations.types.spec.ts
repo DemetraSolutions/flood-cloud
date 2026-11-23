@@ -4,7 +4,7 @@ import {
   conflictKey,
   feeItemName,
   isActivationTab,
-  rangeIssue,
+  isPeriodInOrder,
   currentMonth,
   FeeItem,
   flagText,
@@ -204,16 +204,15 @@ describe('conflictKey', () => {
   });
 });
 
-describe('rangeIssue', () => {
-  it('accepts a period of up to 24 months, in order', () => {
-    expect(rangeIssue('2026-05', '2026-05')).toBeUndefined();
-    expect(rangeIssue('2025-01', '2026-12')).toBeUndefined();
-    expect(rangeIssue('2025-12', '2026-01')).toBeUndefined();
+describe('isPeriodInOrder', () => {
+  it('accepts a period in order, whatever its length', () => {
+    expect(isPeriodInOrder('2026-05', '2026-05')).toBe(true);
+    expect(isPeriodInOrder('2025-12', '2026-01')).toBe(true);
+    expect(isPeriodInOrder('2020-01', '2030-12')).toBe(true);
   });
 
-  it('refuses a period that ends first or lasts more than 24 months', () => {
-    expect(rangeIssue('2026-06', '2026-05')).toBe('order');
-    expect(rangeIssue('2025-01', '2027-01')).toBe('span');
+  it('refuses a period that ends before it starts', () => {
+    expect(isPeriodInOrder('2026-06', '2026-05')).toBe(false);
   });
 });
 

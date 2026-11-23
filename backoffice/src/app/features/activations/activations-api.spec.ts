@@ -39,6 +39,14 @@ describe('ActivationsApi', () => {
     await result;
   });
 
+  it('downloads the CSV of the detail without a start month', async () => {
+    const result = api().downloadLines({ to: '2026-06' });
+    const request = backend().expectOne((r) => r.url === `${API}/v1/activations/lines.csv`);
+    expect(request.request.params.keys()).toEqual(['to']);
+    request.flush(new Blob(['x']));
+    await result;
+  });
+
   it('freezes and unfreezes the renewal base of a year', async () => {
     const service = api();
     const freeze = service.freezeBase(2026);

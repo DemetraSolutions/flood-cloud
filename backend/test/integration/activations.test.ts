@@ -610,7 +610,7 @@ describe('GET /v1/activations/lines, the detail of all the activations of a span
       cursor = `&cursor=${reply.body.page.next}`;
     }
     assert.deepEqual(seen, ['Negozio 4', 'Negozio 8', 'Cross', 'Negozio sospeso', 'Negozio 9', 'Negozio 1', 'Negozio 6']);
-    for (const bad of ['!!', 'e30', Buffer.from(JSON.stringify({ ver: 1, t: 'x', d: '', g: '', p: '', i: 'a'.repeat(24) })).toString('base64url'), Buffer.from('nope').toString('base64url'), Buffer.from('[]').toString('base64url'), Buffer.from(JSON.stringify({ ver: 1, t: 1, d: '', g: '', p: '', i: 'zz' })).toString('base64url')]) {
+    for (const bad of ['!!', 'e30', Buffer.from(JSON.stringify({ ver: 1, t: 'x', d: '', g: '', p: '', i: 'a'.repeat(24), b: true })).toString('base64url'), Buffer.from(JSON.stringify({ ver: 1, t: 1, d: '', g: '', p: '', i: 'a'.repeat(24), b: 'yes' })).toString('base64url'), Buffer.from(JSON.stringify({ ver: 1, t: 1, d: '', g: '', p: '', i: 'a'.repeat(24) })).toString('base64url'), Buffer.from('nope').toString('base64url'), Buffer.from('[]').toString('base64url'), Buffer.from(JSON.stringify({ ver: 1, t: 1, d: '', g: '', p: '', i: 'zz', b: true })).toString('base64url')]) {
       assert.deepEqual(failure(await lines(psa(), `from=2026-05&to=2026-05&cursor=${bad}`)).details, [{ field: 'cursor', issue: 'format' }], bad);
     }
   });
@@ -630,7 +630,7 @@ describe('GET /v1/activations/lines, the detail of all the activations of a span
     assert.deepEqual(names(await lines(psa(), 'from=2026-06&to=2026-06')), ['Negozio 5']);
     assert.deepEqual(names(await lines(psa(), 'from=2025-12&to=2025-12')), ['Negozio 3']);
     const december = (await lines(psa(), 'from=2025-12&to=2025-12')).body.data[0];
-    assert.deepEqual([december.months, december.amountCents, december.monthlyCents], [0, 0, 2000]);
+    assert.deepEqual([december.months, december.amountCents, december.monthlyCents], [12, 24000, 2000]);
     assert.deepEqual(names(await lines(psa(), 'from=2026-01&to=2026-04')), []);
     assert.ok(names(await lines(psa(), 'from=2026-05&to=2026-06')).includes('Negozio 9'), 'a date from the id inside');
     assert.ok(!names(await lines(psa(), 'from=2026-06&to=2026-07')).includes('Negozio 9'), 'and outside');
@@ -666,17 +666,118 @@ describe('GET /v1/activations/lines, the detail of all the activations of a span
     assert.equal(reply.body.data[0].monthlyCents, 1000);
   });
 
-  it('refuses a span that is empty, longer than 24 months, malformed or missing, with 422 on the field', async () => {
+  it('refuses a span that is reversed, malformed or without an end, with 422 on the field', async () => {
     const field = async (query: string) => (failure(await lines(psa(), query)).details as Array<{ field: string }>).map((detail) => detail.field);
     assert.deepEqual(await field('from=2026-06&to=2026-05'), ['to']);
-    assert.deepEqual(await field('from=2024-01&to=2026-01'), ['to']);
-    assert.equal((await lines(psa(), 'from=2024-02&to=2026-01')).status, 200);
-    assert.deepEqual(await field('to=2026-05'), ['from']);
+    assert.equal((await lines(psa(), 'from=2020-01&to=2026-01')).status, 200, 'no longest span');
+    assert.deepEqual(await field('from=&to=2026-05'), ['from']);
+    assert.deepEqual(await field('from=2026-13&to=2026-05'), ['from']);
+    assert.deepEqual(await field('to=2026-14'), ['to']);
+    assert.deepEqual(await field(''), ['to']);
     assert.deepEqual(await field('from=2026-05'), ['to']);
     for (const bad of ['from=2026-13&to=2026-14', 'from=2026-05&to=2026-05&x=1', 'from=2026-05&to=2026-05&limit=101', 'from=2019-12&to=2020-01', 'from=2026-05&to=2026-05&dealerId=zz']) {
       assert.equal((await lines(psa(), bad)).status, 422, bad);
     }
     assert.equal((await office.call('GET', '/activations/lines.csv?from=2026-06&to=2026-05', await as.tokenOf(psa()))).status, 422);
+  });
+
+  it('with no from lists the activations of every month up to the end month, however old, with the totals of the whole set', async () => {
+    const reply = await lines(psa(), 'to=2026-05');
+    assert.equal(reply.status, 200);
+    assert.deepEqual([reply.body.from, reply.body.to], [null, '2026-05']);
+    assert.deepEqual(names(reply), ['Negozio 4', 'Negozio 8', 'Cross', 'Negozio sospeso', 'Negozio 9', 'Negozio 1', 'Negozio 6', 'Negozio 3', 'Negozio 2', 'Negozio 7']);
+    assert.equal(reply.body.totals.places, 10);
+    assert.ok(names(reply).includes('Negozio 9'), 'a place dated by its id');
+    assert.deepEqual(names(await lines(psa(), 'to=2024-02')), ['Negozio 7']);
+    assert.deepEqual(names(await lines(psa(), 'to=2024-01')), []);
+    const seen: string[] = [];
+    let cursor = '';
+    for (let page = 0; page < 6; page += 1) {
+      const paged = await lines(psa(), `to=2026-05&limit=4${cursor}`);
+      assert.equal(paged.body.totals.places, 10);
+      assert.equal(paged.body.from, null);
+      seen.push(...names(paged));
+      if (paged.body.page.next === null) {
+        break;
+      }
+      cursor = `&cursor=${paged.body.page.next}`;
+    }
+    assert.deepEqual(seen, names(reply));
+  });
+
+  it('keeps a from older than 24 months working, and a D with no from to his own lines', async () => {
+    assert.deepEqual(names(await lines(psa(), 'from=2024-01&to=2026-05')).length, 10);
+    assert.deepEqual(names(await lines(psa(), 'from=2024-03&to=2026-05')).length, 9);
+    const own = await lines(dealerA(), 'to=2026-05');
+    assert.deepEqual([names(own), own.body.totals.places], [['Negozio 4', 'Negozio sospeso', 'Negozio 1', 'Negozio 3', 'Negozio 2'], 5]);
+    assert.equal((await lines(dealerA(), 'to=2026-05&dealerId=none')).status, 403);
+  });
+
+  it('accepts a cursor only for a query of the same form: with from or without it', async () => {
+    const bounded = await lines(psa(), 'from=2024-01&to=2026-05&limit=3');
+    const open = await lines(psa(), 'to=2026-05&limit=3');
+    assert.ok(bounded.body.page.next !== null && open.body.page.next !== null);
+    const refused = [{ details: [{ field: 'cursor', issue: 'format' }] }];
+    assert.deepEqual(failure(await lines(psa(), `to=2026-05&limit=3&cursor=${bounded.body.page.next}`)).details, refused[0]!.details);
+    assert.deepEqual(failure(await lines(psa(), `from=2024-01&to=2026-05&limit=3&cursor=${open.body.page.next}`)).details, refused[0]!.details);
+    assert.equal((await lines(psa(), `to=2026-05&limit=3&cursor=${open.body.page.next}`)).status, 200);
+    assert.equal((await lines(psa(), `from=2024-01&to=2026-05&limit=3&cursor=${bounded.body.page.next}`)).status, 200);
+  });
+
+  it('counts the months left only in the year of the activation, a full year in the later ones, against the year of now', async () => {
+    const [a1] = office.cluster.groups;
+    const company0 = (await common().collection('companies').findOne({ groupId: a1!.groupId, trash: false }))!['_id'] as ObjectId;
+    const idOf = (iso: string) => ObjectId.createFromTime(Math.floor(Date.parse(iso) / 1000));
+    await insertCopies(ctx.databases, 'places', [
+      place(a1!.groupId, company0, 'Dicembre', new Date('2026-12-15T10:00:00Z')),
+      place(a1!.groupId, company0, 'Maggio scorso', new Date('2025-05-10T10:00:00Z')),
+      place(a1!.groupId, company0, 'Tre anni fa', new Date('2023-05-10T10:00:00Z')),
+      place(a1!.groupId, company0, 'Da id', undefined, { _id: idOf('2024-03-10T10:00:00Z') }),
+    ]);
+    const at = (time: number) => createActivationsService({ repository: createActivationsRepository(ctx.databases), priceLists: { getPriceList: async () => ({ list: DEFAULT_PRICE_LIST, version: 'v' }) }, activityLog: office.activity, now: () => time, limits: DEFAULT_LIMITS });
+    const monthsOf = async (service: ReturnType<typeof at>, to: string) => {
+      const page = await service.detailPage(principalOf('PSA'), { to, limit: 100 });
+      return { page, months: new Map(page.lines.map((line) => [line.placeName, line.months])) };
+    };
+    const now = at(Date.UTC(2026, 10, 18));
+    const { page, months } = await monthsOf(now, '2026-12');
+    assert.equal(page.referenceYear, 2026);
+    assert.deepEqual([months.get('Negozio 1'), months.get('Dicembre'), months.get('Maggio scorso'), months.get('Tre anni fa'), months.get('Da id'), months.get('Negozio 3'), months.get('Negozio 7')], [7, 0, 12, 12, 12, 12, 12]);
+    assert.equal(page.totals.amountCents, page.lines.reduce((sum, line) => sum + line.amountCents, 0));
+    assert.equal(page.lines.find((line) => line.placeName === 'Maggio scorso')!.amountCents, page.lines.find((line) => line.placeName === 'Maggio scorso')!.monthlyCents * 12);
+    const next = await monthsOf(at(Date.UTC(2027, 0, 5)), '2026-12');
+    assert.equal(next.page.referenceYear, 2027);
+    assert.deepEqual([next.months.get('Negozio 1'), next.months.get('Dicembre')], [12, 12]);
+    const reply = await lines(psa(), 'to=2026-12&limit=100');
+    assert.equal(reply.body.referenceYear, new Date().getUTCFullYear());
+    const summed = await Promise.all([lines(psa(), 'to=2026-12&limit=5')]).then(async ([first]) => {
+      const seen = [...first.body.data];
+      let cursor = first.body.page.next as string | null;
+      while (cursor !== null) {
+        const more = await lines(psa(), `to=2026-12&limit=5&cursor=${cursor}`);
+        seen.push(...more.body.data);
+        cursor = more.body.page.next;
+      }
+      return seen.reduce((sum: number, line: { amountCents: number }) => sum + line.amountCents, 0);
+    });
+    assert.equal(summed, reply.body.totals.amountCents, 'the total is the sum of the lines across the pages');
+    const csv = (await (await office.call('GET', '/activations/lines.csv?to=2026-12', await as.tokenOf(psa()))).text()).trim().split('\r\n');
+    assert.ok(csv.some((row) => row.includes(';Tre anni fa;') && row.includes(';12;')), 'the months column carries the full year');
+  });
+
+  it('keeps the months of the statements and of the summary counting the months left whatever the year', async () => {
+    const reply = await call(psa(), 'GET', `/activations/statements/${dealerA().toHexString()}?month=2026-06&section=activations`);
+    assert.deepEqual(reply.body.data.map((line: { placeName: string; months: number }) => [line.placeName, line.months]), [['Negozio 1', 7], ['Negozio 4', 7], ['Negozio sospeso', 7]]);
+    const rows = await summary(psa(), '2026-06');
+    assert.equal(rowOf(rows, 'Rivenditore Alfa').activations.places, 3);
+  });
+
+  it('names the CSV of a query with no from after the beginning', async () => {
+    const response = await office.call('GET', '/activations/lines.csv?to=2026-05', await as.tokenOf(psa()));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="attivazioni-dettaglio_inizio_2026-05.csv"');
+    assert.equal((await response.text()).trim().split('\r\n').length, 11);
+    assert.equal((await office.call('GET', '/activations/lines.csv?from=&to=2026-05', await as.tokenOf(psa()))).status, 422);
   });
 
   it('exports the same lines as CSV with the dealer of each line, and refuses more lines than the view holds', async () => {
@@ -692,6 +793,7 @@ describe('GET /v1/activations/lines, the detail of all the activations of a span
     await assert.rejects(limited(2).detail(principalOf('PSA'), { from: '2026-05', to: '2026-05' }), issue, 'a dealer over the limit');
     await assert.rejects(limited(3).detailPage(principalOf('PSA'), { from: '2026-05', to: '2026-05' }), issue, 'all the dealers together over the limit');
     assert.equal((await limited(7).detail(principalOf('PSA'), { from: '2026-05', to: '2026-05' })).entries.length, 7);
+    await assert.rejects(limited(9).detail(principalOf('PSA'), { to: '2026-05' }), issue, 'with no from the whole history counts');
   });
 });
 

@@ -64,16 +64,20 @@ export interface StatementPage extends Omit<Statement, 'lines'> {
 
 /** The detail of the activations of a span of months: every line with its dealer, in the order of the view, and the totals of the whole set. */
 export interface Detail {
-  readonly from: string;
+  /** The first month of the query, or `null` when it had none (from the beginning). */
+  readonly from: string | null;
   readonly to: string;
+  /** The year of "now" (Rome) the months were counted against: a place of an earlier year counts 12 months, one of this year the months left. */
+  readonly referenceYear: number;
   readonly totals: ActivationTotals;
   readonly entries: readonly DetailEntry[];
 }
 
 /** A page of the detail of the activations. */
 export interface DetailPage {
-  readonly from: string;
+  readonly from: string | null;
   readonly to: string;
+  readonly referenceYear: number;
   readonly totals: ActivationTotals;
   readonly lines: readonly DetailLineView[];
   readonly page: PageInfo;
@@ -245,11 +249,11 @@ export function createActivationsService(deps: ActivationsServiceDeps): Activati
   type Context = Awaited<ReturnType<typeof context>>;
 
   /** The lines of a section activated in a window for the groups of a context. With no group to read there is nothing, and nothing is read. */
-  const run = async (ctx: Context, window: ActivationWindow, section: Section, keepLines: boolean): Promise<Map<string, Bucket>> => {
+  const run = async (ctx: Context, window: ActivationWindow, section: Section, keepLines: boolean, referenceYear: number | null = null): Promise<Map<string, Bucket>> => {
     if (ctx.empty) {
       return new Map();
     }
-    return compute({ repository, groups: ctx.groups, groupIds: ctx.groupIds, window, section, pricesOf: ctx.pricesOf, now: now(), keepLines, limits });
+    return compute({ repository, groups: ctx.groups, groupIds: ctx.groupIds, window, section, pricesOf: ctx.pricesOf, now: now(), keepLines, limits, referenceYear });
   };
   /** The lines of a section of an invoice month. */
   const live = (ctx: Context, months: Months, section: Section, keepLines: boolean): Promise<Map<string, Bucket>> =>
@@ -315,11 +319,16 @@ export function createActivationsService(deps: ActivationsServiceDeps): Activati
     detailPage: async (principal, query) => {
       const detail = await detailOf(principal, query);
       const limit = query.limit ?? STATEMENT_DEFAULT_LIMIT;
-      const after = query.cursor === undefined ? null : decodeDetailCursor(query.cursor);
+      const bounded = query.from !== undefined;
+      const cursor = query.cursor === undefined ? null : decodeDetailCursor(query.cursor);
+      if (cursor !== null && cursor.bounded !== bounded) {
+        throw new AppError('VALIDATION_ERROR', { details: [{ field: 'cursor', issue: 'format' }] });
+      }
+      const after = cursor === null ? null : cursor.key;
       const rest = after === null ? detail.entries : detail.entries.filter((entry) => compareDetailKeys(detailKeyOf(entry), after) > 0);
       const page = rest.slice(0, limit);
-      const next = rest.length > limit ? encodeDetailCursor(detailKeyOf(page[page.length - 1]!)) : null;
-      return { from: detail.from, to: detail.to, totals: detail.totals, lines: page.map((entry) => ({ ...toLineView(entry.line), dealer: toDealerView(entry.dealer) })), page: { limit, next } };
+      const next = rest.length > limit ? encodeDetailCursor(detailKeyOf(page[page.length - 1]!), bounded) : null;
+      return { from: detail.from, to: detail.to, referenceYear: detail.referenceYear, totals: detail.totals, lines: page.map((entry) => ({ ...toLineView(entry.line), dealer: toDealerView(entry.dealer) })), page: { limit, next } };
     },
 
     detail: (principal, query) => detailOf(principal, query),
@@ -449,13 +458,14 @@ export function createActivationsService(deps: ActivationsServiceDeps): Activati
     },
   };
 
-  /** The detail of the activations of a span: the places activated from the first day of the first month to the end of the last one (months of Rome), live, for the groups of the target. */
+  /** The detail of the activations of a span: the places activated from the first day of the first month (or from the beginning) to the end of the last one (months of Rome), live, for the groups of the target. */
   async function detailOf(principal: AuthPrincipal, query: DetailCsvQuery): Promise<Detail> {
     const target = await targetOf(principal, query.dealerId);
-    const first = parseMonth(query.from)!;
+    const first = query.from === undefined ? null : parseMonth(query.from)!;
     const last = parseMonth(query.to)!;
     const ctx = await context(target);
-    const buckets = await run(ctx, { from: monthStart(first.year, first.month), to: monthStart(last.year, last.month + 1) }, 'activations', true);
+    const referenceYear = monthOf(now()).year;
+    const buckets = await run(ctx, { from: first === null ? null : monthStart(first.year, first.month), to: monthStart(last.year, last.month + 1) }, 'activations', true, referenceYear);
     const entries = [...buckets].flatMap(([key, bucket]) => bucket.lines.map((line) => ({ dealer: refOf(key, bucket.dealerId, ctx), line })));
     if ([...buckets.values()].some((bucket) => bucket.overflow) || entries.length > limits.maxLines) {
       throw noLinesIssue();
@@ -463,8 +473,9 @@ export function createActivationsService(deps: ActivationsServiceDeps): Activati
     const total = (pick: (bucket: Bucket) => number): number => [...buckets.values()].reduce((sum, bucket) => sum + pick(bucket), 0);
     const monthlyCents = total((bucket) => bucket.monthlyCents);
     return {
-      from: query.from,
+      from: query.from ?? null,
       to: query.to,
+      referenceYear,
       totals: { places: total((bucket) => bucket.places), monthlyCents, amountCents: total((bucket) => bucket.amountCents), projection12Cents: monthlyCents * 12, anomalies: total((bucket) => bucket.anomalies) },
       entries: sortDetail(entries),
     };

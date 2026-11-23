@@ -389,7 +389,7 @@ describe('templates', () => {
       ...Object.values(SERVICE_LABEL_KEYS),
       ...Object.values(FLAG_KEYS),
       ...Object.values(PROVIDER_KEYS),
-      ...['MONTH', 'ORDER', 'SPAN'].map((part) => `ACTIVATIONS.DETAIL.ERROR.${part}`),
+      ...['MONTH', 'ORDER'].map((part) => `ACTIVATIONS.DETAIL.ERROR.${part}`),
       ...['INVOICES', 'DETAIL'].map((part) => `ACTIVATIONS.TAB.${part}`),
       ...Object.values(CONFLICT_KEYS),
       ...Object.values(ACTION_TEXTS).flatMap((texts) => Object.values(texts)),

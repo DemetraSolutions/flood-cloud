@@ -27,8 +27,8 @@ import {
   flagText,
   formatCents,
   isMonth,
+  isPeriodInOrder,
   NO_DEALER,
-  rangeIssue,
   WARNING_FLAGS,
 } from './activations.types';
 
@@ -46,8 +46,9 @@ const EMPTY_DETAIL: DetailResponse = {
   data: [],
   page: { limit: DEFAULT_LIMIT, next: null },
   totals: { places: 0, monthlyCents: 0, amountCents: 0, projection12Cents: 0, anomalies: 0 },
-  from: '',
+  from: null,
   to: '',
+  referenceYear: 0,
 };
 
 /** Query parameters of the page as kept in the URL (`null` removes one). */
@@ -57,9 +58,12 @@ type QueryChange = Record<string, string | null>;
  * The detail of all the activations of a period (tab "Dettaglio attivazioni" of
  * `/activations`): every place activated between two months, with the items that make up
  * its monthly fee, the months invoiced, the amount and the projection to 12 months. It is an
- * analysis computed live from the current data and prices, not an invoice. Period (both months
- * default to the current one) and dealer (platform administrators) live in the URL; a wrong
- * period shows a message on its field and the API is not called. The same filters drive the CSV.
+ * analysis computed live from the current data and prices, not an invoice. Period and dealer
+ * (platform administrators) live in the URL; a wrong period shows a message on its field and the
+ * API is not called. The start month is optional: empty, everything from the beginning up to the
+ * end month is shown (no `from` in the URL nor in the request), and the period has no maximum
+ * length. With no query parameters at all both months are the current one. The same filters drive
+ * the CSV.
  */
 @Component({
   selector: 'fc-activations-detail',
@@ -100,27 +104,40 @@ export class ActivationsDetail {
   });
   protected readonly cursorStack = signal<readonly (string | null)[]>([]);
 
-  /** What the month fields show: the URL, or the current month. */
-  protected readonly fromText = linkedSignal(() => this.from() ?? currentMonth());
+  /**
+   * What the month fields show: the URL. With no `from` the start is empty (everything from the
+   * beginning), except on a page opened with no period at all, where it is the current month.
+   */
+  protected readonly fromText = linkedSignal(
+    () => this.from() ?? (this.to() === undefined ? currentMonth() : ''),
+  );
   protected readonly toText = linkedSignal(() => this.to() ?? currentMonth());
   protected readonly fromError = computed(() =>
-    isMonth(this.fromText()) ? null : this.i18n.t('ACTIVATIONS.DETAIL.ERROR.MONTH'),
+    this.fromText() === '' || isMonth(this.fromText())
+      ? null
+      : this.i18n.t('ACTIVATIONS.DETAIL.ERROR.MONTH'),
   );
   protected readonly toError = computed(() => {
     if (!isMonth(this.toText())) {
       return this.i18n.t('ACTIVATIONS.DETAIL.ERROR.MONTH');
     }
-    const issue = this.fromError() === null ? rangeIssue(this.fromText(), this.toText()) : null;
-    return issue === undefined || issue === null
-      ? null
-      : this.i18n.t(`ACTIVATIONS.DETAIL.ERROR.${issue === 'order' ? 'ORDER' : 'SPAN'}`);
+    const ordered =
+      this.fromError() !== null ||
+      this.fromText() === '' ||
+      isPeriodInOrder(this.fromText(), this.toText());
+    return ordered ? null : this.i18n.t('ACTIVATIONS.DETAIL.ERROR.ORDER');
   });
-  /** The period to read, `null` while the fields are not right. */
-  private readonly period = computed(() =>
-    this.fromError() === null && this.toError() === null
-      ? { from: this.fromText(), to: this.toText() }
-      : null,
-  );
+  /** The period to read (`from` only when the start is given), `null` while the fields are not right. */
+  private readonly period = computed<Record<string, string> | null>(() => {
+    if (this.fromError() !== null || this.toError() !== null) {
+      return null;
+    }
+    const period: Record<string, string> = { to: this.toText() };
+    if (this.fromText() !== '') {
+      period['from'] = this.fromText();
+    }
+    return period;
+  });
 
   /** Between group, company and place in the heading of a card. */
   protected readonly separator = '›';
@@ -173,11 +190,19 @@ export class ActivationsDetail {
   );
   protected readonly lines = computed(() => this.body().data);
   protected readonly totals = computed(() => this.body().totals);
+  protected readonly referenceYear = computed(() => this.body().referenceYear);
   protected readonly nextCursor = computed(() => this.body().page.next);
   protected readonly loadError = computed(() => apiErrorOf(this.detail.error()));
   protected readonly errorMessage = computed(() => {
     const error = this.loadError();
-    return this.i18n.t(error === null ? 'ERRORS.GENERIC.MESSAGE' : apiErrorMessageKey(error));
+    if (error === null) {
+      return this.i18n.t('ERRORS.GENERIC.MESSAGE');
+    }
+    return this.i18n.t(
+      error.details.some((detail) => detail.issue === 'tooManyLines')
+        ? 'ACTIVATIONS.DETAIL.TOO_MANY_LINES'
+        : apiErrorMessageKey(error),
+    );
   });
 
   // Links to the existing pages, where the user may open them.
@@ -236,9 +261,10 @@ export class ActivationsDetail {
     this.downloadError.set(null);
     try {
       const filters = this.filters() as Record<string, string>;
+      // Same name as the one the server proposes.
       saveFile(
         await this.api.downloadLines(filters),
-        `activations-detail_${filters['from']}_${filters['to']}.csv`,
+        `attivazioni-dettaglio_${filters['from'] ?? 'inizio'}_${filters['to']}.csv`,
       );
     } catch (error) {
       this.downloadError.set(downloadErrorKey(error));
@@ -269,10 +295,11 @@ export class ActivationsDetail {
     }));
   }
 
-  /** Writes the period to the URL once both months are right (first page again). */
+  /** Writes the period to the URL once the months are right (first page again); no start, no `from`. */
   private syncUrl(): void {
-    if (this.period() !== null) {
-      this.change({ from: this.fromText(), to: this.toText() });
+    const period = this.period();
+    if (period !== null) {
+      this.change({ from: period['from'] ?? null, to: period['to'] });
     }
   }
 

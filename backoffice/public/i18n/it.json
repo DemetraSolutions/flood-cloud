@@ -3723,7 +3723,7 @@
     "LOAD_ERROR": "Impossibile caricare le attivazioni",
     "EMPTY": "Nessun rivenditore",
     "EMPTY_MESSAGE": "Non ci sono attivazioni né rinnovi da fatturare per questo mese.",
-    "TABLE": "Riepilogo per rivenditore",
+    "TABLE": "Riepilogo per rivenditore: fatture di {invoice} (attivazioni di {activity})",
     "TOTALS": "Totale",
     "ANOMALIES": "{count} segnalazioni",
     "PRINT": "Stampa",
@@ -3855,22 +3855,25 @@
     "DETAIL": {
       "HINT": "Tutte le attivazioni del periodo con le voci attive e come si compone il prezzo. È un’analisi calcolata ora con i dati e i prezzi attuali, non una fattura.",
       "FROM": "Dal mese",
+      "FROM_HINT": "Lascia vuoto per vedere tutte le attivazioni dall’inizio",
       "TO": "Al mese",
       "ALL_DEALERS": "Tutti i rivenditori",
       "NO_DEALER": "Senza rivenditore",
       "LOAD_ERROR": "Impossibile caricare il dettaglio delle attivazioni",
       "TOTAL_PLACES": "Punti vendita attivati",
       "TOTAL_MONTHLY": "Canone mensile totale",
-      "TOTAL_AMOUNT": "Importo attivazioni",
+      "TOTAL_AMOUNT": "Importo anno {year}",
+      "TOTAL_AMOUNT_HINT": "Attivazioni dell’anno riproporzionate dal mese successivo all’attivazione; anni precedenti per intero",
       "EMPTY": "Nessuna attivazione",
       "EMPTY_MESSAGE": "Nessun punto vendita è stato attivato nel periodo scelto.",
+      "TOO_MANY_LINES": "Troppi punti vendita per mostrarli in un solo elenco: restringi il periodo o filtra per rivenditore.",
       "ERROR": {
         "MONTH": "Indica un mese valido (AAAA-MM, dal 2020 al 2100).",
         "ORDER": "Il mese finale non può precedere quello iniziale.",
         "SPAN": "Il periodo può durare al massimo 24 mesi."
       },
       "DOWNLOAD_ERROR": {
-        "TOO_MANY_LINES": "Troppi punti vendita per un solo file CSV: restringi il periodo"
+        "TOO_MANY_LINES": "Troppi punti vendita per un solo file CSV: restringi il periodo o filtra per rivenditore"
       }
     },
     "TAB": {
