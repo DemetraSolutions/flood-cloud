@@ -15,6 +15,7 @@ describe('activity log types', () => {
     expect(ACTIVITY_ACTIONS).toContain('request.failed');
     expect(ACTIVITY_ACTIONS).toContain('place.deleted');
     expect(ACTIVITY_ACTIONS).toContain('rateLimit.exceeded');
+    expect(ACTIVITY_ACTIONS).toContain('store.configurationRead');
     for (const verb of ['created', 'updated', 'revoked']) {
       expect(ACTIVITY_ACTIONS).toContain(`apiKey.${verb}`);
     }
@@ -27,6 +28,7 @@ describe('activity log types', () => {
   it('builds dictionary keys from the action names', () => {
     expect(actionLabelKey('auth.loginSucceeded')).toBe('ACTIVITY.ACTION.AUTH_LOGIN_SUCCEEDED');
     expect(actionLabelKey('rateLimit.exceeded')).toBe('ACTIVITY.ACTION.RATE_LIMIT_EXCEEDED');
+    expect(actionLabelKey('store.configurationRead')).toBe('ACTIVITY.ACTION.STORE_CONFIGURATION_READ');
     expect(actionLabelKey('client.error')).toBe('ACTIVITY.ACTION.CLIENT_ERROR');
     expect(actionLabelKey('apiKey.revoked')).toBe('ACTIVITY.ACTION.API_KEY_REVOKED');
     expect(actionLabelKey('countryArea.created')).toBe('ACTIVITY.ACTION.COUNTRY_AREA_CREATED');

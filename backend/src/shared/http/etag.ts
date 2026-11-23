@@ -46,6 +46,16 @@ function matches(header: string | undefined, etag: string): boolean {
 }
 
 /**
+ * Whether the request would be answered `304` for a resource with this tag (`If-None-Match` matches it), so a caller can decide what to do before it sends.
+ *
+ * @param req Express request.
+ * @param etag The complete tag.
+ */
+export function revalidates(req: Request, etag: string): boolean {
+  return matches(req.get('if-none-match'), etag);
+}
+
+/**
  * Sends a `{ data }` envelope with an `ETag` and `Cache-Control: no-store` (nothing is kept by the browser; the client revalidates its own in-memory copy, revalidation is
  * mandatory; the default of the API is `no-store`, which this resource deliberately relaxes). When the request
  * carries a matching `If-None-Match` the answer is `304 Not Modified` with no body. Only the resources that

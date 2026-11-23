@@ -111,6 +111,7 @@ import { createReferenceRoutes } from './modules/reference/reference.routes.ts';
 import { createReferenceService } from './modules/reference/reference.service.ts';
 import { createSessionsRepository } from './modules/sessions/sessions.repository.ts';
 import { createAuthenticateStore } from './modules/store-keys/authenticate-store.ts';
+import { createConfigurationReadAudit } from './modules/store-context/store-context.audit.ts';
 import { createStoreContextController } from './modules/store-context/store-context.controller.ts';
 import { createStoreContextRepository } from './modules/store-context/store-context.repository.ts';
 import { createStoreContextRoutes } from './modules/store-context/store-context.routes.ts';
@@ -299,6 +300,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       logger,
     }),
     versionKey,
+    createConfigurationReadAudit({ activityLog, rateLimiter, logger }),
   );
   const placesService = createPlacesService({
     repository: createPlacesRepository(databases, companiesRepository),

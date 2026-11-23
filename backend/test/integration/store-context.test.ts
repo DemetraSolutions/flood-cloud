@@ -493,6 +493,85 @@ describe('what a store cannot choose or do', () => {
   });
 });
 
+describe('the record of the reads that carry credentials', () => {
+  const events = () => world.office.activity.entries.filter((entry) => entry.action === 'store.configurationRead');
+  const read = (path: string, key = store.key, headers: Record<string, string> = {}) => world.asStore(key, 'GET', path, undefined, headers);
+
+  it('writes one security event on the first 200 of the group and of the place, with the ids and the resource and no value', async () => {
+    const before = events().length;
+    const group = await read('/store-context/group');
+    const place = await read('/store-context/place');
+    assert.deepEqual([group.status, place.status], [200, 200]);
+    const [first, second, ...rest] = events().slice(before);
+    assert.equal(rest.length, 0);
+    for (const [event, resource] of [[first!, 'group'], [second!, 'place']] as const) {
+      assert.deepEqual([event.category, event.action, event.outcome], ['security', 'store.configurationRead', 'success']);
+      assert.deepEqual(event.actor, { kind: 'store', id: new ObjectId(store.keyId) });
+      assert.deepEqual(event.groupId, world.group(0).groupId);
+      assert.deepEqual(event.resource, { type: 'storeKey', id: store.keyId });
+      assert.deepEqual(event.metadata, { resource, companyId: hex(ownCompany), placeId: hex(own()) });
+      assert.ok(typeof event.requestId === 'string' && event.requestId !== '');
+      assert.ok(typeof event.ip === 'string');
+      const text = JSON.stringify(event);
+      for (const secret of [LEGACY_KEY, YELLGO_KEY, DOJO_KEY, STRIPE_KEY, DEVICE_USER, DEVICE_PASSWORD, store.key, group.headers.get('etag')!, place.headers.get('etag')!]) {
+        assert.ok(!text.includes(secret), secret);
+      }
+    }
+  });
+
+  it('throttles to one an hour for a key and a resource: group and place apart, two keys apart, and a new one when the hour is over', async () => {
+    const before = events().length;
+    for (let i = 0; i < 3; i += 1) {
+      await read('/store-context/group');
+    }
+    assert.equal(events().length - before, 1);
+    await read('/store-context/place');
+    assert.equal(events().length - before, 2, 'the place is another resource');
+    await read('/store-context/place');
+    assert.equal(events().length - before, 2);
+    const second = await world.activate(other());
+    await read('/store-context/group', second.key);
+    assert.equal(events().length - before, 3, 'another key is another event');
+    assert.equal(events().at(-1)!.actor.kind === 'store' && hex(events().at(-1)!.actor.id as ObjectId), second.keyId);
+    limiter.reset();
+    await read('/store-context/group');
+    assert.equal(events().length - before, 4, 'the counter of the hour is gone: a new event');
+    assert.ok(limiter.calls.filter((call) => call.bucket === 'storeConfigurationRead:key').every((call) => call.limit === 1));
+  });
+
+  it('writes nothing on a 304, on the company, on the context, or on any refusal', async () => {
+    const tag = (await read('/store-context/group')).headers.get('etag')!;
+    const placeTag = (await read('/store-context/place')).headers.get('etag')!;
+    limiter.reset();
+    const before = events().length;
+    assert.equal((await read('/store-context/group', store.key, { 'if-none-match': tag })).status, 304);
+    assert.equal((await read('/store-context/place', store.key, { 'if-none-match': placeTag })).status, 304);
+    assert.equal((await read('/store-context/company')).status, 200);
+    assert.equal((await read('/store-context')).status, 200);
+    assert.equal((await read('/store-context/group', 'fc_sk_nothing')).status, 401);
+    assert.equal((await world.as.call(world.office.cluster.psa, 'GET', '/store-context/place')).status, 403);
+    await common().collection('places').updateOne({ _id: own() }, { $set: { status: false } });
+    assert.equal((await read('/store-context/place')).status, 403);
+    await common().collection('places').updateOne({ _id: own() }, { $set: { status: true } });
+    const place = (await groupDb().collection('places').findOne({ _id: own() }))!;
+    await groupDb().collection('places').deleteOne({ _id: own() });
+    assert.equal((await read('/store-context/place')).status, 404);
+    await groupDb().collection('places').insertOne(place);
+    assert.equal(events().length - before, 0);
+    const small = await openTestDatabases();
+    const office = await startStoreWorld(small, { env: { RATE_LIMIT_API_PER_STORE: '1' }, rateLimiter: memoryRateLimiter() });
+    try {
+      const key = await office.activate(office.group(0).ownPlaceId);
+      await office.asStore(key.key, 'GET', '/store-context');
+      assert.equal((await office.asStore(key.key, 'GET', '/store-context/group')).status, 429);
+      assert.equal(office.office.activity.entries.filter((entry) => entry.action === 'store.configurationRead').length, 0);
+    } finally {
+      await office.office.close();
+      await small.cleanup();
+    }
+  });
+});
+
 // Last of the file: it moves the clock of the application past the life of an access token, and the tests above log in as the PSA.
 describe('the credentials of the other surfaces', () => {
   it('is 401 for a public API key and for an access token that has expired', async () => {

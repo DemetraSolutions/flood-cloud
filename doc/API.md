@@ -941,7 +941,7 @@ La **configurazione completa** del gruppo, dell'azienda e del punto vendita dell
     ```json
     { "data": { "id": "665f…", "name": "Bar Roma", "integrations": { "dojo": { "status": true, "apiKey": "…" } }, "devices": { "items": [{ "id": "d1", "name": "Cassa", "automaticCashUsername": "…", "automaticCashPassword": "…" }] }, "dealerSettings": { "sentry": false, "serverIp": "10.0.0.1", "connectorAddress": "" } } }
     ```
-- **Errori:** `401`; `403 STORE_DISABLED`; `403 FORBIDDEN` (non è una chiave di negozio); `404` (il documento non esiste più); `429`. Nessun segreto compare in log, registro delle attività o messaggi d'errore; non si registra un evento per ogni lettura.
+- **Errori:** `401`; `403 STORE_DISABLED`; `403 FORBIDDEN` (non è una chiave di negozio); `404` (il documento non esiste più); `429`. Nessun segreto compare in log, registro delle attività o messaggi d'errore. `/group` e `/place` (che portano credenziali) registrano, solo su `200`, l'evento di sicurezza `store.configurationRead` con la risorsa letta (`group` o `place`) e gli id di azienda e punto vendita, al più uno all'ora per chiave e risorsa; `/company` non lo registra (oggi senza credenziali: da rivedere quando ne avrà). Un `304`, un errore o `/store-context` non registrano nulla.
 
 ## Chiavi delle API pubbliche (`/v1`)
 

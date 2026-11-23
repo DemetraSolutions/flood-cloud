@@ -13,6 +13,7 @@ import { STORE_PROFILE } from '../../src/shared/security/rbac/policy.ts';
 import { requireStoreGroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import type { GroupAccess } from '../../src/shared/security/scope/group-access.ts';
 import type { StorePrincipal } from '../../src/shared/security/scope/principal.ts';
+import { createConfigurationReadAudit } from '../../src/modules/store-context/store-context.audit.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 import { toPlace, toStorePlace } from '../../src/modules/places/place.mapper.ts';
 import type { Place } from '../../src/modules/places/place.types.ts';
@@ -245,5 +246,41 @@ describe('the place of a store', () => {
     // @ts-expect-error the group of a store is not the group of the backoffice
     const asGroup: GroupResponse = {} as ReturnType<typeof toStoreGroup>;
     assert.ok([asPlace, asClear, asGroup].length === 3);
+  });
+});
+
+describe('the audit of the reads of the configuration', () => {
+  const client = { requestId: 'req-1', ip: '10.0.0.9', userAgent: null } as never;
+  const run = async (consume: () => Promise<{ allowed: boolean }>, ip: string | null = '10.0.0.9') => {
+    const recorded: Array<Record<string, unknown>> = [];
+    const consumed: unknown[][] = [];
+    const errors: unknown[] = [];
+    const audit = createConfigurationReadAudit({
+      activityLog: { record: async (entry) => void recorded.push(entry as never) },
+      rateLimiter: { consume: (...args: unknown[]) => (consumed.push(args), consume()) } as never,
+      logger: { error: (_message: string, fields: unknown) => errors.push(fields) } as never,
+    });
+    await audit.record(STORE, { ...(client as object), ip } as never, 'place');
+    return { recorded, consumed, errors };
+  };
+
+  it('counts one an hour per key and resource, and records the event once the counter allows it', async () => {
+    const { recorded, consumed } = await run(async () => ({ allowed: true }));
+    assert.deepEqual(consumed, [['storeConfigurationRead:key', `${STORE.keyId.toHexString()}:place`, 1, 3600]]);
+    assert.equal(recorded.length, 1);
+    assert.equal(recorded[0]!['action'], 'store.configurationRead');
+    assert.equal((await run(async () => ({ allowed: false }))).recorded.length, 0);
+  });
+
+  it('leaves out the address when the request has none', async () => {
+    assert.ok(!('ip' in (await run(async () => ({ allowed: true }), null)).recorded[0]!));
+  });
+
+  it('writes the event anyway when the counter fails, and logs the failure: a read that succeeded stays a success', async () => {
+    const { recorded, errors } = await run(async () => {
+      throw new Error('counter down');
+    });
+    assert.equal(recorded.length, 1);
+    assert.equal(errors.length, 1);
   });
 });

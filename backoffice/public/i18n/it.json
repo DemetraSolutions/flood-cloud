@@ -791,6 +791,7 @@
       "GROUP_SUSPENDED": "Gruppo sospeso",
       "GROUP_REACTIVATED": "Gruppo riattivato",
       "RATE_LIMIT_EXCEEDED": "Limite di richieste superato",
+      "STORE_CONFIGURATION_READ": "Configurazione letta dal server di negozio",
       "REQUEST_FAILED": "Richiesta fallita",
       "CLIENT_ERROR": "Errore del backoffice",
       "USER_CREATED": "Utente creato",

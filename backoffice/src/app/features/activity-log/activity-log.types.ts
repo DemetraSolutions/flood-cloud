@@ -29,6 +29,7 @@ const SECURITY_ACTIONS = [
   'group.trashed',
   'group.restored',
   'rateLimit.exceeded',
+  'store.configurationRead',
   'apiKey.created',
   'apiKey.updated',
   'apiKey.revoked',
