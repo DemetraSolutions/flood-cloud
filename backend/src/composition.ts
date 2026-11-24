@@ -26,6 +26,10 @@ import { createApiKeysService } from './modules/api-keys/api-keys.service.ts';
 import { createAuthenticateApiKey } from './modules/api-keys/authenticate-api-key.ts';
 import { createUsageMeter } from './modules/api-keys/usage-meter.ts';
 import type { UsageMeter } from './modules/api-keys/usage-meter.ts';
+import { createApiKeyCallers } from './modules/public-catalog/public-catalog.caller.ts';
+import { createPublicCatalogController } from './modules/public-catalog/public-catalog.controller.ts';
+import { createPublicCatalogRoutes } from './modules/public-catalog/public-catalog.routes.ts';
+import { createPublicCatalogService } from './modules/public-catalog/public-catalog.service.ts';
 import { createPublicController } from './modules/public-api/public.controller.ts';
 import { createPublicRepository } from './modules/public-api/public.repository.ts';
 import { createPublicRoutes } from './modules/public-api/public.routes.ts';
@@ -99,6 +103,11 @@ import { createGroupLanguages } from './modules/product-catalog/group-languages.
 import { createProductReferences } from './modules/product-catalog/product-references.ts';
 import { createAttributeGroupsRepository } from './modules/product-attribute-groups/product-attribute-groups.repository.ts';
 import { createProductAttributeGroupsRoutes } from './modules/product-attribute-groups/product-attribute-groups.routes.ts';
+import type { AttributeGroupsService } from './modules/product-attribute-groups/product-attribute-groups.service.ts';
+import type { BrandsService } from './modules/product-brands/product-brands.service.ts';
+import type { DepartmentsService } from './modules/product-departments/product-departments.service.ts';
+import type { CategoriesService } from './modules/product-categories/categories.service.ts';
+import type { ProductsService } from './modules/products/products.service.ts';
 import { createAttributeGroupsService } from './modules/product-attribute-groups/product-attribute-groups.service.ts';
 import { createBrandsRepository } from './modules/product-brands/product-brands.repository.ts';
 import { createProductBrandsRoutes } from './modules/product-brands/product-brands.routes.ts';
@@ -202,6 +211,17 @@ export interface BackofficeModules {
   readonly nonBrowserGuard: NonBrowserGuard | undefined;
   /** The security policy in memory, shared by the guard, the limits and the settings service of this instance. */
   readonly securityPolicy: SecurityPolicyProvider;
+  /** The services of the product catalog (already wrapped by the rule of the single place), which the public API uses as it is. */
+  readonly catalog: CatalogServices;
+}
+
+/** The services of the product catalog of a group, shared by the backoffice, the server of a point of sale and the public API. */
+export interface CatalogServices {
+  readonly products: ProductsService;
+  readonly categories: CategoriesService;
+  readonly brands: BrandsService;
+  readonly attributeGroups: AttributeGroupsService;
+  readonly departments: DepartmentsService;
 }
 
 /** Collaborators of {@link createBackofficeModules}. */
@@ -400,15 +420,15 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
   const departmentsService = withSoleLocation(createDepartmentsService({ ...catalogDeps, repository: createDepartmentsRepository(databases), catalogs: catalogsService, products: productReferences }), placeCounter, logger);
   const productDepartments = createEntityController(departmentsService);
-  const productBrands = createEntityController(withSoleLocation(createBrandsService({ ...catalogDeps, repository: createBrandsRepository(databases), products: productReferences }), placeCounter, logger));
+  const brandsService = withSoleLocation(createBrandsService({ ...catalogDeps, repository: createBrandsRepository(databases), products: productReferences }), placeCounter, logger);
+  const productBrands = createEntityController(brandsService);
   const categoriesService = withSoleLocation(createCategoriesService({ repository: createCategoriesRepository(databases), places: categoryPlaces, catalogs: catalogsService, products: productReferences, ...catalogDeps }), placeCounter, logger);
   const productCategories = createCategoriesController(categoriesService);
+  const attributeGroupsService = createAttributeGroupsService({ repository: createAttributeGroupsRepository(databases), products: productReferences, languages: groupLanguages, users, activityLog, versionKey, now, newAttributeId: newElementId });
   // The catalog of the server of a point of sale: the same services, for a caller limited to the place of its key, and the check of the operator of its writes.
-  const storeCatalog = createStoreCatalogController(createStoreCatalogService({ products: productsService, categories: categoriesService, departments: departmentsService }));
+  const storeCatalog = createStoreCatalogController(createStoreCatalogService({ products: productsService, categories: categoriesService, departments: departmentsService, brands: brandsService, attributeGroups: attributeGroupsService }));
   const requireOperator = createRequireOperator({ context: storeContextService, audit: createOperatorAudit({ activityLog, rateLimiter, logger }) });
-  const productAttributeGroups = createEntityController(
-    createAttributeGroupsService({ repository: createAttributeGroupsRepository(databases), products: productReferences, languages: groupLanguages, users, activityLog, versionKey, now, newAttributeId: newElementId }),
-  );
+  const productAttributeGroups = createEntityController(attributeGroupsService);
   const countries = createCountriesController(createCountriesService({ repository: createCountriesRepository(databases, logger), activityLog, versionKey, now }));
   const tobaccos = createTobaccosController(createTobaccosService({ repository: createTobaccosRepository(databases), activityLog, now }));
   const vatLookups = createVatLookupsController(
@@ -452,6 +472,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     groups,
     nonBrowserGuard,
     securityPolicy,
+    catalog: { products: productsService, categories: categoriesService, brands: brandsService, attributeGroups: attributeGroupsService, departments: departmentsService },
   };
 }
 
@@ -473,12 +494,14 @@ export interface PublicApiDeps {
   readonly logger: Logger;
   /** The rate limit counters (the per-key limit and the daily quota use them). */
   readonly rateLimiter: RateLimiter;
+  /** The services of the product catalog, from {@link createBackofficeModules}: the public API goes through the same rules as the backoffice. */
+  readonly catalog: CatalogServices;
   /** Clock in epoch milliseconds; defaults to `Date.now`. */
   readonly now?: () => number;
 }
 
 /**
- * Composition root of the public API: the API key authentication (with the usage meter), the reads of places, companies and the group catalogs, and their routes.
+ * Composition root of the public API: the API key authentication (with the usage meter), the reads of places, companies and the group catalogs, the product catalog (reads and writes), and their routes.
  *
  * @param deps Configuration, databases, activity log, logger, counters and clock.
  * @returns Routes, authentication and meter, ready for `createApp` and the server.
@@ -490,5 +513,8 @@ export function createPublicApiModules(deps: PublicApiDeps): PublicApiModules {
   const meter = createUsageMeter({ repository: keys, logger, flushIntervalMs: config.publicApiUsageFlushSeconds * 1000 });
   const groups = createManagedGroupsRepository(databases, publicApiLimitsOf(config));
   const controller = createPublicController(createPublicService({ repository: createPublicRepository(databases), groups, rateLimiter }));
-  return { routes: createPublicRoutes(controller), authenticate: createAuthenticateApiKey({ repository: keys, rateLimiter, activityLog, logger, meter, now }), meter };
+  const catalog = createPublicCatalogController(createPublicCatalogService({ ...deps.catalog, callers: createApiKeyCallers(databases) }));
+  const idempotency = createIdempotencyStore(databases, idempotencyBodyKey(Buffer.from(config.versionHmacKey.reveal(), 'base64')), now);
+  const rules = createRateLimitRules(config);
+  return { routes: [...createPublicRoutes(controller), ...createPublicCatalogRoutes(catalog, idempotency, rules.publicCatalogWritePerKey)], authenticate: createAuthenticateApiKey({ repository: keys, rateLimiter, activityLog, logger, meter, now }), meter };
 }

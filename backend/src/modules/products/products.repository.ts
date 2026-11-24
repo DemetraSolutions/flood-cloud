@@ -84,6 +84,14 @@ export interface ProductsRepository extends EntityRepository, FullListing {
    */
   invalid(principal: CatalogCaller, access: GroupAccess, ids: readonly string[], use: 'modifier' | 'plain', scoped: boolean): Promise<number[]>;
   /**
+   * The ids, among some, of the products that exist, are not in the trash and are reached by the caller (for a company or place administrator, a place administrator's key or a store: for every place or for a place of the perimeter).
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   * @param ids The ids to check, hexadecimal and valid (they come from products already read).
+   */
+  reachable(principal: CatalogCaller, access: GroupAccess, ids: readonly string[]): Promise<string[]>;
+  /**
    * The components of the bill of materials of some products (whatever the caller reaches: a cycle cannot be judged on a part of the data).
    *
    * @param principal The authenticated caller.
@@ -228,6 +236,16 @@ export function createProductsRepository(databases: Databases): ProductsReposito
       );
       const valid = new Set(idsOf(found).map((id) => id.toHexString()));
       return ids.flatMap((id, index) => (valid.has(id) ? [] : [index]));
+    },
+
+    reachable: async (principal, access, ids) => {
+      const wanted = [...new Set(ids)].map((id) => ObjectId.createFromHexString(id));
+      const found = await read(() =>
+        products(principal, access)
+          .find(withScope(categoriesVisibleTo(principal), { _id: { $in: wanted }, trash: { $ne: true } }), { projection: { _id: 1 }, limit: wanted.length, maxTimeMS: LIST_MAX_TIME_MS })
+          .toArray(),
+      );
+      return idsOf(found).map((id) => id.toHexString());
     },
 
     componentsOf: async (principal, access, ids) => {

@@ -39,7 +39,7 @@ export const PRODUCT_LIMITS = Object.freeze({
 const MAX_NUMBER = 1_000_000_000;
 
 const HEX_ID = /^[0-9a-f]{24}$/;
-const hexId = () => string({ min: 24, max: 24, pattern: HEX_ID });
+export const hexId = () => string({ min: 24, max: 24, pattern: HEX_ID });
 const stationId = () => string({ min: 1, max: 64, pattern: SAFE_ID });
 const NO_CONTROL = /^[^\u0000-\u001F\u007F]*$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -85,6 +85,12 @@ export interface ProductChangesQuery {
   readonly family?: (typeof PRODUCT_FAMILIES)[number];
   /** An instant, normalized ISO 8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`). */
   readonly updatedSince?: string;
+  /** Only the products that are enabled and not in the trash, with or without `updatedSince` (what an integration lists when it asks for no instant). */
+  readonly activeOnly?: boolean;
+  /** Only the products available for the e-commerce. */
+  readonly ecommerce?: boolean;
+  /** Only the products that move the warehouse (the ones that have a stock). */
+  readonly stockOnly?: boolean;
 }
 
 /** The `true`/`false` of a query string. */
@@ -217,7 +223,7 @@ const gallery = () =>
   );
 
 /** What a creation and a modification have in common, except the texts: every field optional but the name of a creation. */
-function commonShape() {
+export function commonShape() {
   return {
     type: optional(enumOf(PRODUCT_TYPES)),
     enabled: optional(boolean()),
@@ -283,7 +289,7 @@ function externalUrl(): Schema<string, false> {
 const modifierBase = () => ({ type: optional(enumOf(MODIFIER_TYPES)), pricePercentagePlus: optional(nullable(number({ min: 0, max: 1000 }))), pricePercentageMinus: optional(nullable(number({ min: 0, max: 100 }))) });
 
 /** The fields of a creation, over the common ones. */
-const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+export const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
   ...shape,
   name: nameTexts(),
   shortName: optional(shortNameTexts()),
@@ -296,7 +302,7 @@ const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
 });
 
 /** The fields of a modification, over the common ones. */
-const patchFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+export const patchFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
   ...shape,
   name: optional(nameTextsPatch()),
   shortName: optional(shortNameTextsPatch()),

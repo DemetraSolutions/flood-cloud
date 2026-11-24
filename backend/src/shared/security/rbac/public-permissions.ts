@@ -2,7 +2,7 @@
  * Catalog of the permissions of the public API (`/public/v1`), kept apart from the backoffice permissions: a public API key
  * holds some of these and nothing else. `GET /me` needs none. Every entry must be described in `doc/Public-API.md`.
  */
-export const PUBLIC_PERMISSIONS = Object.freeze(['places:read', 'companies:read', 'catalog:read'] as const);
+export const PUBLIC_PERMISSIONS = Object.freeze(['places:read', 'companies:read', 'catalog:read', 'catalog:write'] as const);
 
 /** A permission a public API key may hold. */
 export type PublicPermission = (typeof PUBLIC_PERMISSIONS)[number];

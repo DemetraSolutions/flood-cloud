@@ -7,7 +7,7 @@ import type { CatalogsService } from '../groups/catalogs/catalogs.service.ts';
 import { taxes } from '../groups/catalogs/taxes.ts';
 import type { Tax } from '../groups/catalogs/taxes.ts';
 import { createEntityService } from '../product-catalog/entity.service.ts';
-import type { EntityKind, EntityService, EntityView, KindContext } from '../product-catalog/entity.service.ts';
+import type { EntityChanges, EntityKind, EntityService, EntityView, KindContext } from '../product-catalog/entity.service.ts';
 import type { GroupLanguages } from '../product-catalog/group-languages.ts';
 import { userField } from '../product-catalog/product-references.ts';
 import type { ProductReferences } from '../product-catalog/product-references.ts';
@@ -27,7 +27,7 @@ import type { CatalogCaller } from '../product-catalog/caller.ts';
 export type Department = EntityView & DepartmentExtra;
 
 /** The service of the departments of a group (`doc/Tasks.md` step C1). */
-export type DepartmentsService = EntityService<Department, CreateDepartmentBody, PatchDepartmentBody>;
+export type DepartmentsService = EntityService<Department, CreateDepartmentBody, PatchDepartmentBody> & EntityChanges<Department>;
 
 /** Collaborators of {@link createDepartmentsService}. */
 export interface DepartmentsServiceDeps {

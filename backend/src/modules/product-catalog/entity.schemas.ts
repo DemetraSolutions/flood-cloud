@@ -18,6 +18,13 @@ export const placeIdsSchema = () => array(string({ min: 24, max: 24, pattern: /^
 /** An image of the library of the group, by its id, or `null` for none. */
 export const imageSchema = () => nullable(object({ imageId: string({ min: 24, max: 24, pattern: /^[0-9a-f]{24}$/ }) }));
 
+/** How a download of the changes of a collection of the catalog (brands, groups of attributes) is ordered: by the date of the last change, oldest first; no search and no other sort. */
+export const ENTITY_CHANGES_LIST: ListConfig = Object.freeze({
+  sorts: Object.freeze({ updatedAt: Object.freeze({ field: 'updateDate', kind: 'date' as const }) }),
+  defaultSort: 'updatedAt',
+  searchFields: Object.freeze([]),
+});
+
 /** The `true`/`false` of a query string. */
 const flag = () => transform(enumOf(['true', 'false']), (value) => value === 'true', 'enum');
 

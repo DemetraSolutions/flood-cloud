@@ -64,6 +64,8 @@ export interface CategoryChangesQuery {
   readonly cursor?: string;
   /** An instant, normalized ISO 8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`). */
   readonly updatedSince?: string;
+  /** Only the enabled categories, with or without `updatedSince` (what an integration lists when it asks for no instant). */
+  readonly activeOnly?: boolean;
 }
 
 /** The `true`/`false` of a query string. */
@@ -125,7 +127,7 @@ const dining = () =>
   });
 
 /** What a creation and a modification have in common: every field optional but the name of a creation. */
-function commonShape() {
+export function commonShape() {
   return {
     parentId: optional(nullable(hexId())),
     enabled: optional(boolean()),
@@ -158,7 +160,7 @@ const stationsByPlace = () => record(stations(), { max: MAX_STATION_PLACES, key:
 const stationsByPlacePatch = () => record(nullable(stations()), { max: MAX_STATION_PLACES, key: HEX_ID });
 
 /** The fields of a creation, over the common ones. */
-const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+export const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
   ...shape,
   name: nameTexts(),
   description: optional(descriptionTexts()),
@@ -167,7 +169,7 @@ const createFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
 });
 
 /** The fields of a modification, over the common ones. */
-const patchFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
+export const patchFields = <S extends Parameters<typeof object>[0]>(shape: S) => ({
   ...shape,
   name: optional(nameTextsPatch()),
   description: optional(descriptionTextsPatch()),

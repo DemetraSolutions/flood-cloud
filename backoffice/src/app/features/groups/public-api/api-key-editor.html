@@ -20,6 +20,12 @@
         (blurred)="keyForm.permissions[permission]().markAsTouched()"
       />
     }
+    @if (unrestrictedWrite()) {
+      <p class="warning" role="status">
+        <fc-icon name="alert" />
+        <span>{{ 'PUBLIC_API.KEY.WRITE_UNRESTRICTED_WARNING' | t }}</span>
+      </p>
+    }
     <div class="error" [id]="permissionsErrorId" aria-live="polite">
       @if (permissionsError(); as text) {
         <fc-icon name="error" />

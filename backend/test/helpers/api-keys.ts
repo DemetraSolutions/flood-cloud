@@ -22,7 +22,7 @@ export interface KeysWorld extends StoreWorld {
   /** Creates a key as `actor` (the response must be a 201): by default `places:read`, `companies:read`, `catalog:read`, in group `index`, with the public API of the group switched on. */
   makeKey(index?: number, body?: Record<string, unknown>, actor?: ObjectId): Promise<MadeKey>;
   /** A request to `/public/v1` with a key, the body read. */
-  asKey(secret: string | undefined, path: string, headers?: Record<string, string>, method?: string): Promise<Reply<any>>;
+  asKey(secret: string | undefined, path: string, headers?: Record<string, string>, method?: string, body?: unknown): Promise<Reply<any>>;
   /** The stored document of a key, hash and all. */
   storedKey(id: string): Promise<Document | null>;
 }
@@ -58,8 +58,8 @@ export async function startKeysWorld(ctx: TestDatabases, options: BackofficeOpti
       }
       return { id: made.body.data.id as string, secret: made.body.data.secret as string };
     },
-    asKey: async (secret, path, headers = {}, method = 'GET') => {
-      const response = await world.office.publicCall(method, path, secret, headers);
+    asKey: async (secret, path, headers = {}, method = 'GET', body) => {
+      const response = await world.office.publicCall(method, path, secret, headers, body);
       const text = await response.text();
       return { status: response.status, headers: response.headers, body: text === '' ? undefined : JSON.parse(text) };
     },

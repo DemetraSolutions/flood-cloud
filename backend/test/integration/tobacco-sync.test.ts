@@ -19,6 +19,7 @@ import { LAST_SYNC_INDEX, lastSyncQuery } from '../../src/modules/tobacco-sync/t
 import { MAX_BARCODE_QUANTITY, MAX_PRICE } from '../../src/modules/tobacco-sync/tobacco-sync.plan.ts';
 import { catalogWorkbook, uploadWorkbook } from '../helpers/catalog-xlsx.ts';
 import { createIdempotencyStore, idempotencyBodyKey } from '../../src/shared/http/idempotency.ts';
+import { throughRealLog } from '../helpers/real-log.ts';
 import { memoryActivityLog, memoryRateLimiter } from '../helpers/activity.ts';
 import { memoryLogger } from '../helpers/app.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
@@ -892,5 +893,20 @@ describe('the lock of the catalog', () => {
     assert.ok(messages.events.length >= 3);
     fail = new Set();
     await settings().deleteMany({});
+  });
+});
+
+describe('the summary of a synchronization, as the real activity log stores it', () => {
+  it('is accepted by the log with every metadata key it carries, and nothing in it is redacted', async () => {
+    await listing(entry(1));
+    const mark = world.office.activity.entries.length;
+    assert.equal((await run({}, { query: '?dryRun=true' })).status, 200);
+    assert.equal((await run({})).status, 200);
+    const found = summaries(mark);
+    assert.ok(found.length >= 2);
+    const { stored, refused } = await throughRealLog(ctx, found);
+    assert.deepEqual(refused, []);
+    assert.equal(stored.length, found.length);
+    assert.ok(!JSON.stringify(stored.map((event) => event['metadata'])).includes('REDACTED'));
   });
 });

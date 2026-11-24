@@ -20,7 +20,7 @@ describe('key model', () => {
   it('starts a new key empty, with the limits it inherits', () => {
     expect(toKeyModel(null, INHERITED)).toEqual({
       name: '',
-      permissions: { 'places:read': false, 'companies:read': false, 'catalog:read': false },
+      permissions: { 'places:read': false, 'companies:read': false, 'catalog:read': false, 'catalog:write': false },
       companyIds: [],
       placeIds: [],
       expiresOn: '',
@@ -39,7 +39,7 @@ describe('key model', () => {
     });
     expect(toKeyModel(key, INHERITED)).toEqual({
       name: 'Webshop',
-      permissions: { 'places:read': false, 'companies:read': false, 'catalog:read': true },
+      permissions: { 'places:read': false, 'companies:read': false, 'catalog:read': true, 'catalog:write': false },
       companyIds: ['c1'],
       placeIds: ['p1', 'p2'],
       expiresOn: '2027-01-02',
@@ -52,7 +52,7 @@ describe('key model', () => {
     const model = () => ({
       ...toKeyModel(null, INHERITED),
       name: '  Webshop ',
-      permissions: { 'places:read': true, 'companies:read': false, 'catalog:read': true },
+      permissions: { 'places:read': true, 'companies:read': false, 'catalog:read': true, 'catalog:write': false },
     });
 
     it('sends only what was filled in', () => {
@@ -123,7 +123,7 @@ describe('key model', () => {
           {
             ...same(),
             name: 'Nuova',
-            permissions: { 'places:read': true, 'companies:read': true, 'catalog:read': true },
+            permissions: { 'places:read': true, 'companies:read': true, 'catalog:read': true, 'catalog:write': false },
             companyIds: ['c1'],
             placeIds: ['p9'],
             expiresOn: '2027-02-01',

@@ -131,6 +131,9 @@ export function createApp(deps: AppDeps): Express {
   mountRoutes(publicApi, deps.routes?.public ?? [], {
     allowedAuth: ['apiKey'],
     ...(deps.authenticate?.public === undefined ? {} : { authenticate: deps.authenticate.public }),
+    ...(deps.groupAccess === undefined
+      ? {}
+      : { groupAccess: { groups: deps.groupAccess.groups, onCrossGroupAccess: createCrossGroupAuditor({ activityLog, now }) } }),
     rateLimit: rateLimitMount,
   });
   app.use('/public/v1', publicApi);

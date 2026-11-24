@@ -1,5 +1,5 @@
 import { createHmac, hkdfSync } from 'node:crypto';
-import type { Request, RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { ObjectId } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
 import { AppError } from './errors.ts';
@@ -27,7 +27,7 @@ export interface StoredResponse {
 
 /** What identifies a request for idempotency: who sent it, to which route, with which key and body. */
 export interface IdempotencyRequest {
-  /** The user (hexadecimal id), or `store:` and the id of the store key: keys are scoped per caller. */
+  /** The user (hexadecimal id), `store:` and the id of the store key, or `apikey:` and the id of the public API key: keys are scoped per caller. */
   readonly principal: string;
   /** Method and concrete path: keys are scoped per route. */
   readonly route: string;
@@ -148,10 +148,18 @@ export function idempotencyKeyOf(req: Request): string {
   return raw.trim().toLowerCase();
 }
 
+/** The caller the keys are scoped to: the user, `store:` and the id of the store key, or `apikey:` and the id of the public API key. */
+function idempotencyPrincipalOf(res: Response): string {
+  if (res.locals.store !== undefined) {
+    return `store:${res.locals.store.keyId.toHexString()}`;
+  }
+  return res.locals.apiKey === undefined ? res.locals.auth!.userId.toHexString() : `apikey:${res.locals.apiKey.keyId.toHexString()}`;
+}
+
 /**
  * Makes a creation idempotent (`doc/API-Guidelines.md` section 6): wraps the handler of a `POST`. The `Idempotency-Key` header (a UUID) is required (`422`, `required` or `format`); the
  * same key with the same body answers again what the first request answered (status, body, `Location`, `ETag`); the same key with another body, or while the first request is still running,
- * is `409`. Keys are scoped per caller (the user, or the store key) and per route, and only a successful response is kept: a failure releases the key. It runs after the validation of the body, so what is hashed is a body the route accepts.
+ * is `409`. Keys are scoped per caller (the user, the store key or the public API key) and per route, and only a successful response is kept: a failure releases the key. It runs after the validation of the body, so what is hashed is a body the route accepts.
  *
  * @param store The record of the keys.
  * @param handler The handler of the route.
@@ -159,7 +167,7 @@ export function idempotencyKeyOf(req: Request): string {
 export function idempotent(store: IdempotencyStore, handler: RequestHandler): RequestHandler {
   return async (req: Request, res, next) => {
     const begun = await store.begin({
-      principal: res.locals.store === undefined ? res.locals.auth!.userId.toHexString() : `store:${res.locals.store.keyId.toHexString()}`,
+      principal: idempotencyPrincipalOf(res),
       route: `${req.method} ${req.baseUrl}${req.path}`,
       key: idempotencyKeyOf(req),
       bodyHash: store.fingerprint(req.body ?? null),

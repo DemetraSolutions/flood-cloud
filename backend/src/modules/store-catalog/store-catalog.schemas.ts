@@ -56,3 +56,31 @@ export const storeProductParams = object({ productId: objectId() }, { allowUnkno
 
 /** Path parameters of the routes on one category (the builder has already checked that it is an id). */
 export const storeCategoryParams = object({ categoryId: objectId() }, { allowUnknown: true });
+
+/** Largest page of brands a store may ask for. */
+export const STORE_BRANDS_MAX_PAGE = 100;
+
+/** Page of the brands and of the groups of attributes a store reads when it asks for none. */
+export const STORE_ENTITIES_DEFAULT_PAGE = 50;
+
+/** Query of `GET /v1/store-context/catalog/brands`: the page and `updatedSince`. Nothing else. */
+export const storeBrandsQuery = object({
+  limit: optional(integerString({ min: 1, max: STORE_BRANDS_MAX_PAGE })),
+  cursor: cursor(),
+  updatedSince: optional(isoInstant()),
+});
+
+/** The validated query of the brands of a store. */
+export type StoreBrandsQuery = Infer<typeof storeBrandsQuery>;
+
+/** Query of `GET /v1/store-context/catalog/attribute-groups`: the page and `updatedSince`. Nothing else. */
+export const storeAttributeGroupsQuery = storeBrandsQuery;
+
+/** The validated query of the groups of attributes of a store. */
+export type StoreAttributeGroupsQuery = StoreBrandsQuery;
+
+/** Path parameters of the routes on one brand (the builder has already checked that it is an id). */
+export const storeBrandParams = object({ brandId: objectId() }, { allowUnknown: true });
+
+/** Path parameters of the routes on one group of attributes (the builder has already checked that it is an id). */
+export const storeAttributeGroupParams = object({ attributeGroupId: objectId() }, { allowUnknown: true });

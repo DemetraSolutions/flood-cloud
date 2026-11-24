@@ -34,3 +34,17 @@ export const patchBrandBody = atLeastOne(object(commonPatchShape()));
 
 /** Validated body of a modification. */
 export type PatchBrandBody = Infer<typeof patchBrandBody>;
+
+/** What a store never sends: the image of a brand (the library of images is the group's). */
+const STORE_EXCLUDED_BRAND_FIELDS = ['image'] as const;
+
+const withoutStoreFields = <T extends Record<string, unknown>>(shape: T): Omit<T, (typeof STORE_EXCLUDED_BRAND_FIELDS)[number]> => {
+  const { image: _image, ...kept } = shape;
+  return kept;
+};
+
+/** Body of `POST /v1/store-context/catalog/brands`: the one of the backoffice without the `image`, which is `422` for a store. */
+export const storeCreateBrandBody = object(withoutStoreFields(commonCreateShape())) as unknown as typeof createBrandBody;
+
+/** Body of `PATCH /v1/store-context/catalog/brands/{id}`: the one of the backoffice without the `image`, which is `422` for a store. */
+export const storePatchBrandBody = atLeastOne(object(withoutStoreFields(commonPatchShape()))) as unknown as typeof patchBrandBody;

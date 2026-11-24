@@ -922,8 +922,12 @@
         "HINT": "Elenco e dettaglio delle aziende."
       },
       "CATALOG_READ": {
-        "LABEL": "Listini e aliquote: lettura",
-        "HINT": "Listini e aliquote IVA del gruppo."
+        "LABEL": "Lettura del catalogo",
+        "HINT": "Legge prodotti, giacenze, categorie, marche, attributi, reparti, listini e aliquote."
+      },
+      "CATALOG_WRITE": {
+        "LABEL": "Scrittura del catalogo",
+        "HINT": "Crea e modifica prodotti (prezzi compresi), cestina e ripristina prodotti, crea, modifica ed elimina categorie. Marche, attributi, reparti e giacenze restano in sola lettura. Per una chiave limitata ad alcuni punti vendita valgono le regole di un amministratore di quei punti vendita."
       }
     },
     "STATUS": {
@@ -983,7 +987,8 @@
       "NAME": "Nome",
       "NAME_HINT": "Per riconoscerla: l’integrazione o il fornitore che la usa.",
       "PERMISSIONS": "Permessi",
-      "PERMISSIONS_HINT": "Cosa può leggere la chiave. Almeno un permesso.",
+      "PERMISSIONS_HINT": "Cosa può leggere o modificare la chiave. Almeno un permesso.",
+      "WRITE_UNRESTRICTED_WARNING": "Senza restrizioni a punti vendita o aziende la chiave potrà modificare l'intero catalogo del gruppo. Si consiglia di limitarla ai punti vendita necessari.",
       "RESTRICTIONS": "Restrizioni",
       "RESTRICTIONS_HINT": "Facoltative: senza una scelta la chiave vede tutto il gruppo. Con aziende e punti vendita insieme vale l’intersezione.",
       "COMPANIES": "Aziende",

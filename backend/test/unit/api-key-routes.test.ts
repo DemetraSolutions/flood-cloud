@@ -38,8 +38,8 @@ function mountError(routes: RouteDefinition[], options: Parameters<typeof mountR
 }
 
 describe('the public catalog of permissions', () => {
-  it('lists places, companies and the catalog, and recognizes only them', () => {
-    assert.deepEqual([...PUBLIC_PERMISSIONS], ['places:read', 'companies:read', 'catalog:read']);
+  it('lists places, companies and the catalog (read and write), and recognizes only them', () => {
+    assert.deepEqual([...PUBLIC_PERMISSIONS], ['places:read', 'companies:read', 'catalog:read', 'catalog:write']);
     for (const value of PUBLIC_PERMISSIONS) {
       assert.equal(isPublicPermission(value), true);
     }
@@ -61,9 +61,16 @@ describe('the routes of the public surface', () => {
   });
 
   it('refuses what is not for an API key route: groups, features, lists of permissions, store and pending password', () => {
-    for (const extra of [{ group: true }, { feature: 'rooms' }, { anyPermission: ['places:read'] }, { allowWithPendingPasswordChange: true }, { store: true }]) {
-      assert.match(mountError([route({ auth: { kind: 'apiKey', permission: 'places:read', ...extra } })]), /declares nothing but its kind and its permission/);
+    for (const extra of [{ feature: 'rooms' }, { anyPermission: ['places:read'] }, { allowWithPendingPasswordChange: true }, { store: true }]) {
+      assert.match(mountError([route({ auth: { kind: 'apiKey', permission: 'places:read', ...extra } })]), /declares nothing but its kind, its permission and, when it reads the group, group: true/);
     }
+  });
+
+  it('accepts the group only as `group: true`, and only on a surface that has the group access dependencies', () => {
+    assert.match(mountError([route({ auth: { kind: 'apiKey', permission: 'places:read', group: false } })]), /an API key route's group can only be true/);
+    assert.match(mountError([route({ auth: { kind: 'apiKey', permission: 'places:read', group: 'yes' } })]), /an API key route's group can only be true/);
+    assert.match(mountError([route({ auth: { kind: 'apiKey', permission: 'places:read', group: true } })]), /an API key route that asks for the group needs the groupAccess dependencies/);
+    mountRoutes(express.Router(), [route({ auth: { kind: 'apiKey', permission: 'places:read', group: true } })], { ...withKeys, groupAccess: { groups: { findAccess: async () => null, resolveCluster: () => 'cluster0' }, onCrossGroupAccess: () => undefined } });
   });
 
   it('needs the authentication and the rate limit dependencies of the surface', () => {

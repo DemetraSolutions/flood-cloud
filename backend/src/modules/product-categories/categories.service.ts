@@ -77,7 +77,7 @@ export interface CategoriesService extends EntityService<Category, CreateCategor
    */
   tree(principal: CatalogCaller, access: GroupAccess): Promise<CategoryTreeNode[]>;
   /**
-   * A page of the categories the caller reaches, oldest change first, for a client that keeps a copy of the catalog: with `updatedSince` every category changed from that instant, without it all of them.
+   * A page of the categories the caller reaches, oldest change first, for a client that keeps a copy of the catalog: with `updatedSince` every category changed from that instant, without it all of them (`activeOnly` keeps only the enabled ones).
    *
    * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit.
    */
@@ -432,7 +432,8 @@ export function createCategoriesService(deps: CategoriesServiceDeps): Categories
     listChanges: async (principal, access, query) => {
       const params = listParamsOf(query, CATEGORY_CHANGES_LIST);
       const tree = await loadTree(principal, access);
-      const { items, page } = await repository.list(principal, access, query.updatedSince === undefined ? {} : { updateDate: { $gte: new Date(query.updatedSince) } }, params, CATEGORY_CHANGES_LIST);
+      const filter: Filter<Document> = { ...(query.updatedSince === undefined ? {} : { updateDate: { $gte: new Date(query.updatedSince) } }), ...(query.activeOnly === true ? { status: true } : {}) };
+      const { items, page } = await repository.list(principal, access, filter, params, CATEGORY_CHANGES_LIST);
       return { items: items.map((document) => viewOf(principal, access, document, tree)), page };
     },
 

@@ -13,10 +13,13 @@ export function actorOf(principal: Pick<AuthPrincipal, 'userId' | 'role'> | unde
 }
 
 /**
- * The actor of the request a response belongs to: the store (by the id of its store key) when the request authenticated with a store key, the user when it authenticated as one, anonymous otherwise.
+ * The actor of the request a response belongs to: the public API key (by its id) when the request authenticated with one, the store (by the id of its store key) when the request authenticated with a store key, the user when it authenticated as one, anonymous otherwise.
  *
  * @param res The response, whose locals hold the principal.
  */
 export function responseActorOf(res: Response): ActivityActor {
+  if (res.locals.apiKey !== undefined) {
+    return { kind: 'apiKey', id: res.locals.apiKey.keyId };
+  }
   return res.locals.store === undefined ? actorOf(res.locals.auth) : { kind: 'store', id: res.locals.store.keyId };
 }

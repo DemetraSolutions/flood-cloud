@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { ObjectId } from 'mongodb';
 import type { ActivityLog } from '../activity-log/activity-log.ts';
 import type { MetadataValue } from '../activity-log/activity-log.ts';
 import { responseActorOf } from '../activity-log/actor.ts';
@@ -33,6 +34,11 @@ export interface ErrorActivityOptions {
   readonly now: () => number;
   /** Defaults to {@link MAX_ERROR_ENTRIES_PER_MINUTE}. */
   readonly maxPerMinute?: number;
+}
+
+/** The group the request is for: the verified access, else the group of the public API key that authenticated (known before the access is issued). */
+function groupOf(res: Response): ObjectId | undefined {
+  return res.locals.groupAccess?.groupId ?? res.locals.apiKey?.groupId;
 }
 
 /**
@@ -71,7 +77,7 @@ export function createErrorActivityReporter(options: ErrorActivityOptions): Erro
           action: 'request.failed',
           outcome: 'failure',
           actor: responseActorOf(res),
-          ...(res.locals.groupAccess === undefined ? {} : { groupId: res.locals.groupAccess.groupId }),
+          ...(groupOf(res) === undefined ? {} : { groupId: groupOf(res)! }),
           requestId: res.locals.requestId,
           ...(req.ip === undefined ? {} : { ip: req.ip }),
           metadata,

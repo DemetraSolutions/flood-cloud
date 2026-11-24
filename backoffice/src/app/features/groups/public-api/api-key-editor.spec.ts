@@ -18,6 +18,8 @@ const NAME = `${L}.NAME`;
 const PLACES_READ = 'PUBLIC_API.PERMISSION.PLACES_READ.LABEL';
 const COMPANIES_READ = 'PUBLIC_API.PERMISSION.COMPANIES_READ.LABEL';
 const CATALOG_READ = 'PUBLIC_API.PERMISSION.CATALOG_READ.LABEL';
+const CATALOG_WRITE = 'PUBLIC_API.PERMISSION.CATALOG_WRITE.LABEL';
+const WARNING = `${L}.WRITE_UNRESTRICTED_WARNING`;
 const EXPIRES = `${L}.EXPIRES`;
 const PER_MINUTE = `${L}.PER_MINUTE`;
 const PER_DAY = `${L}.PER_DAY`;
@@ -110,7 +112,7 @@ describe('ApiKeyEditor: creation', () => {
   it('starts empty, with the inherited limits', async () => {
     const { control, check, save } = await render();
     expect((control(NAME) as HTMLInputElement).value).toBe('');
-    for (const label of [PLACES_READ, COMPANIES_READ, CATALOG_READ]) {
+    for (const label of [PLACES_READ, COMPANIES_READ, CATALOG_READ, CATALOG_WRITE]) {
       expect((control(label) as HTMLInputElement).checked).toBe(false);
     }
     expect((control(EXPIRES) as HTMLInputElement).value).toBe('');
@@ -125,6 +127,27 @@ describe('ApiKeyEditor: creation', () => {
     expect(root.textContent).toContain('PUBLIC_API.PERMISSION.PLACES_READ.HINT');
     expect(root.textContent).toContain('PUBLIC_API.PERMISSION.COMPANIES_READ.HINT');
     expect(root.textContent).toContain('PUBLIC_API.PERMISSION.CATALOG_READ.HINT');
+    expect(root.textContent).toContain('PUBLIC_API.PERMISSION.CATALOG_WRITE.HINT');
+  });
+
+  it('warns only when the catalog write is ticked on a key without restrictions', async () => {
+    const { root, check, pick, view } = await render();
+    expect(root.textContent).not.toContain(WARNING);
+    await check(CATALOG_WRITE, true);
+    expect(root.querySelector('.warning')?.getAttribute('role')).toBe('status');
+    expect(root.textContent).toContain(WARNING);
+    await pick(PLACES, 'Centro');
+    await view();
+    expect(root.textContent).not.toContain(WARNING);
+    await pick(PLACES, 'Centro', false);
+    expect(root.textContent).toContain(WARNING);
+    await pick(COMPANIES, 'Alfa Srl');
+    expect(root.textContent).not.toContain(WARNING);
+    await pick(COMPANIES, 'Alfa Srl', false);
+    await check(CATALOG_WRITE, false);
+    expect(root.textContent).not.toContain(WARNING);
+    await check(CATALOG_READ, true);
+    expect(root.textContent).not.toContain(WARNING);
   });
 
   it('sends the name and the permissions when nothing else is filled in', async () => {

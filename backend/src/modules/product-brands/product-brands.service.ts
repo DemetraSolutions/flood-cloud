@@ -9,7 +9,7 @@ import { referenced } from '../groups/catalogs/kit.ts';
 import type { ReferencesRepository } from '../groups/catalogs/references.repository.ts';
 import type { EntityRepository } from '../product-catalog/entity.repository.ts';
 import { createEntityService } from '../product-catalog/entity.service.ts';
-import type { EntityKind, EntityService, EntityView } from '../product-catalog/entity.service.ts';
+import type { EntityChanges, EntityKind, EntityService, EntityView } from '../product-catalog/entity.service.ts';
 import type { GroupLanguages } from '../product-catalog/group-languages.ts';
 import { userField } from '../product-catalog/product-references.ts';
 import type { ProductReferences } from '../product-catalog/product-references.ts';
@@ -21,7 +21,7 @@ import type { CreateBrandBody, PatchBrandBody } from './product-brands.schemas.t
 export type Brand = EntityView;
 
 /** The service of the brands of a group (`doc/Tasks.md` step C1). */
-export type BrandsService = EntityService<Brand, CreateBrandBody, PatchBrandBody>;
+export type BrandsService = EntityService<Brand, CreateBrandBody, PatchBrandBody> & EntityChanges<Brand>;
 
 /** Collaborators of {@link createBrandsService}. */
 export interface BrandsServiceDeps {

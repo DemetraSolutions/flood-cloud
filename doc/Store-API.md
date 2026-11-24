@@ -2,7 +2,7 @@
 
 Documento per chi sviluppa il **server di punto vendita**: descrive solo le chiamate che il server di negozio può fare al cloud con la propria **chiave di negozio**. Si aggiorna a ogni passo che apre una nuova chiamata al negozio (registro in fondo).
 
-- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita, catalogo del punto vendita (lettura di prodotti, categorie e reparti; scrittura di prodotti e categorie).
+- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita, catalogo del punto vendita (lettura di prodotti, categorie, reparti, marche e gruppi di attributi; scrittura di prodotti, categorie e marche).
 - **Non è qui:** le API del backoffice (`doc/API.md`) e le API pubbliche per gli integratori (`doc/Public-API.md`).
 
 ## 1. Convenzioni
@@ -312,7 +312,7 @@ Le chiamate dei §4.3–4.7 sono pensate per essere interrogate periodicamente: 
 
 ### 4.9 Catalogo del punto vendita — `/v1/store-context/catalog/…`
 
-Il catalogo che il server di negozio scarica e, per i prodotti e le categorie, modifica. Tutte le chiamate usano la **chiave di negozio**; il punto vendita, l'azienda e il gruppo sono sempre quelli della chiave: **nessun parametro li sceglie** (un parametro che non è nelle tabelle qui sotto dà `422`).
+Il catalogo che il server di negozio scarica e, per i prodotti, le categorie e le marche, modifica. Tutte le chiamate usano la **chiave di negozio**; il punto vendita, l'azienda e il gruppo sono sempre quelli della chiave: **nessun parametro li sceglie** (un parametro che non è nelle tabelle qui sotto dà `422`).
 
 > **Prezzi.** I prezzi del catalogo sono in **unità di valuta decimali** (`"net": 10`, `"gross": 12.2` per 12,20 euro), come li usa il POS, e non in centesimi come gli altri importi di questo documento. `net` è l'imponibile, `gross` l'importo con IVA.
 
@@ -332,8 +332,12 @@ Nessuna lettura chiede l'operatore. Ogni elenco è a pagine con cursore (`page.n
 | `GET /v1/store-context/catalog/categories/tree` | — | Albero compatto (`{ id, name, parentId, position, enabled, children }`), con `ETag` debole e `304`. `409 CONFLICT` (`categories`/`tooMany`) in un gruppo con troppe categorie. |
 | `GET /v1/store-context/catalog/categories/{categoryId}` | — | La categoria con l'`ETag`. |
 | `GET /v1/store-context/catalog/departments` | `limit` 1–**100** (default 50), `cursor` | Reparti per nome. `403 FEATURE_DISABLED` se il gruppo non ha la funzione `cash`. |
+| `GET /v1/store-context/catalog/brands` | `limit` 1–**100** (default 50), `cursor`, `updatedSince` | Marche dal meno recente al più recente per data di modifica, **disattivate comprese** (`enabled: false`). Solo quelle del proprio punto vendita o per tutti. |
+| `GET /v1/store-context/catalog/brands/{brandId}` | — | La marca con l'`ETag` della sua versione. |
+| `GET /v1/store-context/catalog/attribute-groups` | `limit` 1–**100** (default 50), `cursor`, `updatedSince` | Gruppi di attributi (ognuno con i propri attributi) dal meno recente al più recente. |
+| `GET /v1/store-context/catalog/attribute-groups/{attributeGroupId}` | — | Il gruppo con l'`ETag`. |
 
-Marche e gruppi di attributi non sono aperti al negozio. Listini, aliquote e gruppi preferiti non sono qui: arrivano con la configurazione del gruppo (§4.3).
+I gruppi di attributi sono **di sola lettura** per il negozio: li scrivono solo l'amministratore di piattaforma, il rivenditore e l'amministratore del gruppo dal backoffice. Listini, aliquote e gruppi preferiti non sono qui: arrivano con la configurazione del gruppo (§4.3).
 
 **`updatedSince`** è un istante ISO 8601 (`2026-11-23T10:00:00.000Z`, oppure solo la data). Restituisce ogni voce **modificata da quell'istante in poi (compreso)**, **anche quelle disattivate (`enabled: false`) e quelle nel cestino (`trashed: true`)**, perché il negozio le tolga dalla propria copia. Senza `updatedSince` i prodotti nel cestino non ci sono (quelli disattivati sì).
 
@@ -400,11 +404,13 @@ Marche e gruppi di attributi non sono aperti al negozio. Listini, aliquote e gru
   "page": { "limit": 50, "next": null }
 }
 ```
+**Esempio — una marca** (`GET /v1/store-context/catalog/brands`): `{ "id": "665f…", "name": { "it": "Acme" }, "description": { "it": "" }, "enabled": true, "placeIds": ["665f…"], "editable": true, "createdAt": "…", "updatedAt": "…" }` (con la funzione `media` c'è anche `image`, che il negozio può leggere ma non scrivere). **Esempio — un gruppo di attributi** (`GET /v1/store-context/catalog/attribute-groups`): `{ "id": "665f…", "name": { "it": "Taglie" }, "attributes": [{ "id": "a1b2…", "name": { "it": "S" } }, { "id": "c3d4…", "name": { "it": "M" } }], "editable": false, "createdAt": null, "updatedAt": "…" }`.
+
 **Esempio — l'albero:** `{ "data": [{ "id": "665f…", "name": "Bevande", "parentId": null, "parentHidden": false, "position": 1, "enabled": true, "children": [] }] }`. **Esempio — un reparto:** `{ "id": "665f…", "code": 5, "taxId": "tax-001", "tax": { "rate": 22, "department": 1, "vatNature": null, "description": null }, "noDiscount": false, "secondaryFiscalPrinter": false, "name": { "it": "Reparto 1" }, "description": { "it": "" }, "enabled": true, "placeIds": [], "editable": false, "createdAt": "…", "updatedAt": "…" }`.
 
 #### Scritture
 
-Si possono **creare, modificare, duplicare, cestinare e ripristinare i prodotti** (le varianti sono prodotti) e **creare, modificare ed eliminare le categorie**. **Non** esistono: l'eliminazione definitiva di un prodotto, lo svuotamento del cestino, le scritture su reparti, marche e attributi, la sincronizzazione dei tabacchi. Il cambio dei prezzi è una modifica del prodotto (`prices`).
+Si possono **creare, modificare, duplicare, cestinare e ripristinare i prodotti** (le varianti sono prodotti) e **creare, modificare ed eliminare le categorie e le marche**. **Non** esistono: l'eliminazione definitiva di un prodotto, lo svuotamento del cestino, le scritture su reparti e gruppi di attributi. Il cambio dei prezzi è una modifica del prodotto (`prices`).
 
 | Chiamata | Header richiesti | Corpo | Risposta |
 |---|---|---|---|
@@ -416,10 +422,13 @@ Si possono **creare, modificare, duplicare, cestinare e ripristinare i prodotti*
 | `POST /v1/store-context/catalog/categories` | `X-Operator-Id`, `Idempotency-Key` | la categoria (come nel backoffice, "Categorie") | `201`, `Location`, `ETag` |
 | `PATCH …/categories/{categoryId}` | `X-Operator-Id`, `If-Match` | i campi da cambiare | `200`, `ETag` |
 | `DELETE …/categories/{categoryId}` | `X-Operator-Id` | nessuno | `204`; `409` se qualcosa la usa; nessuna eliminazione a cascata, niente cicli |
+| `POST /v1/store-context/catalog/brands` | `X-Operator-Id`, `Idempotency-Key` | la marca: `name` (obbligatorio, per lingua), `description`, `enabled`, `placeIds` | `201`, `Location`, `ETag` |
+| `PATCH …/brands/{brandId}` | `X-Operator-Id`, `If-Match` | i campi da cambiare | `200`, `ETag` |
+| `DELETE …/brands/{brandId}` | `X-Operator-Id` | nessuno | `204`; `409` se un prodotto la usa |
 
-**Campi che il negozio non scrive.** I corpi di scrittura sono quelli del backoffice **senza** questi campi: nei prodotti `simpleCost`, `suppliers`, `image` e `gallery`; nelle categorie `image` e `icon` (costi e fornitori sono dati dell'intero gruppo, che il negozio non legge; la libreria delle immagini non è sua). Una di queste chiavi dà `422` (`unknown`, come ogni chiave sconosciuta) e non viene scritto nulla. La **duplicazione** copia invece nel nuovo prodotto costi e fornitori del prodotto d'origine, senza mostrarli.
+**Campi che il negozio non scrive.** I corpi di scrittura sono quelli del backoffice **senza** questi campi: nei prodotti `simpleCost`, `suppliers`, `image` e `gallery`; nelle categorie `image` e `icon`; nelle marche `image` (costi e fornitori sono dati dell'intero gruppo, che il negozio non legge; la libreria delle immagini non è sua). Una di queste chiavi dà `422` (`unknown`, come ogni chiave sconosciuta) e non viene scritto nulla. La **duplicazione** copia invece nel nuovo prodotto costi e fornitori del prodotto d'origine, senza mostrarli.
 
-Le regole sono **quelle del backoffice** (stessi controlli, stessi codici): i campi che dipendono dalle funzioni del gruppo, i riferimenti che devono esistere, la **concorrenza** (`If-Match` con l'`ETag` letto: `412` se la voce è cambiata, `422` se manca o non è un tag forte), l'`Idempotency-Key` in creazione (un UUID; la stessa chiave con lo stesso corpo risponde di nuovo come la prima volta, con un corpo diverso `409`; le chiavi sono **legate alla chiave di negozio** e valgono 24 ore), i limiti di dimensione (corpo del prodotto fino a 256 KB, della categoria fino a 128 KB: oltre `413`; non JSON `415`). In scrittura il negozio può cambiare **per intero** una voce solo se `editable` è `true`; una voce condivisa con altri punti vendita (o per tutti, con due o più punti vendita) accetta soltanto i campi del proprio punto vendita (`places`, `printStations`, `counterPrintStations`, `stock` per i prodotti) e per gli altri risponde `403 FORBIDDEN` con `details: [{ field, issue: "notAllowed" }]`. Un negozio non può dichiarare un punto vendita diverso dal proprio (`403`).
+Le regole sono **quelle del backoffice** (stessi controlli, stessi codici): i campi che dipendono dalle funzioni del gruppo, i riferimenti che devono esistere, la **concorrenza** (`If-Match` con l'`ETag` letto: `412` se la voce è cambiata, `422` se manca o non è un tag forte), l'`Idempotency-Key` in creazione (un UUID; la stessa chiave con lo stesso corpo risponde di nuovo come la prima volta, con un corpo diverso `409`; le chiavi sono **legate alla chiave di negozio** e valgono 24 ore), i limiti di dimensione (corpo del prodotto fino a 256 KB, della categoria fino a 128 KB: oltre `413`; non JSON `415`). In scrittura il negozio può cambiare **per intero** una voce solo se `editable` è `true`; una voce condivisa con altri punti vendita (o per tutti, con due o più punti vendita) accetta soltanto i campi del proprio punto vendita (`places`, `printStations`, `counterPrintStations`, `stock` per i prodotti; per le marche nessuno: una marca condivisa o per tutti è in sola lettura) e per gli altri risponde `403 FORBIDDEN` con `details: [{ field, issue: "notAllowed" }]`. Un negozio non può dichiarare un punto vendita diverso dal proprio (`403`).
 
 **Esempio — cambio di prezzo:**
 ```
@@ -432,6 +441,8 @@ Content-Type: application/json
 { "prices": [{ "id": "price-1", "priceListId": "list-1", "currency": "EUR", "taxId": "tax-001", "gross": 12.5 }] }
 ```
 → `200` con il prodotto aggiornato e il nuovo `ETag`.
+
+**Marche.** Valgono le stesse regole del backoffice per un amministratore di quel punto vendita: una marca **solo del proprio punto vendita** si modifica ed elimina per intero; una per tutti o condivisa con altri punti vendita è in sola lettura (`403`), salvo il caso del gruppo con un solo punto vendita (sopra); una marca usata da un prodotto non si elimina (`409`). Il corpo non ha `image` (`422`, `unknown`). La creazione deve nominare in `placeIds` il proprio punto vendita (con due o più punti vendita nel gruppo; `403` altrimenti).
 
 **Esempio — creazione di un prodotto** (con un solo punto vendita nel gruppo `places` può mancare; con più punti vendita deve nominare il proprio):
 ```
@@ -475,7 +486,7 @@ L'aggiornamento con `updatedSince` **non** segnala: una voce che esce dal perime
 | `412` | `PRECONDITION_FAILED` | Catalogo: la voce non è più alla versione dell'`If-Match`. | Rilegge la voce (nuovo `ETag`) e riapplica la modifica. |
 | `413` / `415` | `PAYLOAD_TOO_LARGE` / `UNSUPPORTED_MEDIA_TYPE` | Corpo oltre il limite (§4.9) o non JSON. | Errore di integrazione. |
 | `429` | `RATE_LIMITED` | Anche: oltre 120 scritture del catalogo al minuto per chiave. | Aspetta `Retry-After`. |
-| `422` | `VALIDATION_ERROR` | Parametro, identificativo o corpo non validi (anche `simpleCost`, `suppliers`, `image`, `gallery` nei prodotti e `image`, `icon` nelle categorie); `details` nomina i campi. Mancano `If-Match` o `Idempotency-Key`. | Errore di integrazione, o dato da correggere. |
+| `422` | `VALIDATION_ERROR` | Parametro, identificativo o corpo non validi (anche `simpleCost`, `suppliers`, `image`, `gallery` nei prodotti, `image`, `icon` nelle categorie e `image` nelle marche); `details` nomina i campi. Mancano `If-Match` o `Idempotency-Key`. | Errore di integrazione, o dato da correggere. |
 | `429` | `RATE_LIMITED` | Oltre **600 richieste al minuto** per chiave. Contano tutte le richieste, anche quelle rifiutate. | Aspetta i secondi di `Retry-After`. |
 | `5xx` | — | Errore del cloud. | Riprova con attesa crescente; segnala `X-Request-Id`. |
 
@@ -485,9 +496,15 @@ Un punto vendita ripristinato dal cestino **non riottiene** la vecchia chiave: s
 
 Chiamate non ancora aperte al server di negozio, previste con i prossimi passi (oggi rispondono `403 FORBIDDEN`):
 
-- la sincronizzazione dei tabacchi del catalogo;
-- marche e attributi (il POS non li usa);
 - anagrafiche dei clienti (contatti).
+
+### Non disponibile al server di negozio
+
+Queste operazioni **non** sono e non saranno aperte alla chiave di negozio: rispondono sempre `403 FORBIDDEN`.
+
+- la sincronizzazione dei tabacchi del catalogo (la lancia solo il backoffice);
+- l'eliminazione definitiva di un prodotto e lo svuotamento del cestino;
+- le scritture su reparti e gruppi di attributi.
 
 ## 7. Registro delle modifiche
 
@@ -499,3 +516,4 @@ Chiamate non ancora aperte al server di negozio, previste con i prossimi passi (
 | 2026-11-23 | Paesi e province (§4.6). |
 | 2026-11-23 | Utenti del punto vendita con PIN in chiaro (§4.7). |
 | 2026-11-23 | Catalogo del punto vendita (§4.9): campi non scrivibili, limite di 120 scritture al minuto, rilettura completa periodica; letture di prodotti, categorie, albero e reparti con `updatedSince`; scritture di prodotti e categorie con l'operatore dichiarato (`X-Operator-Id`, `403 OPERATOR_NOT_ALLOWED`); voci "per tutti" di un gruppo con un solo punto vendita. I prezzi del catalogo sono in unità di valuta decimali. |
+| 2026-11-24 | Catalogo: marche in lettura e scrittura (senza immagine) e gruppi di attributi in sola lettura, con `updatedSince`. La sincronizzazione dei tabacchi non è disponibile al server di negozio (nuovo elenco in §6); "marche e attributi" non sono più "in arrivo". |

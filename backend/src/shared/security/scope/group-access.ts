@@ -11,7 +11,7 @@ import type { PermissionDecisionHook } from '../rbac/require-permission.ts';
 import type { GroupsRepository } from './groups.repository.ts';
 import type { AuthPrincipal, ScopeHolder } from './principal.ts';
 
-/** A group the caller was verified to reach. Only {@link requireGroupAccess}, {@link requireGroupAccesses} and {@link requireStoreGroupAccess} create one. */
+/** A group the caller was verified to reach. Only {@link requireGroupAccess}, {@link requireGroupAccesses}, {@link requireStoreGroupAccess} and {@link requireApiKeyGroupAccess} create one. */
 export interface GroupAccess {
   readonly groupId: ObjectId;
   /** Cluster that holds the group's operational database, resolved from `groups.dataCluster`. */
@@ -94,7 +94,7 @@ export interface GroupAccessDeps {
 
 /**
  * Verifies a raw group id against the principal's scope and against `common.groups`, and issues the access to it: the one step both {@link requireGroupAccess} (the group of the
- * path) and {@link requireGroupAccesses} (the groups of a body) go through, so a group is never reached by a rule of its own. Not exported: an access is issued only by those two middleware and by {@link requireStoreGroupAccess} (for the routes only a store may call).
+ * path) and {@link requireGroupAccesses} (the groups of a body) go through, so a group is never reached by a rule of its own. Not exported: an access is issued only by those two middleware and by {@link requireStoreGroupAccess} and {@link requireApiKeyGroupAccess} (for the routes only a store or a public key may call).
  *
  * @param groups Group lookup.
  * @param principal The caller.
@@ -159,6 +159,28 @@ export function requireStoreGroupAccess(groups: Pick<GroupsRepository, 'findAcce
       throw new AppError('UNAUTHENTICATED');
     }
     const access = await resolveGroupAccess(groups, store, store.groupId.toHexString());
+    if (access === null) {
+      throw new AppError('NOT_FOUND');
+    }
+    res.locals.groupAccess = access;
+    next();
+  };
+}
+
+/**
+ * Middleware of the routes of the public surface that read the group database (`auth: { kind: 'apiKey', group: true }`), which have no `:groupId`: it issues the access to the one group the API key belongs to (the group
+ * of the principal, which the authentication verified, never a value of the client), checked against `common.groups` like the group of a path. The result goes in `res.locals.groupAccess`.
+ *
+ * @param groups Group lookup.
+ * @returns The handler: `401 UNAUTHENTICATED` without an API key principal, `404 NOT_FOUND` when the group is no longer reachable.
+ */
+export function requireApiKeyGroupAccess(groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'>): RequestHandler {
+  return async (_req, res, next) => {
+    const key = res.locals.apiKey;
+    if (key === undefined) {
+      throw new AppError('UNAUTHENTICATED');
+    }
+    const access = await resolveGroupAccess(groups, { scope: { kind: 'group', groupId: key.groupId } }, key.groupId.toHexString());
     if (access === null) {
       throw new AppError('NOT_FOUND');
     }

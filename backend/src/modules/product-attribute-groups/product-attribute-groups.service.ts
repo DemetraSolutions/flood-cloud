@@ -15,8 +15,9 @@ import type { CatalogCaller } from '../product-catalog/caller.ts';
 import { dateOf, isRecord, recordsOf, referenced } from '../groups/catalogs/kit.ts';
 import { perimeterOf } from '../product-catalog/availability.ts';
 import type { EntityRepository } from '../product-catalog/entity.repository.ts';
+import { ENTITY_CHANGES_LIST } from '../product-catalog/entity.schemas.ts';
 import { entityVersion } from '../product-catalog/entity.service.ts';
-import type { EntityPage, EntityResult, EntityService } from '../product-catalog/entity.service.ts';
+import type { EntityChanges, EntityPage, EntityResult, EntityService } from '../product-catalog/entity.service.ts';
 import type { GroupLanguages } from '../product-catalog/group-languages.ts';
 import { userField } from '../product-catalog/product-references.ts';
 import type { ProductReferences } from '../product-catalog/product-references.ts';
@@ -46,7 +47,7 @@ export interface AttributeGroup {
 }
 
 /** The service of the groups of attributes of a group (`doc/Tasks.md` step C1). */
-export type AttributeGroupsService = EntityService<AttributeGroup, CreateAttributeGroupBody, PatchAttributeGroupBody>;
+export type AttributeGroupsService = EntityService<AttributeGroup, CreateAttributeGroupBody, PatchAttributeGroupBody> & EntityChanges<AttributeGroup>;
 
 /** Collaborators of {@link createAttributeGroupsService}. */
 export interface AttributeGroupsServiceDeps {
@@ -134,6 +135,12 @@ export function createAttributeGroupsService(deps: AttributeGroupsServiceDeps): 
       const config = attributeGroupsListFor(await languageOf(principal, access));
       const params = listParamsOf(query, config);
       const { items, page } = await repository.list(principal, access, params.q === null ? {} : nameSearch(params.q), params, config);
+      return { items: items.map((item) => viewOf(principal, item)), page } satisfies EntityPage<AttributeGroup>;
+    },
+
+    listChanges: async (principal, access, query) => {
+      const params = listParamsOf(query, ENTITY_CHANGES_LIST);
+      const { items, page } = await repository.list(principal, access, query.updatedSince === undefined ? {} : { updateDate: { $gte: new Date(query.updatedSince) } }, params, ENTITY_CHANGES_LIST);
       return { items: items.map((item) => viewOf(principal, item)), page } satisfies EntityPage<AttributeGroup>;
     },
 

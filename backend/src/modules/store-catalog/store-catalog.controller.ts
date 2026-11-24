@@ -6,11 +6,12 @@ import { sendRevalidated } from '../../shared/http/etag.ts';
 import { entityTag } from '../../shared/http/if-match.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
 import type { StoreOperator } from '../product-catalog/caller.ts';
+import type { CreateBrandBody, PatchBrandBody } from '../product-brands/product-brands.schemas.ts';
 import type { CreateCategoryBody, PatchCategoryBody } from '../product-categories/categories.schemas.ts';
 import type { CreateProductBody, PatchProductBody } from '../products/products.schemas.ts';
 import type { StoreProductResult } from './store-catalog.mapper.ts';
 import type { StoreCatalogService } from './store-catalog.service.ts';
-import type { StoreCategoriesQuery, StoreDepartmentsQuery, StoreProductsQuery } from './store-catalog.schemas.ts';
+import type { StoreAttributeGroupsQuery, StoreBrandsQuery, StoreCategoriesQuery, StoreDepartmentsQuery, StoreProductsQuery } from './store-catalog.schemas.ts';
 
 /** HTTP handlers of the catalog routes of the server of a point of sale. */
 export interface StoreCatalogController {
@@ -28,9 +29,18 @@ export interface StoreCatalogController {
   updateCategory: RequestHandler;
   deleteCategory: RequestHandler;
   listDepartments: RequestHandler;
+  listBrands: RequestHandler;
+  getBrand: RequestHandler;
+  createBrand: RequestHandler;
+  updateBrand: RequestHandler;
+  deleteBrand: RequestHandler;
+  listAttributeGroups: RequestHandler;
+  getAttributeGroup: RequestHandler;
 }
 
 const productIdOf = (res: Response): ObjectId => inputOf<{ productId: ObjectId }>(res, 'params').productId;
+const brandIdOf = (res: Response): ObjectId => inputOf<{ brandId: ObjectId }>(res, 'params').brandId;
+const attributeGroupIdOf = (res: Response): ObjectId => inputOf<{ attributeGroupId: ObjectId }>(res, 'params').attributeGroupId;
 const categoryIdOf = (res: Response): ObjectId => inputOf<{ categoryId: ObjectId }>(res, 'params').categoryId;
 /** The operator the `operator` check of a write route verified (the builder guarantees it ran). */
 const operatorOf = (res: Response): StoreOperator => res.locals.storeOperator!;
@@ -97,6 +107,32 @@ export function createStoreCatalogController(service: StoreCatalogService): Stor
     deleteCategory: async (req, res) => {
       await service.deleteCategory(res.locals.store!, operatorOf(res), res.locals.groupAccess!, categoryIdOf(res), clientContextOf(req, res));
       res.status(204).end();
+    },
+    listBrands: async (_req, res) => {
+      const { items, page } = await service.listBrands(res.locals.store!, res.locals.groupAccess!, inputOf<StoreBrandsQuery>(res, 'query'));
+      sendPage(res, items, page);
+    },
+    getBrand: async (_req, res) => {
+      sendEntry(res, await service.getBrand(res.locals.store!, res.locals.groupAccess!, brandIdOf(res)));
+    },
+    createBrand: async (req, res) => {
+      const created = await service.createBrand(res.locals.store!, operatorOf(res), res.locals.groupAccess!, inputOf<CreateBrandBody>(res, 'body'), clientContextOf(req, res));
+      res.setHeader('Location', `${req.baseUrl}${req.path.replace(/\/$/, '')}/${created.entity.id}`);
+      sendEntry(res, created, 201);
+    },
+    updateBrand: async (req, res) => {
+      sendEntry(res, await service.updateBrand(res.locals.store!, operatorOf(res), res.locals.groupAccess!, brandIdOf(res), res.locals.ifMatch!, inputOf<PatchBrandBody>(res, 'body'), clientContextOf(req, res)));
+    },
+    deleteBrand: async (req, res) => {
+      await service.deleteBrand(res.locals.store!, operatorOf(res), res.locals.groupAccess!, brandIdOf(res), clientContextOf(req, res));
+      res.status(204).end();
+    },
+    listAttributeGroups: async (_req, res) => {
+      const { items, page } = await service.listAttributeGroups(res.locals.store!, res.locals.groupAccess!, inputOf<StoreAttributeGroupsQuery>(res, 'query'));
+      sendPage(res, items, page);
+    },
+    getAttributeGroup: async (_req, res) => {
+      sendEntry(res, await service.getAttributeGroup(res.locals.store!, res.locals.groupAccess!, attributeGroupIdOf(res)));
     },
     listDepartments: async (_req, res) => {
       const { items, page } = await service.listDepartments(res.locals.store!, res.locals.groupAccess!, inputOf<StoreDepartmentsQuery>(res, 'query'));

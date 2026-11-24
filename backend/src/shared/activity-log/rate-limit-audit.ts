@@ -18,6 +18,8 @@ export function createRateLimitAudit(activityLog: ActivityLog): RateLimitExceede
       action: 'rateLimit.exceeded',
       outcome: 'denied',
       actor: responseActorOf(res),
+      // A public key is known to a group before the access to it is issued: the administrators of the group see what its keys cause.
+      ...(res.locals.apiKey === undefined ? {} : { groupId: res.locals.apiKey.groupId }),
       requestId: res.locals.requestId,
       ...(req.ip === undefined ? {} : { ip: req.ip }),
       metadata: { bucket: rule.bucket },

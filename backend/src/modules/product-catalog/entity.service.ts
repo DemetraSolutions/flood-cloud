@@ -22,6 +22,7 @@ import { assertWritablePlaces, isWritablePlaces, placeIdsOf, placesWrite, shownP
 import type { EntityRepository } from './entity.repository.ts';
 import type { GroupLanguages } from './group-languages.ts';
 import { imageOf, imageWrite, newMedias } from './image.ts';
+import { ENTITY_CHANGES_LIST } from './entity.schemas.ts';
 import { languageIssues, mergeTexts, nameSearch, requiredLanguage, textsOf } from './texts.ts';
 import type { Texts, TextsPatch } from './texts.ts';
 
@@ -53,6 +54,16 @@ export interface EntityQuery {
   readonly sort?: string;
   readonly q?: string;
   readonly enabled?: boolean;
+}
+
+/** What a read of the changes of a collection asks: the page and the instant the changes are counted from (every entry when left out). */
+export interface EntityChangesQuery {
+  readonly limit?: number;
+  readonly cursor?: string;
+  /** An instant, normalized ISO 8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`). */
+  readonly updatedSince?: string;
+  /** Only the enabled entries, with or without `updatedSince` (what an integration lists when it asks for no instant). */
+  readonly activeOnly?: boolean;
 }
 
 /** What every department and brand shows. */
@@ -114,6 +125,16 @@ export interface EntityKind<X extends object, C extends EntityCreateBody, P exte
    * cannot have). It returns the {@link AppError} of the rule when the write must not stand (the service then undoes the whole write and throws it), `null` otherwise.
    */
   settle?(context: KindContext, written: { readonly id: ObjectId; readonly previous: Document | undefined; readonly document: Document }): Promise<AppError | null>;
+}
+
+/** The incremental read of a collection of the catalog, for a client that keeps its own copy (the server of a point of sale, an integration). */
+export interface EntityChanges<V> {
+  /**
+   * A page of the entries the caller reaches, oldest change first, the disabled ones included (unless `activeOnly`); with `updatedSince`, the ones changed from that instant.
+   *
+   * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit; `NOT_FOUND` if the caller disappeared since the authentication.
+   */
+  listChanges(principal: CatalogCaller, access: GroupAccess, query: EntityChangesQuery): Promise<EntityPage<V>>;
 }
 
 /** The operations on the departments or the brands of a group. */
@@ -209,7 +230,7 @@ export function entityVersion(document: Document, fields: readonly string[], key
  *
  * @param deps The kind, the repository and the collaborators.
  */
-export function createEntityService<X extends object, C extends EntityCreateBody, P extends EntityPatchBody>(deps: EntityServiceDeps<X, C, P>): EntityService<EntityView & X, C, P> {
+export function createEntityService<X extends object, C extends EntityCreateBody, P extends EntityPatchBody>(deps: EntityServiceDeps<X, C, P>): EntityService<EntityView & X, C, P> & EntityChanges<EntityView & X> {
   const { kind, repository, activityLog, versionKey } = deps;
   const newId = deps.newId ?? (() => new ObjectId());
   type Entity = EntityView & X;
@@ -303,6 +324,13 @@ export function createEntityService<X extends object, C extends EntityCreateBody
         ...(query.enabled === undefined ? {} : { status: query.enabled ? true : { $ne: true } }),
       };
       const { items, page } = await repository.list(principal, access, filter, params, config);
+      return { items: items.map((document) => viewOf(principal, access, document)), page };
+    },
+
+    listChanges: async (principal, access, query) => {
+      const params = listParamsOf(query, ENTITY_CHANGES_LIST);
+      const filter: Filter<Document> = { ...(query.updatedSince === undefined ? {} : { updateDate: { $gte: new Date(query.updatedSince) } }), ...(query.activeOnly === true ? { status: true } : {}) };
+      const { items, page } = await repository.list(principal, access, filter, params, ENTITY_CHANGES_LIST);
       return { items: items.map((document) => viewOf(principal, access, document)), page };
     },
 

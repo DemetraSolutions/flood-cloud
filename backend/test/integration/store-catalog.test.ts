@@ -10,9 +10,10 @@ import { memoryLogger, testConfig } from '../helpers/app.ts';
 import { legacyPermissions, legacyUser } from '../helpers/legacy-fixtures.ts';
 import { openTestDatabases } from '../helpers/mongo.ts';
 import type { TestDatabases } from '../helpers/mongo.ts';
-import { catalogCollections, legacyCategory, legacyDepartment } from '../helpers/product-catalog.ts';
+import { catalogCollections, legacyAttributeGroup, legacyBrand, legacyCategory, legacyDepartment } from '../helpers/product-catalog.ts';
 import type { CatalogCollections } from '../helpers/product-catalog.ts';
 import { legacyFullProduct, placeEntry } from '../helpers/products.ts';
+import { throughRealLog } from '../helpers/real-log.ts';
 import { startStoreWorld } from '../helpers/store-keys.ts';
 import type { ActivatedKey, StoreWorld } from '../helpers/store-keys.ts';
 
@@ -33,6 +34,8 @@ const ALL = { cash: true, warehouse: true, customersApp: true, tobaccosGamesMono
 const CATALOG = '/store-context/catalog';
 const PRODUCTS = `${CATALOG}/products`;
 const CATEGORIES = `${CATALOG}/categories`;
+const BRANDS = `${CATALOG}/brands`;
+const ATTRIBUTE_GROUPS = `${CATALOG}/attribute-groups`;
 const operator = (id: ObjectId): Record<string, string> => ({ 'x-operator-id': hex(id) });
 const pa = () => world.group(0).pa;
 const get = (path: string, key = store.key) => world.asStore(key, 'GET', path);
@@ -71,7 +74,7 @@ after(async () => {
 });
 beforeEach(async () => {
   limiter.reset();
-  await Promise.all([db.products.deleteMany({}), db.categories.deleteMany({}), db.departments.deleteMany({}), db.brands.deleteMany({})]);
+  await Promise.all([db.products.deleteMany({}), db.categories.deleteMany({}), db.departments.deleteMany({}), db.brands.deleteMany({}), db.attributes.deleteMany({})]);
   await copies().updateMany({}, { $set: { trash: false, status: true } });
   await originals().updateMany({}, { $set: { trash: false } });
   await groups().updateOne({ _id: gid() }, { $set: { 'settings.languages': ['it'] } });
@@ -378,6 +381,162 @@ describe('the catalog of the store: writing categories', () => {
   });
 });
 
+describe('the catalog of the store: brands', () => {
+  const brand = async (overrides: Document = {}): Promise<ObjectId> => {
+    const document = legacyBrand(overrides);
+    await db.brands.insertOne(document);
+    return document['_id'] as ObjectId;
+  };
+
+  it('reads the brands of its place and the ones for every place, the disabled ones included, page after page and since an instant', async () => {
+    const everyone = await brand({ name: { it: 'Per tutti' }, updateDate: at(1) });
+    const mine = await brand({ name: { it: 'Mia' }, placesAvailability: [own()], updateDate: at(2) });
+    const shared = await brand({ name: { it: 'Condivisa' }, placesAvailability: [own(), other()], updateDate: at(3) });
+    const elsewhere = await brand({ name: { it: 'Altrove' }, placesAvailability: [other()], updateDate: at(4) });
+    const disabled = await brand({ name: { it: 'Spenta' }, status: false, updateDate: at(5) });
+    const listed = await get(BRANDS);
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.deepEqual(ids(listed), [hex(everyone), hex(mine), hex(shared), hex(disabled)], 'oldest change first, none of another place');
+    assert.ok(!ids(listed).includes(hex(elsewhere)));
+    assert.deepEqual(listed.body.page, { limit: 50, next: null });
+    assert.equal(listed.body.data[3].enabled, false);
+    assert.deepEqual(listed.body.data[2].placeIds, [hex(own())], 'only its own place of the availability');
+    assert.deepEqual((await pagesOf(BRANDS)).flatMap(pageIds), [hex(everyone), hex(mine), hex(shared), hex(disabled)]);
+    assert.deepEqual(ids(await get(`${BRANDS}?updatedSince=2026-01-03T00:00:00.000Z`)), [hex(shared), hex(disabled)]);
+    const one = await get(`${BRANDS}/${hex(mine)}`);
+    assert.equal(one.status, 200);
+    assert.ok(one.headers.get('etag'));
+    assert.equal((await get(`${BRANDS}/${hex(elsewhere)}`)).status, 404);
+    assert.equal((await get(`${BRANDS}/${hex(new ObjectId())}`)).status, 404);
+    assert.equal((await get(`${BRANDS}/zz`)).status, 422);
+    for (const query of ['?sort=name', '?q=a', '?enabled=true', '?limit=101', '?updatedSince=ieri', '?placeId=x']) {
+      assert.equal((await get(`${BRANDS}${query}`)).status, 422, query);
+    }
+  });
+
+  it('creates, changes and deletes a brand of its place, with the rules of the backoffice, and records the store with the operator', async () => {
+    const mark = world.office.activity.entries.length;
+    const key = randomUUID();
+    const body = { name: { it: 'Acme' }, placeIds: [hex(own())] };
+    const created = await send('POST', BRANDS, body, { 'idempotency-key': key });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const id = created.body.data.id as string;
+    assert.equal(created.headers.get('location'), `/v1${BRANDS}/${id}`);
+    assert.deepEqual((await send('POST', BRANDS, body, { 'idempotency-key': key })).body, created.body, 'a retry is replayed');
+    assert.equal(await db.brands.countDocuments({}), 1);
+    assert.equal((await send('POST', BRANDS, { name: { it: 'x' }, placeIds: [hex(other())] }, { 'idempotency-key': randomUUID() })).status, 403, 'a place that is not its own');
+    assert.equal((await send('POST', BRANDS, { name: { it: 'Per tutti' } }, { 'idempotency-key': randomUUID() })).status, 403, 'a brand for every place is not its to make');
+    assert.equal((await send('POST', BRANDS, { name: { it: 'x' }, placeIds: [hex(own())] })).status, 422, 'a creation needs its Idempotency-Key');
+    const changed = await send('PATCH', `${BRANDS}/${id}`, { name: { it: 'Acme 2' } }, { 'if-match': tagOf(created) });
+    assert.equal(changed.status, 200, JSON.stringify(changed.body));
+    assert.equal(changed.body.data.name.it, 'Acme 2');
+    assert.equal((await send('PATCH', `${BRANDS}/${id}`, { name: { it: 'Altro' } }, { 'if-match': tagOf(created) })).status, 412);
+    assert.equal((await send('PATCH', `${BRANDS}/${id}`, { name: { it: 'Altro' } })).status, 422, 'If-Match is required');
+    assert.equal((await send('PATCH', `${BRANDS}/${id}`, {}, { 'if-match': tagOf(changed) })).status, 422);
+    await db.products.insertOne(legacyFullProduct({ brandId: new ObjectId(id) }));
+    const inUse = await send('DELETE', `${BRANDS}/${id}`);
+    assert.deepEqual([inUse.status, inUse.body.error.code], [409, 'CONFLICT'], 'a product has it');
+    await db.products.deleteMany({});
+    assert.equal((await send('DELETE', `${BRANDS}/${id}`)).status, 204);
+    assert.equal(await db.brands.countDocuments({}), 0);
+    for (const action of ['productBrand.created', 'productBrand.updated', 'productBrand.deleted']) {
+      const found = entries(action, mark);
+      assert.ok(found.length > 0 && found.every((entry) => entry.actor.kind === 'store' && entry.metadata?.['operatorId'] === hex(pa())), action);
+    }
+  });
+
+  it('refuses the image, the places of others and the operator it does not have, and keeps a brand for every place, of another place or shared out of its hands', async () => {
+    const everyone = await brand({ name: { it: 'Tutti' } });
+    const shared = await brand({ name: { it: 'Condivisa' }, placesAvailability: [own(), other()] });
+    const elsewhere = await brand({ name: { it: 'Altrove' }, placesAvailability: [other()] });
+    const tag = tagOf(await get(`${BRANDS}/${hex(everyone)}`));
+    assert.equal((await send('POST', BRANDS, { name: { it: 'x' }, placeIds: [hex(own())], image: null }, { 'idempotency-key': randomUUID() })).status, 422, 'no image');
+    assert.equal((await send('PATCH', `${BRANDS}/${hex(everyone)}`, { image: { imageId: hex(new ObjectId()) } }, { 'if-match': tag })).status, 422);
+    for (const id of [everyone, shared]) {
+      const read = await get(`${BRANDS}/${hex(id)}`);
+      assert.equal(read.body.data.editable, false);
+      assert.equal((await send('PATCH', `${BRANDS}/${hex(id)}`, { name: { it: 'x' } }, { 'if-match': tagOf(read) })).status, 403);
+      assert.equal((await send('DELETE', `${BRANDS}/${hex(id)}`)).status, 403);
+    }
+    assert.equal((await send('PATCH', `${BRANDS}/${hex(elsewhere)}`, { name: { it: 'x' } }, { 'if-match': tag })).status, 404);
+    assert.equal((await send('DELETE', `${BRANDS}/${hex(elsewhere)}`)).status, 404);
+    assert.equal(await db.brands.countDocuments({}), 3);
+    // Without a verified operator nothing is read, as for the products.
+    const noOperator = await world.asStore(store.key, 'DELETE', `${BRANDS}/${hex(everyone)}`);
+    assert.equal(noOperator.body.error.code, 'OPERATOR_NOT_ALLOWED');
+    // A user does not reach the routes of the store, and a store key not the ones of the backoffice.
+    assert.equal((await world.as.call(pa(), 'GET', BRANDS)).status, 403);
+    assert.equal((await world.asStore(store.key, 'GET', `/groups/${hex(gid())}/product-brands`)).status, 403);
+  });
+
+  it('lets a store of a group with one place only change a brand for every place, and takes it back with a second place', async () => {
+    const everyone = await brand({ name: { it: 'Tutti' } });
+    await Promise.all([copies().updateOne({ _id: other() }, { $set: { trash: true } }), originals().updateOne({ _id: other() }, { $set: { trash: true } })]);
+    try {
+      const read = await get(`${BRANDS}/${hex(everyone)}`);
+      assert.equal(read.body.data.editable, true);
+      const renamed = await send('PATCH', `${BRANDS}/${hex(everyone)}`, { name: { it: 'Mia' } }, { 'if-match': tagOf(read) });
+      assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
+      const forAll = await send('POST', BRANDS, { name: { it: 'Nuova per tutti' } }, { 'idempotency-key': randomUUID() });
+      assert.equal(forAll.status, 201, JSON.stringify(forAll.body));
+    } finally {
+      await Promise.all([copies().updateOne({ _id: other() }, { $set: { trash: false } }), originals().updateOne({ _id: other() }, { $set: { trash: false } })]);
+    }
+    assert.equal((await get(`${BRANDS}/${hex(everyone)}`)).body.data.editable, false);
+  });
+});
+
+describe('the catalog of the store: the activity log as it is stored', () => {
+  it('keeps the store as the actor and the operator in the metadata of every write, with nothing redacted and nothing refused by the real log', async () => {
+    const mark = world.office.activity.entries.length;
+    const product = await create({ code: 'LOG-1' });
+    const trashed = await send('POST', `${PRODUCTS}/${product.body.data.id}/trash`, undefined, { 'if-match': tagOf(product) });
+    await send('POST', `${PRODUCTS}/${product.body.data.id}/restore`, undefined, { 'if-match': tagOf(trashed) });
+    await send('POST', `${PRODUCTS}/${product.body.data.id}/duplicate`, undefined, { 'idempotency-key': randomUUID() });
+    const category = await send('POST', CATEGORIES, { name: { it: 'Log' }, places: [{ placeId: hex(own()) }] }, { 'idempotency-key': randomUUID() });
+    await send('DELETE', `${CATEGORIES}/${category.body.data.id}`);
+    const brand = await send('POST', BRANDS, { name: { it: 'Log' }, placeIds: [hex(own())] }, { 'idempotency-key': randomUUID() });
+    const renamed = await send('PATCH', `${BRANDS}/${brand.body.data.id}`, { name: { it: 'Log 2' } }, { 'if-match': tagOf(brand) });
+    assert.equal(renamed.status, 200);
+    await send('DELETE', `${BRANDS}/${brand.body.data.id}`);
+    const { stored, refused } = await throughRealLog(ctx, world.office.activity.entries.slice(mark));
+    assert.deepEqual(refused, []);
+    assert.ok(stored.length >= 9);
+    for (const entry of stored) {
+      assert.equal(entry['actor'].kind, 'store', entry['action']);
+      assert.equal(entry['metadata']['operatorId'], hex(pa()), entry['action']);
+    }
+    assert.ok(!JSON.stringify(stored).includes('REDACTED'));
+  });
+});
+
+describe('the catalog of the store: groups of attributes', () => {
+  it('reads them, page after page and since an instant, and one, and never writes them', async () => {
+    const first = legacyAttributeGroup({ name: { it: 'Colori' }, updateDate: at(1) });
+    const second = legacyAttributeGroup({ name: { it: 'Taglie' }, updateDate: at(3) });
+    await db.attributes.insertMany([second, first]);
+    const listed = await get(ATTRIBUTE_GROUPS);
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.deepEqual(ids(listed), [hex(first['_id'] as ObjectId), hex(second['_id'] as ObjectId)]);
+    assert.deepEqual(listed.body.data[0].attributes, [{ id: 'attr-1', name: { it: 'Rosso' } }, { id: 'attr-2', name: { it: 'Blu' } }]);
+    assert.equal(listed.body.data[0].editable, false);
+    assert.deepEqual(listed.body.page, { limit: 50, next: null });
+    assert.equal((await pagesOf(ATTRIBUTE_GROUPS)).flatMap(pageIds).length, 2);
+    assert.deepEqual(ids(await get(`${ATTRIBUTE_GROUPS}?updatedSince=2026-01-02`)), [hex(second['_id'] as ObjectId)]);
+    const one = await get(`${ATTRIBUTE_GROUPS}/${hex(first['_id'] as ObjectId)}`);
+    assert.equal(one.status, 200);
+    assert.ok(one.headers.get('etag'));
+    assert.equal((await get(`${ATTRIBUTE_GROUPS}/${hex(new ObjectId())}`)).status, 404);
+    assert.equal((await get(`${ATTRIBUTE_GROUPS}?q=a`)).status, 422);
+    for (const method of ['POST', 'PATCH', 'DELETE', 'PUT']) {
+      const path = method === 'POST' ? ATTRIBUTE_GROUPS : `${ATTRIBUTE_GROUPS}/${hex(first['_id'] as ObjectId)}`;
+      const reply = await send(method, path, { name: { it: 'x' } }, { 'idempotency-key': randomUUID(), 'if-match': tagOf(one) });
+      assert.ok([404, 405].includes(reply.status), `${method} is not a route of the store: ${String(reply.status)}`);
+    }
+    assert.equal(await db.attributes.countDocuments({}), 2);
+  });
+});
+
 describe('the catalog of the store: the operator', () => {
   const REFUSED = { status: 403, body: { error: { code: 'OPERATOR_NOT_ALLOWED', message: 'Operator not allowed' } } };
   let mine: ObjectId;
@@ -518,8 +677,13 @@ describe('the catalog of the store: who may call it and when', () => {
     const modules = createBackofficeModules({ config: testConfig(), databases: ctx.databases, activityLog: memoryActivityLog(), logger: memoryLogger().logger, rateLimiter: memoryRateLimiter() });
     const open = modules.routes.filter((route) => route.auth.kind === 'store' || (route.auth.kind === 'user' && route.auth.store === true)).map((route) => `${route.method} ${route.path}`).sort();
     assert.deepEqual(open, [
+      'DELETE /store-context/catalog/brands/:brandId',
       'DELETE /store-context/catalog/categories/:categoryId',
       'GET /store-context',
+      'GET /store-context/catalog/attribute-groups',
+      'GET /store-context/catalog/attribute-groups/:attributeGroupId',
+      'GET /store-context/catalog/brands',
+      'GET /store-context/catalog/brands/:brandId',
       'GET /store-context/catalog/categories',
       'GET /store-context/catalog/categories/:categoryId',
       'GET /store-context/catalog/categories/tree',
@@ -531,8 +695,10 @@ describe('the catalog of the store: who may call it and when', () => {
       'GET /store-context/group',
       'GET /store-context/place',
       'GET /store-context/users',
+      'PATCH /store-context/catalog/brands/:brandId',
       'PATCH /store-context/catalog/categories/:categoryId',
       'PATCH /store-context/catalog/products/:productId',
+      'POST /store-context/catalog/brands',
       'POST /store-context/catalog/categories',
       'POST /store-context/catalog/products',
       'POST /store-context/catalog/products/:productId/duplicate',

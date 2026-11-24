@@ -13,7 +13,7 @@ import type { RateLimitMount, RateLimitRule } from '../security/rate-limit/rate-
 import type { NonBrowserSignal } from '../security/non-browser-signal.ts';
 import { sustainedRateLimit } from '../security/rate-limit/sustained.ts';
 import { requireApiKeyPermission } from '../security/scope/api-key-guards.ts';
-import { reportCrossGroupAccess, requireGroupAccess, requireStoreGroupAccess } from '../security/scope/group-access.ts';
+import { reportCrossGroupAccess, requireApiKeyGroupAccess, requireGroupAccess, requireStoreGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { requireFeature } from '../security/scope/require-feature.ts';
 import { refuseStore, requireStore, requireStoreParams, requireStorePermission, requireStorePlace } from '../security/scope/store-guards.ts';
@@ -69,7 +69,7 @@ export interface UserAuth {
  * The only path parameters a store route may have: the ids of the entries of the catalog it reads or writes (`/store-context/catalog/products/:productId`). The builder checks each one is the text of
  * an id before anything else of the route runs; the group, the company and the place are never a parameter, they come from the store key.
  */
-export const STORE_PATH_PARAMETERS = Object.freeze(['productId', 'categoryId'] as const);
+export const STORE_PATH_PARAMETERS = Object.freeze(['productId', 'categoryId', 'brandId', 'attributeGroupId'] as const);
 
 /** A path parameter a store route may declare. */
 export type StoreParameter = (typeof STORE_PATH_PARAMETERS)[number];
@@ -105,6 +105,11 @@ export interface ApiKeyAuth {
   readonly kind: 'apiKey';
   /** Permission of the public catalog the key must hold, or `null` for a route every valid key may call (`GET /me`): it is always declared, never left out. */
   readonly permission: PublicPermission | null;
+  /**
+   * `true` for a route that reads or writes the group database: the builder then issues the verified access to the one group of the key (`requireApiKeyGroupAccess`) right after the permission check, so the access
+   * is never a middleware a route can place by hand. Needs the group access dependencies.
+   */
+  readonly group?: true;
 }
 
 /** Authentication requirement of a route. */
@@ -251,8 +256,13 @@ function apiKeyProblems(label: string, auth: AuthFields, options: MountOptions):
   if (auth.permission !== null && !isPublicPermission(auth.permission)) {
     problems.push(`${label}: an API key route declares a permission of the public catalog, or null`);
   }
-  if (['anyPermission', 'group', 'feature', 'allowWithPendingPasswordChange', 'store'].some((name) => (auth as Record<string, unknown>)[name] !== undefined)) {
-    problems.push(`${label}: an API key route declares nothing but its kind and its permission`);
+  if (['anyPermission', 'feature', 'allowWithPendingPasswordChange', 'store'].some((name) => (auth as Record<string, unknown>)[name] !== undefined)) {
+    problems.push(`${label}: an API key route declares nothing but its kind, its permission and, when it reads the group, group: true`);
+  }
+  if (auth.group !== undefined && auth.group !== true) {
+    problems.push(`${label}: an API key route's group can only be true`);
+  } else if (auth.group === true && options.groupAccess === undefined) {
+    problems.push(`${label}: an API key route that asks for the group needs the groupAccess dependencies`);
   }
   if (options.authenticate === undefined) {
     problems.push(`${label}: API key route needs an authenticate middleware`);
@@ -474,8 +484,8 @@ const DEFAULT_ALLOWED_AUTH: readonly string[] = ['anonymous'];
  * A caller that authenticated with a store key (`res.locals.store`, never `res.locals.auth`) is refused with `403` by every `user` route that does not declare `store: true`, right after `authenticate`;
  * on a route that does, it follows its own chain (the group check on the store principal, the place of the key, the store profile, the feature), and a user follows the chain above.
  * A route with `auth: { kind: 'store' }` runs `authenticate`, refuses whoever is not a store, issues the group access (`group: true`), checks the ids of its path (`params`), applies the declared rules, runs the check of the operator of a write (`operator`) and reads the body. The per-key rate limit is the store authentication's own.
- * A route with `auth: { kind: 'apiKey', permission }` (the public surface) runs `authenticate` (guarded by the per-IP limit on failed authentications), refuses a key that lacks the permission (`403`), then applies the
- * declared rules before the body; the per-key rate limit and the daily quota are the API key authentication's own.
+ * A route with `auth: { kind: 'apiKey', permission }` (the public surface) runs `authenticate` (guarded by the per-IP limit on failed authentications), refuses a key that lacks the permission (`403`), issues the access to the
+ * group of the key when it declares `group: true`, then applies the declared rules before the body; the per-key rate limit and the daily quota are the API key authentication's own.
  *
  * @param router Target router.
  * @param routes Route declarations.
@@ -554,7 +564,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
       );
     } else if (route.auth.kind === 'apiKey') {
       // The per-key rate limit and the daily quota are the authentication's own (the limits are the key's, not a constant of the rule).
-      middleware.push(guardAuthentication(authenticate!, { ...rateLimitOptions!, authFailureRule: rateLimitOptions!.apiKeyAuthFailureRule }), requireApiKeyPermission(route.auth.permission), ...beforeBody);
+      middleware.push(guardAuthentication(authenticate!, { ...rateLimitOptions!, authFailureRule: rateLimitOptions!.apiKeyAuthFailureRule }), requireApiKeyPermission(route.auth.permission), ...(route.auth.group === true ? [requireApiKeyGroupAccess(groupAccess!.groups)] : []), ...beforeBody);
     } else {
       middleware.push(...beforeBody);
     }

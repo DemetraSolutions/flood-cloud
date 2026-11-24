@@ -8,13 +8,16 @@ import type { StoreCaller, StoreOperator } from '../product-catalog/caller.ts';
 import type { EntityPage, EntityResult } from '../product-catalog/entity.service.ts';
 import type { CategoriesService, Category, CategoryTreeNode } from '../product-categories/categories.service.ts';
 import type { CreateCategoryBody, PatchCategoryBody } from '../product-categories/categories.schemas.ts';
+import type { AttributeGroup, AttributeGroupsService } from '../product-attribute-groups/product-attribute-groups.service.ts';
+import type { Brand, BrandsService } from '../product-brands/product-brands.service.ts';
+import type { CreateBrandBody, PatchBrandBody } from '../product-brands/product-brands.schemas.ts';
 import type { Department, DepartmentsService } from '../product-departments/product-departments.service.ts';
 import type { CreateProductBody, PatchProductBody } from '../products/products.schemas.ts';
 import type { ProductsService } from '../products/products.service.ts';
 import { toStoreProductResult } from './store-catalog.mapper.ts';
 import type { StoreProduct, StoreProductResult } from './store-catalog.mapper.ts';
-import { STORE_CATEGORIES_DEFAULT_PAGE, STORE_PRODUCTS_DEFAULT_PAGE } from './store-catalog.schemas.ts';
-import type { StoreCategoriesQuery, StoreDepartmentsQuery, StoreProductsQuery } from './store-catalog.schemas.ts';
+import { STORE_CATEGORIES_DEFAULT_PAGE, STORE_ENTITIES_DEFAULT_PAGE, STORE_PRODUCTS_DEFAULT_PAGE } from './store-catalog.schemas.ts';
+import type { StoreAttributeGroupsQuery, StoreBrandsQuery, StoreCategoriesQuery, StoreDepartmentsQuery, StoreProductsQuery } from './store-catalog.schemas.ts';
 
 /** A page of products for a store. */
 export interface StoreProductPage {
@@ -56,6 +59,20 @@ export interface StoreCatalogService {
   deleteCategory(store: StorePrincipal, operator: StoreOperator, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<void>;
   /** A page of the departments of the place, by name. @throws {AppError} `FEATURE_DISABLED` in a group without the `cash` function. */
   listDepartments(store: StorePrincipal, access: GroupAccess, query: StoreDepartmentsQuery): Promise<EntityPage<Department>>;
+  /** A page of the brands of the place, oldest change first, the disabled ones included; with `updatedSince` those changed from that instant. */
+  listBrands(store: StorePrincipal, access: GroupAccess, query: StoreBrandsQuery): Promise<EntityPage<Brand>>;
+  /** One brand with its version. @throws {AppError} `NOT_FOUND` for a brand that does not exist, is of other places only or is in another group. */
+  getBrand(store: StorePrincipal, access: GroupAccess, id: ObjectId): Promise<EntityResult<Brand>>;
+  /** Creates a brand (the errors of `BrandsService.create`). */
+  createBrand(store: StorePrincipal, operator: StoreOperator, access: GroupAccess, body: CreateBrandBody, client: ClientContext): Promise<EntityResult<Brand>>;
+  /** Modifies a brand (`403` for one that is shared with other places or is for every place, `412`, `409`). */
+  updateBrand(store: StorePrincipal, operator: StoreOperator, access: GroupAccess, id: ObjectId, expected: string, body: PatchBrandBody, client: ClientContext): Promise<EntityResult<Brand>>;
+  /** Deletes a brand for good, with the rules of the backoffice (`409` when a product has it). */
+  deleteBrand(store: StorePrincipal, operator: StoreOperator, access: GroupAccess, id: ObjectId, client: ClientContext): Promise<void>;
+  /** A page of the groups of attributes, oldest change first; with `updatedSince` those changed from that instant. Read only: a store never writes them. */
+  listAttributeGroups(store: StorePrincipal, access: GroupAccess, query: StoreAttributeGroupsQuery): Promise<EntityPage<AttributeGroup>>;
+  /** One group of attributes with its version. @throws {AppError} `NOT_FOUND`. */
+  getAttributeGroup(store: StorePrincipal, access: GroupAccess, id: ObjectId): Promise<EntityResult<AttributeGroup>>;
 }
 
 /** Collaborators of {@link createStoreCatalogService}: the services of the catalog, already wrapped by the rule of the single place. */
@@ -63,6 +80,9 @@ export interface StoreCatalogServiceDeps {
   readonly products: Pick<ProductsService, 'listChanges' | 'get' | 'create' | 'update' | 'duplicate' | 'trash' | 'restore'>;
   readonly categories: Pick<CategoriesService, 'listChanges' | 'tree' | 'get' | 'create' | 'update' | 'remove'>;
   readonly departments: Pick<DepartmentsService, 'list'>;
+  readonly brands: Pick<BrandsService, 'listChanges' | 'get' | 'create' | 'update' | 'remove'>;
+  /** Only the reads: the type does not let the store catalog write a group of attributes. */
+  readonly attributeGroups: Pick<AttributeGroupsService, 'listChanges' | 'get'>;
 }
 
 /**
@@ -81,7 +101,7 @@ function callerOf(store: StorePrincipal, operator: StoreOperator | null): StoreC
  * @param deps The services of the products, the categories and the departments.
  */
 export function createStoreCatalogService(deps: StoreCatalogServiceDeps): StoreCatalogService {
-  const { products, categories, departments } = deps;
+  const { products, categories, departments, brands, attributeGroups } = deps;
   return {
     listProducts: (store, access, query) => products.listChanges(callerOf(store, null), access, { ...query, limit: query.limit ?? STORE_PRODUCTS_DEFAULT_PAGE }),
     getProduct: async (store, access, id) => toStoreProductResult(await products.get(callerOf(store, null), access, id)),
@@ -96,6 +116,13 @@ export function createStoreCatalogService(deps: StoreCatalogServiceDeps): StoreC
     createCategory: (store, operator, access, body, client) => categories.create(callerOf(store, operator), access, body, client),
     updateCategory: (store, operator, access, id, expected, body, client) => categories.update(callerOf(store, operator), access, id, expected, body, client),
     deleteCategory: (store, operator, access, id, client) => categories.remove(callerOf(store, operator), access, id, client),
+    listBrands: (store, access, query) => brands.listChanges(callerOf(store, null), access, { ...query, limit: query.limit ?? STORE_ENTITIES_DEFAULT_PAGE }),
+    getBrand: (store, access, id) => brands.get(callerOf(store, null), access, id),
+    createBrand: (store, operator, access, body, client) => brands.create(callerOf(store, operator), access, body, client),
+    updateBrand: (store, operator, access, id, expected, body, client) => brands.update(callerOf(store, operator), access, id, expected, body, client),
+    deleteBrand: (store, operator, access, id, client) => brands.remove(callerOf(store, operator), access, id, client),
+    listAttributeGroups: (store, access, query) => attributeGroups.listChanges(callerOf(store, null), access, { ...query, limit: query.limit ?? STORE_ENTITIES_DEFAULT_PAGE }),
+    getAttributeGroup: (store, access, id) => attributeGroups.get(callerOf(store, null), access, id),
     listDepartments: async (store, access, query) => {
       if (!access.features.cash) {
         throw new AppError('FEATURE_DISABLED');

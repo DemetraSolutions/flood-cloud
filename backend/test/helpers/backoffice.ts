@@ -58,7 +58,7 @@ export interface Backoffice {
   /** A request to `/v1` with a Bearer access token. */
   call(method: string, path: string, accessToken: string | undefined, body?: unknown, headers?: Record<string, string>): Promise<Response>;
   /** A request to `/public/v1` with an `X-Api-Key` (none when `apiKey` is `undefined`); the body of the response is not read. */
-  publicCall(method: string, path: string, apiKey: string | undefined, headers?: Record<string, string>): Promise<Response>;
+  publicCall(method: string, path: string, apiKey: string | undefined, headers?: Record<string, string>, body?: unknown): Promise<Response>;
   /** The usage meter of the public API (never started here: a test calls `flush`). */
   readonly meter: UsageMeter;
   /** Events of the application logger (parsed lines). */
@@ -123,7 +123,7 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
   const logs = memoryLogger();
   const rateLimiter = options.rateLimiter ?? memoryRateLimiter();
   const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, rateLimiter, mediaStorage: options.mediaStorage ?? null, ...(options.cervedHttp === undefined ? {} : { cervedHttp: options.cervedHttp }) });
-  const publicApi = createPublicApiModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, rateLimiter, now: clock.now });
+  const publicApi = createPublicApiModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, rateLimiter, catalog: modules.catalog, now: clock.now });
   const app = await startApp(
     {
       config,
@@ -149,8 +149,12 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-  const publicCall: Backoffice['publicCall'] = (method, path, apiKey, headers = {}) =>
-    fetch(`${app.baseUrl}/public/v1${path}`, { method, headers: { ...(apiKey === undefined ? {} : { 'x-api-key': apiKey }), ...headers } });
+  const publicCall: Backoffice['publicCall'] = (method, path, apiKey, headers = {}, body) =>
+    fetch(`${app.baseUrl}/public/v1${path}`, {
+      method,
+      headers: { ...(apiKey === undefined ? {} : { 'x-api-key': apiKey }), ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
   const login: Backoffice['login'] = (name, password = TEST_PASSWORD, headers) =>
     call('POST', '/auth/login', undefined, { username: name, password }, headers);
   return {

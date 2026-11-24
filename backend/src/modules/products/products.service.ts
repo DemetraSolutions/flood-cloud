@@ -75,11 +75,20 @@ export interface ProductsService {
   list(principal: CatalogCaller, access: GroupAccess, query: ProductsQuery): Promise<ProductPage>;
   /**
    * A page of the whole products the caller reaches, oldest change first, for a client that keeps a copy of the catalog: with `updatedSince` every product changed from that instant (the ones in the trash and the
-   * disabled ones included, so the client can remove them), without it the products that are not in the trash. Every family unless one is asked. The costs, the suppliers and the simple cost are not read.
+   * disabled ones included, so the client can remove them), without it the products that are not in the trash. Every family unless one is asked. The costs, the suppliers and the simple cost are not read. `activeOnly` keeps
+   * only the enabled ones that are not in the trash, `ecommerce` the ones available for the e-commerce and `stockOnly` the ones that move the warehouse.
    *
    * @throws {AppError} `VALIDATION_ERROR` on `cursor`/`format` for a cursor that does not fit.
    */
   listChanges(principal: CatalogCaller, access: GroupAccess, query: ProductChangesQuery): Promise<{ readonly items: readonly ProductWithoutCosts[]; readonly page: PageInfo }>;
+  /**
+   * Which of some products the caller reaches and may use as a reference: they exist, are not in the trash and are for every place or for a place of the perimeter. One read limited to the list; the ids it is given come from the
+   * products of a page already read, never from the client.
+   *
+   * @param ids The ids to check, hexadecimal, at most a page of references.
+   * @returns The ids that are reachable.
+   */
+  reachableIds(principal: CatalogCaller, access: GroupAccess, ids: readonly string[]): Promise<ReadonlySet<string>>;
   /**
    * One product, with the warnings of its code, PLU and barcodes.
    *
@@ -370,10 +379,15 @@ export function createProductsService(deps: ProductsServiceDeps): ProductsServic
       const conditions: Filter<Document>[] = [
         ...(query.family === undefined ? [] : [familyFilter(query.family)]),
         query.updatedSince === undefined ? { trash: { $ne: true } } : { updateDate: { $gte: new Date(query.updatedSince) } },
+        ...(query.activeOnly === true ? [{ trash: { $ne: true } }, { status: true }] : []),
+        ...(query.ecommerce === true ? [{ 'availability.ecommerce': true }] : []),
+        ...(query.stockOnly === true ? [{ 'availability.warehouse': true }] : []),
       ];
       const { items, page } = await repository.listFull(principal, access, { $and: conditions }, params, PRODUCT_CHANGES_LIST, PRODUCT_COST_FIELDS);
       return { items: items.map((document) => withoutCosts(productView(document, principal, access.features))), page };
     },
+
+    reachableIds: async (principal, access, ids) => (ids.length === 0 ? new Set<string>() : new Set(await repository.reachable(principal, access, ids))),
 
     get: async (principal, access, id) => resultOf(principal, access, await found(principal, access, id)),
 

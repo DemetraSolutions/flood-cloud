@@ -172,7 +172,7 @@ export async function run(
   });
   const rateLimiter = createRateLimiter(databases);
   const backoffice = createBackofficeModules({ config, databases, activityLog, logger, rateLimiter, mediaStorage });
-  const publicApi = createPublicApiModules({ config, databases, activityLog, logger, rateLimiter });
+  const publicApi = createPublicApiModules({ config, databases, activityLog, logger, rateLimiter, catalog: backoffice.catalog });
   const app = createApp({
     config,
     logger,

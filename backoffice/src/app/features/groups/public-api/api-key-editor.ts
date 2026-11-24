@@ -158,6 +158,15 @@ export class ApiKeyEditor {
   protected readonly hasChanges = computed(
     () => this.item() === null || Object.keys(this.body()).length > 0,
   );
+  /** A key allowed to write the catalog and limited to no company or place may change all of it. */
+  protected readonly unrestrictedWrite = computed(() => {
+    const model = this.model();
+    return (
+      model.permissions['catalog:write'] &&
+      model.companyIds.length === 0 &&
+      model.placeIds.length === 0
+    );
+  });
   protected readonly permissionsError = computed(
     () =>
       fieldErrorMessage(this.i18n, this.keyForm.permissions()) ??

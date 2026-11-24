@@ -21,6 +21,7 @@ import { AppError } from '../../src/shared/http/errors.ts';
 import { EXACT_TYPES } from '../../src/shared/legacy-write/copy-rule.ts';
 import { createIdempotencyStore, idempotencyBodyKey } from '../../src/shared/http/idempotency.ts';
 import { memoryActivityLog, memoryRateLimiter } from '../helpers/activity.ts';
+import { throughRealLog } from '../helpers/real-log.ts';
 import { memoryLogger } from '../helpers/app.ts';
 import { addUser } from '../helpers/backoffice.ts';
 import { catalogWorkbook, downloadWorkbook, uploadWorkbook } from '../helpers/catalog-xlsx.ts';
@@ -1779,6 +1780,10 @@ describe('catalog import: the activity log', () => {
     const entries = world.office.activity.entries.slice(mark);
     assert.deepEqual(entries.map((entry) => entry.action), ['productCategory.created', 'product.updated', 'product.created', 'catalog.imported']);
     assert.equal(new Set(entries.map((entry) => entry.requestId)).size, 1, 'one request');
+    const real = await throughRealLog(ctx, entries);
+    assert.deepEqual(real.refused, [], 'the real log accepts every entry of an import');
+    assert.equal(real.stored.length, entries.length);
+    assert.ok(!JSON.stringify(real.stored.map((event) => event['metadata'])).includes('REDACTED'));
     assert.ok(entries.every((entry) => entry.outcome === 'success' && entry.actor.id?.toHexString() === hex(sa()) && entry.groupId?.toHexString() === hex(gid())));
     const updated = entries[1]!;
     assert.equal(updated.resource?.id, hex(target));

@@ -25,6 +25,12 @@ describe('api key types', () => {
     );
   });
 
+  it('builds the dictionary keys of the catalog write permission', () => {
+    expect(permissionTextKey('catalog:write', 'LABEL')).toBe(
+      'PUBLIC_API.PERMISSION.CATALOG_WRITE.LABEL',
+    );
+  });
+
   describe('keyStatus', () => {
     it('is revoked whatever the expiry', () => {
       expect(
