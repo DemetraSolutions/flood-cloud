@@ -1,0 +1,33 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: flood-cloud-backend
+  namespace: flood-v2
+  labels:
+    app.kubernetes.io/name: flood-cloud-backend
+    app.kubernetes.io/part-of: flood-cloud
+    app.kubernetes.io/component: api
+spec:
+  parentRefs:
+    - name: flood-gateway
+      # The shared Gateway lives in the default namespace and admits routes
+      # from every namespace (allowedRoutes.namespaces.from: All).
+      namespace: default
+      # Only the HTTPS listener: plain HTTP is redirected by httproute-redirect.yaml.
+      sectionName: https
+  hostnames:
+    - api-core.floodsoftware.cloud
+  rules:
+    # Only the two API surfaces are public. /health/* stays internal: the kubelet probes the pod
+    # and the load balancer probes the endpoints directly (healthcheckpolicy.yaml), neither goes
+    # through this route; /health/ready pings MongoDB and must not be callable from the internet.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+        - path:
+            type: PathPrefix
+            value: /public/v1
+      backendRefs:
+        - name: flood-cloud-backend
+          port: 80

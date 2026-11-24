@@ -1,0 +1,14 @@
+# Public, non-secret runtime configuration injected at container start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flood-cloud-backoffice-config
+  namespace: flood-v2
+  labels:
+    app.kubernetes.io/name: flood-cloud-backoffice
+    app.kubernetes.io/part-of: flood-cloud
+    app.kubernetes.io/component: backoffice
+data:
+  PORT: "8080"
+  # Without /v1: the SPA appends the /v1/... paths itself.
+  API_BASE_URL: "https://api-core.floodsoftware.cloud"

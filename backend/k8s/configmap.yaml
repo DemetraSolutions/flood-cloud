@@ -1,0 +1,51 @@
+# Non-secret configuration. Optional variables not listed here use their defaults:
+# see backend/.env.example for the full list.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flood-cloud-backend-config
+  namespace: flood-v2
+  labels:
+    app.kubernetes.io/name: flood-cloud-backend
+    app.kubernetes.io/part-of: flood-cloud
+    app.kubernetes.io/component: api
+data:
+  # Required. Execution environment: development | production. Part of every database name.
+  APP_ENV: "production"
+  # Optional. TCP port (1-65535). Default: 3000. Must match containerPort in deployment.yaml.
+  PORT: "3000"
+  # Optional. Address to bind: an IP address or a hostname. Empty: all interfaces.
+  HOST: ""
+  # Optional. Exact number of reverse proxies in front of the server. The global external
+  # Application Load Balancer (gke-l7-global-external-managed) appends "client, lb-ip"
+  # to X-Forwarded-For, hence 2.
+  TRUST_PROXY: "2"
+  CORS_ALLOWED_ORIGINS: "https://portal.floodsoftware.cloud"
+  LEGACY_PASSWORD_COEXISTENCE: "true"
+  # Optional. Lookups per minute allowed to one user (1-100000): each is two paid calls to the provider.
+  # Empty: default 10
+  RATE_LIMIT_CERVED_LOOKUP_PER_USER: ""
+  # Optional. Lookups per day (window of 24 hours) allowed to one user (1-1000000), a cap on the cost.
+  # Empty: default 200
+  RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY: ""
+  # Optional. Host of the files (images) of the groups, written in the `filesHost` of every group the
+  # onboarding of a new customer creates: an https URL without credentials, query or fragment, e.g. the
+  # public address of the media bucket. Empty: new groups have an empty `filesHost`.
+  # Image URLs: <GROUP_FILES_HOST>/<groupId>/media/image/<xs|s|m|l|xl>/<basename>, as in the legacy.
+  GROUP_FILES_HOST: "https://storage.googleapis.com/flood-media"
+  # Optional. Failed authentications (401) per minute allowed to a client IP on /v1 (1-100000).
+  # Empty: default 300
+  RATE_LIMIT_UNAUTHENTICATED_PER_IP: ""
+  # Optional. Days the activity log keeps data and security entries (1-3650). Empty: default 365
+  ACTIVITY_LOG_RETENTION_DAYS: ""
+  # Optional. Days the activity log keeps error entries (1-3650). Empty: default 90
+  ACTIVITY_LOG_ERROR_RETENTION_DAYS: ""
+  # Optional. Where the uploaded images are stored: gcs | disabled. disabled: the upload answers 503,
+  # the list of the images still works.
+  MEDIA_STORAGE: "gcs"
+  # Required with MEDIA_STORAGE=gcs. Name of the bucket (3-63 characters: lower case letters, digits,
+  # dots, dashes, underscores).
+  GCS_MEDIA_BUCKET: "flood-media"
+  # Required with MEDIA_STORAGE=gcs. metadata: token of the GKE metadata server (Workload Identity, see
+  # serviceaccount.yaml). No credentials file: GCS_SERVICE_ACCOUNT_FILE is intentionally not set.
+  GCS_AUTH: "metadata"

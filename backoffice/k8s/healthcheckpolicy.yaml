@@ -1,0 +1,28 @@
+# Health check of the GKE load balancer behind flood-gateway. The Gateway does not
+# read the pod probes: without this policy it would probe "/" on the serving port.
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: flood-cloud-backoffice
+  namespace: flood-v2
+  labels:
+    app.kubernetes.io/name: flood-cloud-backoffice
+    app.kubernetes.io/part-of: flood-cloud
+    app.kubernetes.io/component: backoffice
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    logConfig:
+      enabled: false
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_SERVING_PORT
+        requestPath: /healthz
+  targetRef:
+    group: ""
+    kind: Service
+    name: flood-cloud-backoffice

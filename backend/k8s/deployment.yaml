@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flood-cloud-backend
+  namespace: flood-v2
+  labels:
+    app.kubernetes.io/name: flood-cloud-backend
+    app.kubernetes.io/part-of: flood-cloud
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flood-cloud-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flood-cloud-backend
+        app.kubernetes.io/part-of: flood-cloud
+        app.kubernetes.io/component: api
+    spec:
+      # Kubernetes service account bound to Google Cloud through Workload Identity (media bucket).
+      # The GKE metadata server identifies the pod by it: the API token is not needed in the pod.
+      serviceAccountName: flood-cloud-backend
+      automountServiceAccountToken: false
+      # On SIGTERM the app waits SHUTDOWN_DRAIN_MS (default 5 s) for readiness to fail, then gives
+      # in-flight requests up to 25 s before the forced exit: 35 s covers both.
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          # Repository flood-cloud-backend (new: distinct from the images of the legacy platform).
+          # TODO_TAG is replaced by the pipeline with the tag of the built image (commit SHA).
+          image: europe-west8-docker.pkg.dev/flood-software/floodsoftware/flood-cloud-backend:TODO_TAG
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: flood-cloud-backend-config
+            - secretRef:
+                name: flood-cloud-backend-secrets
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

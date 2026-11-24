@@ -316,8 +316,10 @@ describe('static server', () => {
   test('sets hardened server timeouts', () => {
     assert.equal(server.requestTimeout, 30_000);
     assert.equal(server.headersTimeout, 15_000);
-    assert.equal(server.keepAliveTimeout, 5_000);
-    assert.equal(server.timeout, 30_000);
+    // Beyond the 600 s keep-alive of Google's load balancer, and the socket timeout beyond that.
+    assert.equal(server.keepAliveTimeout, 620_000);
+    assert.equal(server.timeout, 630_000);
+    assert.ok(server.timeout > server.keepAliveTimeout);
   });
 });
 

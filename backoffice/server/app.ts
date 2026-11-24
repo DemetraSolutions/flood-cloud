@@ -346,9 +346,19 @@ export function createApp(
   };
 }
 
+/**
+ * Idle time of a keep-alive connection before the server closes it: longer than the keep-alive of
+ * Google's load balancer (600 s), so the balancer never reuses a connection the server just closed
+ * (which would surface as a sporadic 502).
+ */
+export const KEEP_ALIVE_TIMEOUT_MS = 620_000;
+
 /** Timeouts of the HTTP server in milliseconds (overridable in tests). */
 export interface ServerTimeouts {
-  /** Socket inactivity timeout (slow readers). */
+  /**
+   * Socket inactivity timeout (slow readers). Longer than {@link KEEP_ALIVE_TIMEOUT_MS}, or it would
+   * cut idle keep-alive connections first; slow senders are bounded by `headersMs` and `requestMs`.
+   */
   readonly socketMs: number;
   /** Time allowed to receive the request headers. */
   readonly headersMs: number;
@@ -359,7 +369,7 @@ export interface ServerTimeouts {
 }
 
 const DEFAULT_SERVER_TIMEOUTS: ServerTimeouts = {
-  socketMs: 30_000,
+  socketMs: 630_000,
   headersMs: 15_000,
   requestMs: 30_000,
   checkIntervalMs: 30_000,
@@ -389,7 +399,7 @@ export function createHttpServer(
   server.timeout = t.socketMs;
   server.headersTimeout = t.headersMs;
   server.requestTimeout = t.requestMs;
-  server.keepAliveTimeout = 5_000;
+  server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
   const headers = buildSecurityHeaders(config.apiOrigin);
   server.on('clientError', (error: NodeJS.ErrnoException, socket: Duplex) => {
     if (error.code === 'ECONNRESET' || !socket.writable) {

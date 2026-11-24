@@ -1,12 +1,16 @@
 name: backoffice
 
-# Disabled for now (user decision of 2026-11-01): runs only when started by hand.
-# To enable, restore the triggers below.
-#   push:
-#     paths: ["backoffice/**", ".github/workflows/backoffice.yml"]
-#   pull_request:
-#     paths: ["backoffice/**", ".github/workflows/backoffice.yml"]
+# When it runs (development happens on `development`, where no CI runs):
+#   - pull request to main touching backoffice/ or this file: tests only;
+#   - push to main touching backoffice/ or this file: tests, then build, push and deploy to GKE;
+#   - by hand (workflow_dispatch): tests; the deploy only when started on main.
 on:
+  pull_request:
+    branches: [main]
+    paths: ["backoffice/**", ".github/workflows/backoffice.yml"]
+  push:
+    branches: [main]
+    paths: ["backoffice/**", ".github/workflows/backoffice.yml"]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +18,8 @@ permissions:
 
 concurrency:
   group: backoffice-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a pull request supersedes the older run; on main a deploy is never cut halfway.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -57,3 +62,67 @@ jobs:
 
       - name: Verify registry signatures
         run: npm audit signatures
+
+  deploy:
+    name: Build, push and deploy to GKE
+    needs: [test]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Only this job talks to Google Cloud: the OIDC token is requested here and nowhere else.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE: europe-west8-docker.pkg.dev/flood-software/floodsoftware/flood-cloud-backoffice:${{ github.sha }}
+      NAMESPACE: flood-v2
+      DEPLOYMENT: flood-cloud-backoffice
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Workload Identity Federation: no key in GitHub. Repository variables (not secrets):
+      # GCP_WIF_PROVIDER (pool github, provider flood-cloud) and GCP_SERVICE_ACCOUNT.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west8-docker.pkg.dev --quiet
+
+      - name: Build image
+        run: docker build --pull -t "${IMAGE}" -f backoffice/Dockerfile backoffice
+
+      - name: Push image
+        run: docker push "${IMAGE}"
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3.0.0
+        with:
+          project_id: flood-software
+          cluster_name: flood-software
+          location: europe-west8
+
+      # Only k8s/*.yaml is applied. The namespace and the real Secret are managed on the cluster,
+      # never in the repository.
+      - name: Render and apply manifests
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/k8s"
+          mkdir -p "${out}"
+          for f in backoffice/k8s/*.yaml; do
+            name="$(basename "${f}")"
+            sed "s|:TODO_TAG|:${GITHUB_SHA}|" "${f}" > "${out}/${name}"
+          done
+          if grep -rnE '^[^#]*TODO_' "${out}"; then
+            echo "::error::unresolved placeholder in the manifests"
+            exit 1
+          fi
+          kubectl apply -n "${NAMESPACE}" -f "${out}"
+
+      - name: Wait for the rollout
+        run: kubectl -n "${NAMESPACE}" rollout status "deployment/${DEPLOYMENT}" --timeout=5m

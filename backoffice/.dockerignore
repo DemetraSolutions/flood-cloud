@@ -18,3 +18,5 @@ Dockerfile
 **/.DS_Store
 **/keys/
 **/secrets/
+k8s
+out.txt
