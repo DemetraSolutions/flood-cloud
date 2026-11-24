@@ -17,6 +17,8 @@ export function validEnv(overrides: Record<string, string | undefined> = {}): Re
     MONGODB_URI: 'mongodb://127.0.0.1:1/?directConnection=true',
     LEGACY_PASSWORD_PEPPER: randomBytes(16).toString('hex'),
     VERSION_HMAC_KEY: TEST_VERSION_KEY_TEXT,
+    // Off for the tests that are not about it: a test client sends no `Origin`, so every request would raise the signal.
+    REQUEST_ORIGIN_SIGNAL: 'off',
     ...overrides,
   };
 }

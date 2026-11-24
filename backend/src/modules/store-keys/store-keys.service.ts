@@ -10,7 +10,7 @@ import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { generateSecret, hashSecret } from '../../shared/security/secrets.ts';
 import { generateActivationCode, hashActivationCode, normalizeActivationCode } from './activation-code.ts';
-import { auditActivationCode, auditKeyRevoked } from './store-keys.audit.ts';
+import { auditActivationCode, auditActiveKeyReplaced, auditActiveKeyRevoked, auditCodeForActivePlace, auditKeyRevoked } from './store-keys.audit.ts';
 import type { StoreKeysRepository } from './store-keys.repository.ts';
 import type { StoreStateReader } from './store-state.ts';
 import type { Installation, KeyIssuer, PendingActivation, RevokedSummary, StoreKey } from './store-keys.types.ts';
@@ -67,9 +67,10 @@ export interface StoreKeysService {
    * @param access Verified access to the group.
    * @param placeId Id of the place.
    * @param client The calling client.
-   * @throws {AppError} `NOT_FOUND` (the place does not exist, is in the trash or is outside the perimeter), `CONFLICT` (the group, the place or its company is not operational: nothing could be activated).
+   * @param confirmReplaceActiveKey `true` when the caller confirms that a place with an active key is to be activated again (the key is replaced when the new server activates); ignored for a place without one.
+   * @throws {AppError} `NOT_FOUND` (the place does not exist, is in the trash or is outside the perimeter), `CONFLICT` (the group, the place or its company is not operational: nothing could be activated; or the place has an active key and `confirmReplaceActiveKey` is not `true`: `details` `confirmReplaceActiveKey` / `required`, nothing is created).
    */
-  createActivationCode(principal: AuthPrincipal, access: GroupAccess, placeId: ObjectId, client: ClientContext): Promise<IssuedActivationCode>;
+  createActivationCode(principal: AuthPrincipal, access: GroupAccess, placeId: ObjectId, client: ClientContext, confirmReplaceActiveKey?: boolean): Promise<IssuedActivationCode>;
   /**
    * Cancels the pending activation code of a place.
    *
@@ -165,10 +166,14 @@ export function createStoreKeysService(deps: StoreKeysServiceDeps): StoreKeysSer
   };
 
   return {
-    createActivationCode: async (principal, access, placeId, client) => {
+    createActivationCode: async (principal, access, placeId, client, confirmReplaceActiveKey = false) => {
       const place = await managed(principal, access, placeId);
       if (!place.operational || (await state.assess(access.groupId, placeId, clock())).kind !== 'ok') {
         throw new AppError('CONFLICT');
+      }
+      const activeKey = await repository.findActiveOfPlace(access.groupId, placeId);
+      if (activeKey !== null && !confirmReplaceActiveKey) {
+        throw new AppError('CONFLICT', { message: 'The place has an active key: confirm to replace it', details: [{ field: 'confirmReplaceActiveKey', issue: 'required' }] });
       }
       const { normalized, presented } = generateActivationCode();
       const createdAt = clock();
@@ -183,6 +188,9 @@ export function createStoreKeysService(deps: StoreKeysServiceDeps): StoreKeysSer
         expiresAt,
       });
       await auditActivationCode(activityLog, { action: 'store.activationCodeCreated', actor: actorOf(principal), groupId: access.groupId, placeId, client });
+      if (activeKey !== null) {
+        await auditCodeForActivePlace(activityLog, { actor: actorOf(principal), activeKey, client });
+      }
       return { code: presented, expiresAt };
     },
 
@@ -211,6 +219,7 @@ export function createStoreKeysService(deps: StoreKeysServiceDeps): StoreKeysSer
         throw new AppError('NOT_FOUND');
       }
       await auditKeyRevoked(activityLog, { key, reason: 'revoked', actor: actorOf(principal), client });
+      await auditActiveKeyRevoked(activityLog, { key, actor: actorOf(principal), client });
     },
 
     exchange: async (request, client) => {
@@ -256,6 +265,9 @@ export function createStoreKeysService(deps: StoreKeysServiceDeps): StoreKeysSer
       const { consumed, replaced, secret, key, companyId } = outcome;
       if (replaced !== null) {
         await auditKeyRevoked(activityLog, { key: replaced, reason: 'replaced', actor: { kind: 'user', id: consumed.createdBy.userId, role: consumed.createdBy.role }, client });
+      }
+      if (replaced !== null) {
+        await auditActiveKeyReplaced(activityLog, { newKeyId: key.id, replaced, client });
       }
       await activityLog.record({
         category: 'security',

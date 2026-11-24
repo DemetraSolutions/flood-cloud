@@ -91,6 +91,12 @@ describe('visibleMenu', () => {
     ]);
   });
 
+  it('puts the security alerts counter on the activity log entry only', () => {
+    expect(MENU.filter((item) => item.badge !== undefined).map((item) => item.id)).toEqual([
+      'activity-log',
+    ]);
+  });
+
   it('groups fidelity pages under one entry and the favorites under products', () => {
     const menu = visibleMenu(MENU, allowAll, allowAll);
     const children = (id: string) => ids([...(menu.find((i) => i.id === id)?.children ?? [])]);
@@ -111,12 +117,27 @@ describe('visibleMenu', () => {
   it('puts the four lists of products, services, variants and tobacco products before the categories, each with its feature', () => {
     const children = MENU.find((i) => i.id === 'products')?.children ?? [];
     const lists = children.slice(1, 5);
-    expect(lists.map((i) => i.id)).toEqual(['products-list', 'services-list', 'modifiers-list', 'tobacco-products-list']);
+    expect(lists.map((i) => i.id)).toEqual([
+      'products-list',
+      'services-list',
+      'modifiers-list',
+      'tobacco-products-list',
+    ]);
     expect(children[5].id).toBe('product-categories');
     expect(lists).toMatchObject([
       { labelKey: 'MENU.PRODUCTS_LIST', groupPath: 'products', permission: 'products:read' },
-      { labelKey: 'MENU.SERVICES_LIST', groupPath: 'services', permission: 'products:read', feature: 'services' },
-      { labelKey: 'MENU.MODIFIERS_LIST', groupPath: 'product-modifiers', permission: 'products:read', feature: 'productsVariants' },
+      {
+        labelKey: 'MENU.SERVICES_LIST',
+        groupPath: 'services',
+        permission: 'products:read',
+        feature: 'services',
+      },
+      {
+        labelKey: 'MENU.MODIFIERS_LIST',
+        groupPath: 'product-modifiers',
+        permission: 'products:read',
+        feature: 'productsVariants',
+      },
       {
         labelKey: 'MENU.TOBACCO_PRODUCTS_LIST',
         groupPath: 'tobacco-products',
@@ -136,8 +157,16 @@ describe('visibleMenu', () => {
     expect(shown(() => false)).toEqual(['products-list']);
     expect(shown((f) => f === 'services')).toEqual(['products-list', 'services-list']);
     expect(shown((f) => f === 'productsVariants')).toEqual(['products-list', 'modifiers-list']);
-    expect(shown((f) => f === 'tobaccosGamesMonopoly')).toEqual(['products-list', 'tobacco-products-list']);
-    expect(shown(() => true)).toEqual(['products-list', 'services-list', 'modifiers-list', 'tobacco-products-list']);
+    expect(shown((f) => f === 'tobaccosGamesMonopoly')).toEqual([
+      'products-list',
+      'tobacco-products-list',
+    ]);
+    expect(shown(() => true)).toEqual([
+      'products-list',
+      'services-list',
+      'modifiers-list',
+      'tobacco-products-list',
+    ]);
   });
 
   it('shows departments, brands and attribute groups with products:read, the departments only with the cash feature', () => {
@@ -168,10 +197,20 @@ describe('visibleMenu', () => {
     ]);
     expect(productChildren((p) => p === 'places:read', allowAll)).toBeUndefined();
     expect(
-      MENU.find((i) => i.id === 'products')?.children?.find((i) => i.id === 'product-categories')?.feature,
+      MENU.find((i) => i.id === 'products')?.children?.find((i) => i.id === 'product-categories')
+        ?.feature,
     ).toBeUndefined();
     expect(
-      MENU.find((i) => i.id === 'products')?.children?.filter((i) => !['product-favorites', 'products-list', 'services-list', 'modifiers-list', 'tobacco-products-list'].includes(i.id)),
+      MENU.find((i) => i.id === 'products')?.children?.filter(
+        (i) =>
+          ![
+            'product-favorites',
+            'products-list',
+            'services-list',
+            'modifiers-list',
+            'tobacco-products-list',
+          ].includes(i.id),
+      ),
     ).toMatchObject([
       { id: 'product-categories', groupPath: 'product-categories', permission: 'products:read' },
       { id: 'product-departments', groupPath: 'product-departments', feature: 'cash' },
@@ -229,9 +268,12 @@ describe('visibleMenu', () => {
       visibleMenu(MENU, can, hasFeature, 'SA')
         .find((i) => i.id === 'tools')
         ?.children?.map((i) => i.id);
-    expect(children(allowAll)).toEqual(['diagnostics', 'email-templates']);
-    expect(children((feature) => feature !== 'email')).toEqual(['diagnostics']);
-    expect(children(allowAll, (p) => p !== 'places:read')).toBeUndefined();
+    expect(children(allowAll)).toEqual(['diagnostics', 'catalog-import-export', 'email-templates']);
+    expect(children((feature) => feature !== 'email')).toEqual([
+      'diagnostics',
+      'catalog-import-export',
+    ]);
+    expect(children(allowAll, (p) => p !== 'places:read' && p !== 'products:read')).toBeUndefined();
     expect(
       MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'email-templates'),
     ).toMatchObject({
@@ -240,6 +282,30 @@ describe('visibleMenu', () => {
       feature: 'email',
       permission: 'places:read',
     });
+  });
+
+  it('shows "Strumenti › Import / Export" only with a working group and products:read', () => {
+    const children = (can: (p: string) => boolean, hasGroup: boolean, role: Role = 'SA') =>
+      visibleMenu(MENU, can, allowAll, role, hasGroup)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children((p) => p === 'products:read', true)).toEqual(['catalog-import-export']);
+    expect(children((p) => p === 'products:read', false, 'PSA')).toBeUndefined();
+    expect(children((p) => p === 'places:read', true)).not.toContain('catalog-import-export');
+    expect(
+      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'catalog-import-export'),
+    ).toMatchObject({
+      route: '/groups',
+      groupPath: 'tools/catalog-import-export',
+      permission: 'products:read',
+      requiresGroup: true,
+    });
+  });
+
+  it('sends the group chooser to the page of "Strumenti › Import / Export"', () => {
+    expect(chooserTarget('/groups?to=tools/catalog-import-export')).toBe(
+      'tools/catalog-import-export',
+    );
   });
 
   it('shows "Strumenti › Nuovo cliente" to platform administrators and dealers with groups:create', () => {
@@ -566,6 +632,7 @@ describe('visibleMenu', () => {
       ['promotions', 'promotions'],
       ['fidelity/points-collections', 'points-collections'],
       ['email-templates', 'email-templates'],
+      ['tools/catalog-import-export', 'catalog-import-export'],
     ])('with a group, /groups/:id/%s highlights only %s', (path, id) => {
       expect(activeFor('PSA', true, `/groups/${GROUP}/${path}`)).toEqual([id]);
     });

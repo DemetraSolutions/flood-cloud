@@ -72,6 +72,32 @@ export function focusFirstError(root: ReadonlyFieldTree<unknown>): void {
   root().errorSummary()[0]?.fieldTree().focusBoundControl();
 }
 
+/** Dictionary keys of the units of a waiting time: singular and plural of seconds, minutes and hours. */
+export const WAIT_KEYS = [
+  'ERRORS.WAIT.SECOND',
+  'ERRORS.WAIT.SECONDS',
+  'ERRORS.WAIT.MINUTE',
+  'ERRORS.WAIT.MINUTES',
+  'ERRORS.WAIT.HOUR',
+  'ERRORS.WAIT.HOURS',
+] as const;
+
+/**
+ * A waiting time ("30 secondi", "5 minuti", "3 ore"), rounded up to the unit that reads best.
+ *
+ * @param i18n Translation service.
+ * @param seconds Seconds from `Retry-After`.
+ */
+export function waitText(i18n: I18nService, seconds: number): string {
+  const [unit, count] =
+    seconds < 60
+      ? (['SECOND', Math.max(1, Math.ceil(seconds))] as const)
+      : seconds < 3600
+        ? (['MINUTE', Math.ceil(seconds / 60)] as const)
+        : (['HOUR', Math.ceil(seconds / 3600)] as const);
+  return i18n.t(count === 1 ? `ERRORS.WAIT.${unit}` : `ERRORS.WAIT.${unit}S`, { count });
+}
+
 /**
  * User message for any failure of a form action. Backend errors use the central mapping;
  * anything else is logged (never swallowed) and reported generically.
@@ -81,6 +107,11 @@ export function focusFirstError(root: ReadonlyFieldTree<unknown>): void {
  */
 export function failureMessage(i18n: I18nService, error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.code === 'RATE_LIMITED' && error.retryAfterSeconds !== null) {
+      return i18n.t('ERRORS.API.RATE_LIMITED_WAIT', {
+        wait: waitText(i18n, error.retryAfterSeconds),
+      });
+    }
     return i18n.t(apiErrorMessageKey(error));
   }
   console.error(error);

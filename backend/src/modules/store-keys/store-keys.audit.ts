@@ -29,6 +29,75 @@ export async function auditKeyRevoked(
 }
 
 /**
+ * Writes the alert `store.activationCodeForActivePlace`: an activation code was made for a place that already has an active key. The resource is the place, the metadata the four character hint of
+ * that key; the code and the key are never recorded.
+ *
+ * @param activityLog The log.
+ * @param event The actor, the place, the active key as it is and the client.
+ */
+export async function auditCodeForActivePlace(
+  activityLog: ActivityLog,
+  event: { readonly actor: ActivityActor; readonly activeKey: Pick<StoreKey, 'groupId' | 'placeId' | 'hint'>; readonly client: ClientContext },
+): Promise<void> {
+  await activityLog.record({
+    category: 'security',
+    action: 'store.activationCodeForActivePlace',
+    outcome: 'success',
+    actor: event.actor,
+    groupId: event.activeKey.groupId,
+    resource: { type: 'place', id: event.activeKey.placeId.toHexString() },
+    ...requestPart(event.client),
+    metadata: { keyHint: event.activeKey.hint },
+  });
+}
+
+/**
+ * Writes the alert `store.activeKeyRevoked`: an administrator revoked the active key of a place by hand (next to `store.keyRevoked`). It closes the way round the confirmation of a new code (revoke the key, then ask for a
+ * code that needs no confirmation). The resource is the place, the metadata the hint and the id of the key; never a key.
+ *
+ * @param activityLog The log.
+ * @param event The key as it was, the actor and the client.
+ */
+export async function auditActiveKeyRevoked(
+  activityLog: ActivityLog,
+  event: { readonly key: Pick<StoreKey, 'id' | 'groupId' | 'placeId' | 'hint'>; readonly actor: ActivityActor; readonly client: ClientContext },
+): Promise<void> {
+  await activityLog.record({
+    category: 'security',
+    action: 'store.activeKeyRevoked',
+    outcome: 'success',
+    actor: event.actor,
+    groupId: event.key.groupId,
+    resource: { type: 'place', id: event.key.placeId.toHexString() },
+    ...requestPart(event.client),
+    metadata: { keyHint: event.key.hint, keyId: event.key.id.toHexString() },
+  });
+}
+
+/**
+ * Writes the alert `store.activeKeyReplaced`: an activation replaced the active key of a place. The actor is the new key (the exchange is anonymous), the resource the place, the metadata the hint and the
+ * id of the key that was replaced; no key is ever recorded.
+ *
+ * @param activityLog The log.
+ * @param event The new key, the replaced key as it was and the client.
+ */
+export async function auditActiveKeyReplaced(
+  activityLog: ActivityLog,
+  event: { readonly newKeyId: ObjectId; readonly replaced: Pick<StoreKey, 'id' | 'groupId' | 'placeId' | 'hint'>; readonly client: ClientContext },
+): Promise<void> {
+  await activityLog.record({
+    category: 'security',
+    action: 'store.activeKeyReplaced',
+    outcome: 'success',
+    actor: { kind: 'store', id: event.newKeyId },
+    groupId: event.replaced.groupId,
+    resource: { type: 'place', id: event.replaced.placeId.toHexString() },
+    ...requestPart(event.client),
+    metadata: { keyHint: event.replaced.hint, replacedKeyId: event.replaced.id.toHexString() },
+  });
+}
+
+/**
  * Writes the security event of an activation code: created or cancelled by a PSA or a dealer. The resource is the place; the code is never recorded.
  *
  * @param activityLog The log.

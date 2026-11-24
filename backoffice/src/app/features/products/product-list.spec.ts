@@ -325,6 +325,18 @@ describe('ProductList', () => {
       expect(root.querySelector('.hint')?.textContent).toBe(`PRODUCTS.FAMILY.${text}.HINT`);
       expect(root.querySelector('table caption')?.textContent?.trim()).toBe(`PRODUCTS.FAMILY.${text}.TITLE`);
       expect(root.querySelector('.new a')?.getAttribute('href')).toBe(`/groups/${GROUP}/${segment}/new`);
+      // The Import / Export page is the only place that imports or exports; the tobaccos are not in the file.
+      expect(root.querySelector('a.import-export')?.getAttribute('href') ?? null).toBe(
+        family === 'tgm' ? null : `/groups/${GROUP}/tools/catalog-import-export`,
+      );
+    });
+
+    it('links to the Import / Export page also to who can only read', async () => {
+      const { flush, root } = await render('', READ_ONLY);
+      await flush([]);
+      const link = root.querySelector('a.import-export');
+      expect(link?.textContent?.trim()).toBe('CATALOG_XLSX.LINK');
+      expect(link?.getAttribute('href')).toBe(`/groups/${GROUP}/tools/catalog-import-export`);
     });
 
     it('lists the products when the route has no family or an unknown one', async () => {

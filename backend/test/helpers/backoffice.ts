@@ -90,6 +90,8 @@ const GENEROUS = {
   RATE_LIMIT_LOGIN_PER_IP: '100000',
   RATE_LIMIT_REFRESH_PER_IP: '100000',
   RATE_LIMIT_API_PER_USER: '100000',
+  RATE_LIMIT_API_PER_USER_HOUR: '1000000',
+  RATE_LIMIT_API_PER_USER_DAY: '10000000',
   RATE_LIMIT_USER_CREDENTIALS_PER_USER: '100000',
   RATE_LIMIT_UNAUTHENTICATED_PER_IP: '100000',
   RATE_LIMIT_API_PER_STORE: '100000',
@@ -132,6 +134,8 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
       routes: { v1: [...modules.routes, ...(options.extraRoutes ?? [])], public: publicApi.routes },
       authenticate: { v1: modules.authenticate, store: modules.authenticateStore, public: publicApi.authenticate },
       groupAccess: { groups: modules.groups },
+      securityPolicy: modules.securityPolicy,
+      ...(modules.nonBrowserGuard === undefined ? {} : { nonBrowserGuard: modules.nonBrowserGuard }),
     },
     env,
   );

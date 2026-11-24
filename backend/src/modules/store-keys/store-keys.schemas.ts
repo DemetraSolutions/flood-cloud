@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { object, optional, string, validate } from '../../shared/validation/schema.ts';
+import { boolean, object, optional, string, validate } from '../../shared/validation/schema.ts';
 import type { Infer } from '../../shared/validation/schema.ts';
 import { objectId } from '../../shared/validation/schema.ts';
 
@@ -27,9 +27,21 @@ export const placeKeyParams = object({ placeId: objectId() }, { allowUnknown: tr
 const emptyBody = object({});
 
 /**
- * The body of the creation of an activation code is empty: no body, or `{}`; any property is `422`. Runs as a route middleware, so it also covers the request that sends no body at all.
+ * An empty body: no body, or `{}`; any property is `422`. Runs as a route middleware, so it also covers the request that sends no body at all.
  */
 export const requireNoBodyContent: RequestHandler = (req, _res, next) => {
   validate(emptyBody, req.body ?? {}, '(body)');
+  next();
+};
+
+/** Body of the creation of an activation code: empty, or the explicit confirmation to replace the active key of the place (any other property is `422`). */
+export const activationCodeBody = object({ confirmReplaceActiveKey: optional(boolean()) });
+
+/** Validated body of the creation of an activation code. */
+export type ActivationCodeBody = Infer<typeof activationCodeBody>;
+
+/** Validates the body of the creation of an activation code (no body is `{}`) and keeps it for `inputOf<ActivationCodeBody>(res, 'body')`. */
+export const validateActivationCodeBody: RequestHandler = (req, res, next) => {
+  res.locals.input = { ...res.locals.input, body: validate(activationCodeBody, req.body ?? {}, '(body)') };
   next();
 };

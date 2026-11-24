@@ -32,7 +32,9 @@
     "SKIP_TO_CONTENT": "Salta al contenuto",
     "MENU": "Menu",
     "MAIN_NAV": "Navigazione principale",
-    "CLOSE_MENU": "Chiudi il menu"
+    "CLOSE_MENU": "Chiudi il menu",
+    "ALERTS_ONE": "{count} nuova segnalazione di sicurezza",
+    "ALERTS_OTHER": "{count} nuove segnalazioni di sicurezza"
   },
   "MENU": {
     "HOME": "Home",
@@ -60,7 +62,9 @@
     "RELEASES": "Release",
     "EMAIL_TEMPLATES": "Template e-mail",
     "TOBACCOS": "Listino Tabacchi",
+    "CATALOG_IMPORT_EXPORT": "Import / Export",
     "COUNTRIES": "Gestione stati",
+    "SECURITY": "Sicurezza",
     "ACTIVATIONS": "Attivazioni",
     "PRICE_LIST": "Listino",
     "PRODUCT_DEPARTMENTS": "Reparti",
@@ -128,7 +132,17 @@
       "SERVICE_UNAVAILABLE": "Servizio temporaneamente non disponibile.",
       "NETWORK_ERROR": "Impossibile contattare il servizio: controlla la connessione.",
       "UNKNOWN_ERROR": "Si è verificato un errore imprevisto.",
-      "FEATURE_DISABLED": "Questa funzione non è attiva per il gruppo."
+      "FEATURE_DISABLED": "Questa funzione non è attiva per il gruppo.",
+      "BROWSER_REQUIRED": "Questa operazione è consentita solo da un browser: le chiamate fatte da altri programmi con le credenziali di un utente sono bloccate. Accedi dal backoffice.",
+      "RATE_LIMITED_WAIT": "Troppe richieste: riprova tra {wait}."
+    },
+    "WAIT": {
+      "SECOND": "{count} secondo",
+      "SECONDS": "{count} secondi",
+      "MINUTE": "{count} minuto",
+      "MINUTES": "{count} minuti",
+      "HOUR": "{count} ora",
+      "HOURS": "{count} ore"
     },
     "BACK_HOME": "Torna alla home",
     "FEATURE_DISABLED": {
@@ -727,6 +741,36 @@
     "DETAIL_LABEL": "Dettagli dell'attività {action} del {date}",
     "FILTER_ACTOR": "Filtra per questo attore",
     "FILTER_ACTOR_LABEL": "Filtra per l'attore dell'attività {action} del {date}",
+    "ALERTS": {
+      "REGION": "Segnalazioni di sicurezza",
+      "NOTICE_ONE": "{count} nuova segnalazione di sicurezza dall'ultima visita",
+      "NOTICE_OTHER": "{count} nuove segnalazioni di sicurezza dall'ultima visita",
+      "SHOW": "Mostra",
+      "MARK_SEEN": "Segna come viste",
+      "SEEN_DONE": "Segnalazioni segnate come viste.",
+      "DETAIL": "Soglia di {limit} richieste superata {window}: {mode}.",
+      "WINDOW_HOUR": "nell'ultima ora",
+      "WINDOW_DAY": "nella giornata",
+      "MODE_REPORT": "richiesta solo segnalata",
+      "MODE_ENFORCE": "richiesta bloccata",
+      "CODE_FOR_ACTIVE": "Il punto vendita aveva già una chiave attiva, che inizia per «{hint}».",
+      "KEY_REPLACED": "Sostituita la chiave che inizia per «{hint}».",
+      "KEY_REVOKED": "Revocata la chiave che inizia per «{hint}».",
+      "BROWSER_REQUIRED": "Credenziali valide, ma la richiesta non veniva da un browser.",
+      "NON_BROWSER": "{source} da un programma che non è un browser ({reason}).",
+      "PROGRAM": "Programma: «{agent}».",
+      "SOURCE_LOGIN": "Login eseguito",
+      "SOURCE_REFRESH": "Rinnovo della sessione eseguito",
+      "SOURCE_API": "Chiamata alle API eseguita",
+      "REASON_NO_ORIGIN": "origine assente",
+      "REASON_FOREIGN_ORIGIN": "origine non riconosciuta",
+      "REASON_INCONSISTENT": "intestazioni del browser incoerenti",
+      "POLICY_CHANGE": "{field}: da «{before}» a «{after}».",
+      "POLICY_NON_BROWSER": "Chiamate non da browser",
+      "POLICY_LIMITS": "Limiti orario e giornaliero per utente",
+      "POLICY_REPORT": "solo segnalazione",
+      "POLICY_BLOCK": "blocca"
+    },
     "CATEGORY": {
       "DATA": "Dati",
       "SECURITY": "Sicurezza",
@@ -765,7 +809,9 @@
       "TO": "Al",
       "REQUEST_ID": "Request id",
       "CLEAR_ACTOR": "Rimuovi il filtro per attore ({id})",
-      "CURRENT_GROUP": "Solo il gruppo selezionato"
+      "CURRENT_GROUP": "Solo il gruppo selezionato",
+      "ONLY_ALERTS": "Solo segnalazioni di sicurezza",
+      "CLEAR_ALERTS": "Rimuovi il filtro: solo segnalazioni di sicurezza"
     },
     "PERIOD": {
       "ORDER": "La data finale precede quella iniziale.",
@@ -832,7 +878,34 @@
       "COUNTRY_DELETED": "Paese eliminato",
       "COUNTRY_AREA_CREATED": "Provincia creata",
       "COUNTRY_AREA_UPDATED": "Provincia modificata",
-      "COUNTRY_AREA_DELETED": "Provincia eliminata"
+      "COUNTRY_AREA_DELETED": "Provincia eliminata",
+      "RATE_LIMIT_SUSTAINED_EXCEEDED": "Limite di richieste superato",
+      "STORE_OPERATOR_REJECTED": "Operatore rifiutato dal server di negozio",
+      "STORE_ACTIVATION_CODE_FOR_ACTIVE_PLACE": "Codice di attivazione generato su un negozio attivo",
+      "STORE_ACTIVE_KEY_REPLACED": "Chiave di negozio sostituita",
+      "STORE_ACTIVE_KEY_REVOKED": "Chiave di negozio revocata",
+      "AUTH_REFRESH_FAILED": "Rinnovo della sessione rifiutato",
+      "REQUEST_NON_BROWSER": "Accesso non da browser",
+      "SETTINGS_SECURITY_POLICY_UPDATED": "Impostazioni di sicurezza modificate",
+      "GROUP_TAX_REALIGNMENT_INCOMPLETE": "Riallineamento di un'aliquota incompleto",
+      "PRODUCT_CREATED": "Prodotto creato",
+      "PRODUCT_UPDATED": "Prodotto modificato",
+      "PRODUCT_TRASHED": "Prodotto spostato nel cestino",
+      "PRODUCT_RESTORED": "Prodotto ripristinato",
+      "PRODUCT_DELETED": "Prodotto eliminato",
+      "PRODUCT_DUPLICATED": "Prodotto duplicato",
+      "PRODUCT_CATEGORY_CREATED": "Categoria prodotti creata",
+      "PRODUCT_CATEGORY_UPDATED": "Categoria prodotti modificata",
+      "PRODUCT_CATEGORY_DELETED": "Categoria prodotti eliminata",
+      "PRODUCT_DEPARTMENT_CREATED": "Reparto creato",
+      "PRODUCT_DEPARTMENT_UPDATED": "Reparto modificato",
+      "PRODUCT_DEPARTMENT_DELETED": "Reparto eliminato",
+      "PRODUCT_BRAND_CREATED": "Marca creata",
+      "PRODUCT_BRAND_UPDATED": "Marca modificata",
+      "PRODUCT_BRAND_DELETED": "Marca eliminata",
+      "PRODUCT_ATTRIBUTE_GROUP_CREATED": "Gruppo di attributi creato",
+      "PRODUCT_ATTRIBUTE_GROUP_UPDATED": "Gruppo di attributi modificato",
+      "PRODUCT_ATTRIBUTE_GROUP_DELETED": "Gruppo di attributi eliminato"
     }
   },
   "PUBLIC_API": {
@@ -2949,6 +3022,9 @@
       "GENERATE": "Genera codice di attivazione",
       "CANCEL_CODE": "Annulla codice",
       "REVOKE": "Revoca chiave",
+      "REPLACE_TITLE": "Generare un codice per un negozio già attivo?",
+      "REPLACE_MESSAGE": "Per questo punto vendita è già in uso una chiave di negozio. Quando il nuovo codice verrà usato, la chiave attuale sarà revocata e il punto vendita smetterà di funzionare finché il server di negozio non sarà riattivato con il nuovo codice. L'operazione comparirà tra le segnalazioni di sicurezza del registro attività.",
+      "REPLACE_CONFIRM": "Genera il codice",
       "REVOKE_TITLE": "Revocare la chiave di negozio?",
       "REVOKE_MESSAGE": "Il server del punto vendita smetterà di funzionare alla prossima richiesta, finché non sarà attivato con un nuovo codice.",
       "CODE_TITLE": "Codice di attivazione",
@@ -3339,6 +3415,145 @@
       "CREDIT_NOTE": "Nota di credito"
     }
   },
+  "CATALOG_XLSX": {
+    "TITLE": "Import / Export del catalogo",
+    "LINK": "Import / Export",
+    "HINT": "Un solo file Excel (.xlsx) con tre fogli, Prodotti, Varianti e Categorie, per modificare il catalogo del gruppo in blocco: scarica il modello, esporta il catalogo, compila il file e importalo.",
+    "DOWNLOADING": "Download del file in corso…",
+    "DOWNLOAD_ERROR": {
+      "TOO_LARGE": "Il catalogo supera i limiti del file (20.000 prodotti o varianti, 60 punti vendita): non si può esportare in un solo file.",
+      "RATE_LIMITED": "Un'esportazione è già in corso o hai raggiunto il limite orario: riprova tra poco.",
+      "RATE_LIMITED_WAIT": "Un'esportazione è già in corso o hai raggiunto il limite orario: riprova tra {seconds} secondi.",
+      "BUSY": "Un'altra operazione è in corso: riprova tra poco.",
+      "FORBIDDEN": "Non hai il permesso di scaricare il file.",
+      "GENERIC": "Impossibile scaricare il file. Riprova."
+    },
+    "SHEET": {
+      "PRODUCTS": "Prodotti",
+      "VARIANTS": "Varianti",
+      "CATEGORIES": "Categorie"
+    },
+    "TEMPLATE": {
+      "TITLE": "Modello",
+      "TEXT": "Il file vuoto con i tre fogli e le sole intestazioni delle colonne, pronto da compilare.",
+      "PLACES_NOTE": "Le colonne dei punti vendita (disponibilità e postazioni di stampa) sono generate dal server sul gruppo di lavoro e sul perimetro del tuo utente: vedi solo i punti vendita che puoi gestire.",
+      "ACTION": "Scarica il modello"
+    },
+    "EXPORT": {
+      "TITLE": "Esporta",
+      "TEXT": "Il catalogo che puoi gestire, nello stesso formato del modello: prodotti, servizi e varianti attivi e non nel cestino, e le categorie attive. Restano fuori tabacchi, giochi, monopoli e gli elementi disattivati.",
+      "REFERENCES": "Come scrivere categorie, genitore, listini e aliquote",
+      "IDS": "Id",
+      "NAMES": "Nomi",
+      "IDS_HELP": "Gli id non sono mai ambigui: due elementi con lo stesso nome non si confondono. È la scelta consigliata.",
+      "NAMES_HELP": "I nomi (per le aliquote, la percentuale) sono più comodi da compilare a mano, ma se due elementi hanno lo stesso nome l'importazione dà errore.",
+      "GENERAL_HELP": "L'importazione riconosce da sola se in una cella c'è un id o un nome, qualunque sia la scelta fatta qui. Si può esportare un file alla volta.",
+      "ACTION": "Esporta il catalogo"
+    },
+    "IMPORT": {
+      "TITLE": "Importa",
+      "TEXT": "Scegli un file .xlsx (al massimo {megabytes} MB, 1.000 righe per foglio e 1.500 in tutto). Prima il file viene verificato senza scrivere nulla; solo se la verifica riesce puoi importarlo. L'importazione è tutto o niente: con un solo errore non cambia nulla. Ogni ora puoi fare 20 verifiche e 6 importazioni.",
+      "NOTE": "Le casse lavorano su una copia locale dei dati: la vendita non risente dell'importazione. Durante la verifica e l'importazione le modifiche fatte sul cloud agli stessi prodotti attendono qualche secondo; se ci sono molte vendite sugli stessi prodotti l'operazione può richiedere un secondo tentativo.",
+      "ACTIVITY": "Le singole modifiche sono registrate nel registro attività.",
+      "ACTIVITY_LINK": "Apri il registro attività",
+      "CHOOSE": "Scegli il file",
+      "FILE": "{name} ({size} KB)",
+      "VERIFY": "Verifica",
+      "VERIFYING": "Verifica del file in corso…",
+      "IMPORTING": "Importazione in corso…",
+      "VERIFIED_TITLE": "Verifica riuscita",
+      "VERIFIED_TEXT": "Il file è corretto. Ecco cosa farebbe l'importazione: finora non è stato modificato nulla.",
+      "NO_CHANGES": "Il file è corretto ma non cambia nulla nel catalogo.",
+      "ACTION": "Importa",
+      "CONFIRM_TITLE": "Importare il file?",
+      "CONFIRM": "Importare il file «{name}»? Verranno inserite {inserted} voci, aggiornate {updated} e cestinate o eliminate {removed}. L'importazione si applica per intero.",
+      "CONFIRM_ACTION": "Importa",
+      "DONE": "Importazione completata",
+      "CLIENT_ERROR": {
+        "TYPE": "Il file deve essere un foglio Excel con estensione .xlsx.",
+        "SIZE": "Il file supera la dimensione massima di 10 MB.",
+        "EMPTY": "Il file è vuoto."
+      },
+      "ERROR": {
+        "TITLE": "Il file non è stato importato",
+        "ROWS": "Il file contiene errori: correggili e verifica di nuovo. Non è stato modificato nulla.",
+        "INCORRECT": "Il file non è un foglio Excel valido, oppure non contiene nessun foglio con dati.",
+        "TOO_MANY": "Il file ha troppe righe o troppe colonne: al massimo 1.000 righe per foglio e 1.500 in tutto.",
+        "EMPTY": "Scegli un file.",
+        "INVALID": "Il file non è valido.",
+        "TOO_LARGE": "Il file è troppo grande, oppure l'operazione richiede più di 15 secondi: dividi il file in più parti.",
+        "UNSUPPORTED": "Il file non è un foglio Excel .xlsx.",
+        "BUSY": "Un'importazione di questo gruppo è già in corso: riprova tra poco.",
+        "KEY_REUSED": "Questo invio è già stato fatto con un file diverso: scegli di nuovo il file e verificalo.",
+        "RATE_LIMITED": "Hai raggiunto il limite orario (6 importazioni e 20 verifiche all'ora): riprova più tardi.",
+        "RATE_LIMITED_WAIT": "Hai raggiunto il limite orario (6 importazioni e 20 verifiche all'ora): riprova tra {seconds} secondi.",
+        "UNAVAILABLE": "Il servizio è occupato: riprova tra poco."
+      }
+    },
+    "COUNTS": {
+      "SHEET": "Foglio",
+      "INSERTED": "Inserite",
+      "UPDATED": "Aggiornate",
+      "REMOVED": "Cestinate o eliminate",
+      "UNCHANGED": "Invariate",
+      "CAPTION_VERIFIED": "Voci che l'importazione inserirebbe, aggiornerebbe, cestinerebbe o eliminerebbe, per foglio",
+      "CAPTION_DONE": "Voci inserite, aggiornate, cestinate o eliminate dall'importazione, per foglio"
+    },
+    "PROBLEMS": {
+      "CAPTION": "Errori del file",
+      "SHEET": "Foglio",
+      "ROW": "Riga",
+      "COLUMN": "Colonna",
+      "PROBLEM": "Problema",
+      "FILTER": "Mostra il foglio",
+      "ALL_SHEETS": "Tutti i fogli",
+      "SUMMARY_ONE": "{count} errore",
+      "SUMMARY_OTHER": "{count} errori",
+      "MORE": "… e altri {count} errori non mostrati.",
+      "MORE_UNKNOWN": "… e altri errori non mostrati.",
+      "COPY": "Copia l'elenco",
+      "SAVE": "Scarica l'elenco",
+      "COPIED": "Elenco copiato",
+      "COPY_FAILED": "Impossibile copiare l'elenco",
+      "EMPTY": "Nessun errore per questo foglio",
+      "EMPTY_MESSAGE": "Scegli un altro foglio o tutti i fogli."
+    },
+    "ROW_ERROR": {
+      "UNKNOWN_COLUMN": "La colonna non è una di quelle del foglio.",
+      "DUPLICATE_COLUMN": "La colonna compare più di una volta.",
+      "UNKNOWN_PLACE": "Il punto vendita della colonna non esiste, è nel cestino o non rientra nel tuo perimetro.",
+      "AMBIGUOUS_PLACE": "Più punti vendita hanno il nome della colonna.",
+      "TOO_MANY_ROWS": "Il foglio ha più righe di quante ne accetti un'importazione.",
+      "INVALID_ID": "L'id non è valido.",
+      "DUPLICATE_ID": "L'id compare più volte nel foglio.",
+      "NOT_FOUND": "L'id non esiste, è nel cestino o non è raggiungibile dal tuo utente.",
+      "TRASHED": "L'elemento è nel cestino.",
+      "WRONG_SHEET": "L'elemento appartiene a un altro foglio (una variante sta nel foglio Varianti).",
+      "NOT_IMPORTABLE": "L'elemento è di un tipo che il file non gestisce.",
+      "DELETE_WITHOUT_ID": "Per cancellare serve l'id dell'elemento.",
+      "REQUIRED": "Il valore è obbligatorio.",
+      "INVALID_VALUE": "Il valore non è valido.",
+      "NOT_FOUND_REFERENCE": "Il riferimento non corrisponde a nulla (né un id né un nome).",
+      "AMBIGUOUS_NAME": "Il riferimento è un nome che hanno più elementi: usa l'id.",
+      "INCOMPLETE_PRICE": "Un prezzo richiede listino, prezzo e aliquota.",
+      "DUPLICATE_PRICE_LIST": "Il listino compare in più prezzi della stessa riga.",
+      "NOT_REPRESENTABLE": "Il prodotto ha un prezzo che il file non sa rappresentare: non viene modificato nulla.",
+      "UNKNOWN_STATION": "La postazione di stampa non esiste nel punto vendita.",
+      "INVALID": "Il valore è rifiutato.",
+      "FORBIDDEN": "Il tuo utente non può fare questa modifica.",
+      "CONFLICT": "La modifica è in conflitto con lo stato del catalogo.",
+      "TOO_SLOW": "L'importazione richiede troppo tempo: dividi il file."
+    },
+    "RULES": {
+      "TITLE": "Come funziona il file",
+      "SHEETS": "Il file ha tre fogli, Prodotti, Varianti e Categorie, riconosciuti dal nome in qualsiasi ordine. Un foglio mancante o senza righe viene saltato. Le colonne si riconoscono dall'intestazione, non dalla posizione.",
+      "ID": "La colonna ID vuota crea una nuova voce; con un ID l'importazione aggiorna la voce esistente. Un ID inesistente, nel cestino o non raggiungibile è un errore.",
+      "DELETE": "Una X nella colonna CANCELLAZIONE (con l'ID) manda il prodotto nel cestino (si può ripristinare) ed elimina la categoria solo se non è in uso e non ha sottocategorie.",
+      "ABSENT_COLUMN": "Una colonna assente non modifica nulla (per le voci nuove vale il predefinito); una colonna presente aggiorna il dato, anche con la cella vuota dove indicato. In una colonna con la X (disponibile, preferito e simili) una cella vuota significa «no», sia per le voci nuove sia per quelle esistenti. Le righe che non cambiano nulla non scrivono: esportare e reimportare lascia il catalogo identico.",
+      "PLACES": "Le colonne dei punti vendita (DISPO, POSTAZIONI SALA e POSTAZIONI BANCO) hanno una colonna per ogni punto vendita del tuo perimetro: una X rende la voce disponibile in quel punto vendita, e senza X la voce non lo è più. Una colonna che non nomina un tuo punto vendita è un errore.",
+      "NOT_IN_FILE": "Il file non rappresenta tutto e ciò che non rappresenta resta invariato: i testi in altre lingue oltre l'italiano, i prezzi con fasce e periodi (sconti, orari), i barcode oltre il primo e le loro quantità, e i tabacchi, giochi e monopoli, che hanno la loro sincronizzazione."
+    }
+  },
   "TOBACCOS": {
     "TITLE": "Listino Tabacchi",
     "HINT": "Il listino nazionale dei tabacchi (file ufficiale ADM), unico per tutta la piattaforma. L’importazione sostituisce l’intero listino.",
@@ -3709,6 +3924,49 @@
     "ARUBA_E_INVOICING": "Fatturazione elettronica Aruba",
     "RESERVE_WITH_GOOGLE": "Prenota con Google",
     "BIZERBA": "Bizerba"
+  },
+  "SECURITY_POLICY": {
+    "TITLE": "Sicurezza",
+    "HINT": "Decide che cosa succede alle chiamate che non sembrano fatte da un browser e agli utenti che usano il backoffice in modo prolungato. Ogni modifica compare tra le segnalazioni di sicurezza del registro attività.",
+    "LOAD_ERROR": "Impossibile caricare le impostazioni di sicurezza",
+    "STALE": "Le impostazioni sono state modificate nel frattempo: ricaricale prima di salvare.",
+    "RELOAD": "Ricarica",
+    "SAVED": "Impostazioni di sicurezza salvate.",
+    "BROWSER_REQUIRED": "Il controllo sul browser non è attivo o questo browser non lo ha superato: il blocco non è stato attivato.",
+    "FORCED_NOTICE": "La sola segnalazione è forzata dalla configurazione del server: le scelte salvate qui non hanno effetto finché la forzatura è attiva.",
+    "MODE": {
+      "REPORT": "Solo segnalazione",
+      "BLOCK": "Blocca"
+    },
+    "SOURCE": {
+      "DEFAULT": "Valore predefinito del server.",
+      "DATABASE": "Valore impostato da un amministratore.",
+      "FORCED": "Forzato dal server."
+    },
+    "NON_BROWSER": {
+      "TITLE": "Chiamate non da browser",
+      "HELP": "Le chiamate fatte con le credenziali di un utente da un programma che non è un browser vengono segnalate nel registro attività oppure rifiutate.",
+      "SCOPE": "Non riguarda i server di punto vendita né le API pubbliche.",
+      "PSA": "Gli amministratori di piattaforma non vengono mai bloccati.",
+      "ALWAYS": "Il logout e il cambio della password restano sempre possibili.",
+      "LIMITS": "È un controllo che scoraggia chi improvvisa, non una barriera assoluta: un programma può imitare un browser."
+    },
+    "LIMITS": {
+      "TITLE": "Limiti orario e giornaliero per utente",
+      "HELP": "Quando un utente supera il limite orario o giornaliero di richieste, il superamento viene segnalato nel registro attività oppure le richieste successive vengono rifiutate fino alla fine della finestra.",
+      "EXEMPT": "Gli amministratori di piattaforma e i rivenditori sono sempre solo segnalati, mai bloccati.",
+      "PER_MINUTE": "Richieste al minuto",
+      "PER_HOUR": "Richieste all'ora",
+      "PER_DAY": "Richieste al giorno",
+      "READ_ONLY": "Le soglie si cambiano dalla configurazione del server, non da qui."
+    },
+    "CONFIRM": {
+      "TITLE": "Attivare il blocco?",
+      "ACTION": "Attiva il blocco",
+      "NON_BROWSER": "Gli utenti che usano un programma diverso da un browser riceveranno un errore e le loro chiamate non verranno eseguite.",
+      "LIMITS": "Gli utenti che superano il limite orario o giornaliero riceveranno un errore «troppe richieste» fino alla fine della finestra.",
+      "LOGGED": "La modifica compare tra le segnalazioni di sicurezza del registro attività."
+    }
   },
   "PRICE_LIST": {
     "TITLE": "Listino",

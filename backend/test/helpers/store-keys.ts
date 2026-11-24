@@ -48,7 +48,7 @@ export async function startStoreWorld(ctx: TestDatabases, options: BackofficeOpt
   };
   const keyPath = (index: number, placeId: ObjectId, rest = ''): string => `/groups/${world.group(index).groupId.toHexString()}/places/${placeId.toHexString()}/store-key${rest}`;
   const codeFor: StoreWorld['codeFor'] = async (placeId, index = 0, actor = world.office.cluster.psa) => {
-    const made = await world.as.call(actor, 'POST', keyPath(index, placeId, '/activation-codes'));
+    const made = await world.as.call(actor, 'POST', keyPath(index, placeId, '/activation-codes'), { confirmReplaceActiveKey: true });
     if (made.status !== 201) {
       throw new Error(`creating the activation code answered ${String(made.status)}: ${JSON.stringify(made.body)}`);
     }

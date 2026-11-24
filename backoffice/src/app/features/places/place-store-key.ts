@@ -18,12 +18,25 @@ import { PlaceState } from './place-state';
 import { StoreKeyApi } from './store-key-api';
 import { ActivationCode, StoreKeyStatus } from './store-key.types';
 
+/** Whether the server asks for the confirmation to replace an active key (`409`, issue `required` on `confirmReplaceActiveKey`). */
+function needsConfirmation(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 409 &&
+    error.details.some(
+      (detail) => detail.field === 'confirmReplaceActiveKey' && detail.issue === 'required',
+    )
+  );
+}
+
 /**
  * Store key tab of the place (platform administrators and dealers): whether the store server has
  * a key, since when, when it was last seen and with which app version and address, the pending
  * activation code and why the last key stopped working. "Genera codice di attivazione" shows the
  * code once in a dialog, with copy and expiry; the code lives only in this component, only while
- * the dialog is open, and is never stored or logged. Revoking asks for confirmation.
+ * the dialog is open, and is never stored or logged. Revoking asks for confirmation, and so does
+ * generating a code for a place that already has an active key (the key is revoked when the new code
+ * is used and the store stops working until it is activated again).
  */
 @Component({
   selector: 'fc-place-store-key',
@@ -56,6 +69,8 @@ export class PlaceStoreKey {
   protected readonly code = signal<ActivationCode | null>(null);
   protected readonly codeOpen = signal(false);
   protected readonly revokeOpen = signal(false);
+  /** The warning shown before a code is generated for a place that already has an active key. */
+  protected readonly replaceOpen = signal(false);
   protected readonly busy = signal(false);
 
   protected reload(): void {
@@ -70,14 +85,40 @@ export class PlaceStoreKey {
     });
   }
 
+  /** Generates a code; with an active key the confirmation comes first (the new code revokes it when used). */
   protected async generate(): Promise<void> {
+    if (this.info()?.status === 'active') {
+      this.replaceOpen.set(true);
+      return;
+    }
+    await this.create(false);
+  }
+
+  /** The user confirmed the replacement of the active key. */
+  protected async confirmReplace(): Promise<void> {
+    await this.create(true);
+  }
+
+  private async create(confirmReplaceActiveKey: boolean): Promise<void> {
     this.busy.set(true);
     try {
       this.code.set(
-        await this.api.createCode(this.state.groupId(), this.state.placeId() as string),
+        await this.api.createCode(
+          this.state.groupId(),
+          this.state.placeId() as string,
+          confirmReplaceActiveKey,
+        ),
       );
+      this.replaceOpen.set(false);
       this.codeOpen.set(true);
     } catch (error) {
+      if (!confirmReplaceActiveKey && needsConfirmation(error)) {
+        // The key became active after the page was read: ask now, and show the real state.
+        this.replaceOpen.set(true);
+        this.status.reload();
+        return;
+      }
+      this.replaceOpen.set(false);
       this.toast.error(failureMessage(this.i18n, error));
       return;
     } finally {

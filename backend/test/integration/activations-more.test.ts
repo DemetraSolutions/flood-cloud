@@ -108,10 +108,10 @@ describe('the writes of the settings and of the dealers when somebody wins the r
   const admin = principalOf('PSA');
   it('answers 412 when the price list or the overrides changed between the read and the write, and logs nothing then', async () => {
     const repository = createSettingsRepository(ctx.databases);
-    const settings = createSettingsService({ repository, activityLog: activity, versionKey: key, now: () => 0 });
+    const settings = createSettingsService({ repository, activityLog: activity, versionKey: key, sustainedDefault: 'report', limits: { perMinute: 300, perHour: 2000, perDay: 10_000 }, now: () => 0 });
     const expected = (await settings.getPriceList()).version;
     const body = { plans: {}, services: DEFAULT_PRICE_LIST.services };
-    const racing = createSettingsService({ repository: { ...repository, replacePriceList: async () => false }, activityLog: activity, versionKey: key, now: () => 0 });
+    const racing = createSettingsService({ repository: { ...repository, replacePriceList: async () => false }, activityLog: activity, versionKey: key, sustainedDefault: 'report', limits: { perMinute: 300, perHour: 2000, perDay: 10_000 }, now: () => 0 });
     await assert.rejects(racing.replacePriceList(admin, expected, body, client), (error: unknown) => error instanceof AppError && error.status === 412);
     assert.equal(await repository.replacePriceList(DEFAULT_PRICE_LIST, body, dealer, new Date()), false, 'a stored value that is not the one read is not replaced');
     await settings.replacePriceList(admin, expected, body, { requestId: 'r', ip: '203.0.113.5', userAgent: null });

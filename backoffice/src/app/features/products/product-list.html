@@ -1,5 +1,8 @@
 <header class="page-header">
   <h1>{{ ('PRODUCTS.FAMILY.' + settings().text + '.TITLE') | t }}</h1>
+  @if (settings().family !== 'tgm') {
+    <a class="import-export" [routerLink]="importExportRoute()">{{ 'CATALOG_XLSX.LINK' | t }}</a>
+  }
   <span class="new" *fcCan="'products:update'">
     <a [routerLink]="newRoute()">{{ ('PRODUCTS.FAMILY.' + settings().text + '.NEW') | t }}</a>
     <a [routerLink]="newRoute()" [queryParams]="{ view: 'quick' }">{{ 'PRODUCTS.NEW_QUICK' | t }}</a>

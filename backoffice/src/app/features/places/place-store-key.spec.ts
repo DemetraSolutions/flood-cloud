@@ -116,7 +116,7 @@ describe('PlaceStoreKey', () => {
   });
 
   it('shows the code once in a dialog, with its expiry and the warning, and forgets it on close', async () => {
-    const view = await render(ACTIVE);
+    const view = await render();
     await view.click('PLACES.STORE_KEY.GENERATE');
     const post = backend().expectOne(`${URL_KEY}/activation-codes`);
     expect(post.request.method).toBe('POST');
@@ -126,7 +126,7 @@ describe('PlaceStoreKey', () => {
       { status: 201, statusText: 'Created' },
     );
     await view.view();
-    backend().expectOne(URL_KEY).flush({ data: ACTIVE });
+    backend().expectOne(URL_KEY).flush({ data: NONE });
     await view.view();
     const dialog = view.root.querySelector('dialog') as HTMLDialogElement;
     expect(dialog.hasAttribute('open')).toBe(true);
@@ -225,6 +225,7 @@ describe('PlaceStoreKey', () => {
     await view.view();
     expect(view.root.querySelector('dialog[open]')).toBeNull();
     await view.click('PLACES.STORE_KEY.GENERATE');
+    await view.click('PLACES.STORE_KEY.REPLACE_CONFIRM');
     backend()
       .expectOne(`${URL_KEY}/activation-codes`)
       .flush(
@@ -295,5 +296,110 @@ describe('PlaceStoreKey', () => {
     await fixture.whenStable();
     expect(fixture.nativeElement.textContent).not.toContain('PLACES.STORE_KEY.TITLE');
     backend().expectNone(URL_KEY);
+  });
+  describe('replacing an active key', () => {
+    const dialog = (view: Awaited<ReturnType<typeof render>>) =>
+      view.root.querySelector('dialog[open]') as HTMLDialogElement | null;
+    const created = { data: { code: CODE, expiresAt: '2026-11-14T10:00:00.000Z' } };
+
+    it('asks first, with an alert dialog whose focus starts on Cancel, and sends nothing yet', async () => {
+      const view = await render(ACTIVE);
+      await view.click('PLACES.STORE_KEY.GENERATE');
+      backend().expectNone(`${URL_KEY}/activation-codes`);
+      const open = dialog(view)!;
+      expect(open.getAttribute('role')).toBe('alertdialog');
+      expect(open.getAttribute('aria-describedby')).toBeTruthy();
+      expect(open.textContent).toContain('PLACES.STORE_KEY.REPLACE_MESSAGE');
+      expect(open.querySelector('footer button')?.hasAttribute('autofocus')).toBe(true);
+      expect(open.querySelector('footer button')?.textContent?.trim()).toBe('COMMON.CANCEL');
+    });
+
+    it('cancelling sends nothing', async () => {
+      const view = await render(ACTIVE);
+      await view.click('PLACES.STORE_KEY.GENERATE');
+      (dialog(view)!.querySelector('footer button') as HTMLButtonElement).click();
+      await view.view();
+      expect(dialog(view)).toBeNull();
+      backend().expectNone(`${URL_KEY}/activation-codes`);
+    });
+
+    it('sends the confirmation, then shows the code', async () => {
+      const view = await render(ACTIVE);
+      await view.click('PLACES.STORE_KEY.GENERATE');
+      await view.click('PLACES.STORE_KEY.REPLACE_CONFIRM');
+      const post = backend().expectOne(`${URL_KEY}/activation-codes`);
+      expect(post.request.body).toEqual({ confirmReplaceActiveKey: true });
+      post.flush(created, { status: 201, statusText: 'Created' });
+      await view.view();
+      backend().expectOne(URL_KEY).flush({ data: ACTIVE });
+      await view.view();
+      expect(dialog(view)?.textContent).toContain(CODE);
+      expect(dialog(view)?.getAttribute('role')).toBeNull();
+    });
+
+    it('sends no body without an active key', async () => {
+      const view = await render();
+      await view.click('PLACES.STORE_KEY.GENERATE');
+      expect(dialog(view)).toBeNull();
+      const post = backend().expectOne(`${URL_KEY}/activation-codes`);
+      expect(post.request.body).toBeNull();
+      post.flush(created, { status: 201, statusText: 'Created' });
+      await view.view();
+      backend().expectOne(URL_KEY).flush({ data: NONE });
+      await view.view();
+    });
+
+    it('asks and retries with the confirmation when the key became active meanwhile', async () => {
+      const view = await render();
+      await view.click('PLACES.STORE_KEY.GENERATE');
+      backend()
+        .expectOne(`${URL_KEY}/activation-codes`)
+        .flush(errorBody('CONFLICT', [{ field: 'confirmReplaceActiveKey', issue: 'required' }]), {
+          status: 409,
+          statusText: 'x',
+        });
+      await view.view();
+      backend().expectOne(URL_KEY).flush({ data: ACTIVE });
+      await view.view();
+      expect(view.toasts()).toHaveLength(0);
+      expect(dialog(view)?.getAttribute('role')).toBe('alertdialog');
+      await view.click('PLACES.STORE_KEY.REPLACE_CONFIRM');
+      const retry = backend().expectOne(`${URL_KEY}/activation-codes`);
+      expect(retry.request.body).toEqual({ confirmReplaceActiveKey: true });
+      retry.flush(created, { status: 201, statusText: 'Created' });
+      await view.view();
+      backend().expectOne(URL_KEY).flush({ data: ACTIVE });
+      await view.view();
+      expect(dialog(view)?.textContent).toContain(CODE);
+    });
+
+    it('closes the question and reports a failure of the confirmed request', async () => {
+      const view = await render(ACTIVE);
+      await view.click('PLACES.STORE_KEY.GENERATE');
+      await view.click('PLACES.STORE_KEY.REPLACE_CONFIRM');
+      backend()
+        .expectOne(`${URL_KEY}/activation-codes`)
+        .flush(errorBody('CONFLICT', [{ field: 'confirmReplaceActiveKey', issue: 'required' }]), {
+          status: 409,
+          statusText: 'x',
+        });
+      await view.view();
+      expect(dialog(view)).toBeNull();
+      expect(view.toasts()).toHaveLength(1);
+    });
+
+    it('treats any other conflict as a plain failure', async () => {
+      const view = await render();
+      await view.click('PLACES.STORE_KEY.GENERATE');
+      backend()
+        .expectOne(`${URL_KEY}/activation-codes`)
+        .flush(errorBody('CONFLICT', [{ field: 'other', issue: 'required' }]), {
+          status: 409,
+          statusText: 'x',
+        });
+      await view.view();
+      expect(dialog(view)).toBeNull();
+      expect(view.toasts()).toHaveLength(1);
+    });
   });
 });

@@ -1,0 +1,88 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 48rem;
+}
+
+.hint,
+.note,
+.source {
+  margin-block: 0;
+  color: var(--color-text-muted);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.help p,
+.help ul {
+  margin-block: 0 var(--space-2);
+}
+
+.help ul {
+  padding-inline-start: var(--space-4);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-height);
+}
+
+.option input {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  accent-color: var(--color-primary);
+}
+
+.thresholds {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+}
+
+.thresholds dt {
+  color: var(--color-text-muted);
+}
+
+.thresholds dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.forced {
+  border-color: var(--color-warning);
+  background: var(--color-warning-soft);
+  color: var(--color-on-warning-soft);
+}

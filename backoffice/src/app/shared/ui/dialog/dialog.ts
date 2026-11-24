@@ -34,12 +34,15 @@ export class Dialog {
   readonly heading = input.required<string>();
   /** Wider panel, for long forms. */
   readonly wide = input(false, { transform: booleanAttribute });
+  /** Announces the dialog as an alert (`alertdialog`): for warnings that need an answer before going on. */
+  readonly alert = input(false, { transform: booleanAttribute });
   /** Whether the dialog is open (two-way). */
   readonly open = model(false);
   /** Emitted after the dialog closed, whatever the reason. */
   readonly closed = output<void>();
 
   protected readonly headingId = uniqueId('fc-dialog-title');
+  protected readonly bodyId = uniqueId('fc-dialog-body');
 
   constructor() {
     effect(() => {

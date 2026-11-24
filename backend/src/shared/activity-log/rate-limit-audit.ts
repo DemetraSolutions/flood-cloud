@@ -1,4 +1,5 @@
 import type { RateLimitExceededHandler } from '../security/rate-limit/rate-limit.ts';
+import type { SustainedExceededHandler } from '../security/rate-limit/sustained.ts';
 import { responseActorOf } from './actor.ts';
 import type { ActivityLog } from './activity-log.ts';
 
@@ -20,6 +21,31 @@ export function createRateLimitAudit(activityLog: ActivityLog): RateLimitExceede
       requestId: res.locals.requestId,
       ...(req.ip === undefined ? {} : { ip: req.ip }),
       metadata: { bucket: rule.bucket },
+    });
+  };
+}
+
+/**
+ * Builds the callback that records `rateLimit.sustainedExceeded` (security) at the first request of a user over the
+ * hourly or daily limit of `/v1`: the user as the actor, the bucket, the window, the limit and the mode that applied.
+ * The outcome is `denied` when the request was refused (`enforce`) and `success` when it passed (`report`). Nothing of
+ * the request is recorded beyond what `rateLimit.exceeded` records (request id and IP).
+ *
+ * @param activityLog The log.
+ * @returns The handler for `SustainedRateLimit.onExceeded`.
+ */
+export function createSustainedRateLimitAudit(activityLog: ActivityLog): SustainedExceededHandler {
+  return async ({ rule, window, mode, req, res }) => {
+    await activityLog.record({
+      category: 'security',
+      action: 'rateLimit.sustainedExceeded',
+      outcome: mode === 'enforce' ? 'denied' : 'success',
+      actor: responseActorOf(res),
+      // The group of the user, when he has one, so his group administrators and dealer see the alert in the monitor.
+      ...(res.locals.auth?.groupId == null ? {} : { groupId: res.locals.auth.groupId }),
+      requestId: res.locals.requestId,
+      ...(req.ip === undefined ? {} : { ip: req.ip }),
+      metadata: { bucket: rule.bucket, window, limit: rule.limit, mode },
     });
   };
 }

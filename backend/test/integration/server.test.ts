@@ -93,6 +93,15 @@ describe('run', () => {
     }
   });
 
+  it('starts with the guard of the requests that do not look like a browser\'s when REQUEST_ORIGIN_SIGNAL is on (the other tests of this file run with it off, the emergency exit)', async () => {
+    const { running, port } = await started({ REQUEST_ORIGIN_SIGNAL: 'on' });
+    try {
+      assert.equal((await fetch(`http://127.0.0.1:${port}/health/ready`)).status, 200);
+    } finally {
+      await closed(running);
+    }
+  });
+
   it('keeps headersTimeout below a short request timeout', async () => {
     const { running } = await started({ REQUEST_TIMEOUT_MS: '1000' });
     try {

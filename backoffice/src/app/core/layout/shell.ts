@@ -11,7 +11,10 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
+import { SecurityAlerts } from '../activity/security-alerts';
+import { I18nService } from '../i18n/i18n.service';
 import { TPipe } from '../i18n/t-pipe';
+import { CountBadge } from '../../shared/ui/count-badge/count-badge';
 import { IconButton } from '../../shared/ui/icon-button/icon-button';
 import { Icon } from '../../shared/ui/icon/icon';
 import { GroupContext } from '../groups/group-context';
@@ -29,7 +32,7 @@ import { UserMenu } from './user-menu';
  */
 @Component({
   selector: 'fc-shell',
-  imports: [RouterLink, RouterOutlet, GroupSelector, Icon, IconButton, TPipe, UserMenu],
+  imports: [CountBadge, RouterLink, RouterOutlet, GroupSelector, Icon, IconButton, TPipe, UserMenu],
   templateUrl: './shell.html',
   styleUrl: './shell.css',
   host: { '(keydown.escape)': 'onEscape()' },
@@ -47,6 +50,24 @@ export class Shell {
   private readonly menuItems = inject(MENU_ITEMS);
   protected readonly groups = inject(GroupContext);
   private readonly features = inject(GroupFeatures);
+  private readonly alerts = inject(SecurityAlerts);
+  private readonly i18n = inject(I18nService);
+
+  /** Counter of the activity log entry: the text shown and the one read by screen readers, `null` when there are no new alerts. */
+  protected readonly alertBadge = computed(() => {
+    const text = this.alerts.badge();
+    if (text === null) {
+      return null;
+    }
+    const params = { count: text };
+    return {
+      text,
+      label:
+        this.alerts.count() === 1
+          ? this.i18n.t('LAYOUT.ALERTS_ONE', params)
+          : this.i18n.t('LAYOUT.ALERTS_OTHER', params),
+    };
+  });
 
   /** The side menu is offered only to a fully signed-in user (not while a password change is pending). */
   protected readonly showNav = computed(() => this.session.status() === 'authenticated');

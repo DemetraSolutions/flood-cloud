@@ -2,7 +2,7 @@ import { defineRoute } from '../../shared/http/routes.ts';
 import type { RouteDefinition } from '../../shared/http/routes.ts';
 import type { RateLimitRules } from '../../shared/security/rate-limit/rules.ts';
 import { validateBody, validateParams } from '../../shared/validation/middleware.ts';
-import { ACTIVATION_BODY_LIMIT, activationBody, placeKeyParams, requireNoBodyContent } from './store-keys.schemas.ts';
+import { ACTIVATION_BODY_LIMIT, activationBody, placeKeyParams, validateActivationCodeBody } from './store-keys.schemas.ts';
 import type { StoreKeysController } from './store-keys.controller.ts';
 
 /**
@@ -27,7 +27,7 @@ export function createStoreKeysRoutes(controller: StoreKeysController, rules: Ra
       bodyLimit: '1kb',
       rateLimit: [rules.storeKeyAdminPerUser],
       compress: false,
-      middleware: [validateParams(placeKeyParams), requireNoBodyContent],
+      middleware: [validateParams(placeKeyParams), validateActivationCodeBody],
       handler: controller.createCode,
     }),
     defineRoute({ method: 'DELETE', path: `${key}/activation-code`, auth: group('storeKeys:manage'), rateLimit: [rules.storeKeyAdminPerUser], middleware: [validateParams(placeKeyParams)], handler: controller.cancelCode }),

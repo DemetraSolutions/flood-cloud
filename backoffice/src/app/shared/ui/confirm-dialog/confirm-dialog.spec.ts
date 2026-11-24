@@ -11,6 +11,7 @@ import { ConfirmDialog } from './confirm-dialog';
     heading="Elimina"
     message="Eliminare «Centro»?"
     [confirmLabel]="label()"
+    [alert]="alert()"
     [danger]="danger()"
     [busy]="busy()"
     [(open)]="open"
@@ -22,6 +23,7 @@ class Host {
   readonly label = signal<string | null>(null);
   readonly danger = signal(true);
   readonly busy = signal(false);
+  readonly alert = signal(false);
   readonly confirms = signal(0);
 }
 
@@ -50,6 +52,17 @@ describe('ConfirmDialog', () => {
     expect(footer()[0].textContent?.trim()).toBe('[COMMON.CANCEL]');
     expect(footer()[1].textContent?.trim()).toBe('[COMMON.CONFIRM]');
     expect(footer()[1].getAttribute('data-variant')).toBe('danger');
+  });
+
+  it('is an alert dialog with the focus on Cancel only on request', async () => {
+    const { fixture, host, root, footer } = await render();
+    expect(root.querySelector('dialog')?.hasAttribute('role')).toBe(false);
+    expect(footer()[0].hasAttribute('autofocus')).toBe(false);
+    host.alert.set(true);
+    await fixture.whenStable();
+    expect(root.querySelector('dialog')?.getAttribute('role')).toBe('alertdialog');
+    expect(footer()[0].hasAttribute('autofocus')).toBe(true);
+    expect(footer()[1].hasAttribute('autofocus')).toBe(false);
   });
 
   it('emits confirmed without closing, and cancel closes', async () => {

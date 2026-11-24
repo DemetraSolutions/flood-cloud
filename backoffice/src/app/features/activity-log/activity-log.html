@@ -1,6 +1,21 @@
 <header class="page-header">
-  <h1>{{ 'ACTIVITY.TITLE' | t }}</h1>
+  <h1 #heading tabindex="-1">{{ 'ACTIVITY.TITLE' | t }}</h1>
 </header>
+
+@if (alertNotice(); as notice) {
+  <section class="alert-notice" [attr.aria-label]="'ACTIVITY.ALERTS.REGION' | t">
+    <fc-icon name="alert" />
+    <p>{{ notice }}</p>
+    <div class="alert-actions">
+      <button fc-button variant="secondary" (click)="showAlerts()">
+        {{ 'ACTIVITY.ALERTS.SHOW' | t }}
+      </button>
+      <button fc-button variant="ghost" (click)="markAlertsSeen()">
+        {{ 'ACTIVITY.ALERTS.MARK_SEEN' | t }}
+      </button>
+    </div>
+  </section>
+}
 
 <form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
   <fc-select
@@ -47,8 +62,19 @@
   />
 </form>
 
-@if (actorFilter() || canFilterGroup()) {
+@if (actorFilter() || canFilterGroup() || alertsFilter()) {
   <div class="active-filters">
+    @if (alertsFilter()) {
+      <button
+        fc-button
+        variant="secondary"
+        [attr.aria-label]="'ACTIVITY.FILTER.CLEAR_ALERTS' | t"
+        (click)="clearAlerts()"
+      >
+        <fc-icon name="close" />
+        {{ 'ACTIVITY.FILTER.ONLY_ALERTS' | t }}
+      </button>
+    }
     @if (actorFilter(); as actor) {
       <button fc-button variant="secondary" (click)="clearActor()">
         {{ 'ACTIVITY.FILTER.CLEAR_ACTOR' | t: { id: abbreviate(actor) } }}
@@ -82,6 +108,12 @@
     [emptyTitle]="'ACTIVITY.EMPTY' | t"
     [emptyMessage]="'ACTIVITY.EMPTY_MESSAGE' | t"
   >
+    <ng-template fcCell="action" let-row>
+      {{ actionLabel(row) }}
+      @if (actionDetail(row); as detail) {
+        <small class="action-detail">{{ detail }}</small>
+      }
+    </ng-template>
     <ng-template fcCell="category" let-row>
       <fc-status-badge [tone]="categoryTone(row)">{{ categoryLabel(row) }}</fc-status-badge>
     </ng-template>

@@ -18,12 +18,22 @@ export class StoreKeyApi {
     return `/v1/groups/${encodeURIComponent(groupId)}/places/${encodeURIComponent(placeId)}/store-key`;
   }
 
-  /** Generates an activation code (replacing the pending one); the key in use keeps working. */
-  async createCode(groupId: string, placeId: string): Promise<ActivationCode> {
+  /**
+   * Generates an activation code (replacing the pending one); the key in use keeps working until
+   * the code is used. For a place with an active key the server wants the explicit confirmation.
+   *
+   * @param confirmReplaceActiveKey Sends `{ confirmReplaceActiveKey: true }`; without it no body.
+   * @throws ApiError `409` with the `required` issue on `confirmReplaceActiveKey` when the key became active meanwhile.
+   */
+  async createCode(
+    groupId: string,
+    placeId: string,
+    confirmReplaceActiveKey = false,
+  ): Promise<ActivationCode> {
     const response = await firstValueFrom(
       this.http.post<ApiData<ActivationCode>>(
         `${this.url(groupId, placeId)}/activation-codes`,
-        null,
+        confirmReplaceActiveKey ? { confirmReplaceActiveKey: true } : null,
       ),
     );
     return response.data;

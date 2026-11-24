@@ -51,6 +51,9 @@
             >
               <fc-icon [name]="item.icon" />
               {{ item.labelKey | t }}
+              @if (item.badge === 'securityAlerts' && alertBadge(); as badge) {
+                <fc-count-badge [text]="badge.text" [label]="badge.label" />
+              }
             </a>
             @if (item.children) {
               <ul>

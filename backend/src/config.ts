@@ -104,6 +104,16 @@ export interface Config {
   readonly rateLimitClientErrorsPerUser: number;
   /** Requests per minute allowed to a user on the `/v1` API (`RATE_LIMIT_API_PER_USER`). */
   readonly rateLimitApiPerUser: number;
+  /** Requests per hour allowed to an authenticated user on the `/v1` API, next to the per-minute rule (`RATE_LIMIT_API_PER_USER_HOUR`). */
+  readonly rateLimitApiPerUserHour: number;
+  /** Requests per day (UTC) allowed to an authenticated user on the `/v1` API (`RATE_LIMIT_API_PER_USER_DAY`). */
+  readonly rateLimitApiPerUserDay: number;
+  /** What happens over the hourly and daily limits of a user: `report` records a security event and lets the request pass, `enforce` answers `429` (PSA and D are never refused) (`RATE_LIMIT_API_SUSTAINED_MODE`). */
+  readonly rateLimitApiSustainedMode: 'report' | 'enforce';
+  /** `on` (default) reports the `/v1` requests of a user that do not look like a browser's; `off` turns the signal off (`REQUEST_ORIGIN_SIGNAL`). */
+  readonly requestOriginSignal: 'on' | 'off';
+  /** `on` forces both settings of the security policy to report only, whatever the database says: the emergency exit of the block and of the limits (`SECURITY_POLICY_FORCE_REPORT`, default `off`). */
+  readonly securityPolicyForceReport: 'on' | 'off';
   /** Failed authentications per minute allowed to a client IP on `/v1` (`RATE_LIMIT_UNAUTHENTICATED_PER_IP`). */
   readonly rateLimitUnauthenticatedPerIp: number;
   /** Requests per minute allowed to a store key on the `/v1` API (`RATE_LIMIT_API_PER_STORE`). */
@@ -255,6 +265,34 @@ function readInteger(
     return undefined;
   }
   return value;
+}
+
+/**
+ * Reads `RATE_LIMIT_API_SUSTAINED_MODE`: `report` (default) or `enforce`, exactly as written.
+ *
+ * @returns The mode, `report` when unset, or `undefined` after recording an issue.
+ */
+function readSustainedMode(env: Env, issues: ConfigIssue[]): 'report' | 'enforce' | undefined {
+  const raw = optionalVariable(env, 'RATE_LIMIT_API_SUSTAINED_MODE');
+  if (raw === undefined || raw === 'report' || raw === 'enforce') {
+    return raw ?? 'report';
+  }
+  issues.push({ variable: 'RATE_LIMIT_API_SUSTAINED_MODE', reason: 'must be report or enforce' });
+  return undefined;
+}
+
+/**
+ * Reads a switch that is `on` or `off`, exactly as written.
+ *
+ * @returns The value, the fallback when unset, or `undefined` after recording an issue.
+ */
+function readOnOff(env: Env, issues: ConfigIssue[], variable: string, fallback: 'on' | 'off'): 'on' | 'off' | undefined {
+  const raw = optionalVariable(env, variable);
+  if (raw === undefined || raw === 'on' || raw === 'off') {
+    return raw ?? fallback;
+  }
+  issues.push({ variable, reason: 'must be on or off' });
+  return undefined;
 }
 
 const INSECURE_TLS_OPTIONS = new Set([
@@ -673,6 +711,14 @@ export function loadConfig(env: Env): Config {
   const rateLimitUserCredentialsPerUser = readInteger(env, issues, 'RATE_LIMIT_USER_CREDENTIALS_PER_USER', 20, 1, 100000);
   const rateLimitClientErrorsPerUser = readInteger(env, issues, 'RATE_LIMIT_CLIENT_ERRORS_PER_USER', 30, 1, 100000);
   const rateLimitApiPerUser = readInteger(env, issues, 'RATE_LIMIT_API_PER_USER', 300, 1, 100000);
+  const rateLimitApiPerUserHour = readInteger(env, issues, 'RATE_LIMIT_API_PER_USER_HOUR', 2000, 1, 10_000_000);
+  const rateLimitApiPerUserDay = readInteger(env, issues, 'RATE_LIMIT_API_PER_USER_DAY', 10_000, 1, 100_000_000);
+  const rateLimitApiSustainedMode = readSustainedMode(env, issues);
+  const requestOriginSignal = readOnOff(env, issues, 'REQUEST_ORIGIN_SIGNAL', 'on');
+  const securityPolicyForceReport = readOnOff(env, issues, 'SECURITY_POLICY_FORCE_REPORT', 'off');
+  if (rateLimitApiPerUser !== undefined && rateLimitApiPerUserHour !== undefined && rateLimitApiPerUserDay !== undefined && !(rateLimitApiPerUser <= rateLimitApiPerUserHour && rateLimitApiPerUserHour <= rateLimitApiPerUserDay)) {
+    issues.push({ variable: 'RATE_LIMIT_API_PER_USER_HOUR', reason: 'the limits must grow with the window: RATE_LIMIT_API_PER_USER <= RATE_LIMIT_API_PER_USER_HOUR <= RATE_LIMIT_API_PER_USER_DAY' });
+  }
   const rateLimitUnauthenticatedPerIp = readInteger(env, issues, 'RATE_LIMIT_UNAUTHENTICATED_PER_IP', 300, 1, 100000);
   const rateLimitMediaUploadPerUser = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_USER', 30, 1, 100000);
   const rateLimitMediaUploadPerUserDaily = readInteger(env, issues, 'RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY', 300, 1, 1_000_000);
@@ -758,6 +804,11 @@ export function loadConfig(env: Env): Config {
     rateLimitUserCredentialsPerUser === undefined ||
     rateLimitClientErrorsPerUser === undefined ||
     rateLimitApiPerUser === undefined ||
+    rateLimitApiPerUserHour === undefined ||
+    rateLimitApiPerUserDay === undefined ||
+    rateLimitApiSustainedMode === undefined ||
+    requestOriginSignal === undefined ||
+    securityPolicyForceReport === undefined ||
     rateLimitUnauthenticatedPerIp === undefined ||
     rateLimitMediaUploadPerUser === undefined ||
     rateLimitMediaUploadPerUserDaily === undefined ||
@@ -815,6 +866,11 @@ export function loadConfig(env: Env): Config {
     rateLimitUserCredentialsPerUser,
     rateLimitClientErrorsPerUser,
     rateLimitApiPerUser,
+    rateLimitApiPerUserHour,
+    rateLimitApiPerUserDay,
+    rateLimitApiSustainedMode,
+    requestOriginSignal,
+    securityPolicyForceReport,
     rateLimitUnauthenticatedPerIp,
     rateLimitMediaUploadPerUser,
     rateLimitMediaUploadPerUserDaily,

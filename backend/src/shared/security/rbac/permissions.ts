@@ -62,6 +62,7 @@ export const PERMISSIONS = Object.freeze({
   ERROR_DOCUMENTS_READ: 'errorDocuments:read',
   ACTIVATIONS_READ: 'activations:read',
   ACTIVATIONS_MANAGE: 'activations:manage',
+  SECURITY_POLICY_MANAGE: 'securityPolicy:manage',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

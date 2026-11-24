@@ -1,0 +1,141 @@
+<header class="page-header">
+  <h1>{{ 'CATALOG_XLSX.TITLE' | t }}</h1>
+</header>
+<p class="hint">{{ 'CATALOG_XLSX.HINT' | t }}</p>
+
+<p class="status" role="status">{{ statusMessage() }}</p>
+
+<section class="card" aria-labelledby="template-heading">
+  <h2 id="template-heading">{{ 'CATALOG_XLSX.TEMPLATE.TITLE' | t }}</h2>
+  <p>{{ 'CATALOG_XLSX.TEMPLATE.TEXT' | t }}</p>
+  <p class="note">{{ 'CATALOG_XLSX.TEMPLATE.PLACES_NOTE' | t }}</p>
+  <div class="actions">
+    <button fc-button variant="secondary" [loading]="downloading() === 'template'" [disabled]="busy()" (click)="downloadTemplate()">
+      {{ 'CATALOG_XLSX.TEMPLATE.ACTION' | t }}
+    </button>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="export-heading">
+  <h2 id="export-heading">{{ 'CATALOG_XLSX.EXPORT.TITLE' | t }}</h2>
+  <p>{{ 'CATALOG_XLSX.EXPORT.TEXT' | t }}</p>
+  <fieldset class="choice" aria-describedby="references-help">
+    <legend>{{ 'CATALOG_XLSX.EXPORT.REFERENCES' | t }}</legend>
+    <label>
+      <input type="radio" name="references" value="ids" [checked]="references() === 'ids'" (change)="setReferences('ids')" />
+      {{ 'CATALOG_XLSX.EXPORT.IDS' | t }}
+    </label>
+    <label>
+      <input type="radio" name="references" value="names" [checked]="references() === 'names'" (change)="setReferences('names')" />
+      {{ 'CATALOG_XLSX.EXPORT.NAMES' | t }}
+    </label>
+  </fieldset>
+  <p id="references-help" class="note">
+    {{ references() === 'ids' ? ('CATALOG_XLSX.EXPORT.IDS_HELP' | t) : ('CATALOG_XLSX.EXPORT.NAMES_HELP' | t) }}
+  </p>
+  <p class="note">{{ 'CATALOG_XLSX.EXPORT.GENERAL_HELP' | t }}</p>
+  <div class="actions">
+    <button fc-button [loading]="downloading() === 'export'" [disabled]="busy()" (click)="downloadExport()">
+      {{ 'CATALOG_XLSX.EXPORT.ACTION' | t }}
+    </button>
+  </div>
+  @if (downloadError(); as message) {
+    <p class="problem" role="alert">{{ message }}</p>
+  }
+</section>
+
+<input
+  #fileInput
+  hidden
+  type="file"
+  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  (change)="onFile($event)"
+/>
+
+<section *fcCan="'products:update'" class="card" aria-labelledby="import-heading">
+  <h2 id="import-heading">{{ 'CATALOG_XLSX.IMPORT.TITLE' | t }}</h2>
+  <p>{{ 'CATALOG_XLSX.IMPORT.TEXT' | t: { megabytes: maxMegabytes } }}</p>
+  <p class="note">{{ 'CATALOG_XLSX.IMPORT.NOTE' | t }}</p>
+  <div class="actions">
+    <button fc-button variant="secondary" [disabled]="busy()" (click)="fileInput.click()">
+      {{ 'CATALOG_XLSX.IMPORT.CHOOSE' | t }}
+    </button>
+    @if (file() !== null) {
+      <span class="file">{{ fileLabel() }}</span>
+      <button fc-button [loading]="working() === 'verify'" [disabled]="busy()" (click)="verify()">
+        {{ 'CATALOG_XLSX.IMPORT.VERIFY' | t }}
+      </button>
+    }
+  </div>
+  @if (pickError(); as message) {
+    <p class="problem" role="alert">{{ message }}</p>
+  }
+
+  @if (failure(); as refused) {
+    <section class="outcome problem" role="alert" aria-labelledby="failure-heading">
+      <h3 id="failure-heading" data-outcome tabindex="-1">{{ 'CATALOG_XLSX.IMPORT.ERROR.TITLE' | t }}</h3>
+      <p>{{ refused.message }}</p>
+      @if (refused.rows.length > 0) {
+        <fc-import-problems [rows]="refused.rows" [errorCount]="refused.errorCount" [moreErrors]="refused.moreErrors" />
+      }
+    </section>
+  }
+
+  @if (verified(); as outcome) {
+    <section class="outcome" aria-labelledby="verified-heading">
+      <h3 id="verified-heading" data-outcome tabindex="-1">{{ 'CATALOG_XLSX.IMPORT.VERIFIED_TITLE' | t }}</h3>
+      <p>{{ (hasChanges() ? 'CATALOG_XLSX.IMPORT.VERIFIED_TEXT' : 'CATALOG_XLSX.IMPORT.NO_CHANGES') | t }}</p>
+      <fc-data-table
+        [caption]="'CATALOG_XLSX.COUNTS.CAPTION_VERIFIED' | t"
+        [columns]="countColumns()"
+        [rows]="verifiedLines()"
+        [rowKey]="countRowKey"
+        [rowHeader]="'sheet'"
+      />
+      @if (hasChanges()) {
+        <div class="actions">
+          <button fc-button variant="danger" [loading]="working() === 'import'" [disabled]="busy()" (click)="confirmOpen.set(true)">
+            {{ 'CATALOG_XLSX.IMPORT.ACTION' | t }}
+          </button>
+        </div>
+      }
+    </section>
+  }
+
+  @if (done(); as outcome) {
+    <section class="outcome" aria-labelledby="done-heading">
+      <h3 id="done-heading" data-outcome tabindex="-1">{{ 'CATALOG_XLSX.IMPORT.DONE' | t }}</h3>
+      <p>
+        {{ 'CATALOG_XLSX.IMPORT.ACTIVITY' | t }}
+        <a *fcCan="'activityLog:read'" routerLink="/activity-log">{{ 'CATALOG_XLSX.IMPORT.ACTIVITY_LINK' | t }}</a>
+      </p>
+      <fc-data-table
+        [caption]="'CATALOG_XLSX.COUNTS.CAPTION_DONE' | t"
+        [columns]="countColumns()"
+        [rows]="doneLines()"
+        [rowKey]="countRowKey"
+        [rowHeader]="'sheet'"
+      />
+    </section>
+  }
+</section>
+
+<details class="rules">
+  <summary>{{ 'CATALOG_XLSX.RULES.TITLE' | t }}</summary>
+  <ul>
+    @for (rule of ruleKeys; track rule) {
+      <li>{{ 'CATALOG_XLSX.RULES.' + rule | t }}</li>
+    }
+  </ul>
+</details>
+
+<fc-confirm-dialog
+  [heading]="'CATALOG_XLSX.IMPORT.CONFIRM_TITLE' | t"
+  [message]="confirmMessage()"
+  [confirmLabel]="'CATALOG_XLSX.IMPORT.CONFIRM_ACTION' | t"
+  [danger]="true"
+  [busy]="working() === 'import'"
+  [open]="confirmOpen()"
+  (openChange)="onConfirmClosed()"
+  (confirmed)="applyImport()"
+/>

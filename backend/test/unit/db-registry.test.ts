@@ -68,7 +68,7 @@ describe('collection registry', () => {
     }
     assert.deepEqual(
       COLLECTIONS.common.activityEvents.indexes.map((index) => index.name),
-      ['at_-1__id_-1', 'groupId_1_at_-1__id_-1', 'actor.id_1_at_-1__id_-1', 'category_1_at_-1__id_-1', 'requestId_1', 'expiresAt_1'],
+      ['at_-1__id_-1', 'groupId_1_at_-1__id_-1', 'actor.id_1_at_-1__id_-1', 'category_1_at_-1__id_-1', 'action_1_at_-1', 'requestId_1', 'expiresAt_1'],
     );
     assert.deepEqual(COLLECTIONS.common.rateLimits.indexes, [{ name: 'expiresAt_1', key: { expiresAt: 1 }, expireAfterSeconds: 0 }]);
     assert.equal(COLLECTIONS.common.dealers.indexes, DEALERS_INDEXES);
@@ -196,6 +196,8 @@ describe('collection registry', () => {
       [join(SRC, 'db', 'indexes.ts'), Infinity],
       [join(SRC, 'db', 'databases.ts'), 1],
       [join(SRC, 'modules', 'groups', 'catalogs', 'references.repository.ts'), 1],
+      // The session-bound database of a transaction forwards the name its repository passes (the repositories are checked here).
+      [join(SRC, 'db', 'session-databases.ts'), 1],
     ]);
     for (const file of await sourceFiles()) {
       const text = await readFile(file, 'utf8');

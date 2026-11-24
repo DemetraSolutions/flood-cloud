@@ -428,6 +428,11 @@ Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul clu
 | `contacts` | esistenza dei clienti nelle promozioni; lettura compatta `lookup/customers` | `_id`, `trash`, `customer`, `companyName`, `name`, `surname` (mai email, telefoni, indirizzi) |
 | `contacts_groups` | esistenza dei gruppi di contatti nelle promozioni; lettura compatta `lookup/contact-groups` | `_id`, `name` (stringa; nessun flag di cestino) |
 
+## settings — impostazioni della piattaforma (database common)
+Un documento per chiave, collection nuova (la scrive solo il PSA tramite il backoffice): `{ key, value, updatedAt, updatedBy }`, indice univoco su `key`.
+- `PRICE_LIST`: il listino delle attivazioni (vedi `doc/API.md`).
+- `SECURITY_POLICY`: la politica di sicurezza, `value` = `{ nonBrowserRequests?: 'report' | 'block', sustainedLimits?: 'report' | 'enforce' }`. **Ogni campo è presente solo dopo che il PSA lo ha salvato**: un campo assente (o con un valore non valido, ignorato) vale il predefinito del server, cioè `report` per `nonBrowserRequests` e, per `sustainedLimits`, `RATE_LIMIT_API_SUSTAINED_MODE` (`report` se la variabile manca); un valore salvato prevale sempre sulla variabile. Un documento assente vale tutti i predefiniti. Con `SECURITY_POLICY_FORCE_REPORT=on` il valore salvato non ha effetto (la politica in vigore è `report`, fonte `forced`). Mai altri campi (le soglie restano nelle variabili d'ambiente). Le istanze del server tengono una copia in memoria di 30 secondi.
+
 ## Domande aperte
 1. `groups.dealerId`: nel legacy riferisce l'`_id` dell'utente `D` (D-09, anagrafica nella collection `dealers`, con lo stesso `_id`). Aperto: se un dealer possa avere più utenti.
 2. Migrazione di `companies` e `places`: risolta con le copie nel common (D-01, D-20), scritte dal legacy e riallineate da `sync:copies`; la dismissione delle copie nei database dei gruppi è la fase 3 (`doc/Tasks.md` 5.7).

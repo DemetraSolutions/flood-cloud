@@ -48,7 +48,7 @@ describe('activityEvents collection (real MongoDB)', () => {
     assert.equal(options['validationLevel'], undefined);
     assert.equal(options['validationAction'], undefined);
     const indexes = new Map((await log().indexes()).map((index) => [index.name, index]));
-    assert.deepEqual([...indexes.keys()].sort(), ['_id_', 'actor.id_1_at_-1__id_-1', 'at_-1__id_-1', 'category_1_at_-1__id_-1', 'expiresAt_1', 'groupId_1_at_-1__id_-1', 'requestId_1']);
+    assert.deepEqual([...indexes.keys()].sort(), ['_id_', 'action_1_at_-1', 'actor.id_1_at_-1__id_-1', 'at_-1__id_-1', 'category_1_at_-1__id_-1', 'expiresAt_1', 'groupId_1_at_-1__id_-1', 'requestId_1']);
     assert.equal(indexes.get('expiresAt_1')?.expireAfterSeconds, 0);
     assert.deepEqual(indexes.get('groupId_1_at_-1__id_-1')?.key, { groupId: 1, at: -1, _id: -1 });
   });

@@ -1,0 +1,30 @@
+<p class="summary">{{ summary() }}</p>
+<div class="tools">
+  @if (sheetOptions().length > 2) {
+    <fc-select
+      [label]="'CATALOG_XLSX.PROBLEMS.FILTER' | t"
+      [options]="sheetOptions()"
+      [value]="sheet()"
+      (valueChange)="sheet.set($event)"
+    />
+  }
+  <div class="actions">
+    <button fc-button variant="secondary" (click)="copy()">
+      {{ 'CATALOG_XLSX.PROBLEMS.COPY' | t }}
+    </button>
+    <button fc-button variant="secondary" (click)="save()">
+      {{ 'CATALOG_XLSX.PROBLEMS.SAVE' | t }}
+    </button>
+  </div>
+</div>
+<fc-data-table
+  [caption]="'CATALOG_XLSX.PROBLEMS.CAPTION' | t"
+  [columns]="columns()"
+  [rows]="shown()"
+  [rowKey]="rowKey"
+  [emptyTitle]="'CATALOG_XLSX.PROBLEMS.EMPTY' | t"
+  [emptyMessage]="'CATALOG_XLSX.PROBLEMS.EMPTY_MESSAGE' | t"
+/>
+@if (moreErrors()) {
+  <p class="more">{{ moreNote() }}</p>
+}

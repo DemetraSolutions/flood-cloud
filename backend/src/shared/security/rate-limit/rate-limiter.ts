@@ -7,6 +7,9 @@ export const RATE_LIMIT_WINDOW_SECONDS = 60;
 /** Seconds a counter outlives its window before the TTL index removes it. */
 const RETENTION_AFTER_WINDOW_SECONDS = 60;
 
+/** Longest a counter read or write may take: a slow primary must not leave a request hanging (the error then propagates like any other failure of the store, so the request fails closed). */
+export const RATE_LIMIT_MAX_TIME_MS = 2000;
+
 /** MongoDB duplicate key error code, raised when two upserts of the same counter race. */
 const DUPLICATE_KEY = 11000;
 
@@ -90,7 +93,7 @@ export function createRateLimiter(databases: Databases, now: () => number = Date
         $inc: { count: 1 },
         $setOnInsert: { expiresAt: new Date((windowEnd + RETENTION_AFTER_WINDOW_SECONDS) * 1000) },
       };
-      const options = { upsert: true, returnDocument: 'after' } as const;
+      const options = { upsert: true, returnDocument: 'after', maxTimeMS: RATE_LIMIT_MAX_TIME_MS } as const;
       const counters = databases.common().collection<RateLimitDocument>('rateLimits');
       let counter: RateLimitDocument | null;
       try {
@@ -114,7 +117,7 @@ export function createRateLimiter(databases: Databases, now: () => number = Date
     },
     peek: async (bucket, key, limit, windowSeconds = RATE_LIMIT_WINDOW_SECONDS) => {
       const { id, resetSeconds } = window(bucket, key, windowSeconds);
-      const counter = await databases.common().collection<RateLimitDocument>('rateLimits').findOne({ _id: id }, { projection: { count: 1 } });
+      const counter = await databases.common().collection<RateLimitDocument>('rateLimits').findOne({ _id: id }, { projection: { count: 1 }, maxTimeMS: RATE_LIMIT_MAX_TIME_MS });
       const count = counter?.count ?? 0;
       return { allowed: count < limit, limit, remaining: Math.max(0, limit - count), resetSeconds, firstExcess: false };
     },

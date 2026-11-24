@@ -5,6 +5,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { API, backend, errorBody, provideApiTesting, settle } from '../../../testing/api';
 import { emulateNativeDialog } from '../../../testing/dialog';
 import { fakeEntry } from '../../../testing/activity';
+import { fakeSecurityAlerts } from '../../../testing/alerts';
 import { signIn } from '../../../testing/session';
 import { AppConfig } from '../../core/config/app-config';
 import { GroupContext, LAST_GROUP_ID_KEY } from '../../core/groups/group-context';
@@ -58,10 +59,17 @@ function page(data: ActivityEntry[], next: string | null = null) {
   return { data, page: { limit: 25, next } };
 }
 
-async function render(url = '/activity-log', profile: Partial<Profile> = {}, extra = false) {
+async function render(
+  url = '/activity-log',
+  profile: Partial<Profile> = {},
+  extra = false,
+  alertCount = 0,
+) {
   emulateNativeDialog();
+  const alerts = fakeSecurityAlerts(alertCount);
   TestBed.configureTestingModule({
     providers: [
+      alerts.provider,
       ...provideApiTesting(),
       ...(extra ? [{ provide: AppConfig, useValue: { apiBaseUrl: signal(null) } }] : []),
       provideRouter(
@@ -105,7 +113,20 @@ async function render(url = '/activity-log', profile: Partial<Profile> = {}, ext
   const params = (req: {
     request: { params: { keys(): string[]; get(k: string): string | null } };
   }) => Object.fromEntries(req.request.params.keys().map((k) => [k, req.request.params.get(k)]));
-  return { harness, root, router, request, flush, view, rows, cells, field, search, params };
+  return {
+    harness,
+    root,
+    router,
+    request,
+    flush,
+    view,
+    rows,
+    cells,
+    field,
+    search,
+    params,
+    alerts,
+  };
 }
 
 afterEach(() => {
@@ -517,5 +538,149 @@ describe('ActivityLogPage', () => {
       expect(search().get('limit')).toBe('50');
       await flush([ONE]);
     });
+  });
+});
+
+describe('ActivityLogPage security alerts', () => {
+  const METADATA = { bucket: 'api:user', window: 'hour', limit: 600, mode: 'report' };
+  const ALERT = fakeEntry({
+    id: '665f1c2e9b1d4a0012ab3510',
+    category: 'security',
+    action: 'rateLimit.sustainedExceeded',
+    outcome: 'denied',
+    metadata: METADATA,
+  });
+
+  it('shows no notice when there are no new alerts', async () => {
+    const { flush, root } = await render();
+    await flush([]);
+    expect(root.querySelector('.alert-notice')).toBeNull();
+  });
+
+  it('announces one or more new alerts with the right wording', async () => {
+    const ctx = await render('/activity-log', { role: 'SA' }, false, 1);
+    await ctx.flush([]);
+    expect(ctx.root.querySelector('.alert-notice p')?.textContent).toBe(
+      'ACTIVITY.ALERTS.NOTICE_ONE {"count":"1"}',
+    );
+    ctx.alerts.count.set(4);
+    ctx.alerts.capped.set(true);
+    ctx.harness.detectChanges();
+    expect(ctx.root.querySelector('.alert-notice p')?.textContent).toBe(
+      'ACTIVITY.ALERTS.NOTICE_OTHER {"count":"99+"}',
+    );
+  });
+
+  it('shows the alerts: filters by action and day in the URL, marks them as seen', async () => {
+    const ctx = await render('/activity-log', { role: 'SA' }, false, 3);
+    await ctx.flush([]);
+    const show = ctx.root.querySelector<HTMLButtonElement>('.alert-actions button')!;
+    show.click();
+    await ctx.view();
+    expect(ctx.alerts.markSeen).toHaveBeenCalledTimes(1);
+    expect(ctx.search().get('alerts')).toBe('true');
+    expect(ctx.search().has('action')).toBe(false);
+    expect(ctx.search().get('from')).toBe('2026-11-20');
+    expect(ctx.root.querySelector('.alert-notice')).toBeNull();
+    expect(document.activeElement).toBe(ctx.root.querySelector('h1'));
+    const req = ctx.request();
+    expect(req.request.params.get('alerts')).toBe('true');
+    expect(req.request.params.has('action')).toBe(false);
+    expect(req.request.params.get('from')).toBe(new Date('2026-11-20T00:00:00').toISOString());
+    req.flush(page([ALERT]));
+    await ctx.view();
+  });
+
+  it('marks the alerts as seen without filtering', async () => {
+    const ctx = await render('/activity-log', { role: 'SA' }, false, 2);
+    await ctx.flush([]);
+    ctx.root.querySelectorAll<HTMLButtonElement>('.alert-actions button')[1].click();
+    await ctx.view();
+    expect(ctx.alerts.markSeen).toHaveBeenCalledTimes(1);
+    expect(ctx.search().has('action')).toBe(false);
+    expect(ctx.root.querySelector('.alert-notice')).toBeNull();
+    expect(document.activeElement).toBe(ctx.root.querySelector('h1'));
+  });
+
+  it('keeps the alerts filter in the URL, shows it as removable and drops an action filter on Show', async () => {
+    const ctx = await render('/activity-log?alerts=true&action=user.created', { role: 'SA' });
+    const req = ctx.request();
+    expect(req.request.params.get('alerts')).toBe('true');
+    expect(req.request.params.get('action')).toBe('user.created');
+    req.flush(page([]));
+    await ctx.view();
+    const chip = [...ctx.root.querySelectorAll<HTMLButtonElement>('.active-filters button')].find(
+      (b) => b.textContent?.includes('ACTIVITY.FILTER.ONLY_ALERTS'),
+    )!;
+    expect(chip.getAttribute('aria-label')).toBe('ACTIVITY.FILTER.CLEAR_ALERTS');
+    chip.click();
+    await ctx.view();
+    expect(ctx.search().has('alerts')).toBe(false);
+    const next = ctx.request();
+    expect(next.request.params.has('alerts')).toBe(false);
+    next.flush(page([]));
+    await ctx.view();
+    expect(ctx.root.querySelector('.active-filters')).toBeNull();
+  });
+
+  it('does not offer or send the alerts filter to CA and PA', async () => {
+    const ctx = await render('/activity-log?alerts=true', { role: 'CA' });
+    const req = ctx.request();
+    expect(req.request.params.has('alerts')).toBe(false);
+    req.flush(page([]));
+    await ctx.view();
+    expect(ctx.root.querySelector('.active-filters')).toBeNull();
+  });
+
+  it('labels the store key alerts and describes their key', async () => {
+    const { flush, rows, cells } = await render();
+    await flush([
+      fakeEntry({
+        id: '665f1c2e9b1d4a0012ab3520',
+        action: 'store.activeKeyReplaced',
+        metadata: { keyHint: 'fc_sk_AbC1', replacedKeyId: 'k1' },
+      }),
+    ]);
+    expect(cells(0)[2]).toContain('ACTIVITY.ACTION.STORE_ACTIVE_KEY_REPLACED');
+    expect(rows()[0].querySelector('.action-detail')?.textContent).toContain(
+      'ACTIVITY.ALERTS.KEY_REPLACED',
+    );
+  });
+
+  it('shows the program of a non-browser request as text, never as HTML', async () => {
+    const { flush, rows } = await render();
+    await flush([
+      fakeEntry({
+        id: '665f1c2e9b1d4a0012ab3530',
+        action: 'request.nonBrowser',
+        metadata: { reason: 'noOrigin', source: 'api', userAgent: '<img src=x onerror=alert(1)>' },
+      }),
+    ]);
+    const detail = rows()[0].querySelector('.action-detail')!;
+    expect(detail.textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(detail.querySelector('img')).toBeNull();
+    expect(rows()[0].textContent).toContain('ACTIVITY.ACTION.REQUEST_NON_BROWSER');
+  });
+
+  it('describes the exceeded limit under the action and in the details', async () => {
+    const { flush, rows, root, view } = await render();
+    await flush([
+      ALERT,
+      fakeEntry({
+        id: '665f1c2e9b1d4a0012ab3511',
+        action: 'rateLimit.sustainedExceeded',
+        metadata: null,
+      }),
+    ]);
+    expect(rows()[0].querySelector('.action-detail')?.textContent).toContain(
+      'ACTIVITY.ALERTS.DETAIL',
+    );
+    expect(rows()[1].querySelector('.action-detail')).toBeNull();
+    expect(rows()[0].textContent).toContain('ACTIVITY.ACTION.RATE_LIMIT_SUSTAINED_EXCEEDED');
+    (rows()[0].querySelector('button') as HTMLButtonElement).click();
+    await view();
+    expect(root.querySelector('fc-activity-detail .summary-text')?.textContent).toContain(
+      'ACTIVITY.ALERTS.DETAIL',
+    );
   });
 });

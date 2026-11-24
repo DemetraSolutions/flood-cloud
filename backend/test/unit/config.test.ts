@@ -67,6 +67,8 @@ describe('loadConfig', () => {
         RATE_LIMIT_USER_CREDENTIALS_PER_USER: '7',
         RATE_LIMIT_CLIENT_ERRORS_PER_USER: '9',
         RATE_LIMIT_API_PER_USER: '100000',
+        RATE_LIMIT_API_PER_USER_HOUR: '100000',
+        RATE_LIMIT_API_PER_USER_DAY: '100000',
         RATE_LIMIT_UNAUTHENTICATED_PER_IP: '100000',
         ACTIVITY_LOG_RETENTION_DAYS: '3650',
         ACTIVITY_LOG_ERROR_RETENTION_DAYS: '7',
@@ -90,6 +92,46 @@ describe('loadConfig', () => {
       ['ACTIVITY_LOG_ERROR_RETENTION_DAYS', '0'],
     ] as const) {
       assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/);
+    }
+  });
+
+  it('reads and validates the sustained use limits of /v1', () => {
+    const defaults = loadConfig(validEnv());
+    assert.deepEqual([defaults.rateLimitApiPerUserHour, defaults.rateLimitApiPerUserDay, defaults.rateLimitApiSustainedMode], [2000, 10000, 'report']);
+    const custom = loadConfig(validEnv({ RATE_LIMIT_API_PER_USER: '4', RATE_LIMIT_API_PER_USER_HOUR: '5', RATE_LIMIT_API_PER_USER_DAY: '9', RATE_LIMIT_API_SUSTAINED_MODE: 'enforce' }));
+    assert.deepEqual([custom.rateLimitApiPerUserHour, custom.rateLimitApiPerUserDay, custom.rateLimitApiSustainedMode], [5, 9, 'enforce']);
+    assert.equal(loadConfig(validEnv({ RATE_LIMIT_API_SUSTAINED_MODE: 'report' })).rateLimitApiSustainedMode, 'report');
+    for (const [variable, bad] of [['RATE_LIMIT_API_PER_USER_HOUR', '0'], ['RATE_LIMIT_API_PER_USER_HOUR', '10000001'], ['RATE_LIMIT_API_PER_USER_DAY', 'x'], ['RATE_LIMIT_API_PER_USER_DAY', '100000001']] as const) {
+      assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/);
+    }
+    // The limits must grow with the window: minute <= hour <= day, otherwise the start fails.
+    const order = 'the limits must grow with the window: RATE_LIMIT_API_PER_USER <= RATE_LIMIT_API_PER_USER_HOUR <= RATE_LIMIT_API_PER_USER_DAY';
+    for (const env of [{ RATE_LIMIT_API_PER_USER_HOUR: '299' }, { RATE_LIMIT_API_PER_USER_DAY: '1999' }, { RATE_LIMIT_API_PER_USER: '2001' }, { RATE_LIMIT_API_PER_USER: '9', RATE_LIMIT_API_PER_USER_HOUR: '8', RATE_LIMIT_API_PER_USER_DAY: '9' }]) {
+      assert.equal(reasonFor(validEnv(env), 'RATE_LIMIT_API_PER_USER_HOUR'), order, JSON.stringify(env));
+    }
+    for (const env of [{ RATE_LIMIT_API_PER_USER_HOUR: '300' }, { RATE_LIMIT_API_PER_USER_DAY: '2000' }, { RATE_LIMIT_API_PER_USER: '2000' }]) {
+      assert.doesNotThrow(() => loadConfig(validEnv(env)), JSON.stringify(env));
+    }
+    for (const bad of ['Enforce', 'on', 'block']) {
+      assert.equal(reasonFor(validEnv({ RATE_LIMIT_API_SUSTAINED_MODE: bad }), 'RATE_LIMIT_API_SUSTAINED_MODE'), 'must be report or enforce');
+    }
+  });
+
+  it('reads and validates the switch of the non-browser signal', () => {
+    assert.equal(loadConfig(validEnv({ REQUEST_ORIGIN_SIGNAL: undefined })).requestOriginSignal, 'on');
+    assert.equal(loadConfig(validEnv({ REQUEST_ORIGIN_SIGNAL: 'on' })).requestOriginSignal, 'on');
+    assert.equal(loadConfig(validEnv({ REQUEST_ORIGIN_SIGNAL: 'off' })).requestOriginSignal, 'off');
+    for (const bad of ['ON', 'true', '0', 'yes']) {
+      assert.equal(reasonFor(validEnv({ REQUEST_ORIGIN_SIGNAL: bad }), 'REQUEST_ORIGIN_SIGNAL'), 'must be on or off');
+    }
+  });
+
+  it('reads and validates the emergency exit of the security policy', () => {
+    assert.equal(loadConfig(validEnv({ SECURITY_POLICY_FORCE_REPORT: undefined })).securityPolicyForceReport, 'off');
+    assert.equal(loadConfig(validEnv({ SECURITY_POLICY_FORCE_REPORT: 'on' })).securityPolicyForceReport, 'on');
+    assert.equal(loadConfig(validEnv({ SECURITY_POLICY_FORCE_REPORT: 'off' })).securityPolicyForceReport, 'off');
+    for (const bad of ['ON', 'true', '1']) {
+      assert.equal(reasonFor(validEnv({ SECURITY_POLICY_FORCE_REPORT: bad }), 'SECURITY_POLICY_FORCE_REPORT'), 'must be on or off');
     }
   });
 

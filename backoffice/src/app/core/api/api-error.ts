@@ -4,6 +4,7 @@ import {
   ApiErrorBody,
   ApiErrorCode,
   ApiErrorDetail,
+  ApiErrorRow,
   ClientErrorCode,
 } from './api.types';
 
@@ -22,6 +23,12 @@ export class ApiError extends Error {
   readonly code: ApiErrorCode | ClientErrorCode;
   /** Per-field details of a `422` response, empty otherwise. */
   readonly details: readonly ApiErrorDetail[];
+  /** Problems of a refused workbook (`422` of the catalog import), empty otherwise. */
+  readonly rows: readonly ApiErrorRow[];
+  /** How many problems a refused workbook has, `null` when the response does not say. */
+  readonly errorCount: number | null;
+  /** Whether a refused workbook has more problems than `rows` lists. */
+  readonly moreErrors: boolean;
   /** Value of the `X-Request-Id` response header, `null` when absent. */
   readonly requestId: string | null;
   /** Seconds to wait before retrying, from the `Retry-After` header; `null` when absent or invalid. */
@@ -32,6 +39,9 @@ export class ApiError extends Error {
     code: ApiErrorCode | ClientErrorCode;
     message: string;
     details?: readonly ApiErrorDetail[];
+    rows?: readonly ApiErrorRow[];
+    errorCount?: number | null;
+    moreErrors?: boolean;
     requestId?: string | null;
     retryAfterSeconds?: number | null;
   }) {
@@ -39,6 +49,9 @@ export class ApiError extends Error {
     this.status = init.status;
     this.code = init.code;
     this.details = init.details ?? [];
+    this.rows = init.rows ?? [];
+    this.errorCount = init.errorCount ?? null;
+    this.moreErrors = init.moreErrors ?? false;
     this.requestId = init.requestId ?? null;
     this.retryAfterSeconds = init.retryAfterSeconds ?? null;
   }
@@ -72,6 +85,33 @@ function parseDetails(value: unknown): ApiErrorDetail[] | null {
   return details;
 }
 
+/** Keeps the well-formed problems of a workbook; anything else in the list is dropped. */
+function parseRows(value: unknown): ApiErrorRow[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const rows: ApiErrorRow[] = [];
+  for (const item of value as unknown[]) {
+    if (
+      isRecord(item) &&
+      typeof item['sheet'] === 'string' &&
+      (item['row'] === null || typeof item['row'] === 'number') &&
+      (item['column'] === null || typeof item['column'] === 'string') &&
+      typeof item['code'] === 'string' &&
+      typeof item['message'] === 'string'
+    ) {
+      rows.push({
+        sheet: item['sheet'],
+        row: item['row'],
+        column: item['column'],
+        code: item['code'],
+        message: item['message'],
+      });
+    }
+  }
+  return rows;
+}
+
 /**
  * Validates an HTTP error body against the standard error envelope (allowlist).
  *
@@ -90,7 +130,15 @@ export function parseApiErrorBody(body: unknown): ApiErrorBody['error'] | null {
   if (parsedDetails === null) {
     return null;
   }
-  return { code: code as ApiErrorCode, message, details: parsedDetails };
+  const { rows, errorCount, moreErrors } = body['error'];
+  return {
+    code: code as ApiErrorCode,
+    message,
+    details: parsedDetails,
+    ...(rows === undefined ? {} : { rows: parseRows(rows) }),
+    ...(typeof errorCount === 'number' ? { errorCount } : {}),
+    ...(moreErrors === true ? { moreErrors } : {}),
+  };
 }
 
 /**
@@ -121,6 +169,9 @@ export function toApiError(response: HttpErrorResponse): ApiError {
     code: parsed.code,
     message: parsed.message,
     details: parsed.details,
+    rows: parsed.rows,
+    errorCount: parsed.errorCount,
+    moreErrors: parsed.moreErrors,
     requestId,
     retryAfterSeconds,
   });

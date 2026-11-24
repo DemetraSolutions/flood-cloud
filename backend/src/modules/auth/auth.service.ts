@@ -8,6 +8,7 @@ import { generateSecret, hashSecret, parseSecret } from '../../shared/security/s
 import { verifyDummyPassword, verifyUserPassword } from '../../shared/security/password-verifier.ts';
 import { hashPassword } from '../../shared/security/scrypt.ts';
 import type { GroupsRepository } from '../../shared/security/scope/groups.repository.ts';
+import type { NonBrowserSubject } from '../../shared/security/non-browser-signal.ts';
 import type { CredentialsRepository } from '../users/credentials.repository.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import type { User } from '../users/user.types.ts';
@@ -27,6 +28,14 @@ export interface IssuedSession {
   readonly refreshTokenExpiresAt: Date;
   readonly sessionId: string;
 }
+
+/**
+ * A check made on a login or a refresh once the user is certain (the credentials verified, the account in good state) and before anything is written: it may refuse by throwing, and then nothing has
+ * happened (no session, no token, no refresh token rotated, no counter of failed logins cleared). Used by the signal of the requests that do not look like a browser's.
+ *
+ * @param subject The user the operation is for.
+ */
+export type SessionGate = (subject: NonBrowserSubject) => Promise<void>;
 
 /** The token pair of a login, and whether the user must replace a provisional password before anything else. */
 export interface LoginResult extends IssuedSession {
@@ -53,7 +62,7 @@ export interface AuthService {
    * @returns The new token pair, and `passwordChangeRequired` when an administrator set the password.
    * @throws {AppError} `INVALID_CREDENTIALS`.
    */
-  login(input: LoginInput, client: ClientContext): Promise<LoginResult>;
+  login(input: LoginInput, client: ClientContext, gate?: SessionGate): Promise<LoginResult>;
   /**
    * Rotates a refresh token. A token that was already used revokes the whole session family and
    * is reported as `auth.refreshReuseDetected`. Every refusal is `401 UNAUTHENTICATED`.
@@ -63,7 +72,7 @@ export interface AuthService {
    * @returns The new token pair.
    * @throws {AppError} `UNAUTHENTICATED`.
    */
-  refresh(refreshToken: string, client: ClientContext): Promise<IssuedSession>;
+  refresh(refreshToken: string, client: ClientContext, gate?: SessionGate): Promise<IssuedSession>;
   /**
    * Revokes one session family (logout).
    *
@@ -100,6 +109,11 @@ export interface AuthServiceDeps {
 /** The actor of an event about a user known by id (the role only when it is a real one). */
 function userActor(user: User): ActivityActor {
   return { kind: 'user', id: ObjectId.createFromHexString(user.id), ...(isRole(user.role) ? { role: user.role } : {}) };
+}
+
+/** The user an operation is for, as the non-browser signal needs it. */
+function subjectOf(user: User): NonBrowserSubject {
+  return { userId: ObjectId.createFromHexString(user.id), actor: userActor(user), ...groupOf(user) };
 }
 
 function groupOf(user: User): { groupId?: ObjectId } {
@@ -199,7 +213,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
   };
 
   return {
-    login: async ({ username, password }, client) => {
+    login: async ({ username, password }, client, gate) => {
       if (!inBounds(username) || !inBounds(password)) {
         return denyLogin(client, 'invalidInput');
       }
@@ -234,6 +248,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
         }
         return denyLogin(client, denial, user);
       }
+      await gate?.(subjectOf(user));
       await credentials.recordSuccess(userId, now);
       if (verification.rehash !== null) {
         await credentials.upsertPassword(userId, { passwordHash: await hashPassword(password), legacyHashFingerprint: verification.rehash.legacyHashFingerprint, passwordChanged: false, now });
@@ -263,7 +278,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
       return { ...issued(pair, session.id), passwordChangeRequired: stored?.mustChangePassword === true };
     },
 
-    refresh: async (refreshToken, client) => {
+    refresh: async (refreshToken, client, gate) => {
       const token = parseSecret(refreshToken, 'fc_rt_');
       const found = token === null ? null : await sessions.findByRefreshHash(hashSecret(token));
       if (found === null || found.session.revokedAt !== null) {
@@ -283,6 +298,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
         await revokeForState(session, denial, user, client);
         throw new AppError('UNAUTHENTICATED');
       }
+      await gate?.(subjectOf(user!));
       const pair = issue(now, session.familyExpiresAt);
       const rotated = await sessions.rotate(session.id, session.refreshTokenHash, {
         accessTokenHash: pair.accessTokenHash,

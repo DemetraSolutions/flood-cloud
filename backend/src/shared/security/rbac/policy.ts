@@ -39,6 +39,9 @@ const ERROR_DOCUMENTS = [P.ERROR_DOCUMENTS_READ] as const;
 const ACTIVATIONS_READ = [P.ACTIVATIONS_READ] as const;
 const ACTIVATIONS_MANAGE = [P.ACTIVATIONS_MANAGE] as const;
 
+/** The security policy of the platform (what happens to a request that does not look like a browser's): read it and change it, only the PSA. */
+const SECURITY_POLICY = [P.SECURITY_POLICY_MANAGE] as const;
+
 /**
  * What the server of a point of sale may do with its store key (`doc/Security-Model.md` section 8.2): an explicit allowlist, never derived from a role, a matrix or a request, and never
  * extended from the interface. For now only the reading of its own place; the domains that come later (cash desk, sales, catalog) add what they decide, each with its own step.
@@ -51,7 +54,7 @@ export const STORE_PROFILE: ReadOnlySet<Permission> = frozenSet<Permission>([P.P
  * immutable.
  */
 export const ROLE_CEILING: Readonly<Record<Role, ReadOnlySet<Permission>>> = Object.freeze({
-  PSA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...ACTIVATIONS_MANAGE, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  PSA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...ACTIVATIONS_MANAGE, ...SECURITY_POLICY, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   D: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   SA: frozenSet<Permission>([P.GROUPS_READ, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   CA: frozenSet<Permission>([P.COMPANIES_READ, P.COMPANIES_UPDATE, P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),

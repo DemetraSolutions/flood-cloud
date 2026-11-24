@@ -24,6 +24,8 @@ export class ConfirmDialog {
   readonly danger = input(false);
   /** Action in progress: confirm shows a spinner and both buttons are disabled. */
   readonly busy = input(false);
+  /** Warning that needs an answer: `alertdialog` role, and the focus starts on Cancel. */
+  readonly alert = input(false);
   /** Whether the dialog is open (two-way). */
   readonly open = model(false);
   /** Emitted when the user confirms. */

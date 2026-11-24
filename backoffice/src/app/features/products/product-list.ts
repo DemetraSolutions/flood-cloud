@@ -1,6 +1,7 @@
 import { httpResource } from '@angular/common/http';
 import { Component, computed, effect, inject, input, linkedSignal, resource, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { catalogXlsxRoute } from '../catalog-xlsx/catalog-xlsx.types';
 import { ApiData, ApiPage } from '../../core/api/api.types';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { Can } from '../../core/auth/can';
@@ -129,6 +130,7 @@ export class ProductList {
   protected readonly favoriteOnly = computed(() => this.favorite() === 'true');
   protected readonly searchText = linkedSignal(() => this.q() ?? '');
   protected readonly cursorStack = signal<readonly (string | null)[]>([]);
+  protected readonly importExportRoute = computed(() => catalogXlsxRoute(this.groupId()));
   protected readonly newRoute = computed(() => productRoute(this.groupId(), this.settings().family, null));
   protected readonly hasWarehouse = computed(() => this.features.enabledFor(this.groupId(), 'warehouse'));
   protected readonly stateOptions = computed(() => [

@@ -3,7 +3,7 @@ import type { ObjectId } from 'mongodb';
 import { clientContextOf } from '../../shared/http/client-context.ts';
 import { sendData } from '../../shared/http/envelope.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
-import type { ActivationBody } from './store-keys.schemas.ts';
+import type { ActivationBody, ActivationCodeBody } from './store-keys.schemas.ts';
 import { toStoreKeyStatus } from './store-keys.mapper.ts';
 import type { StoreKeysService } from './store-keys.service.ts';
 
@@ -31,7 +31,7 @@ export function createStoreKeysController(service: StoreKeysService, now: () => 
       sendData(res, toStoreKeyStatus(await service.status(res.locals.auth!, res.locals.groupAccess!, placeIdOf(res), new Date(now()))));
     },
     createCode: async (req, res) => {
-      const issued = await service.createActivationCode(res.locals.auth!, res.locals.groupAccess!, placeIdOf(res), clientContextOf(req, res));
+      const issued = await service.createActivationCode(res.locals.auth!, res.locals.groupAccess!, placeIdOf(res), clientContextOf(req, res), inputOf<ActivationCodeBody>(res, 'body').confirmReplaceActiveKey === true);
       res.setHeader('Location', `${req.baseUrl}${req.path.replace(/\/activation-codes\/?$/, '')}`);
       sendData(res, { code: issued.code, expiresAt: issued.expiresAt.toISOString() }, 201);
     },

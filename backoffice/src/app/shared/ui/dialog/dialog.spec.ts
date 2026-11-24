@@ -20,7 +20,13 @@ function emulateNativeDialog(): void {
 @Component({
   imports: [Dialog],
   template: `<button id="opener" type="button" (click)="open.set(true)">Apri</button>
-    <fc-dialog heading="Titolo" [wide]="wide()" [(open)]="open" (closed)="closes.set(closes() + 1)">
+    <fc-dialog
+      heading="Titolo"
+      [wide]="wide()"
+      [alert]="alert()"
+      [(open)]="open"
+      (closed)="closes.set(closes() + 1)"
+    >
       <p>Contenuto</p>
       <button fcDialogActions type="button">Azione</button>
     </fc-dialog>`,
@@ -29,6 +35,7 @@ class Host {
   readonly open = signal(false);
   readonly closes = signal(0);
   readonly wide = signal(false);
+  readonly alert = signal(false);
 }
 
 async function render() {
@@ -53,6 +60,16 @@ describe('Dialog', () => {
     expect(title.textContent).toBe('Titolo');
     expect(root.querySelector('.body p')?.textContent).toBe('Contenuto');
     expect(root.querySelector('footer button')?.textContent).toBe('Azione');
+  });
+
+  it('is a plain dialog by default and an alert dialog described by its body on request', async () => {
+    const { fixture, host, dialog, root } = await render();
+    expect(dialog.hasAttribute('role')).toBe(false);
+    expect(dialog.hasAttribute('aria-describedby')).toBe(false);
+    host.alert.set(true);
+    await fixture.whenStable();
+    expect(dialog.getAttribute('role')).toBe('alertdialog');
+    expect(dialog.getAttribute('aria-describedby')).toBe(root.querySelector('.body')!.id);
   });
 
   it('opens modally and returns the focus to the opener when closed with the button', async () => {

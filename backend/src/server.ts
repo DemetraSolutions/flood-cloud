@@ -181,6 +181,8 @@ export async function run(
     routes: { v1: backoffice.routes, public: publicApi.routes },
     authenticate: { v1: backoffice.authenticate, store: backoffice.authenticateStore, public: publicApi.authenticate },
     groupAccess: { groups: backoffice.groups },
+    securityPolicy: backoffice.securityPolicy,
+    ...(backoffice.nonBrowserGuard === undefined ? {} : { nonBrowserGuard: backoffice.nonBrowserGuard }),
     readiness: { isShuttingDown: () => shuttingDown, checks: [createPingCheck(databases)] },
   });
 

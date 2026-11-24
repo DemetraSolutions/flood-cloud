@@ -1,6 +1,16 @@
 import { httpResource } from '@angular/common/http';
-import { Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  input,
+  linkedSignal,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { SecurityAlerts } from '../../core/activity/security-alerts';
 import { ApiPage } from '../../core/api/api.types';
 import { apiErrorMessageKey } from '../../core/api/api-error';
 import { GroupContext } from '../../core/groups/group-context';
@@ -9,6 +19,8 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { DEFAULT_LANGUAGE } from '../../core/i18n/language';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { SessionService } from '../../core/session/session.service';
+import { Icon } from '../../shared/ui/icon/icon';
+import { ToastService } from '../../shared/ui/toast/toast.service';
 import { BadgeTone, StatusBadge } from '../../shared/ui/status-badge/status-badge';
 import { Button } from '../../shared/ui/button/button';
 import { Checkbox } from '../../shared/ui/checkbox/checkbox';
@@ -33,6 +45,7 @@ import {
   ActivityEntry,
   ActivityOutcome,
   otherActorLabel,
+  alertSummary,
 } from './activity-log.types';
 
 /** Page sizes offered by the list. */
@@ -60,6 +73,13 @@ const OUTCOME_TONES: Record<ActivityOutcome, BadgeTone> = {
 /** Query parameters of the list as kept in the URL (`null` removes one). */
 type QueryChange = Record<string, string | null>;
 
+/** The calendar day (`YYYY-MM-DD`, local time) of an ISO date-time. */
+function localDay(iso: string): string {
+  const date = new Date(iso);
+  const part = (value: number): string => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}`;
+}
+
 /** A calendar day (`YYYY-MM-DD`) or `null` when the text is not a real date. */
 function validDay(value: string | undefined): string | null {
   return value !== undefined &&
@@ -86,6 +106,7 @@ function validDay(value: string | undefined): string | null {
     DataTable,
     Dialog,
     ErrorState,
+    Icon,
     RowActionsTemplate,
     Select,
     StatusBadge,
@@ -102,11 +123,26 @@ export class ActivityLogPage {
   protected readonly groups = inject(GroupContext);
   private readonly debouncer = createDebouncer();
   protected readonly i18n = inject(I18nService);
+  private readonly securityAlerts = inject(SecurityAlerts);
+  private readonly toast = inject(ToastService);
+  private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
+
+  /** Text of the notice about the security alerts raised since the last visit, `null` when there are none. */
+  protected readonly alertNotice = computed(() => {
+    const count = this.securityAlerts.badge();
+    if (count === null) {
+      return null;
+    }
+    return this.securityAlerts.count() === 1
+      ? this.i18n.t('ACTIVITY.ALERTS.NOTICE_ONE', { count })
+      : this.i18n.t('ACTIVITY.ALERTS.NOTICE_OTHER', { count });
+  });
 
   /** Query parameters (bound by the router). */
   readonly category = input<string>();
   readonly outcome = input<string>();
   readonly action = input<string>();
+  readonly alerts = input<string>();
   readonly from = input<string>();
   readonly to = input<string>();
   readonly requestId = input<string>();
@@ -115,6 +151,11 @@ export class ActivityLogPage {
   readonly limit = input<string>();
   readonly cursor = input<string>();
 
+  /** CA and PA see only their own actions: the security alerts are never in their log, so they are not offered the filter. */
+  private readonly ownActionsOnly = computed(() => {
+    const role = this.session.me()?.role;
+    return role === 'CA' || role === 'PA';
+  });
   private readonly isPlatformAdmin = computed(() => this.session.me()?.role === 'PSA');
 
   protected readonly pageSize = computed(() => {
@@ -132,7 +173,7 @@ export class ActivityLogPage {
       label: this.i18n.t(`ACTIVITY.OUTCOME.${value.toUpperCase()}`),
     })),
   );
-  /** Actions of the error category are only for the platform admin. */
+  /** Actions of the error category are only for the platform admin;  */
   private readonly visibleActions = computed(() =>
     ACTIVITY_ACTIONS.filter((value) => this.isPlatformAdmin() || !ERROR_ACTIONS.includes(value)),
   );
@@ -149,6 +190,10 @@ export class ActivityLogPage {
   );
   private readonly actionFilter = computed(() =>
     this.visibleActions().find((value) => value === this.action()),
+  );
+  /** Whether the list is limited to the security alerts (the server decides which actions those are). */
+  protected readonly alertsFilter = computed(
+    () => this.alerts() === 'true' && !this.ownActionsOnly(),
   );
   private readonly fromDay = computed(() => validDay(this.from()));
   private readonly toDay = computed(() => validDay(this.to()));
@@ -199,6 +244,7 @@ export class ActivityLogPage {
       category: this.categoryFilter(),
       outcome: this.outcomeFilter(),
       action: this.actionFilter(),
+      alerts: this.alertsFilter() ? 'true' : undefined,
       from: from === null ? undefined : new Date(`${from}T00:00:00`).toISOString(),
       to: to === null ? undefined : new Date(`${to}T23:59:59.999`).toISOString(),
       requestId: this.requestIdFilter(),
@@ -232,11 +278,7 @@ export class ActivityLogPage {
   protected readonly columns = computed<TableColumn<ActivityEntry>[]>(() => [
     { key: 'at', header: this.i18n.t('ACTIVITY.COLUMN.AT'), cell: (row) => this.date(row.at) },
     { key: 'category', header: this.i18n.t('ACTIVITY.COLUMN.CATEGORY') },
-    {
-      key: 'action',
-      header: this.i18n.t('ACTIVITY.COLUMN.ACTION'),
-      cell: (row) => this.actionLabel(row),
-    },
+    { key: 'action', header: this.i18n.t('ACTIVITY.COLUMN.ACTION') },
     { key: 'outcome', header: this.i18n.t('ACTIVITY.COLUMN.OUTCOME') },
     {
       key: 'actor',
@@ -287,6 +329,29 @@ export class ActivityLogPage {
       : row.action;
   }
 
+  /** Readable detail of the entry shown under its action (the exceeded limit), `null` when it has none. */
+  protected actionDetail(row: ActivityEntry): string | null {
+    return alertSummary(this.i18n, row);
+  }
+
+  /**
+   * Shows the alerts raised since the last visit: filters the list by the alert action and by
+   * the day of the last visit (both in the URL), and records the visit.
+   */
+  protected showAlerts(): void {
+    const day = localDay(this.securityAlerts.since());
+    this.securityAlerts.markSeen();
+    this.change({ alerts: 'true', action: null, from: day });
+    this.heading().nativeElement.focus();
+  }
+
+  /** Records the visit and clears the notice; the focus goes to the title, as the buttons disappear. */
+  protected markAlertsSeen(): void {
+    this.securityAlerts.markSeen();
+    this.toast.success(this.i18n.t('ACTIVITY.ALERTS.SEEN_DONE'));
+    this.heading().nativeElement.focus();
+  }
+
   protected actorName(row: ActivityEntry): string {
     const { kind, username, id, role } = row.actor;
     if (kind === 'user') {
@@ -314,6 +379,10 @@ export class ActivityLogPage {
 
   protected filterByActor(row: ActivityEntry): void {
     this.change({ actorId: row.actor.id });
+  }
+
+  protected clearAlerts(): void {
+    this.change({ alerts: null });
   }
 
   protected clearActor(): void {

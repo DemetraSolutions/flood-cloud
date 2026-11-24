@@ -1,0 +1,134 @@
+<fc-page-header [heading]="'SECURITY_POLICY.TITLE' | t">
+  @if (policy() && !failed()) {
+    <ng-container fcPageActions>
+      <button
+        fc-button
+        type="submit"
+        form="security-policy-form"
+        [loading]="saving()"
+        [disabled]="!dirty()"
+      >
+        {{ 'COMMON.SAVE' | t }}
+      </button>
+    </ng-container>
+  }
+</fc-page-header>
+<p class="hint">{{ 'SECURITY_POLICY.HINT' | t }}</p>
+
+@if (failed()) {
+  <fc-error-state
+    [title]="'SECURITY_POLICY.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else if (policy(); as current) {
+  @if (forced()) {
+    <section class="notice forced" role="status">
+      <p>{{ 'SECURITY_POLICY.FORCED_NOTICE' | t }}</p>
+    </section>
+  }
+  @if (stale()) {
+    <section class="notice" role="alert">
+      <p>{{ 'SECURITY_POLICY.STALE' | t }}</p>
+      <button fc-button variant="secondary" (click)="reload()">
+        {{ 'SECURITY_POLICY.RELOAD' | t }}
+      </button>
+    </section>
+  }
+  <form id="security-policy-form" novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+    }
+
+    <fieldset aria-describedby="non-browser-help">
+      <legend>{{ 'SECURITY_POLICY.NON_BROWSER.TITLE' | t }}</legend>
+      <div id="non-browser-help" class="help">
+        <p>{{ 'SECURITY_POLICY.NON_BROWSER.HELP' | t }}</p>
+        <ul>
+          <li>{{ 'SECURITY_POLICY.NON_BROWSER.SCOPE' | t }}</li>
+          <li>{{ 'SECURITY_POLICY.NON_BROWSER.PSA' | t }}</li>
+          <li>{{ 'SECURITY_POLICY.NON_BROWSER.ALWAYS' | t }}</li>
+          <li>{{ 'SECURITY_POLICY.NON_BROWSER.LIMITS' | t }}</li>
+        </ul>
+      </div>
+      <label class="option">
+        <input
+          type="radio"
+          name="nonBrowserRequests"
+          value="report"
+          [checked]="nonBrowser() === 'report'"
+          (change)="nonBrowser.set('report')"
+        />
+        {{ 'SECURITY_POLICY.MODE.REPORT' | t }}
+      </label>
+      <label class="option">
+        <input
+          type="radio"
+          name="nonBrowserRequests"
+          value="block"
+          [checked]="nonBrowser() === 'block'"
+          (change)="nonBrowser.set('block')"
+        />
+        {{ 'SECURITY_POLICY.MODE.BLOCK' | t }}
+      </label>
+      <p class="source">
+        {{ sourceKey(current.sources.nonBrowserRequests) | t }}
+      </p>
+    </fieldset>
+
+    <fieldset aria-describedby="sustained-help">
+      <legend>{{ 'SECURITY_POLICY.LIMITS.TITLE' | t }}</legend>
+      <div id="sustained-help" class="help">
+        <p>{{ 'SECURITY_POLICY.LIMITS.HELP' | t }}</p>
+        <p>{{ 'SECURITY_POLICY.LIMITS.EXEMPT' | t }}</p>
+      </div>
+      <dl class="thresholds">
+        <dt>{{ 'SECURITY_POLICY.LIMITS.PER_MINUTE' | t }}</dt>
+        <dd>{{ number(current.limits.perMinute) }}</dd>
+        <dt>{{ 'SECURITY_POLICY.LIMITS.PER_HOUR' | t }}</dt>
+        <dd>{{ number(current.limits.perHour) }}</dd>
+        <dt>{{ 'SECURITY_POLICY.LIMITS.PER_DAY' | t }}</dt>
+        <dd>{{ number(current.limits.perDay) }}</dd>
+      </dl>
+      <p class="note">{{ 'SECURITY_POLICY.LIMITS.READ_ONLY' | t }}</p>
+      <label class="option">
+        <input
+          type="radio"
+          name="sustainedLimits"
+          value="report"
+          [checked]="sustained() === 'report'"
+          (change)="sustained.set('report')"
+        />
+        {{ 'SECURITY_POLICY.MODE.REPORT' | t }}
+      </label>
+      <label class="option">
+        <input
+          type="radio"
+          name="sustainedLimits"
+          value="enforce"
+          [checked]="sustained() === 'enforce'"
+          (change)="sustained.set('enforce')"
+        />
+        {{ 'SECURITY_POLICY.MODE.BLOCK' | t }}
+      </label>
+      <p class="source">
+        {{ sourceKey(current.sources.sustainedLimits) | t }}
+      </p>
+    </fieldset>
+  </form>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+}
+
+<fc-confirm-dialog
+  [alert]="true"
+  [heading]="'SECURITY_POLICY.CONFIRM.TITLE' | t"
+  [message]="confirmMessage()"
+  [confirmLabel]="'SECURITY_POLICY.CONFIRM.ACTION' | t"
+  [danger]="true"
+  [busy]="saving()"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="onConfirmed()"
+/>

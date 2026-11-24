@@ -32,3 +32,37 @@
   justify-content: flex-end;
   gap: var(--space-1);
 }
+
+.alert-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-end: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-on-warning-soft);
+}
+
+.alert-notice p {
+  flex: 1 1 14rem;
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+h1:focus {
+  outline: none;
+}
+
+.action-detail {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+}

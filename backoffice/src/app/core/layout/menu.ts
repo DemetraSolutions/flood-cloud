@@ -42,6 +42,8 @@ export interface MenuItem {
   readonly feature?: string;
   /** Whether the entry links to its first visible child (a group whose children are open to different roles): `route` is then only the fallback. */
   readonly linksToFirstChild?: true;
+  /** Counter shown next to the label: `securityAlerts` is the number of new security alerts of the activity log. */
+  readonly badge?: 'securityAlerts';
   /** Sub-entries; a group without any visible child is hidden. */
   readonly children?: readonly MenuItem[];
 }
@@ -288,6 +290,15 @@ export const MENU: readonly MenuItem[] = [
         roles: ['PSA'],
       },
       {
+        id: 'catalog-import-export',
+        labelKey: 'MENU.CATALOG_IMPORT_EXPORT',
+        icon: 'tag',
+        route: '/groups',
+        groupPath: 'tools/catalog-import-export',
+        permission: 'products:read',
+        requiresGroup: true,
+      },
+      {
         id: 'email-templates',
         labelKey: 'MENU.EMAIL_TEMPLATES',
         icon: 'mail',
@@ -321,6 +332,14 @@ export const MENU: readonly MenuItem[] = [
         permission: 'countries:manage',
         roles: ['PSA'],
       },
+      {
+        id: 'security',
+        labelKey: 'MENU.SECURITY',
+        icon: 'settings',
+        route: '/settings/security',
+        permission: 'securityPolicy:manage',
+        roles: ['PSA'],
+      },
     ],
   },
   {
@@ -346,6 +365,7 @@ export const MENU: readonly MenuItem[] = [
     icon: 'log',
     route: '/activity-log',
     permission: 'activityLog:read',
+    badge: 'securityAlerts',
   },
 ];
 

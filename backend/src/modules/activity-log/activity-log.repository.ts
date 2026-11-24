@@ -1,11 +1,15 @@
-import { ObjectId } from 'mongodb';
+import { MongoServerError, ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
 import type { Databases } from '../../db/databases.ts';
+import { AppError } from '../../shared/http/errors.ts';
 import { LIST_MAX_TIME_MS, SORT_KEY, pageOf } from '../../shared/http/list.ts';
 import type { ListPage, ListParams } from '../../shared/http/list.ts';
 import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import { activityLogScopeFilter, withScope } from '../../shared/security/scope/scope-filters.ts';
 import { ACTIVITY_LOG_PROJECTION } from './activity-log.mapper.ts';
+
+/** MongoDB's `MaxTimeMSExpired` error code. */
+const MAX_TIME_EXPIRED = 50;
 
 /** Reads of `common.activityEvents` and of the user names of its actors; nothing is ever written here. */
 export interface ActivityLogRepository {
@@ -17,6 +21,16 @@ export interface ActivityLogRepository {
    * @param params Validated list parameters.
    */
   list(principal: Pick<AuthPrincipal, 'userId' | 'scope'>, filter: Filter<Document>, params: ListParams): Promise<ListPage>;
+  /**
+   * How many entries match a filter inside the caller's perimeter, never more than `cap + 1` (the count stops there).
+   *
+   * @param principal The authenticated caller (his scope limits the result).
+   * @param filter Filter of the request.
+   * @param cap The largest count of interest.
+   * @returns The count, at most `cap + 1`.
+   * @throws {AppError} `SERVICE_UNAVAILABLE` when the read exceeds its time limit (the answer is unknown, never zero).
+   */
+  count(principal: Pick<AuthPrincipal, 'userId' | 'scope'>, filter: Filter<Document>, cap: number): Promise<number>;
   /**
    * The user names of some users, resolved in one query.
    *
@@ -74,6 +88,21 @@ export function activityLogPageQuery(principal: Pick<AuthPrincipal, 'userId' | '
   };
 }
 
+/** The index the count of the alerts reads (`{ action: 1, at: -1 }`): named so the count never depends on the planner choosing it. */
+export const ALERTS_COUNT_INDEX = 'action_1_at_-1';
+
+/**
+ * The query of the alert count: scope and request filter combined, a limit of `cap + 1`, the time limit and the hint on {@link ALERTS_COUNT_INDEX}.
+ *
+ * @param principal Id and scope of the caller.
+ * @param filter Filter of the request (alert actions and `since`).
+ * @param cap The largest count of interest.
+ * @returns The filter and the count options.
+ */
+export function activityCountQuery(principal: Pick<AuthPrincipal, 'userId' | 'scope'>, filter: Filter<Document>, cap: number) {
+  return { match: withScope(activityLogScopeFilter(principal), filter), options: { limit: cap + 1, maxTimeMS: LIST_MAX_TIME_MS, hint: ALERTS_COUNT_INDEX } as const };
+}
+
 /**
  * Builds the activity log repository. Every query combines the scope filter of the caller with the filter
  * of the request through `withScope` and projects an allowlist of fields. The order is the stored `at` and
@@ -90,6 +119,15 @@ export function createActivityLogRepository(databases: Databases): ActivityLogRe
         documents.map((document) => ({ ...document, [SORT_KEY]: document['at'] as Date })),
         params,
       );
+    },
+
+    count: async (principal, filter, cap) => {
+      try {
+        const { match, options } = activityCountQuery(principal, filter, cap);
+        return await databases.common().collection('activityEvents').countDocuments(match, options);
+      } catch (error) {
+        throw error instanceof MongoServerError && error.code === MAX_TIME_EXPIRED ? new AppError('SERVICE_UNAVAILABLE') : error;
+      }
     },
 
     usernames: async (ids) => {

@@ -200,7 +200,10 @@ describe('ReferenceApi', () => {
     it('reads the price lists of a supplier', async () => {
       const result = api.lookup('g1', 'suppliers', {});
       const request = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/lookup/suppliers`);
-      const page = { data: [{ id: 's1', name: 'Forn', priceLists: [{ id: 'l1', name: 'Base' }] }], page: { next: null } };
+      const page = {
+        data: [{ id: 's1', name: 'Forn', priceLists: [{ id: 'l1', name: 'Base' }] }],
+        page: { next: null },
+      };
       request.flush(page);
       expect((await result).data[0].priceLists).toEqual([{ id: 'l1', name: 'Base' }]);
     });

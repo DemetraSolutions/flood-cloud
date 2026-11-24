@@ -35,6 +35,10 @@
   }
 </dl>
 
+@if (summary(); as text) {
+  <p class="summary-text">{{ text }}</p>
+}
+
 @if (changes().length > 0) {
   <h3>{{ 'ACTIVITY.DETAIL.CHANGES' | t }}</h3>
   <div class="scroll" role="region" tabindex="0" [attr.aria-label]="'ACTIVITY.DETAIL.CHANGES' | t">

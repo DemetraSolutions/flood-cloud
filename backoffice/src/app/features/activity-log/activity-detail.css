@@ -62,3 +62,8 @@ pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.summary-text {
+  overflow-wrap: anywhere;
+  margin-block: var(--space-3) 0;
+}

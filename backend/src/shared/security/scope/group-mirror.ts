@@ -573,6 +573,30 @@ export async function readPlaceSetups(principal: ScopeHolder, access: GroupAcces
 }
 
 /**
+ * The points of sale of a group that are not in the trash, with the id and name of their print stations, by name: what the columns of the catalog workbook (step C6) are made of. Read from the copies in
+ * the common database, only with that projection. A company or place administrator passes the places of his perimeter.
+ *
+ * @param principal The authenticated caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ * @param placeIds The places to read (the perimeter of the caller), `null` for every place of the group.
+ * @param limit How many places to return at most, a positive integer.
+ * @returns The places (`_id`, `name`, `printStations`), at most `limit`.
+ * @throws {Error} If the access was not issued by `requireGroupAccess` for the principal, or the ids are not `ObjectId`s.
+ */
+export async function readCatalogPlaces(principal: ScopeHolder, access: GroupAccess, databases: Databases, placeIds: readonly ObjectId[] | null, limit: number): Promise<Document[]> {
+  assertVerifiedGroupAccess(principal, access);
+  if (placeIds !== null && !placeIds.every((id) => id instanceof ObjectId)) {
+    throw new Error('A read of the places of the catalog workbook needs their ids');
+  }
+  return databases
+    .common()
+    .collection('places')
+    .find({ $and: [groupCondition(access.groupId), { trash: { $ne: true } }, ...(placeIds === null ? [] : [{ _id: { $in: [...placeIds] } }])] }, { projection: { _id: 1, name: 1, 'printStations.id': 1, 'printStations.name': 1 }, sort: { name: 1, _id: 1 }, limit, maxTimeMS: LIST_MAX_TIME_MS })
+    .toArray();
+}
+
+/**
  * Finds the places of a group, trashed ones included, that still refer to a product category (step C2: the deletion of a category is refused while one does): in the categories a print station makes
  * a summary of, in the kiosk, in the self ordering of any price list and in the map to the categories of TS Hospitality. It is the only read of the copies that looks inside those settings, and it
  * returns nothing but ids. The paths are fixed here and the category id is the only thing the caller supplies (as an `ObjectId`; the places keep it as text).

@@ -39,7 +39,8 @@ export interface ReferenceQuery {
 }
 
 /** Compact reads of a group for the selectors of favorites and promotions (`products:read`). */
-export type LookupKind = 'products' | 'product-categories' | 'customers' | 'contact-groups' | 'suppliers';
+export type LookupKind =
+  'products' | 'product-categories' | 'customers' | 'contact-groups' | 'suppliers';
 // `companies`, `places` and `lookup` reads go through the {@link ReferenceStore}.
 
 /** Most ids a compact read resolves in one request. */

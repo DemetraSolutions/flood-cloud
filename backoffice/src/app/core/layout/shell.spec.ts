@@ -3,6 +3,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { fakeSecurityAlerts } from '../../../testing/alerts';
 import { fakeFeatureFlags } from '../../../testing/groups';
 import { signIn } from '../../../testing/session';
 import { GroupContext } from '../groups/group-context';
@@ -14,8 +15,10 @@ import { MENU_ITEMS, MenuItem } from './menu';
 import { Shell } from './shell';
 
 async function render(menu?: readonly MenuItem[], profile: Partial<Profile> | null = {}) {
+  const alerts = fakeSecurityAlerts();
   TestBed.configureTestingModule({
     providers: [
+      alerts.provider,
       provideHttpClient(),
       provideHttpClientTesting(),
       ...(menu ? [{ provide: MENU_ITEMS, useValue: menu }] : []),
@@ -40,7 +43,7 @@ async function render(menu?: readonly MenuItem[], profile: Partial<Profile> | nu
   const harness = await RouterTestingHarness.create('/page');
   const root = harness.routeNativeElement as HTMLElement;
   document.body.appendChild(root);
-  return { harness, root, announcer: TestBed.inject(PageAnnouncer) };
+  return { harness, root, alerts, announcer: TestBed.inject(PageAnnouncer) };
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -395,5 +398,47 @@ describe('Shell', () => {
     const status = root.querySelector('[role="status"]')!;
     expect(status.textContent).toBe('Home');
     expect(status.classList.contains('visually-hidden')).toBe(true);
+  });
+
+  describe('security alerts badge', () => {
+    const MENU: readonly MenuItem[] = [
+      { id: 'home', labelKey: 'MENU.HOME', icon: 'home', route: '/' },
+      {
+        id: 'activity-log',
+        labelKey: 'MENU.ACTIVITY_LOG',
+        icon: 'log',
+        route: '/activity-log',
+        badge: 'securityAlerts',
+      },
+    ];
+    const badges = (root: HTMLElement) => root.querySelectorAll('nav fc-count-badge');
+
+    it('shows no counter at zero', async () => {
+      const { root } = await render(MENU);
+      expect(badges(root)).toHaveLength(0);
+    });
+
+    it('shows the counter on the entry only, with a text for screen readers', async () => {
+      const { root, alerts, harness } = await render(MENU);
+      alerts.count.set(3);
+      harness.detectChanges();
+      expect(badges(root)).toHaveLength(1);
+      const link = root.querySelectorAll('nav a')[1];
+      expect(link.querySelector('fc-count-badge .count')?.textContent).toBe('3');
+      expect(link.querySelector('.visually-hidden')?.textContent).toBe('[LAYOUT.ALERTS_OTHER]');
+    });
+
+    it('uses the singular for one alert and 99+ when capped', async () => {
+      const { root, alerts, harness } = await render(MENU);
+      alerts.count.set(1);
+      harness.detectChanges();
+      expect(root.querySelector('fc-count-badge .visually-hidden')?.textContent).toBe(
+        '[LAYOUT.ALERTS_ONE]',
+      );
+      alerts.count.set(100);
+      alerts.capped.set(true);
+      harness.detectChanges();
+      expect(root.querySelector('fc-count-badge .count')?.textContent).toBe('99+');
+    });
   });
 });

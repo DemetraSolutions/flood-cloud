@@ -101,3 +101,15 @@
   (openChange)="revokeOpen.set($event)"
   (confirmed)="revoke()"
 />
+
+<fc-confirm-dialog
+  [alert]="true"
+  [heading]="'PLACES.STORE_KEY.REPLACE_TITLE' | t"
+  [message]="'PLACES.STORE_KEY.REPLACE_MESSAGE' | t"
+  [confirmLabel]="'PLACES.STORE_KEY.REPLACE_CONFIRM' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="replaceOpen()"
+  (openChange)="replaceOpen.set($event)"
+  (confirmed)="confirmReplace()"
+/>

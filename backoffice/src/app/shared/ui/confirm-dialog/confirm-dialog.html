@@ -1,9 +1,10 @@
-<fc-dialog [heading]="heading()" [open]="open()" (openChange)="open.set($event)">
+<fc-dialog [heading]="heading()" [alert]="alert()" [open]="open()" (openChange)="open.set($event)">
   <p>{{ message() }}</p>
   <button
     fcDialogActions
     fc-button
     variant="secondary"
+    [attr.autofocus]="alert() ? '' : null"
     [disabled]="busy()"
     (click)="open.set(false)"
   >

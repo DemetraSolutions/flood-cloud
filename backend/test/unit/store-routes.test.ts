@@ -126,6 +126,15 @@ describe('the route builder and the store key', () => {
     assert.equal((await call('/store-only', {})).status, 401);
   });
 
+  it('never counts a store key in the hourly and daily limits of the users, and counts a user in them', async () => {
+    limiter.reset();
+    limiter.calls.length = 0;
+    assert.equal((await asStore(place())).status, 200);
+    assert.equal(limiter.calls.length, 0, 'a store key touches no counter of the users: not api:user, not api-hour:user, not api-day:user');
+    assert.equal((await asUser(place())).status, 200);
+    assert.deepEqual(limiter.calls.map((entry) => entry.bucket), ['api:user', 'api-hour:user', 'api-day:user']);
+  });
+
   it('does not authenticate the anonymous routes, a store key or not', async () => {
     assert.equal((await asStore('/public')).status, 200);
     assert.equal((await call('/public', {})).status, 200);

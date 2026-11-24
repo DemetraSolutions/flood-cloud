@@ -522,11 +522,13 @@ describe('the refusals of the new routes', () => {
     const rules = createRateLimitRules(testConfig());
     const stub = new Proxy({}, { get: () => () => undefined }) as never;
     const routes = [...createActivationsRoutes(stub, rules), ...createSettingsRoutes(stub, rules), ...createDealersRoutes(stub, rules).filter((route) => route.path.endsWith('/price-overrides'))];
-    assert.equal(routes.length, 13);
+    // 13 routes of the activations, plus the two of the security policy that the settings module also declares.
+    assert.equal(routes.length, 15);
     for (const route of routes) {
       assert.equal(route.auth.kind, 'user', route.path);
       assert.ok(!('store' in route.auth), route.path);
-      assert.ok(['activations:read', 'activations:manage'].includes((route.auth as { permission: string }).permission), route.path);
+      const expected = route.path === '/settings/security-policy' ? ['securityPolicy:manage'] : ['activations:read', 'activations:manage'];
+      assert.ok(expected.includes((route.auth as { permission: string }).permission), route.path);
     }
   });
 });

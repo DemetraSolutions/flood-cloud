@@ -30,6 +30,10 @@ import { createPublicController } from './modules/public-api/public.controller.t
 import { createPublicRepository } from './modules/public-api/public.repository.ts';
 import { createPublicRoutes } from './modules/public-api/public.routes.ts';
 import { createPublicService } from './modules/public-api/public.service.ts';
+import { createNonBrowserGuard } from './shared/security/non-browser-signal.ts';
+import type { NonBrowserGuard } from './shared/security/non-browser-signal.ts';
+import type { SecurityPolicyProvider } from './shared/security/security-policy.ts';
+import { createSecurityPolicyProvider } from './shared/security/security-policy.ts';
 import { createAuthController } from './modules/auth/auth.controller.ts';
 import { createAuthRoutes } from './modules/auth/auth.routes.ts';
 import { createAuthService } from './modules/auth/auth.service.ts';
@@ -50,6 +54,9 @@ import { createCountriesController } from './modules/countries/countries.control
 import { createCountriesRepository } from './modules/countries/countries.repository.ts';
 import { createCountriesRoutes } from './modules/countries/countries.routes.ts';
 import { createCountriesService } from './modules/countries/countries.service.ts';
+import { createCatalogXlsxController } from './modules/catalog-xlsx/catalog-xlsx.controller.ts';
+import { createCatalogXlsxRoutes } from './modules/catalog-xlsx/catalog-xlsx.routes.ts';
+import { createCatalogXlsxService } from './modules/catalog-xlsx/catalog-xlsx.service.ts';
 import { createTobaccosController } from './modules/tobaccos/tobaccos.controller.ts';
 import { createTobaccosRepository } from './modules/tobaccos/tobaccos.repository.ts';
 import { createTobaccosRoutes } from './modules/tobaccos/tobaccos.routes.ts';
@@ -188,6 +195,10 @@ export interface BackofficeModules {
   readonly authenticateStore: RequestHandler;
   /** Group lookup for the routes declaring `group: true`. */
   readonly groups: GroupsRepository;
+  /** The guard of the requests of a user that do not look like a browser's; absent when `REQUEST_ORIGIN_SIGNAL` is `off`. */
+  readonly nonBrowserGuard: NonBrowserGuard | undefined;
+  /** The security policy in memory, shared by the guard, the limits and the settings service of this instance. */
+  readonly securityPolicy: SecurityPolicyProvider;
 }
 
 /** Collaborators of {@link createBackofficeModules}. */
@@ -235,7 +246,14 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     logger,
     now,
   });
-  const auth = createAuthController(createAuthService({ config, users, credentials, sessions, groups, activityLog, now }));
+  const settingsRepository = createSettingsRepository(databases);
+  // The security policy lives in memory (30 s) so the guard costs nothing per request; the instance that serves a write updates its copy at once. `REQUEST_ORIGIN_SIGNAL=off` turns the guard (and the block) off whatever the database says.
+  const securityPolicy = createSecurityPolicyProvider({ read: () => settingsRepository.readSecurityPolicy(), sustainedDefault: config.rateLimitApiSustainedMode, forceReport: config.securityPolicyForceReport === 'on', logger, now });
+  const nonBrowserGuard = config.requestOriginSignal === 'on' ? createNonBrowserGuard({ activityLog, rateLimiter, logger, allowedOrigins: config.corsAllowedOrigins, policy: securityPolicy }) : undefined;
+  const auth = createAuthController(
+    createAuthService({ config, users, credentials, sessions, groups, activityLog, now }),
+    nonBrowserGuard,
+  );
   const catalogsRepository = createCatalogsRepository(databases);
   const groupOptions = createGroupOptionsReader(catalogsRepository);
   const services = createServicesRepository(databases);
@@ -256,7 +274,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     now,
   });
   const usersController = createUsersController(usersService);
-  const settingsService = createSettingsService({ repository: createSettingsRepository(databases), activityLog, versionKey, now });
+  const settingsService = createSettingsService({ repository: settingsRepository, activityLog, versionKey, securityPolicy, sustainedDefault: config.rateLimitApiSustainedMode, forceReport: config.securityPolicyForceReport === 'on', limits: { perMinute: config.rateLimitApiPerUser, perHour: config.rateLimitApiPerUserHour, perDay: config.rateLimitApiPerUserDay }, now });
   const dealersController = createDealersController(createDealersService({ dealers, users, usersService, priceLists: settingsService, versionKey, activityLog, now }));
   const managedGroups = createManagedGroupsRepository(databases, publicApiLimitsOf(config));
   const groupsService = createGroupsService({ groups: managedGroups, users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now });
@@ -373,7 +391,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const trash = createTrashController(
     createTrashService({ companies: companiesService, places: placesService, users: usersService, groups: groupsService, products: productsService, activityLog }),
   );
-  const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases)));
+  const activity = createActivityLogController(createActivityLogService(createActivityLogRepository(databases), now));
   const diagnostics = createDiagnosticsController(createDiagnosticsService({ repository: createDiagnosticsRepository(databases), storeKeys: storeKeysRepository }), now);
   const errorDocuments = createErrorDocumentsController(createErrorDocumentsService({ repository: createErrorDocumentsRepository(databases), dealerGroups: createDealerGroupsRepository(databases) }), now);
   const emailTemplates = createEmailTemplatesController(createEmailTemplatesService({ repository: createEmailTemplatesRepository(databases), activityLog, versionKey, now }));
@@ -396,6 +414,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const settings = createSettingsController(settingsService);
   const activations = createActivationsController(createActivationsService({ repository: createActivationsRepository(databases), priceLists: settingsService, activityLog, now }));
   const apiKeys = createApiKeysController(createApiKeysService({ repository: createApiKeysRepository(databases, publicApiLimitsOf(config)), groups: managedGroups, activityLog, now }));
+  // The workbook of the catalog (step C6): the import builds the services of the catalog again over its transaction, so it takes the collaborators, not the instances.
+  const catalogXlsx = createCatalogXlsxController(createCatalogXlsxService({ databases, catalogs: catalogsService, images: mediaService, users, activityLog, logger, versionKey, now }));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
     routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createStoreContextRoutes(storeContext), ...createApiKeysRoutes(apiKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
@@ -413,6 +433,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createProductAttributeGroupsRoutes(productAttributeGroups, idempotency),
       ...createStoreCatalogRoutes(storeCatalog, idempotency, requireOperator, rules.storeCatalogWritePerStore),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
+      ...createCatalogXlsxRoutes(catalogXlsx, idempotency),
       ...createCountriesRoutes(countries, rules),
       ...createSettingsRoutes(settings, rules),
       ...createActivationsRoutes(activations, rules),
@@ -423,6 +444,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     authenticate,
     authenticateStore,
     groups,
+    nonBrowserGuard,
+    securityPolicy,
   };
 }
 

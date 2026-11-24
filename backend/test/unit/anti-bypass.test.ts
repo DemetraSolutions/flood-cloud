@@ -251,7 +251,7 @@ describe('database access cannot be bypassed outside src/db', () => {
     it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups, the cross-group list of the copies, the three fixed reads of the diagnostics and the fixed read of the places that use a template, the two fixed reads of the places the categories refer to (step C2) and the fixed read of the companies and places that use a country', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
-      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorList', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readPlaceSetups', 'findPlacesUsingCategory', 'readCountryUsage']);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorList', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readPlaceSetups', 'readCatalogPlaces', 'findPlacesUsingCategory', 'readCountryUsage']);
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
       // The diagnostics (T1) add two more, each running a pipeline made by `mirror-devices.ts` (the whole of what leaves the copies: an allowlist of the fields of a device).
@@ -271,6 +271,12 @@ describe('database access cannot be bypassed outside src/db', () => {
       }
       return found;
     };
+
+    it('lets only the service of the catalog workbook open a transaction on a group database and bind the repositories to its session', async () => {
+      const SESSION = 'db/session-databases.ts';
+      assert.deepEqual(await importersOf('sessionDatabases', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts']);
+      assert.deepEqual(await importersOf('inGroupTransaction', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts']);
+    });
 
     it('imports the cross-group list of the copies only in the scope layer, which builds the groups from the verified scope and never from the client', async () => {
       assert.deepEqual(await importersOf('readMirrorList', MIRROR), ['shared/security/scope/cross-group.ts']);
@@ -380,7 +386,7 @@ describe('database access cannot be bypassed outside src/db', () => {
           openers.push(posix(file));
         }
       }
-      assert.deepEqual(openers.sort(), ['modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts']);
+      assert.deepEqual(openers.sort(), ['modules/catalog-xlsx/catalog-xlsx.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts']);
     });
 
     it('prepares the administrator of a new group only from the onboarding service', async () => {

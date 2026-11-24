@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
+import { ACTIVITY_ALERT_ACTIONS } from '../../activity-log/catalog.ts';
 import { manageableRoles } from '../rbac/policy.ts';
 import type { AuthPrincipal } from './principal.ts';
 import type { Scope, UserScope } from './scope.ts';
@@ -177,7 +178,7 @@ export function placesScopeFilter(scope: Scope): Filter<Document> {
 /**
  * Filter restricting `common.activityEvents` to the entries a principal may read. A PSA reads everything; a
  * dealer the entries of his groups, a group administrator those of his group; a company or place
- * administrator only his own actions. Entries of the `error` category are the PSA's alone, so for every
+ * administrator only his own actions, never the alert entries (`ACTIVITY_ALERT_ACTIONS`: nobody below the group administrator reads an alert, not even about himself). Entries of the `error` category are the PSA's alone, so for every
  * other role they are excluded here. Combine with {@link withScope}.
  *
  * @param principal Id and scope of the caller.
@@ -195,7 +196,8 @@ export function activityLogScopeFilter(principal: Pick<AuthPrincipal, 'userId' |
       return { ...notErrors, groupId: scope.groupId };
     case 'companies':
     case 'places':
-      return { ...notErrors, 'actor.id': principal.userId };
+      // Only the own actions, and never an alert about oneself (the alert actions are for the staff of the group and above).
+      return { ...notErrors, 'actor.id': principal.userId, action: { $nin: [...ACTIVITY_ALERT_ACTIONS] } };
     case 'none':
       return NOTHING;
   }

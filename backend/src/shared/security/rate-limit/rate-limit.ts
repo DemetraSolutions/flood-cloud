@@ -1,6 +1,7 @@
 import type { Request, RequestHandler, Response } from 'express';
 import { AppError } from '../../http/errors.ts';
 import type { RateLimiter } from './rate-limiter.ts';
+import type { SustainedRateLimit } from './sustained.ts';
 
 /** A rate limit rule: which counter a request feeds and how many requests it may make per minute. */
 export interface RateLimitRule {
@@ -83,6 +84,8 @@ export interface RateLimitMount extends RateLimitDeps {
   readonly authFailureRule: RateLimitRule;
   /** The same for the routes of the public surface: its own bucket, so what a client guesses there never locks an office out of `/v1`, and the other way round. */
   readonly apiKeyAuthFailureRule: RateLimitRule;
+  /** The hourly and daily limit of an authenticated user on `/v1`, applied right after `apiRule` to every `user` route. Absent: not applied. */
+  readonly sustained?: SustainedRateLimit;
 }
 
 /**

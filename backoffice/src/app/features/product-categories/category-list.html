@@ -1,5 +1,6 @@
 <header class="page-header">
   <h1>{{ 'PRODUCT_CATEGORIES.TITLE' | t }}</h1>
+  <a class="import-export" [routerLink]="importExportRoute()">{{ 'CATALOG_XLSX.LINK' | t }}</a>
   <a *fcCan="'products:update'" class="new" [routerLink]="newRoute()">{{ 'PRODUCT_CATEGORIES.NEW' | t }}</a>
 </header>
 <p class="hint">{{ 'PRODUCT_CATEGORIES.HINT' | t }}</p>

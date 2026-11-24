@@ -23,6 +23,7 @@ export type ActorKind = (typeof ACTOR_KINDS)[number];
 export const SECURITY_ACTIONS = Object.freeze([
   'auth.loginSucceeded',
   'auth.loginFailed',
+  'auth.refreshFailed',
   'auth.refreshed',
   'auth.refreshReuseDetected',
   'auth.refreshRaceTolerated',
@@ -38,11 +39,17 @@ export const SECURITY_ACTIONS = Object.freeze([
   'group.trashed',
   'group.restored',
   'rateLimit.exceeded',
+  'rateLimit.sustainedExceeded',
+  'request.nonBrowser',
+  'settings.securityPolicyUpdated',
   'store.activationCodeCreated',
   'store.activationCodeCancelled',
   'store.activated',
   'store.activationFailed',
   'store.keyRevoked',
+  'store.activationCodeForActivePlace',
+  'store.activeKeyReplaced',
+  'store.activeKeyRevoked',
   'store.revokedKeyPresented',
   'store.configurationRead',
   'store.operatorRejected',
@@ -50,6 +57,13 @@ export const SECURITY_ACTIONS = Object.freeze([
   'apiKey.updated',
   'apiKey.revoked',
 ] as const);
+
+/**
+ * The closed set of actions the backoffice shows as an alert (the badge of the activity log menu entry, counted by
+ * `GET /v1/activity-log/alerts/count`). Defined here, in the server, so the client never decides what is an alert; add an
+ * action to the array to raise one more kind of alert. Every action must be a security action.
+ */
+export const ACTIVITY_ALERT_ACTIONS: readonly (typeof SECURITY_ACTIONS)[number][] = Object.freeze(['rateLimit.sustainedExceeded', 'request.nonBrowser', 'settings.securityPolicyUpdated', 'store.activationCodeForActivePlace', 'store.activeKeyReplaced', 'store.activeKeyRevoked'] as const);
 
 /** Resources whose writes are logged. */
 export const DATA_RESOURCES = Object.freeze(['user', 'group', 'dealer', 'company', 'place'] as const);
@@ -81,8 +95,8 @@ export const GROUP_CATALOG_VERBS = Object.freeze(['created', 'updated', 'deleted
 /** An action on an element of a group catalog: `group.<catalog>.<verb>`, for example `group.priceList.created`. */
 export type GroupCatalogAction = `group.${GroupCatalogName}.${(typeof GROUP_CATALOG_VERBS)[number]}`;
 
-/** The data actions that are not a verb of every resource: a place is also duplicated (`place.duplicated`, with the id of the source place in its metadata), and the e-mail templates of a group are created, updated and deleted (never trashed; their content is never logged), and the tobacco price list is imported (`tobaccos.imported`, with the counts of documents only, or with the reason `file` or `rows` when the file was refused), and the countries of the platform and their areas (provinces) are created, updated and deleted by the PSA (`country.*` and `countryArea.*`, with the codes in the metadata), and a company is looked up by its VAT number on Cerved (`vatLookup.performed`, with the outcome `found`, `notFound` or `unavailable` and the VAT number as the id of the resource: business data of a company, never a key), and the bulk operations of the trash page (`trash.bulkRestored`, `trash.bulkDeleted` and `trash.emptied`, one entry per call with the kind and the counts, never the ids: the entries of the single items already carry them), and the departments, the brands, the groups of attributes and the categories of the product catalog of a group (`productDepartment.*`, `productBrand.*`, `productAttributeGroup.*` and `productCategory.*`, created, updated and deleted for good, with the fields of the entry and never anything else), and the realignment of a tax rate that did not complete outside a transaction (`group.tax.realignmentIncomplete`, outcome `failure`, with the id of the rate, the blocks left or `null` and whether it was skipped, never a value), and the products of a group (`product.*`: created, updated, trashed, restored, deleted for good and duplicated, with the id of the source product in the metadata of a duplicate, and the changed fields only, every list cut and counted), and the purge of a trashed group by the command line tool (`group.purged`, written with the system actor: the counts of what was deleted, never a value), and the billing of the activations, all of the PSA (`priceList.updated`, `dealer.priceOverridesUpdated` with the dealer as the resource, `activations.renewalBaseFrozen` and `activations.renewalBaseUnfrozen` with the year, `activations.monthClosed` and `activations.monthReopened` with the invoice month, the counts of dealers and lines in the metadata). */
-export const DATA_EXTRA_ACTIONS = Object.freeze(['place.duplicated', 'emailTemplate.created', 'emailTemplate.updated', 'emailTemplate.deleted', 'tobaccos.imported', 'vatLookup.performed', 'country.created', 'country.updated', 'country.deleted', 'countryArea.created', 'countryArea.updated', 'countryArea.deleted', 'trash.bulkRestored', 'trash.bulkDeleted', 'trash.emptied', 'priceList.updated', 'dealer.priceOverridesUpdated', 'activations.renewalBaseFrozen', 'activations.renewalBaseUnfrozen', 'activations.monthClosed', 'activations.monthReopened', 'group.purged', 'productDepartment.created', 'productDepartment.updated', 'productDepartment.deleted', 'productBrand.created', 'productBrand.updated', 'productBrand.deleted', 'productAttributeGroup.created', 'productAttributeGroup.updated', 'productAttributeGroup.deleted', 'productCategory.created', 'productCategory.updated', 'productCategory.deleted', 'product.created', 'product.updated', 'product.trashed', 'product.restored', 'product.deleted', 'product.duplicated', 'group.tax.realignmentIncomplete'] as const);
+/** The data actions that are not a verb of every resource: a place is also duplicated (`place.duplicated`, with the id of the source place in its metadata), and the e-mail templates of a group are created, updated and deleted (never trashed; their content is never logged), and the tobacco price list is imported (`tobaccos.imported`, with the counts of documents only, or with the reason `file` or `rows` when the file was refused), and the countries of the platform and their areas (provinces) are created, updated and deleted by the PSA (`country.*` and `countryArea.*`, with the codes in the metadata), and a company is looked up by its VAT number on Cerved (`vatLookup.performed`, with the outcome `found`, `notFound` or `unavailable` and the VAT number as the id of the resource: business data of a company, never a key), and the bulk operations of the trash page (`trash.bulkRestored`, `trash.bulkDeleted` and `trash.emptied`, one entry per call with the kind and the counts, never the ids: the entries of the single items already carry them), and the departments, the brands, the groups of attributes and the categories of the product catalog of a group (`productDepartment.*`, `productBrand.*`, `productAttributeGroup.*` and `productCategory.*`, created, updated and deleted for good, with the fields of the entry and never anything else), and the realignment of a tax rate that did not complete outside a transaction (`group.tax.realignmentIncomplete`, outcome `failure`, with the id of the rate, the blocks left or `null` and whether it was skipped, never a value), and the products of a group (`product.*`: created, updated, trashed, restored, deleted for good and duplicated, with the id of the source product in the metadata of a duplicate, and the changed fields only, every list cut and counted), and the workbook of the catalog of a group (`catalog.exported`, with how references were written and the counts of the rows of each sheet, and `catalog.imported`, with the counts of the documents written, or the number of problems and the reason `file` or `rows` when the workbook was refused, and `dryRun`; never the content of the file, a name or a price: the entries of the single products are not written), and the purge of a trashed group by the command line tool (`group.purged`, written with the system actor: the counts of what was deleted, never a value), and the billing of the activations, all of the PSA (`priceList.updated`, `dealer.priceOverridesUpdated` with the dealer as the resource, `activations.renewalBaseFrozen` and `activations.renewalBaseUnfrozen` with the year, `activations.monthClosed` and `activations.monthReopened` with the invoice month, the counts of dealers and lines in the metadata). */
+export const DATA_EXTRA_ACTIONS = Object.freeze(['place.duplicated', 'emailTemplate.created', 'emailTemplate.updated', 'emailTemplate.deleted', 'tobaccos.imported', 'vatLookup.performed', 'country.created', 'country.updated', 'country.deleted', 'countryArea.created', 'countryArea.updated', 'countryArea.deleted', 'trash.bulkRestored', 'trash.bulkDeleted', 'trash.emptied', 'priceList.updated', 'dealer.priceOverridesUpdated', 'activations.renewalBaseFrozen', 'activations.renewalBaseUnfrozen', 'activations.monthClosed', 'activations.monthReopened', 'group.purged', 'productDepartment.created', 'productDepartment.updated', 'productDepartment.deleted', 'productBrand.created', 'productBrand.updated', 'productBrand.deleted', 'productAttributeGroup.created', 'productAttributeGroup.updated', 'productAttributeGroup.deleted', 'productCategory.created', 'productCategory.updated', 'productCategory.deleted', 'product.created', 'product.updated', 'product.trashed', 'product.restored', 'product.deleted', 'product.duplicated', 'group.tax.realignmentIncomplete', 'catalog.exported', 'catalog.imported'] as const);
 
 /** A data action: `<resource>.<verb>`, for example `user.created`, an action of one resource only (`place.duplicated`), or an action on a catalog of a group. */
 export type DataAction = `${(typeof DATA_RESOURCES)[number]}.${(typeof DATA_VERBS)[number]}` | (typeof DATA_EXTRA_ACTIONS)[number] | GroupCatalogAction;
@@ -102,6 +116,8 @@ const DATA_ACTIONS: readonly DataAction[] = [
 const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], readonly string[]>> = {
   'auth.loginSucceeded': [],
   'auth.loginFailed': ['reason'],
+  // A refresh refused although the refresh token was good (today only `browserRequired`: the policy blocks the requests that do not look like a browser's). The token is not consumed.
+  'auth.refreshFailed': ['reason'],
   'auth.refreshed': [],
   'auth.refreshReuseDetected': [],
   'auth.refreshRaceTolerated': [],
@@ -117,11 +133,23 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
   'group.trashed': [],
   'group.restored': [],
   'rateLimit.exceeded': ['bucket'],
+  // A user went over the hourly or daily limit on `/v1` (once per user and window): the bucket, the window (`hour` or `day`), the limit and the mode that applied to this user (`report`: the request passed; `enforce`: it was refused).
+  'rateLimit.sustainedExceeded': ['bucket', 'window', 'limit', 'mode'],
+  // A request of a user that does not look like a browser's (a signal, falsifiable, never a block): why (`noOrigin`, `foreignOrigin`, `inconsistentFetchMetadata`), where it was seen (`source`: `login`, `refresh` or `api`), what was done (`outcome`: `reported` or `blocked`) and the `User-Agent`, printable and cut at 120 characters.
+  // The security policy of the platform was changed by the PSA: the entry carries the field changes (before and after) and no metadata.
+  'settings.securityPolicyUpdated': [],
+  'request.nonBrowser': ['reason', 'source', 'outcome', 'userAgent'],
   'store.activationCodeCreated': [],
   'store.activationCodeCancelled': [],
   'store.activated': ['replacedKeyId'],
   'store.activationFailed': ['reason'],
   'store.keyRevoked': ['reason', 'keyHint'],
+  // Alerts of the store key. An activation code was made for a place that already has an active key (the administrator confirmed the replacement): the four character hint of that key, never the code. Resource: the place.
+  'store.activationCodeForActivePlace': ['keyHint'],
+  // An activation replaced the active key of a place: the hint and the id of the key that was replaced, never a key. Actor: the new key, as for `store.activated`. Resource: the place.
+  'store.activeKeyReplaced': ['keyHint', 'replacedKeyId'],
+  // An administrator revoked the active key of a place by hand (the revocation because the place was trashed or deleted is not an alert): the hint and the id of the key, never a key. Actor: who revoked. Resource: the place.
+  'store.activeKeyRevoked': ['keyHint', 'keyId'],
   'store.revokedKeyPresented': [],
   // The server of a store read the configuration that carries credentials: which one (`group`, `place` or `users`) and the ids of its company and place, never a value.
   'store.configurationRead': ['resource', 'companyId', 'placeId'],
@@ -148,7 +176,7 @@ const PURGE_METADATA: readonly string[] = ['collections', 'documents', 'users', 
 const STORE_WRITE_ACTIONS: ReadonlySet<string> = new Set(['product.created', 'product.updated', 'product.trashed', 'product.restored', 'product.duplicated', 'productCategory.created', 'productCategory.updated', 'productCategory.deleted']);
 
 /** Extra metadata keys of some data actions: a permanent deletion keeps no field changes, only the role of the user it removed (the group is the entry's `groupId`), and a duplicated place the id of the place it was copied from. */
-const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'], 'place.duplicated': ['sourceId'], 'product.duplicated': ['sourceId'], 'group.tax.realignmentIncomplete': ['taxId', 'remainingBlocks', 'skipped'], 'tobaccos.imported': ['inserted', 'previous', 'reason'], 'vatLookup.performed': ['outcome'], 'country.created': ['countryCode'], 'country.updated': ['countryCode'], 'country.deleted': ['countryCode'], 'countryArea.created': ['countryCode', 'areaCode'], 'countryArea.updated': ['countryCode', 'areaCode'], 'countryArea.deleted': ['countryCode', 'areaCode'], 'trash.bulkRestored': TRASH_METADATA, 'trash.bulkDeleted': TRASH_METADATA, 'trash.emptied': TRASH_METADATA, 'activations.renewalBaseFrozen': BILLING_METADATA, 'activations.renewalBaseUnfrozen': BILLING_METADATA, 'activations.monthClosed': BILLING_METADATA, 'activations.monthReopened': BILLING_METADATA, 'group.purged': PURGE_METADATA };
+const DATA_EXTRA_METADATA: Readonly<Partial<Record<DataAction, readonly string[]>>> = { 'user.deleted': ['role'], 'place.duplicated': ['sourceId'], 'product.duplicated': ['sourceId'], 'group.tax.realignmentIncomplete': ['taxId', 'remainingBlocks', 'skipped'], 'tobaccos.imported': ['inserted', 'previous', 'reason'], 'catalog.exported': ['references', 'products', 'variants', 'categories'], 'catalog.imported': ['dryRun', 'reason', 'inserted', 'updated', 'removed', 'unchanged', 'errors'], 'vatLookup.performed': ['outcome'], 'country.created': ['countryCode'], 'country.updated': ['countryCode'], 'country.deleted': ['countryCode'], 'countryArea.created': ['countryCode', 'areaCode'], 'countryArea.updated': ['countryCode', 'areaCode'], 'countryArea.deleted': ['countryCode', 'areaCode'], 'trash.bulkRestored': TRASH_METADATA, 'trash.bulkDeleted': TRASH_METADATA, 'trash.emptied': TRASH_METADATA, 'activations.renewalBaseFrozen': BILLING_METADATA, 'activations.renewalBaseUnfrozen': BILLING_METADATA, 'activations.monthClosed': BILLING_METADATA, 'activations.monthReopened': BILLING_METADATA, 'group.purged': PURGE_METADATA };
 
 /** Definition of one action: its categories and the metadata keys it may carry (anything else is rejected). */
 export interface ActionDefinition {

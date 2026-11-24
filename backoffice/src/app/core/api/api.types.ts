@@ -14,6 +14,7 @@ export const API_ERROR_CODES = [
   'FORBIDDEN',
   'PASSWORD_CHANGE_REQUIRED',
   'FEATURE_DISABLED',
+  'BROWSER_REQUIRED',
   'NOT_FOUND',
   'METHOD_NOT_ALLOWED',
   'CONFLICT',
@@ -45,7 +46,26 @@ export type ApiPage<T> = { data: T[]; page: { limit: number; next: string | null
 /** Per-field validation detail carried by `422` responses. */
 export type ApiErrorDetail = { field: string; issue: string };
 
+/** A problem of one row (or of one sheet) of an imported workbook, as a `422` of an import lists it. */
+export type ApiErrorRow = {
+  sheet: string;
+  row: number | null;
+  column: string | null;
+  code: string;
+  message: string;
+};
+
 /** Standard error envelope. */
 export type ApiErrorBody = {
-  error: { code: ApiErrorCode; message: string; details?: ApiErrorDetail[] };
+  error: {
+    code: ApiErrorCode;
+    message: string;
+    details?: ApiErrorDetail[];
+    /** Problems of a workbook (the import of the catalog only). */
+    rows?: ApiErrorRow[];
+    /** How many problems the workbook has (those listed in `rows` and the others). */
+    errorCount?: number;
+    /** Whether there are problems not listed in `rows`. */
+    moreErrors?: boolean;
+  };
 };

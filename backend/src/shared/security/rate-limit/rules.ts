@@ -42,6 +42,10 @@ export interface RateLimitRules {
   readonly unauthenticatedPublicPerIp: RateLimitRule;
   /** Every `/v1` request per authenticated user (always applied to `user` routes by the route builder). */
   readonly apiPerUser: RateLimitRule;
+  /** Every `/v1` request per authenticated user per hour: the sustained use, applied after {@link RateLimitRules.apiPerUser} by `sustainedRateLimit`. */
+  readonly apiPerUserHour: RateLimitRule;
+  /** Every `/v1` request per authenticated user per day (UTC), like {@link RateLimitRules.apiPerUserHour}. */
+  readonly apiPerUserDay: RateLimitRule;
   /** Every `/v1` request per store key (the route builder applies it to every route a store key may call, and to no other: the per-user rule would let a store through with no limit, its key being the user's). */
   readonly apiPerStore: RateLimitRule;
   /** Activation code exchanges per client IP address: the route is anonymous, so this runs before the body is read. */
@@ -115,6 +119,8 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     cervedLookupPerUser: Object.freeze({ bucket: 'cerved-lookup:user', limit: config.rateLimitCervedLookupPerUser, key: perUser }),
     cervedLookupPerUserDaily: Object.freeze({ bucket: 'cerved-lookup-day:user', limit: config.rateLimitCervedLookupPerUserDaily, windowSeconds: DAY_SECONDS, key: perUser }),
     apiPerUser: Object.freeze({ bucket: 'api:user', limit: config.rateLimitApiPerUser, key: perUser }),
+    apiPerUserHour: Object.freeze({ bucket: 'api-hour:user', limit: config.rateLimitApiPerUserHour, windowSeconds: HOUR_SECONDS, key: perUser }),
+    apiPerUserDay: Object.freeze({ bucket: 'api-day:user', limit: config.rateLimitApiPerUserDay, windowSeconds: DAY_SECONDS, key: perUser }),
     apiPerStore: Object.freeze({ bucket: 'api:store', limit: config.rateLimitApiPerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     storeCatalogWritePerStore: Object.freeze({ bucket: 'store-catalog-write:store', limit: config.rateLimitStoreCatalogWritePerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),

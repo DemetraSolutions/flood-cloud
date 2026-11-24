@@ -11,10 +11,14 @@ import { AppError } from './shared/http/errors.ts';
 import { requestId } from './shared/http/request-id.ts';
 import { createCrossGroupAuditor } from './shared/activity-log/cross-group-audit.ts';
 import type { ActivityLog } from './shared/activity-log/activity-log.ts';
-import { createRateLimitAudit } from './shared/activity-log/rate-limit-audit.ts';
+import { createRateLimitAudit, createSustainedRateLimitAudit } from './shared/activity-log/rate-limit-audit.ts';
 import { createCredentialDispatcher } from './modules/auth/authenticate.ts';
 import { createErrorActivityReporter } from './shared/http/error-activity.ts';
+import { createNonBrowserSignal } from './shared/security/non-browser-signal.ts';
 import { createRateLimitRules } from './shared/security/rate-limit/rules.ts';
+import type { SecurityPolicyProvider } from './shared/security/security-policy.ts';
+import type { SustainedMode } from './shared/security/rate-limit/sustained.ts';
+import type { NonBrowserGuard } from './shared/security/non-browser-signal.ts';
 import type { RateLimiter } from './shared/security/rate-limit/rate-limiter.ts';
 import type { GroupsRepository } from './shared/security/scope/groups.repository.ts';
 import { mountRoutes } from './shared/http/routes.ts';
@@ -54,6 +58,10 @@ export interface AppDeps {
   };
   /** Group lookup for the `/v1` routes declaring `group: true`; PSA and D accesses are audited by the app itself. */
   readonly groupAccess?: { readonly groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'> };
+  /** The security policy in memory (the setting of the PSA): the mode of the hourly and daily limits comes from it. Absent: `RATE_LIMIT_API_SUSTAINED_MODE`, or `report` when `SECURITY_POLICY_FORCE_REPORT` is on (the emergency exit holds in every composition). */
+  readonly securityPolicy?: Pick<SecurityPolicyProvider, 'get'>;
+  /** The guard of the requests of a user that do not look like a browser's (`createNonBrowserGuard`), mounted on the `user` routes of `/v1` unless `REQUEST_ORIGIN_SIGNAL` is `off`. Absent: no signal and no block. */
+  readonly nonBrowserGuard?: NonBrowserGuard;
   /** The activity log: security events and server errors. */
   readonly activityLog: ActivityLog;
   /** The rate limit counters. */
@@ -77,12 +85,15 @@ export function createApp(deps: AppDeps): Express {
   const { config, logger, readiness, activityLog } = deps;
   const now = deps.now ?? Date.now;
   const rules = createRateLimitRules(config);
+  // The mode of the hourly and daily limits: what the PSA saved in the security policy (in memory), else the variable of the environment.
+  const sustainedMode = async (): Promise<SustainedMode> => (deps.securityPolicy === undefined ? (config.securityPolicyForceReport === 'on' ? 'report' : config.rateLimitApiSustainedMode) : (await deps.securityPolicy.get()).sustainedLimits);
   const rateLimitMount = {
     limiter: deps.rateLimiter,
     apiRule: rules.apiPerUser,
     authFailureRule: rules.unauthenticatedPerIp,
     apiKeyAuthFailureRule: rules.unauthenticatedPublicPerIp,
     onExceeded: createRateLimitAudit(activityLog),
+    sustained: { hour: rules.apiPerUserHour, day: rules.apiPerUserDay, mode: sustainedMode, onExceeded: createSustainedRateLimitAudit(activityLog) },
   };
   const app = express();
   // Never let Express render its development error page (stack traces).
@@ -111,6 +122,7 @@ export function createApp(deps: AppDeps): Express {
       ? {}
       : { groupAccess: { groups: deps.groupAccess.groups, onCrossGroupAccess: createCrossGroupAuditor({ activityLog, now }) } }),
     rateLimit: rateLimitMount,
+    ...(deps.nonBrowserGuard === undefined || config.requestOriginSignal === 'off' ? {} : { nonBrowserSignal: createNonBrowserSignal(deps.nonBrowserGuard) }),
   });
   app.use('/v1', cors(config.corsAllowedOrigins), v1);
 

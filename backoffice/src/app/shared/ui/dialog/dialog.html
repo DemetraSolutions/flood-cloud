@@ -1,4 +1,10 @@
-<dialog [class.wide]="wide()" [attr.aria-labelledby]="headingId" (close)="onClose()">
+<dialog
+  [class.wide]="wide()"
+  [attr.role]="alert() ? 'alertdialog' : null"
+  [attr.aria-labelledby]="headingId"
+  [attr.aria-describedby]="alert() ? bodyId : null"
+  (close)="onClose()"
+>
   <div class="panel">
     <header>
       <h2 [id]="headingId">{{ heading() }}</h2>
@@ -9,7 +15,7 @@
         (click)="open.set(false)"
       ></button>
     </header>
-    <div class="body"><ng-content /></div>
+    <div class="body" [id]="bodyId"><ng-content /></div>
     <footer><ng-content select="[fcDialogActions]" /></footer>
   </div>
 </dialog>

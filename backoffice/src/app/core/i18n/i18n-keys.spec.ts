@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { API_ERROR_CODES, CLIENT_ERROR_CODES } from '../api/api.types';
 import { FIELD_ISSUES, issueMessageKey } from '../api/field-issues';
+import { SOURCE_KEYS } from '../../features/security-policy/security-policy-page';
+import { WAIT_KEYS } from '../../shared/forms/form-errors';
 import { FEATURE_NAMES, featureTextKey } from '../groups/feature-catalog';
 import { GROUP_SECTIONS } from '../../features/groups/group-settings';
 import { PROMOTION_SECTIONS } from '../../features/groups/catalogs/promotion-model';
@@ -30,6 +32,8 @@ import {
 } from '../../features/places/place-nav';
 import { TEMPLATE_MODELS } from '../../features/email-templates/template-models';
 import { importProblems } from '../../features/tobaccos/tobaccos.types';
+import { RULE_KEYS } from '../../features/catalog-xlsx/catalog-xlsx-page';
+import { ROW_ERROR_CODES, rowErrorKey } from '../../features/catalog-xlsx/catalog-xlsx.types';
 import {
   ACTION_TEXTS,
   CONFLICT_KEYS,
@@ -161,6 +165,42 @@ describe('dictionaries', () => {
       expected.push(`ACTIVITY.ACTOR.${kind}`);
     }
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the texts of the security alerts, whose keys are chosen at run time', () => {
+    const keys = dictionary('it');
+    const expected = [
+      'LAYOUT.ALERTS_ONE',
+      'LAYOUT.ALERTS_OTHER',
+      ...['NOTICE_ONE', 'NOTICE_OTHER', 'DETAIL', 'WINDOW_HOUR', 'WINDOW_DAY'].map(
+        (part) => `ACTIVITY.ALERTS.${part}`,
+      ),
+      ...[
+        'CODE_FOR_ACTIVE',
+        'KEY_REPLACED',
+        'MODE_REPORT',
+        'MODE_ENFORCE',
+        'SHOW',
+        'MARK_SEEN',
+        'SEEN_DONE',
+        'REGION',
+      ].map((part) => `ACTIVITY.ALERTS.${part}`),
+    ];
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the text of every problem code of the catalog import and nothing else under ROW_ERROR, and the rules of the file', () => {
+    const keys = dictionary('it');
+    expect(ROW_ERROR_CODES.map(rowErrorKey).filter((key) => !keys.has(key))).toEqual([]);
+    const defined = [...keys.keys()].filter((key) => key.startsWith('CATALOG_XLSX.ROW_ERROR.'));
+    expect(defined.sort()).toEqual(ROW_ERROR_CODES.map(rowErrorKey).sort());
+    expect(RULE_KEYS.map((rule) => `CATALOG_XLSX.RULES.${rule}`).filter((key) => !keys.has(key))).toEqual([]);
+    for (const sheet of ['PRODUCTS', 'VARIANTS', 'CATEGORIES']) {
+      expect(keys.has(`CATALOG_XLSX.SHEET.${sheet}`)).toBe(true);
+    }
+    for (const field of ['INSERTED', 'UPDATED', 'REMOVED', 'UNCHANGED']) {
+      expect(keys.has(`CATALOG_XLSX.COUNTS.${field}`)).toBe(true);
+    }
   });
 
   it('defines the names of the e-mail template models, whose keys are built at run time', () => {

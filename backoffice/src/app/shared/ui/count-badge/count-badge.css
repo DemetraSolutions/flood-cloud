@@ -1,0 +1,17 @@
+:host {
+  display: inline-flex;
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.count {
+  min-inline-size: 1.5rem;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.5rem;
+  text-align: center;
+}

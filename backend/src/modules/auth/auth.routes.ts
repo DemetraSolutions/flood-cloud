@@ -38,7 +38,7 @@ export function createAuthRoutes(controller: AuthController, rules: RateLimitRul
       middleware: [validateBody(refreshBody)],
       handler: controller.refresh,
     }),
-    defineRoute({ method: 'POST', path: '/auth/logout', auth: { kind: 'user', permission: 'sessions:revoke', allowWithPendingPasswordChange: true }, handler: controller.logout }),
-    defineRoute({ method: 'POST', path: '/auth/logout-all', auth: { kind: 'user', permission: 'sessions:revoke', allowWithPendingPasswordChange: true }, handler: controller.logoutAll }),
+    defineRoute({ method: 'POST', path: '/auth/logout', auth: { kind: 'user', permission: 'sessions:revoke', allowWithPendingPasswordChange: true }, sustainedExempt: true, handler: controller.logout }),
+    defineRoute({ method: 'POST', path: '/auth/logout-all', auth: { kind: 'user', permission: 'sessions:revoke', allowWithPendingPasswordChange: true }, sustainedExempt: true, handler: controller.logoutAll }),
   ];
 }

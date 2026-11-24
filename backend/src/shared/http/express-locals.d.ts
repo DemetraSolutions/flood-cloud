@@ -25,6 +25,8 @@ declare global {
       sessionId?: ObjectId;
       /** Set by the Bearer middleware when the user must change a provisional password before doing anything else. */
       passwordChangeRequired?: true;
+      /** What the non-browser signal made of this request: the reason it does not look like a browser's, or `null` when it does. Absent when the signal did not look at it (off, or not a user route). */
+      nonBrowserReason?: 'noOrigin' | 'foreignOrigin' | 'inconsistentFetchMetadata' | null;
       /** Set by the route builder for routes that return credentials: the response must not be compressed (BREACH). */
       noCompression?: true;
       /** Validated body, query and params, set by `validateBody`, `validateQuery` and `validateParams`. */

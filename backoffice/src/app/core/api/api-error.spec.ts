@@ -121,6 +121,39 @@ describe('parseApiErrorBody', () => {
   });
 });
 
+describe('the problems of a refused workbook', () => {
+  const valid = { sheet: 'Prodotti', row: 7, column: 'NOME', code: 'required', message: 'm' };
+  const sheetWide = { sheet: 'Categorie', row: null, column: null, code: 'tooManyRows', message: 'm' };
+
+  it('keeps the well-formed rows, the count and the flag, and drops the rest', () => {
+    const error = toApiError(
+      failure(422, {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid',
+          rows: [valid, sheetWide, { sheet: 1 }, 'text', { ...valid, row: 'x' }, { ...valid, column: 1 }],
+          errorCount: 250,
+          moreErrors: true,
+        },
+      }),
+    );
+    expect(error.rows).toEqual([valid, sheetWide]);
+    expect(error.errorCount).toBe(250);
+    expect(error.moreErrors).toBe(true);
+  });
+
+  it('reads rows that are not a list as no rows, and ignores a count or a flag of another type', () => {
+    const error = toApiError(
+      failure(422, {
+        error: { code: 'VALIDATION_ERROR', message: 'm', rows: 'x', errorCount: '3', moreErrors: 'yes' },
+      }),
+    );
+    expect(error.rows).toEqual([]);
+    expect(error.errorCount).toBeNull();
+    expect(error.moreErrors).toBe(false);
+  });
+});
+
 describe('fieldErrors', () => {
   it('keeps the first issue of each field', () => {
     const error = new ApiError({

@@ -289,7 +289,8 @@ function catalogItemRoutes(
   guards: CanMatchFn[],
 ): Routes {
   const data = { kind };
-  const page = () => import('./features/product-catalog/catalog-item-page').then((m) => m.CatalogItemPage);
+  const page = () =>
+    import('./features/product-catalog/catalog-item-page').then((m) => m.CatalogItemPage);
   return [
     {
       path: `groups/:groupId/${segment}`,
@@ -319,6 +320,13 @@ function catalogItemRoutes(
 }
 
 const productCatalogRoutes: Routes = [
+  {
+    path: 'groups/:groupId/tools/catalog-import-export',
+    canMatch: [permission('products:read')],
+    title: 'CATALOG_XLSX.TITLE',
+    loadComponent: () =>
+      import('./features/catalog-xlsx/catalog-xlsx-page').then((m) => m.CatalogXlsxPage),
+  },
   {
     path: 'groups/:groupId/product-categories',
     canMatch: [permission('products:read')],
@@ -794,6 +802,15 @@ export const routes: Routes = [
             title: 'COUNTRIES.DETAIL_TITLE',
             loadComponent: () =>
               import('./features/countries/country-page').then((m) => m.CountryPage),
+          },
+          {
+            path: 'settings/security',
+            canMatch: [role('PSA'), permission('securityPolicy:manage')],
+            title: 'SECURITY_POLICY.TITLE',
+            loadComponent: () =>
+              import('./features/security-policy/security-policy-page').then(
+                (m) => m.SecurityPolicyPage,
+              ),
           },
           {
             path: 'releases',

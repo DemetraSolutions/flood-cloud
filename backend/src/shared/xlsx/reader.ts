@@ -340,3 +340,88 @@ export function readXlsx(buffer: Buffer, overrides: Partial<XlsxLimits> = {}): W
   const shared = archive.has(SHARED_STRINGS) ? sharedStrings(text(archive.read(SHARED_STRINGS)), limits) : [];
   return { rows: sheetRows(text(archive.read(path)), shared, limits) };
 }
+
+/** The sheets of the workbook, in order: the name and the relationship id of each. */
+function sheetEntries(xml: string, limits: XlsxLimits): Array<{ readonly name: string; readonly id: string }> {
+  const sheets: Array<{ readonly name: string; readonly id: string }> = [];
+  parseXml(
+    xml,
+    {
+      open: (name, attributes) => {
+        if (name === 'sheet') {
+          const id = attributes.get('id');
+          const sheetName = attributes.get('name');
+          if (id === undefined || id === '' || sheetName === undefined) {
+            throw new XlsxError('malformed');
+          }
+          if (sheets.length >= MAX_SHEETS) {
+            throw new XlsxError('limit');
+          }
+          sheets.push({ name: sheetName, id });
+        }
+      },
+      close: () => undefined,
+      text: () => undefined,
+    },
+    limits.maxDepth,
+  );
+  return sheets;
+}
+
+/** The targets of all the relationships of the workbook, by id. */
+function relationshipTargets(xml: string, limits: XlsxLimits): Map<string, string> {
+  const targets = new Map<string, string>();
+  parseXml(
+    xml,
+    {
+      open: (name, attributes) => {
+        const id = attributes.get('Id');
+        const target = attributes.get('Target');
+        if (name === 'Relationship' && id !== undefined && target !== undefined && !targets.has(id)) {
+          targets.set(id, target);
+        }
+      },
+      close: () => undefined,
+      text: () => undefined,
+    },
+    limits.maxDepth,
+  );
+  return targets;
+}
+
+/** Most sheets a workbook may declare: more is refused before any of them is read. */
+const MAX_SHEETS = 64;
+
+/**
+ * Reads some worksheets of an XLSX workbook **by name**, with the same rules and limits as {@link readXlsx}. Only the sheets that are asked for are inflated: any other sheet is never read. A sheet the
+ * workbook does not have is absent from the result; a name the workbook declares twice is damage.
+ *
+ * @param buffer The whole file.
+ * @param names The names of the sheets wanted (compared exactly, case included).
+ * @param overrides Limits that replace the defaults of {@link DEFAULT_XLSX_LIMITS}.
+ * @returns The rows of each sheet found, by name.
+ * @throws {XlsxError} When the file is not a workbook this reader accepts.
+ */
+export function readXlsxSheets(buffer: Buffer, names: readonly string[], overrides: Partial<XlsxLimits> = {}): Map<string, Worksheet> {
+  const limits: XlsxLimits = { ...DEFAULT_XLSX_LIMITS, ...overrides };
+  const archive = openZip(buffer, limits);
+  const sheets = sheetEntries(text(archive.read(WORKBOOK)), limits);
+  if (new Set(sheets.map((sheet) => sheet.name)).size !== sheets.length) {
+    throw new XlsxError('malformed');
+  }
+  const wanted = sheets.filter((sheet) => names.includes(sheet.name));
+  const result = new Map<string, Worksheet>();
+  if (wanted.length === 0) {
+    return result;
+  }
+  const targets = relationshipTargets(text(archive.read(RELATIONSHIPS)), limits);
+  const shared = archive.has(SHARED_STRINGS) ? sharedStrings(text(archive.read(SHARED_STRINGS)), limits) : [];
+  for (const sheet of wanted) {
+    const target = targets.get(sheet.id);
+    if (target === undefined || target === '') {
+      throw new XlsxError('missing');
+    }
+    result.set(sheet.name, { rows: sheetRows(text(archive.read(pathOf(target))), shared, limits) });
+  }
+  return result;
+}

@@ -1,3 +1,4 @@
+import { ACTIVITY_ALERT_ACTIONS } from '../../src/shared/activity-log/catalog.ts';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ObjectId } from 'mongodb';
@@ -175,8 +176,8 @@ describe('activityLogScopeFilter', () => {
     assert.deepEqual(filter({ kind: 'platform' }), {});
     assert.deepEqual(filter({ kind: 'dealer', groupIds: new Set([groupId.toHexString()]) }), { category: { $ne: 'error' }, groupId: { $in: [groupId] } });
     assert.deepEqual(filter({ kind: 'group', groupId }), { category: { $ne: 'error' }, groupId });
-    assert.deepEqual(filter({ kind: 'companies', groupId }), { category: { $ne: 'error' }, 'actor.id': userId });
-    assert.deepEqual(filter({ kind: 'places', groupId }), { category: { $ne: 'error' }, 'actor.id': userId });
+    assert.deepEqual(filter({ kind: 'companies', groupId }), { category: { $ne: 'error' }, 'actor.id': userId, action: { $nin: [...ACTIVITY_ALERT_ACTIONS] } });
+    assert.deepEqual(filter({ kind: 'places', groupId }), { category: { $ne: 'error' }, 'actor.id': userId, action: { $nin: [...ACTIVITY_ALERT_ACTIONS] } });
     assert.deepEqual(filter({ kind: 'none' }), { _id: { $in: [] } });
   });
 });

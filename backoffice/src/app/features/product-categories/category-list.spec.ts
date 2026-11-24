@@ -161,6 +161,9 @@ describe('CategoryList', () => {
       expect(cells(0)[4]).toContain('2026');
       expect(cells(1).slice(0, 5)).toEqual(['Food', '', '', 'PRODUCT_CATALOG.STATE.DISABLED', '']);
       expect(root.querySelector('a.new')?.getAttribute('href')).toBe(`/groups/${GROUP}/product-categories/new`);
+      const link = root.querySelector('a.import-export');
+      expect(link?.textContent?.trim()).toBe('CATALOG_XLSX.LINK');
+      expect(link?.getAttribute('href')).toBe(`/groups/${GROUP}/tools/catalog-import-export`);
     });
 
     it('names the parent from the tree, the hidden one with a notice, an unknown one with nothing', async () => {

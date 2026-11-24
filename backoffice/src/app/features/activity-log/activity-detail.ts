@@ -10,6 +10,7 @@ import {
   ActivityEntry,
   formatChangeValue,
   otherActorLabel,
+  alertSummary,
 } from './activity-log.types';
 
 /**
@@ -45,6 +46,7 @@ export class ActivityDetail {
     }
     return otherActorLabel(this.i18n, this.entry().actor);
   });
+  protected readonly summary = computed(() => alertSummary(this.i18n, this.entry()));
   protected readonly changes = computed(() => this.entry().changes ?? []);
   protected readonly metadata = computed(() => Object.entries(this.entry().metadata ?? {}));
 

@@ -8,6 +8,7 @@ import {
   fieldErrorMessage,
   focusFirstError,
   serverFieldErrors,
+  waitText,
 } from './form-errors';
 
 function i18n(): I18nService {
@@ -117,6 +118,31 @@ describe('failureMessage', () => {
   it('uses the central mapping for API errors', () => {
     const error = new ApiError({ status: 429, code: 'RATE_LIMITED', message: 'm' });
     expect(failureMessage(i18n(), error)).toBe('[ERRORS.API.RATE_LIMITED]');
+  });
+
+  it('says how long to wait on a rate limit that tells it, and the code of the browser block', () => {
+    const wait = (retryAfterSeconds: number) =>
+      new ApiError({ status: 429, code: 'RATE_LIMITED', message: 'm', retryAfterSeconds });
+    const t = vi.spyOn(TestBed.inject(I18nService), 't');
+    t.mockImplementation((key, params) => `[${key}${params ? JSON.stringify(params) : ''}]`);
+    const service = TestBed.inject(I18nService);
+    const message = failureMessage(service, wait(30));
+    expect(message).toContain('ERRORS.API.RATE_LIMITED_WAIT');
+    expect(message).toContain('ERRORS.WAIT.SECONDS');
+    expect(message).toContain('30');
+    const browser = new ApiError({ status: 403, code: 'BROWSER_REQUIRED', message: 'm' });
+    expect(failureMessage(service, browser)).toBe('[ERRORS.API.BROWSER_REQUIRED]');
+  });
+
+  it('writes a waiting time in the unit that reads best, in the singular when it is one', () => {
+    const service = TestBed.inject(I18nService);
+    vi.spyOn(service, 't').mockImplementation((key, params) => `${key}:${params?.['count']}`);
+    expect(waitText(service, 0.2)).toBe('ERRORS.WAIT.SECOND:1');
+    expect(waitText(service, 59)).toBe('ERRORS.WAIT.SECONDS:59');
+    expect(waitText(service, 60)).toBe('ERRORS.WAIT.MINUTE:1');
+    expect(waitText(service, 61)).toBe('ERRORS.WAIT.MINUTES:2');
+    expect(waitText(service, 3600)).toBe('ERRORS.WAIT.HOUR:1');
+    expect(waitText(service, 7201)).toBe('ERRORS.WAIT.HOURS:3');
   });
 
   it('logs anything else and answers generically', () => {

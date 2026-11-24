@@ -10,6 +10,8 @@ import { STORE_PROFILE } from '../security/rbac/policy.ts';
 import { requirePermission } from '../security/rbac/require-permission.ts';
 import { guardAuthentication, rateLimit } from '../security/rate-limit/rate-limit.ts';
 import type { RateLimitMount, RateLimitRule } from '../security/rate-limit/rate-limit.ts';
+import type { NonBrowserSignal } from '../security/non-browser-signal.ts';
+import { sustainedRateLimit } from '../security/rate-limit/sustained.ts';
 import { requireApiKeyPermission } from '../security/scope/api-key-guards.ts';
 import { reportCrossGroupAccess, requireGroupAccess, requireStoreGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
@@ -143,8 +145,20 @@ export interface RouteDefinition {
    * is never compressed, which would expose the secrets to BREACH-style attacks (D-12).
    */
   readonly compress?: false;
+  /**
+   * `true` on a route the hourly and daily limits of `/v1` count but never refuse, even in `enforce`: the revocation of one's own sessions and the change of one's own credentials, which a
+   * user who went over the limit (or whose stolen token did) must always be able to perform. Only the routes of {@link SUSTAINED_EXEMPT_ROUTES} may declare it (the check is on the exact
+   * method and path, never on a pattern), and only as `user` routes.
+   */
+  readonly sustainedExempt?: true;
   readonly handler: RequestHandler;
 }
+
+/**
+ * The closed set of routes (`<METHOD> <path declared on /v1>`) that may declare `sustainedExempt`: logout, logout of every session, change of the own password and of the own PIN,
+ * and revocation of one of the own sessions. Adding a route here is a security decision (`doc/Security-Model.md` section 7).
+ */
+export const SUSTAINED_EXEMPT_ROUTES: ReadonlySet<string> = Object.freeze(new Set(['POST /auth/logout', 'POST /auth/logout-all', 'PUT /me/password', 'PUT /me/pin', 'DELETE /me/sessions/:sessionId']));
 
 /** Body limit applied when a route does not override it. */
 export const DEFAULT_BODY_LIMIT = '100kb';
@@ -335,6 +349,10 @@ function validateRoutes(routes: readonly RouteDefinition[], options: MountOption
     if (multipart !== undefined && (typeof multipart !== 'function' || !BODY_METHODS.has(route.method))) {
       problems.push(`${label}: multipart must be a function and only POST, PUT and PATCH routes read a body`);
     }
+    const exempt: unknown = route.sustainedExempt;
+    if (exempt !== undefined && (exempt !== true || auth?.kind !== 'user' || !SUSTAINED_EXEMPT_ROUTES.has(label))) {
+      problems.push(`${label}: sustainedExempt can only be true, on a user route of SUSTAINED_EXEMPT_ROUTES`);
+    }
     const compress: unknown = route.compress;
     if (compress !== undefined && compress !== false) {
       problems.push(`${label}: compress can only be false`);
@@ -429,6 +447,8 @@ export interface MountOptions {
   readonly groupAccess?: GroupAccessDeps;
   /** Limiter, exceeded callback and the per-user API rule applied to every `user` route; required by `user` routes and by routes declaring rules. */
   readonly rateLimit?: RateLimitMount;
+  /** Signal on the requests of a user that do not look like a browser's (`createNonBrowserSignal`): runs on every `user` route right after the rate limits; it reports them and, under the policy `block`, refuses them, except on the `sustainedExempt` routes. Absent: none. */
+  readonly nonBrowserSignal?: NonBrowserSignal;
   /** Lets anonymous routes declare `rateLimitExempt`; only the health router sets it. */
   readonly allowRateLimitExempt?: boolean;
   /** Auth kinds this surface accepts; only anonymous routes by default, so `user` (and `store`) must be allowed explicitly (the backoffice does). */
@@ -499,6 +519,8 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
       const grouped = route.auth.group === true;
       const userChain: RequestHandler[] = [
         ...limits([rateLimitOptions!.apiRule]),
+        ...(rateLimitOptions!.sustained === undefined ? [] : [sustainedRateLimit(rateLimitOptions!.sustained, rateLimitOptions!.limiter, route.sustainedExempt === true)]),
+        ...(options.nonBrowserSignal === undefined ? [] : [options.nonBrowserSignal(route.sustainedExempt === true)]),
         ...beforeBody,
         ...(route.auth.allowWithPendingPasswordChange === true ? [] : [refusePendingPasswordChange]),
         ...(grouped ? [requireGroupAccess(groupAccess!.groups)] : []),

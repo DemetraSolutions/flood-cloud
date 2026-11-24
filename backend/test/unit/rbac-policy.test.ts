@@ -27,6 +27,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'errorDocuments:read': FROM_D,
   'activations:read': FROM_D,
   'activations:manage': ['PSA'],
+  'securityPolicy:manage': ['PSA'],
   'companies:read': FROM_CA,
   'companies:create': FROM_SA,
   'companies:update': FROM_CA,

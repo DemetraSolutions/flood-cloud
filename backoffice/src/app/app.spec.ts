@@ -180,6 +180,7 @@ describe('routes', () => {
       ['/activity-log', sa(['activityLog:read', 'profile:read']), '⟦ACTIVITY.TITLE⟧'],
       ['/tools/tobaccos', psa(['tobaccos:read']), '⟦TOBACCOS.TITLE⟧'],
       ['/settings/countries', psa(['countries:manage']), '⟦COUNTRIES.TITLE⟧'],
+      ['/settings/security', psa(['securityPolicy:manage']), '⟦SECURITY_POLICY.TITLE⟧'],
       ['/settings/countries/IT', psa(['countries:manage']), '⟦COUNTRIES.DETAIL_TITLE⟧'],
     ])('lazy-loads %s', async (url, profile, expected) => {
       expect(await go(url, profile)).toBe(expected);
@@ -326,6 +327,8 @@ describe('routes', () => {
       ['/tools/tobaccos', { ...psa(['tobaccos:read']), role: 'D' as const }],
       ['/tools/tobaccos', sa(['tobaccos:read'])],
       ['/settings/countries', psa([])],
+      ['/settings/security', psa([])],
+      ['/settings/security', { ...psa(['securityPolicy:manage']), role: 'D' as const }],
       ['/settings/countries', { ...psa(['countries:manage']), role: 'D' as const }],
       ['/settings/countries/IT', sa(['countries:manage'])],
       ['/users', psa([])],
@@ -413,6 +416,34 @@ describe('routes', () => {
       expect(location()).toBe('/forbidden');
     });
   });
+  describe('catalog import and export', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a1';
+
+    async function open(permissions: string[]) {
+      setup();
+      sessionStorage.clear();
+      signIn({ role: 'SA', permissions: [...permissions, 'profile:read'] });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/groups/${GROUP}/tools/catalog-import-export`);
+      return harness;
+    }
+
+    afterEach(() => sessionStorage.clear());
+
+    it('lazy-loads the page for whoever reads the products', async () => {
+      const harness = await open(['products:read']);
+      const root = harness.routeNativeElement as HTMLElement;
+      expect(root.querySelector('main h1')?.textContent).toBe('⟦CATALOG_XLSX.TITLE⟧');
+      expect(root.querySelector('fc-catalog-xlsx-page')).not.toBeNull();
+    });
+
+    it('protects the page', async () => {
+      await open([]);
+      expect(location()).toBe('/forbidden');
+    });
+  });
+
   describe('email templates', () => {
     const GROUP = '665f1c2e9b1d4a0012ab34a1';
     const TEMPLATE = '665f1c2e9b1d4a0012ab34c1';

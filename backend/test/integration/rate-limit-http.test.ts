@@ -173,13 +173,13 @@ describe('rate limit failure and order', () => {
       // E has no permissions: 403, but the request was counted first.
       const forbidden = await fetch(`${app.baseUrl}/v1/things`, { headers: { 'x-user': id } });
       assert.equal(forbidden.status, 403);
-      assert.deepEqual(limiter.calls.map((call) => call.bucket), ['api:user']);
+      assert.deepEqual(limiter.calls.map((call) => call.bucket), ['api:user', 'api-hour:user', 'api-day:user']);
       // Over the limit the answer is 429, not 403: the rate limit precedes the authorization.
       const limited = await fetch(`${app.baseUrl}/v1/things`, { headers: { 'x-user': id } });
       assert.equal(limited.status, 429);
       await fetch(`${app.baseUrl}/health/live`);
       await fetch(`${app.baseUrl}/health/ready`);
-      assert.equal(limiter.calls.length, 2);
+      assert.equal(limiter.calls.length, 4, 'the refused request never reaches the sustained counters, /health is never counted');
     } finally {
       await app.close();
     }
