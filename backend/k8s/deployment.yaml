@@ -8,7 +8,10 @@ metadata:
     app.kubernetes.io/part-of: flood-cloud
     app.kubernetes.io/component: api
 spec:
-  replicas: 2
+  # One replica while the project is not in service yet (user decision of 2026-11-24): a pod
+  # restart or a node drain gives a short downtime. The rolling update below still starts the new
+  # pod before stopping the old one. Raise it before going live.
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:

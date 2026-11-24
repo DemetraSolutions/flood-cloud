@@ -8,7 +8,10 @@ metadata:
     app.kubernetes.io/part-of: flood-cloud
     app.kubernetes.io/component: backoffice
 spec:
-  replicas: 2
+  # One replica (user decision of 2026-11-24): a stateless static server, no session or data here.
+  # A pod restart or a node drain makes the portal unreachable for a few seconds; the rolling
+  # update below starts the new pod before stopping the old one.
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
