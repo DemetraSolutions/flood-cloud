@@ -40,7 +40,7 @@ Ogni chiave ha uno o più permessi; una richiesta a un endpoint il cui permesso 
 | *(nessuno)* | `GET /me`: sempre ammesso per una chiave valida |
 | `places:read` | `GET /places`, `GET /places/{placeId}` |
 | `companies:read` | `GET /companies`, `GET /companies/{companyId}` |
-| `catalog:read` | `GET /price-lists`, `GET /taxes` (listini e aliquote) e **tutte le letture del catalogo**: prodotti, categorie, marche, gruppi di attributi, reparti e giacenze |
+| `catalog:read` | `GET /price-lists`, `GET /taxes`, `GET /currencies`, `GET /measure-units` (listini, aliquote, valute e unità di misura) e **tutte le letture del catalogo**: prodotti, categorie, marche, gruppi di attributi, reparti e giacenze |
 | `catalog:write` | **le scritture del catalogo**: creare, modificare, cestinare e ripristinare i prodotti; creare, modificare ed eliminare le categorie |
 
 `catalog:write` si concede solo alle chiavi che devono scrivere e **non include** `catalog:read`: una chiave di sola scrittura riceve la voce che ha scritto, ma non legge il catalogo. Per scrivere e rileggere servono entrambi.
@@ -308,6 +308,42 @@ curl -H "X-Api-Key: $FLOOD_API_KEY" https://<host>/public/v1/taxes
 }
 ```
 `rate` è la percentuale; `department` il reparto fiscale (o `null`); `vatNature` il codice di natura IVA (da `N1` a `N6.9`) per le aliquote a zero, altrimenti `null`.
+
+### GET /currencies
+Le valute dell'attività. **Permesso:** `catalog:read`. Nessun parametro.
+
+**Richiesta**
+```sh
+curl -H "X-Api-Key: $FLOOD_API_KEY" https://<host>/public/v1/currencies
+```
+**Risposta** `200`
+```json
+{
+  "data": [
+    { "code": "EUR", "symbol": "€" },
+    { "code": "USD", "symbol": "$" }
+  ]
+}
+```
+`code` è il codice di tre lettere (ISO 4217); `symbol` il simbolo da mostrare. L'elenco è completo (al più 10 voci), senza paginazione, e uguale per ogni chiave con il permesso, anche se ristretta a certe aziende o punti vendita: sono dati dell'attività.
+
+### GET /measure-units
+Le unità di misura dell'attività. **Permesso:** `catalog:read`. Nessun parametro.
+
+**Richiesta**
+```sh
+curl -H "X-Api-Key: $FLOOD_API_KEY" https://<host>/public/v1/measure-units
+```
+**Risposta** `200`
+```json
+{
+  "data": [
+    { "id": "unita-pezzi", "value": "pz", "name": "pz" },
+    { "id": "unita-chili", "value": "kg", "name": "kg" }
+  ]
+}
+```
+`value` è il testo dell'unità (come lo portano i prodotti); `name` è il nome da mostrare, oggi uguale a `value`. L'elenco è completo (al più 50 voci), senza paginazione, e uguale per ogni chiave con il permesso.
 
 ## Catalogo
 

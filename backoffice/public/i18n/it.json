@@ -923,7 +923,7 @@
       },
       "CATALOG_READ": {
         "LABEL": "Lettura del catalogo",
-        "HINT": "Legge prodotti, giacenze, categorie, marche, attributi, reparti, listini e aliquote."
+        "HINT": "Legge prodotti, giacenze, categorie, marche, attributi, reparti, listini, aliquote, valute e unità di misura."
       },
       "CATALOG_WRITE": {
         "LABEL": "Scrittura del catalogo",

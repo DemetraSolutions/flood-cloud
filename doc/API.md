@@ -990,7 +990,7 @@ Rappresentazione di una chiave (mai l'hash né il segreto):
   "revokedBy": null
 }
 ```
-`permissions` sono del catalogo **pubblico** (`places:read`, `companies:read`, `catalog:read`, `catalog:write`), non del backoffice. `catalog:read` dà la lettura del catalogo (listini, aliquote, prodotti, categorie, marche, gruppi di attributi, reparti, giacenze); `catalog:write` la scrittura di prodotti e categorie e si concede **solo** alle chiavi che devono scrivere (non implica `catalog:read`). `restrictions.companyIds` e `restrictions.placeIds` sono elenchi di id (1–100) o `null` per nessuna restrizione di quel tipo; con entrambe vale l'intersezione. `status` è `active` o `revoked`; `lastUsedAt` è aggiornato al più una volta al minuto.
+`permissions` sono del catalogo **pubblico** (`places:read`, `companies:read`, `catalog:read`, `catalog:write`), non del backoffice. `catalog:read` dà la lettura del catalogo (listini, aliquote, valute, unità di misura, prodotti, categorie, marche, gruppi di attributi, reparti, giacenze); `catalog:write` la scrittura di prodotti e categorie e si concede **solo** alle chiavi che devono scrivere (non implica `catalog:read`). `restrictions.companyIds` e `restrictions.placeIds` sono elenchi di id (1–100) o `null` per nessuna restrizione di quel tipo; con entrambe vale l'intersezione. `status` è `active` o `revoked`; `lastUsedAt` è aggiornato al più una volta al minuto.
 
 ### GET /v1/groups/{groupId}/api-keys
 - **Autenticazione e permesso:** Bearer backoffice, `apiKeys:read` (PSA e D)
@@ -2082,6 +2082,17 @@ Realizzata nel passo 9A (`doc/Security-Model.md` §6–7; la versione per gli in
   { "data": [{ "id": "n1P8xQwR2cV5tYb7KdLm0g", "rate": 22, "department": 1, "description": null, "vatNature": null }] }
   ```
   `rate` è una percentuale; `vatNature` è un codice di natura IVA (`N1`…`N6.9`) o `null`.
+
+### GET /public/v1/currencies e GET /public/v1/measure-units
+- **Permesso:** `catalog:read`; nessun parametro (`422` con qualsiasi parametro)
+- **Risposta:** `200` con **tutte** le voci del gruppo (al più 10 valute e 50 unità), senza `page`; stesso elenco per ogni chiave, con o senza restrizioni (sono del gruppo); letti in modo tollerante dai cataloghi del gruppo, solo i campi dichiarati
+  ```json
+  { "data": [{ "code": "EUR", "symbol": "€" }] }
+  ```
+  ```json
+  { "data": [{ "id": "unita-pezzi", "value": "pz", "name": "pz" }] }
+  ```
+  `symbol` è il carattere (`€`), non l'entità memorizzata; `name` è il `value`.
 
 
 ### Catalogo pubblico (`/public/v1`, decisioni del 2026-11-24)

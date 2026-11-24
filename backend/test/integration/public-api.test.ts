@@ -129,7 +129,7 @@ describe('the authentication of the public surface', () => {
     const store = await world.activate(g().ownPlaceId);
     for (const credential of [accessToken, store.key]) {
       for (const headers of [{ authorization: `Bearer ${credential}` }, { 'x-api-key': credential }, { authorization: credential, 'x-api-key': credential }]) {
-        for (const path of ['/me', '/places', '/companies', '/price-lists', '/taxes']) {
+        for (const path of ['/me', '/places', '/companies', '/price-lists', '/taxes', '/currencies', '/measure-units']) {
           const reply = await asKey(undefined, path, headers);
           assert.deepEqual([reply.status, reply.body], [401, unauthenticated], `${path} ${Object.keys(headers).join()}`);
         }
@@ -218,13 +218,13 @@ describe('the permissions and the restrictions of a key', () => {
     const only = await world.makeKey(0, { permissions: ['places:read'] });
     assert.equal((await asKey(only.secret, '/places')).status, 200);
     assert.equal((await asKey(only.secret, `/places/${hex(place(1))}`)).status, 200);
-    for (const path of ['/companies', `/companies/${hex(company(1))}`, '/price-lists', '/taxes']) {
+    for (const path of ['/companies', `/companies/${hex(company(1))}`, '/price-lists', '/taxes', '/currencies', '/measure-units']) {
       const reply = await asKey(only.secret, path);
       assert.deepEqual([reply.status, reply.body.error.code], [403, 'FORBIDDEN'], path);
     }
     assert.equal((await asKey(only.secret, '/me')).status, 200);
     const catalog = await world.makeKey(0, { permissions: ['catalog:read'] });
-    assert.deepEqual([(await asKey(catalog.secret, '/price-lists')).status, (await asKey(catalog.secret, '/taxes')).status, (await asKey(catalog.secret, '/places')).status, (await asKey(catalog.secret, '/companies')).status], [200, 200, 403, 403]);
+    assert.deepEqual([(await asKey(catalog.secret, '/price-lists')).status, (await asKey(catalog.secret, '/taxes')).status, (await asKey(catalog.secret, '/currencies')).status, (await asKey(catalog.secret, '/measure-units')).status, (await asKey(catalog.secret, '/places')).status, (await asKey(catalog.secret, '/companies')).status], [200, 200, 200, 200, 403, 403]);
   });
 
   it('follows a change of the permissions at the next request', async () => {
@@ -396,6 +396,37 @@ describe('the public projections', () => {
     assert.deepEqual([(await asKey(secret, '/price-lists')).body, (await asKey(secret, '/taxes')).body], [{ data: [] }, { data: [] }]);
   });
 
+  it('shows the currencies and the measure units of the group, public fields only, read tolerantly', async () => {
+    const { secret } = await world.makeKey();
+    const currencies = await asKey(secret, '/currencies');
+    assert.deepEqual(currencies.body, { data: [{ code: 'EUR', symbol: '\u20ac' }, { code: 'USD', symbol: '$' }] });
+    const units = await asKey(secret, '/measure-units');
+    assert.deepEqual(units.body, { data: [{ id: 'unit-001', value: 'pz', name: 'pz' }] });
+    for (const item of [...currencies.body.data, ...units.body.data] as Array<Record<string, unknown>>) {
+      assert.ok(Object.keys(item).length <= 3);
+    }
+    const restricted = await world.makeKey(0, { permissions: ['catalog:read'], restrictions: { placeIds: [hex(place(1))] } });
+    assert.deepEqual([(await asKey(restricted.secret, '/currencies')).body, (await asKey(restricted.secret, '/measure-units')).body], [currencies.body, units.body]);
+    const other = await world.makeKey(1);
+    assert.deepEqual((await asKey(other.secret, '/measure-units')).body.data.map((unit: { id: string }) => unit.id), ['unit-002']);
+    await common().collection('groups').updateOne(
+      { _id: g().groupId },
+      { $set: { currencies: { USD: { code: 'USD', symbol: '$', extra: 1 }, GBP: { code: 'GBP', symbol: 7 }, XXX: 'bad' }, measureUnits: { a: { id: 'a', value: 3, secret: 'x' }, b: 'bad' } } },
+    );
+    const dirty = await asKey(secret, '/currencies');
+    const dirtyUnits = await asKey(secret, '/measure-units');
+    assert.deepEqual([dirty.status, dirtyUnits.status], [200, 200]);
+    for (const item of dirty.body.data as Array<Record<string, unknown>>) {
+      assert.deepEqual(Object.keys(item).sort(), ['code', 'symbol']);
+    }
+    for (const item of dirtyUnits.body.data as Array<Record<string, unknown>>) {
+      assert.deepEqual(Object.keys(item).sort(), ['id', 'name', 'value']);
+    }
+    assert.ok(JSON.stringify(dirty.body).includes('"$"'));
+    await common().collection('groups').updateOne({ _id: g().groupId }, { $set: { currencies: {}, measureUnits: {} } });
+    assert.deepEqual([(await asKey(secret, '/currencies')).body, (await asKey(secret, '/measure-units')).body], [{ data: [] }, { data: [] }]);
+  });
+
   it('pages the lists by name with a limit of at most 100', async () => {
     for (const [n, name] of [[70, 'Cafe A'], [71, 'Cafe B'], [72, 'Cafe C']] as const) {
       await world.seedPlace(0, n, 1, { name });
@@ -425,6 +456,8 @@ describe('the public projections', () => {
     assert.equal((await asKey(secret, '/me?x=1')).status, 422);
     assert.equal((await asKey(secret, '/taxes?x=1')).status, 422);
     assert.equal((await asKey(secret, '/price-lists?x=1')).status, 422);
+    assert.equal((await asKey(secret, '/currencies?x=1')).status, 422);
+    assert.equal((await asKey(secret, '/measure-units?x=1')).status, 422);
   });
 
   it('answers HEAD like GET without a body', async () => {

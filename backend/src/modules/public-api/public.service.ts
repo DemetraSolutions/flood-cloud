@@ -6,7 +6,7 @@ import type { RateLimiter } from '../../shared/security/rate-limit/rate-limiter.
 import type { ApiKeyPrincipal } from '../../shared/security/scope/principal.ts';
 import { PUBLIC_QUOTA_BUCKET, QUOTA_WINDOW_SECONDS } from '../api-keys/authenticate-api-key.ts';
 import type { ManagedGroupsRepository } from '../groups/groups.repository.ts';
-import { toMe, toPublicCompany, toPublicPlace, toPublicPriceList, toPublicTax } from './public.mapper.ts';
+import { toMe, toPublicCompany, toPublicCurrency, toPublicMeasureUnit, toPublicPlace, toPublicPriceList, toPublicTax } from './public.mapper.ts';
 import { PUBLIC_NAME_LIST } from './public.list.ts';
 import type { PublicRepository } from './public.repository.ts';
 import type { PublicListQuery } from './public.schemas.ts';
@@ -33,6 +33,10 @@ export interface PublicService {
   priceLists(principal: ApiKeyPrincipal): Promise<Array<ReturnType<typeof toPublicPriceList>>>;
   /** The tax rates of the group of the key. */
   taxes(principal: ApiKeyPrincipal): Promise<Array<ReturnType<typeof toPublicTax>>>;
+  /** The currencies of the group of the key. */
+  currencies(principal: ApiKeyPrincipal): Promise<Array<ReturnType<typeof toPublicCurrency>>>;
+  /** The measure units of the group of the key. */
+  measureUnits(principal: ApiKeyPrincipal): Promise<Array<ReturnType<typeof toPublicMeasureUnit>>>;
 }
 
 /** Collaborators of {@link createPublicService}. */
@@ -95,5 +99,9 @@ export function createPublicService(deps: PublicServiceDeps): PublicService {
     priceLists: async (principal) => (await catalogs(principal)).priceLists.map(toPublicPriceList),
 
     taxes: async (principal) => (await catalogs(principal)).taxes.map(toPublicTax),
+
+    currencies: async (principal) => (await catalogs(principal)).currencies.map(toPublicCurrency),
+
+    measureUnits: async (principal) => (await catalogs(principal)).measureUnits.map(toPublicMeasureUnit),
   };
 }

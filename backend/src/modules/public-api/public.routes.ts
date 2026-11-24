@@ -21,5 +21,7 @@ export function createPublicRoutes(controller: PublicController): RouteDefinitio
     defineRoute({ method: 'GET', path: '/companies/:companyId', auth: key('companies:read'), middleware: [validateParams(companyParams), validateQuery(noQuery)], handler: controller.company }),
     defineRoute({ method: 'GET', path: '/price-lists', auth: key('catalog:read'), middleware: [validateQuery(noQuery)], handler: controller.priceLists }),
     defineRoute({ method: 'GET', path: '/taxes', auth: key('catalog:read'), middleware: [validateQuery(noQuery)], handler: controller.taxes }),
+    defineRoute({ method: 'GET', path: '/currencies', auth: key('catalog:read'), middleware: [validateQuery(noQuery)], handler: controller.currencies }),
+    defineRoute({ method: 'GET', path: '/measure-units', auth: key('catalog:read'), middleware: [validateQuery(noQuery)], handler: controller.measureUnits }),
   ];
 }

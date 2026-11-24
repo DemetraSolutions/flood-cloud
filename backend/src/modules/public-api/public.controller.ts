@@ -14,6 +14,8 @@ export interface PublicController {
   company: RequestHandler;
   priceLists: RequestHandler;
   taxes: RequestHandler;
+  currencies: RequestHandler;
+  measureUnits: RequestHandler;
 }
 
 /**
@@ -38,5 +40,7 @@ export function createPublicController(service: PublicService): PublicController
     company: async (_req, res) => sendData(res, await service.company(res.locals.apiKey!, companyIdOf(res))),
     priceLists: async (_req, res) => sendData(res, await service.priceLists(res.locals.apiKey!)),
     taxes: async (_req, res) => sendData(res, await service.taxes(res.locals.apiKey!)),
+    currencies: async (_req, res) => sendData(res, await service.currencies(res.locals.apiKey!)),
+    measureUnits: async (_req, res) => sendData(res, await service.measureUnits(res.locals.apiKey!)),
   };
 }

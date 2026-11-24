@@ -1005,9 +1005,11 @@ describe('the catalog of the public API: more refusals', () => {
       'GET /categories/tree catalog:read',
       'GET /companies companies:read',
       'GET /companies/:companyId companies:read',
+      'GET /currencies catalog:read',
       'GET /departments catalog:read',
       'GET /departments/:departmentId catalog:read',
       'GET /me null',
+      'GET /measure-units catalog:read',
       'GET /places places:read',
       'GET /places/:placeId places:read',
       'GET /price-lists catalog:read',
@@ -1025,7 +1027,7 @@ describe('the catalog of the public API: more refusals', () => {
     ]);
     assert.ok(publicApi.routes.every((route) => route.auth.kind === 'apiKey'));
     assert.ok(publicApi.routes.filter((route) => route.method !== 'GET').every((route) => route.rateLimit?.[0]?.bucket === 'public-catalog-write:key'));
-    assert.ok(publicApi.routes.filter((route) => route.auth.kind === 'apiKey' && (route.auth.permission === 'catalog:read' || route.auth.permission === 'catalog:write') && route.path !== '/price-lists' && route.path !== '/taxes').every((route) => (route.auth as { group?: true }).group === true));
+    assert.ok(publicApi.routes.filter((route) => route.auth.kind === 'apiKey' && (route.auth.permission === 'catalog:read' || route.auth.permission === 'catalog:write') && !['/price-lists', '/taxes', '/currencies', '/measure-units'].includes(route.path)).every((route) => (route.auth as { group?: true }).group === true));
   });
 });
 

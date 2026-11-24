@@ -1,6 +1,8 @@
 import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { nonEmptyOrNull, stringOrNull } from '../companies/company.mapper.ts';
+import type { Currency } from '../groups/catalogs/currencies.ts';
+import type { MeasureUnit } from '../groups/catalogs/measure-units.ts';
 import type { PriceList } from '../groups/catalogs/price-lists.ts';
 import type { Tax } from '../groups/catalogs/taxes.ts';
 import { toRestrictionsResponse } from '../api-keys/api-keys.mapper.ts';
@@ -92,6 +94,16 @@ export function toPublicPriceList(priceList: PriceList) {
 /** A tax rate of the group, as the public API shows it. */
 export function toPublicTax(tax: Tax) {
   return { id: tax.id, rate: tax.rate, department: tax.department, description: tax.description, vatNature: tax.vatNature };
+}
+
+/** A currency of the group, as the public API shows it. */
+export function toPublicCurrency(currency: Currency) {
+  return { code: currency.code, symbol: currency.symbol };
+}
+
+/** A measure unit of the group, as the public API shows it: the id, the value and the name (which is the value). */
+export function toPublicMeasureUnit(unit: MeasureUnit) {
+  return { id: unit.id, value: unit.value, name: unit.value };
 }
 
 /**
