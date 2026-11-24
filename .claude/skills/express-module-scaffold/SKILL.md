@@ -57,6 +57,13 @@ Una route può essere aperta al server di punto vendita (chiave di negozio, D-24
 
 Le uniche route `anonymous: true` ammesse sono quelle che lo sono per natura (health, login, refresh, webhook con firma propria), sempre con rate limit e un commento che lo motiva. Percorsi e metodi seguono `doc/API-Guidelines.md`.
 
+## Esposizione pubblica (GKE)
+Su GKE il bilanciatore inoltra al backend **solo** i prefissi elencati in `backend/k8s/httproute.yaml`: oggi `/v1` e `/public/v1`. Tutto il resto, compreso `/health`, non è raggiungibile da internet.
+- Una route nuova va **sempre** dentro una superficie esistente (router di `/v1` o di `/public/v1`), mai montata direttamente sull'app.
+- Un prefisso nuovo (es. `/v2`, un endpoint di webhook) è una decisione da chiedere all'utente. Se approvato: si aggiunge ad `API_PREFIXES` in `src/shared/http/surfaces.ts`, si monta in `src/app.ts` con la costante (mai un percorso letterale) e si aggiunge come `PathPrefix` in `backend/k8s/httproute.yaml`.
+- `/health` (`HEALTH_PREFIX`) non va mai nella `HTTPRoute`: le sonde arrivano direttamente ai pod.
+- `test/unit/route-exposure.test.ts` fallisce se costanti, montaggi e `HTTPRoute` non coincidono, se si espone `/` o `/health`, se si monta un percorso letterale o una route sull'app, o se un altro file crea un'app Express: non si aggira, si allineano i tre file.
+
 ## Controller
 ```ts
 import type { RequestHandler } from 'express';
@@ -85,6 +92,7 @@ export function createProductsController({ productsService }: ProductsController
 
 ## Checklist del modulo
 - [ ] ogni route sulla superficie giusta e con `permission`
+- [ ] nessun prefisso nuovo; se approvato, allineati `surfaces.ts`, `app.ts` e `backend/k8s/httproute.yaml`
 - [ ] schemi per ogni input
 - [ ] repository con contesto di tenant (skill `tenant-isolation`)
 - [ ] indici dichiarati e creati all'avvio

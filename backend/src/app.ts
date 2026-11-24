@@ -4,6 +4,7 @@ import type { Config } from './config.ts';
 import { createHealthRoutes } from './modules/health/health.routes.ts';
 import type { Readiness } from './modules/health/health.routes.ts';
 import { accessLog } from './shared/http/access-log.ts';
+import { API_PREFIXES, HEALTH_PREFIX } from './shared/http/surfaces.ts';
 import { compressionMiddleware } from './shared/http/compression.ts';
 import { cors } from './shared/http/cors.ts';
 import { errorHandler } from './shared/http/error-handler.ts';
@@ -109,7 +110,7 @@ export function createApp(deps: AppDeps): Express {
 
   const health = express.Router();
   mountRoutes(health, createHealthRoutes(readiness, logger), { allowRateLimitExempt: true });
-  app.use('/health', health);
+  app.use(HEALTH_PREFIX, health);
 
   const v1 = express.Router();
   mountRoutes(v1, deps.routes?.v1 ?? [], {
@@ -124,7 +125,7 @@ export function createApp(deps: AppDeps): Express {
     rateLimit: rateLimitMount,
     ...(deps.nonBrowserGuard === undefined || config.requestOriginSignal === 'off' ? {} : { nonBrowserSignal: createNonBrowserSignal(deps.nonBrowserGuard) }),
   });
-  app.use('/v1', cors(config.corsAllowedOrigins), v1);
+  app.use(API_PREFIXES.backoffice, cors(config.corsAllowedOrigins), v1);
 
   const publicApi = express.Router();
   // Only API key routes: no anonymous route, no user, no store (the route builder refuses them at startup).
@@ -136,7 +137,7 @@ export function createApp(deps: AppDeps): Express {
       : { groupAccess: { groups: deps.groupAccess.groups, onCrossGroupAccess: createCrossGroupAuditor({ activityLog, now }) } }),
     rateLimit: rateLimitMount,
   });
-  app.use('/public/v1', publicApi);
+  app.use(API_PREFIXES.public, publicApi);
 
   app.use(() => {
     throw new AppError('NOT_FOUND');
