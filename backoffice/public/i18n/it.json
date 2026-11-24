@@ -473,7 +473,7 @@
       "ACCESS": "Accesso",
       "SCOPE": "Perimetro",
       "PERMISSIONS": "Permessi",
-      "POS": "Cassa",
+      "POS": "Permessi app",
       "SHIFTS": "Turni"
     },
     "SHIFTS": {
@@ -510,11 +510,11 @@
       }
     },
     "POS": {
-      "ENABLED": "Cassa abilitata",
-      "GRANTS": "Permessi della cassa",
+      "ENABLED": "App abilitate",
+      "GRANTS": "Permessi delle app",
       "OPTIONS": "Preferenze dell'interfaccia",
       "CHOICES": "Scelte",
-      "PERMISSIONS_READONLY": "Solo chi può gestire i permessi può modificare i permessi della cassa; le preferenze le modifica chi può modificare l'utente.",
+      "PERMISSIONS_READONLY": "Solo chi può gestire i permessi può modificare i permessi delle app; le preferenze le modifica chi può modificare l'utente.",
       "NOT_GRANTABLE": "Non puoi concedere questo permesso: non lo hai.",
       "DISCOUNT_MAX": "Sconto massimo (%)",
       "SERVICE_PERCENTAGE": "Percentuale di servizio (%)",
