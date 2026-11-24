@@ -22,6 +22,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'dealers:update': ['PSA'],
   'tobaccos:read': ['PSA'],
   'tobaccos:import': ['PSA'],
+  'tobaccos:sync': FROM_SA,
   'countries:manage': ['PSA'],
   'trash:empty': ['PSA'],
   'errorDocuments:read': FROM_D,

@@ -268,12 +268,23 @@ describe('visibleMenu', () => {
       visibleMenu(MENU, can, hasFeature, 'SA')
         .find((i) => i.id === 'tools')
         ?.children?.map((i) => i.id);
-    expect(children(allowAll)).toEqual(['diagnostics', 'catalog-import-export', 'email-templates']);
+    expect(children(allowAll)).toEqual([
+      'diagnostics',
+      'catalog-import-export',
+      'tobacco-sync',
+      'email-templates',
+    ]);
     expect(children((feature) => feature !== 'email')).toEqual([
       'diagnostics',
       'catalog-import-export',
+      'tobacco-sync',
     ]);
-    expect(children(allowAll, (p) => p !== 'places:read' && p !== 'products:read')).toBeUndefined();
+    expect(
+      children(
+        allowAll,
+        (p) => p !== 'places:read' && p !== 'products:read' && p !== 'tobaccos:sync',
+      ),
+    ).toBeUndefined();
     expect(
       MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'email-templates'),
     ).toMatchObject({
@@ -298,6 +309,32 @@ describe('visibleMenu', () => {
       route: '/groups',
       groupPath: 'tools/catalog-import-export',
       permission: 'products:read',
+      requiresGroup: true,
+    });
+  });
+
+  it('shows "Strumenti › Sincronizza tabacchi" only with a working group, tobaccos:sync and the tobaccos function', () => {
+    const children = (
+      can: (p: string) => boolean,
+      hasGroup: boolean,
+      hasFeature: (feature: string) => boolean = allowAll,
+      role: Role = 'SA',
+    ) =>
+      visibleMenu(MENU, can, hasFeature, role, hasGroup)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    const sync = (p: string) => p === 'tobaccos:sync';
+    expect(children(sync, true)).toEqual(['tobacco-sync']);
+    expect(children(sync, false, allowAll, 'PSA')).toBeUndefined();
+    expect(children(sync, true, (feature) => feature !== 'tobaccosGamesMonopoly')).toBeUndefined();
+    expect(children((p) => p === 'products:read', true)).not.toContain('tobacco-sync');
+    expect(
+      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'tobacco-sync'),
+    ).toMatchObject({
+      route: '/groups',
+      groupPath: 'tools/tobacco-sync',
+      permission: 'tobaccos:sync',
+      feature: 'tobaccosGamesMonopoly',
       requiresGroup: true,
     });
   });
@@ -633,6 +670,7 @@ describe('visibleMenu', () => {
       ['fidelity/points-collections', 'points-collections'],
       ['email-templates', 'email-templates'],
       ['tools/catalog-import-export', 'catalog-import-export'],
+      ['tools/tobacco-sync', 'tobacco-sync'],
     ])('with a group, /groups/:id/%s highlights only %s', (path, id) => {
       expect(activeFor('PSA', true, `/groups/${GROUP}/${path}`)).toEqual([id]);
     });

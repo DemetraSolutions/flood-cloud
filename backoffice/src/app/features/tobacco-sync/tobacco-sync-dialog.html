@@ -1,0 +1,122 @@
+<fc-dialog
+  [heading]="'TOBACCO_SYNC.DIALOG.TITLE' | t"
+  wide
+  [open]="open()"
+  (openChange)="open.set($event)"
+>
+  <p class="status" role="status">{{ statusMessage() }}</p>
+
+  <div class="options">
+    @if (status().warehouseAllowed) {
+      <fc-checkbox
+        [label]="'TOBACCO_SYNC.DIALOG.WAREHOUSE' | t"
+        [hint]="'TOBACCO_SYNC.DIALOG.WAREHOUSE_HINT' | t"
+        [checked]="warehouse()"
+        [disabled]="working() !== null"
+        (checkedChange)="setWarehouse($event)"
+      />
+    }
+    <fc-checkbox
+      [label]="'TOBACCO_SYNC.DIALOG.NO_DISCOUNT' | t"
+      [hint]="'TOBACCO_SYNC.DIALOG.NO_DISCOUNT_HINT' | t"
+      [checked]="noDiscount()"
+      [disabled]="working() !== null"
+      (checkedChange)="setNoDiscount($event)"
+    />
+
+    <fieldset class="places" aria-describedby="sync-places-help">
+      <legend>{{ 'TOBACCO_SYNC.DIALOG.PLACES' | t }}</legend>
+      <p id="sync-places-help" class="note">{{ 'TOBACCO_SYNC.DIALOG.PLACES_HELP' | t }}</p>
+      @for (place of status().tobaccoPlaces; track place.id) {
+        <fc-checkbox
+          [label]="place.name"
+          [checked]="isChosen(place.id)"
+          [disabled]="working() !== null"
+          (checkedChange)="setPlace(place.id, $event)"
+        />
+      }
+    </fieldset>
+    <p class="warning">{{ 'TOBACCO_SYNC.DIALOG.OVERWRITE' | t }}</p>
+  </div>
+
+  @if (failure(); as message) {
+    <p class="problem" role="alert">{{ message }}</p>
+  }
+
+  @if (verified(); as outcome) {
+    <section class="verified" aria-labelledby="sync-verified-heading">
+      <h3 id="sync-verified-heading">{{ 'TOBACCO_SYNC.DIALOG.VERIFIED_TITLE' | t }}</h3>
+      <p>
+        {{
+          (hasChanges() ? 'TOBACCO_SYNC.DIALOG.VERIFIED_TEXT' : 'TOBACCO_SYNC.DIALOG.NO_CHANGES')
+            | t
+        }}
+      </p>
+      @if (massDisable(); as mass) {
+        <p class="problem" role="alert">
+          {{
+            'TOBACCO_SYNC.DIALOG.MASS_DISABLE' | t: { disable: mass.disable, active: mass.active }
+          }}
+        </p>
+      }
+      <fc-tobacco-sync-counts
+        [outcome]="outcome"
+        [label]="'TOBACCO_SYNC.DIALOG.VERIFIED_TITLE' | t"
+      />
+    </section>
+  }
+
+  <button
+    fcDialogActions
+    fc-button
+    variant="secondary"
+    [disabled]="working() !== null"
+    (click)="open.set(false)"
+  >
+    {{ 'COMMON.CANCEL' | t }}
+  </button>
+  <button
+    fcDialogActions
+    fc-button
+    variant="secondary"
+    [loading]="working() === 'verify'"
+    [disabled]="working() !== null"
+    (click)="verify()"
+  >
+    {{ 'TOBACCO_SYNC.DIALOG.VERIFY' | t }}
+  </button>
+  @if (verified() !== null && hasChanges()) {
+    <button
+      fcDialogActions
+      fc-button
+      variant="danger"
+      [loading]="working() === 'sync'"
+      [disabled]="working() !== null"
+      (click)="confirmOpen.set(true)"
+    >
+      {{ 'TOBACCO_SYNC.DIALOG.SYNC' | t }}
+    </button>
+  }
+</fc-dialog>
+
+<fc-confirm-dialog
+  [heading]="
+    (massDisable() === null
+      ? 'TOBACCO_SYNC.DIALOG.CONFIRM_TITLE'
+      : 'TOBACCO_SYNC.DIALOG.CONFIRM_MASS_TITLE'
+    ) | t
+  "
+  [message]="confirmMessage()"
+  [confirmLabel]="
+    (massDisable() === null
+      ? 'TOBACCO_SYNC.DIALOG.CONFIRM_ACTION'
+      : 'TOBACCO_SYNC.DIALOG.CONFIRM_MASS_ACTION'
+    ) | t
+  "
+  [danger]="true"
+  [alert]="true"
+  [busy]="working() === 'sync'"
+  [open]="confirmOpen()"
+  (openChange)="confirmOpen.set($event)"
+  (confirmed)="apply()"
+/>

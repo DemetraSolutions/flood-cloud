@@ -34,6 +34,9 @@ import { TEMPLATE_MODELS } from '../../features/email-templates/template-models'
 import { importProblems } from '../../features/tobaccos/tobaccos.types';
 import { RULE_KEYS } from '../../features/catalog-xlsx/catalog-xlsx-page';
 import { ROW_ERROR_CODES, rowErrorKey } from '../../features/catalog-xlsx/catalog-xlsx.types';
+import { COUNT_KEYS } from '../../features/tobacco-sync/tobacco-sync-counts';
+import { CONFLICT_REASONS } from '../../features/tobacco-sync/tobacco-sync-errors';
+import { reasonKey, UNAVAILABLE_REASONS } from '../../features/tobacco-sync/tobacco-sync.types';
 import {
   ACTION_TEXTS,
   CONFLICT_KEYS,
@@ -185,6 +188,17 @@ describe('dictionaries', () => {
         'SEEN_DONE',
         'REGION',
       ].map((part) => `ACTIVITY.ALERTS.${part}`),
+    ];
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the texts of the tobacco synchronization chosen at run time: reasons, conflicts and counts', () => {
+    const keys = dictionary('it');
+    const expected = [
+      ...[...UNAVAILABLE_REASONS, 'unknown'].map(reasonKey),
+      ...CONFLICT_REASONS.map((reason) => `TOBACCO_SYNC.ERROR.CONFLICT.${reason}`),
+      'TOBACCO_SYNC.ERROR.CONFLICT.other',
+      ...COUNT_KEYS.map((key) => `TOBACCO_SYNC.COUNT.${key}`),
     ];
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });

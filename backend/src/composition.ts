@@ -57,6 +57,9 @@ import { createCountriesService } from './modules/countries/countries.service.ts
 import { createCatalogXlsxController } from './modules/catalog-xlsx/catalog-xlsx.controller.ts';
 import { createCatalogXlsxRoutes } from './modules/catalog-xlsx/catalog-xlsx.routes.ts';
 import { createCatalogXlsxService } from './modules/catalog-xlsx/catalog-xlsx.service.ts';
+import { createTobaccoSyncController } from './modules/tobacco-sync/tobacco-sync.controller.ts';
+import { createTobaccoSyncRoutes } from './modules/tobacco-sync/tobacco-sync.routes.ts';
+import { createTobaccoSyncService } from './modules/tobacco-sync/tobacco-sync.service.ts';
 import { createTobaccosController } from './modules/tobaccos/tobaccos.controller.ts';
 import { createTobaccosRepository } from './modules/tobaccos/tobaccos.repository.ts';
 import { createTobaccosRoutes } from './modules/tobaccos/tobaccos.routes.ts';
@@ -416,6 +419,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const apiKeys = createApiKeysController(createApiKeysService({ repository: createApiKeysRepository(databases, publicApiLimitsOf(config)), groups: managedGroups, activityLog, now }));
   // The workbook of the catalog (step C6): the import builds the services of the catalog again over its transaction, so it takes the collaborators, not the instances.
   const catalogXlsx = createCatalogXlsxController(createCatalogXlsxService({ databases, catalogs: catalogsService, images: mediaService, users, activityLog, logger, versionKey, now }));
+  // The synchronization of the national tobacco price list into the products of a group (step C7).
+  const tobaccoSync = createTobaccoSyncController(createTobaccoSyncService({ databases, catalogs: catalogsService, activityLog, logger, now }));
   const clientErrors = createClientErrorsController(createClientErrorsService({ activityLog, logger, now }));
   return {
     routes: [...createAuthRoutes(auth, rules), ...createMeRoutes(me, rules), ...createUsersRoutes(usersController, rules), ...createDealersRoutes(dealersController, rules), ...createReferenceRoutes(reference), ...createCompaniesRoutes(companies, idempotency), ...createPlacesRoutes(places, idempotency), ...createStoreKeysRoutes(storeKeys, rules), ...createStoreContextRoutes(storeContext), ...createApiKeysRoutes(apiKeys, rules), ...createMediaRoutes(media, rules, () => mediaService.available), ...createGroupsRoutes(groupsController), ...createOnboardingRoutes(onboarding, idempotency, rules),
@@ -434,6 +439,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createStoreCatalogRoutes(storeCatalog, idempotency, requireOperator, rules.storeCatalogWritePerStore),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createCatalogXlsxRoutes(catalogXlsx, idempotency),
+      ...createTobaccoSyncRoutes(tobaccoSync, idempotency),
       ...createCountriesRoutes(countries, rules),
       ...createSettingsRoutes(settings, rules),
       ...createActivationsRoutes(activations, rules),

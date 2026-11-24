@@ -1,0 +1,8 @@
+<dl class="counts" role="group" [attr.aria-label]="label()">
+  @for (line of lines(); track line.key) {
+    <div class="line">
+      <dt>{{ term(line.key) }}</dt>
+      <dd>{{ line.value }}</dd>
+    </div>
+  }
+</dl>

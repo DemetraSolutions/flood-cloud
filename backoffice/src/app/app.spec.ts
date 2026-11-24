@@ -444,6 +444,40 @@ describe('routes', () => {
     });
   });
 
+  describe('tobacco synchronization', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a1';
+    const ON = fakeFeatureFlags(false, { tobaccosGamesMonopoly: true });
+
+    afterEach(() => sessionStorage.clear());
+
+    async function open(permissions: string[], groupFeatures = ON) {
+      setup();
+      sessionStorage.clear();
+      signIn({ role: 'SA', permissions: [...permissions, 'profile:read'], groupFeatures });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/groups/${GROUP}/tools/tobacco-sync`);
+      return harness;
+    }
+
+    it('lazy-loads the page for whoever may synchronize in a group with the tobaccos function', async () => {
+      const harness = await open(['tobaccos:sync']);
+      const root = harness.routeNativeElement as HTMLElement;
+      expect(root.querySelector('main h1')?.textContent).toBe('⟦TOBACCO_SYNC.TITLE⟧');
+      expect(root.querySelector('fc-tobacco-sync-page')).not.toBeNull();
+    });
+
+    it('protects the page with the permission', async () => {
+      await open([]);
+      expect(location()).toBe('/forbidden');
+    });
+
+    it('sends the page to the feature-disabled page when the group has no tobaccos function', async () => {
+      await open(['tobaccos:sync'], fakeFeatureFlags(false));
+      expect(location()).toBe('/feature-disabled');
+    });
+  });
+
   describe('email templates', () => {
     const GROUP = '665f1c2e9b1d4a0012ab34a1';
     const TEMPLATE = '665f1c2e9b1d4a0012ab34c1';

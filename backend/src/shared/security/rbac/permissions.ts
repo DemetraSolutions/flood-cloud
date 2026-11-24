@@ -57,6 +57,7 @@ export const PERMISSIONS = Object.freeze({
   API_KEYS_MANAGE: 'apiKeys:manage',
   TOBACCOS_READ: 'tobaccos:read',
   TOBACCOS_IMPORT: 'tobaccos:import',
+  TOBACCOS_SYNC: 'tobaccos:sync',
   COUNTRIES_MANAGE: 'countries:manage',
   TRASH_EMPTY: 'trash:empty',
   ERROR_DOCUMENTS_READ: 'errorDocuments:read',

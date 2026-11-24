@@ -321,6 +321,13 @@ function catalogItemRoutes(
 
 const productCatalogRoutes: Routes = [
   {
+    path: 'groups/:groupId/tools/tobacco-sync',
+    canMatch: [permission('tobaccos:sync'), feature('tobaccosGamesMonopoly')],
+    title: 'TOBACCO_SYNC.TITLE',
+    loadComponent: () =>
+      import('./features/tobacco-sync/tobacco-sync-page').then((m) => m.TobaccoSyncPage),
+  },
+  {
     path: 'groups/:groupId/tools/catalog-import-export',
     canMatch: [permission('products:read')],
     title: 'CATALOG_XLSX.TITLE',

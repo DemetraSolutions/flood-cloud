@@ -17,6 +17,7 @@ import { createReferencesRepository } from '../../src/modules/groups/catalogs/re
 import { createTaxDepartments } from '../../src/modules/product-departments/product-departments.repository.ts';
 import { createUsersRepository } from '../../src/modules/users/users.repository.ts';
 import { createGate } from '../../src/modules/media/gate.ts';
+import { AppError } from '../../src/shared/http/errors.ts';
 import { EXACT_TYPES } from '../../src/shared/legacy-write/copy-rule.ts';
 import { createIdempotencyStore, idempotencyBodyKey } from '../../src/shared/http/idempotency.ts';
 import { memoryActivityLog, memoryRateLimiter } from '../helpers/activity.ts';
@@ -1477,7 +1478,7 @@ describe('catalog import: the request', () => {
     const first = rawUpload(await file('Prima'), { path });
     await running;
     const second = await rawUpload(await file('Seconda'), { path });
-    assert.deepEqual([second.status, second.body.error.code, second.body.error.message], [409, 'CONFLICT', 'An import of this group is already running']);
+    assert.deepEqual([second.status, second.body.error.code, second.body.error.message], [409, 'CONFLICT', 'An import or a synchronization of this group is already running']);
     assert.deepEqual(audit.entries.map((entry) => [entry.outcome, entry.metadata]), [['failure', { dryRun: false, reason: 'busy' }]]);
     const otherGroup = await rawUpload(await file('Altra'), { path: path.replace(hex(gid()), hex(world.group(1).groupId)), actor: world.group(1).sa });
     assert.equal(otherGroup.status, 200, 'another group is not held');
@@ -1603,6 +1604,14 @@ describe('catalog import: documents of the legacy that miss what a row compares 
 describe('catalog import: the service called without a request', () => {
   const principal = () => principalOf('SA', { groupId: gid(), userId: sa() });
   const client = { requestId: 'req-1', ip: null, userAgent: null } as const;
+
+  it('answers 503 and records the failure when the lock of the group cannot be taken', async () => {
+    const access = (await accessFor(principal(), gid()))!;
+    const service = serviceWith(undefined, Date.now, ctx.databases, { lock: { acquire: () => Promise.reject(new AppError('SERVICE_UNAVAILABLE')) } });
+    await assert.rejects(service.import(principal(), access, await catalogWorkbook({ categories: [{ name: 'Locale' }] }), false, { requestId: 'req-1', ip: null, userAgent: null }), (error: AppError) => error.code === 'SERVICE_UNAVAILABLE');
+    assert.deepEqual(audit.entries.map((entry) => [entry.outcome, entry.metadata]), [['failure', { dryRun: false, reason: 'error' }]]);
+    assert.equal(await db.categories.countDocuments({}), 0);
+  });
 
   it('records the import and the export without an address when the request has none', async () => {
     const access = (await accessFor(principal(), gid()))!;

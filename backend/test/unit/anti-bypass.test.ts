@@ -272,10 +272,10 @@ describe('database access cannot be bypassed outside src/db', () => {
       return found;
     };
 
-    it('lets only the service of the catalog workbook open a transaction on a group database and bind the repositories to its session', async () => {
+    it('lets only the services of the catalog workbook and of the tobacco synchronization open a transaction on a group database and bind the repositories to its session', async () => {
       const SESSION = 'db/session-databases.ts';
-      assert.deepEqual(await importersOf('sessionDatabases', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts']);
-      assert.deepEqual(await importersOf('inGroupTransaction', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts']);
+      assert.deepEqual(await importersOf('sessionDatabases', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts', 'modules/tobacco-sync/tobacco-sync.service.ts']);
+      assert.deepEqual(await importersOf('inGroupTransaction', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts', 'modules/tobacco-sync/tobacco-sync.service.ts']);
     });
 
     it('imports the cross-group list of the copies only in the scope layer, which builds the groups from the verified scope and never from the client', async () => {
@@ -379,14 +379,14 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.deepEqual(departments.filter((path) => !path.startsWith('tools/')), ['modules/groups/onboarding.repository.ts', 'modules/product-departments/product-departments.repository.ts']);
     });
 
-    it('opens the products of a group only in the product repository, the tax copies, the lookups, the services of the users and the reads of the catalog (step C3)', async () => {
+    it('opens the products of a group only in the product repository, the tax copies, the lookups, the services of the users and the reads of the catalog and the tobacco synchronization (step C3)', async () => {
       const openers: string[] = [];
       for (const file of await filesUnder(SRC)) {
         if (/\.collection(?:<[^>]*>)?\(\s*['"`]products['"`]/.test(await readFile(file, 'utf8')) && !posix(file).startsWith('tools/')) {
           openers.push(posix(file));
         }
       }
-      assert.deepEqual(openers.sort(), ['modules/catalog-xlsx/catalog-xlsx.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts']);
+      assert.deepEqual(openers.sort(), ['modules/catalog-xlsx/catalog-xlsx.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts', 'modules/tobacco-sync/tobacco-sync.repository.ts']);
     });
 
     it('prepares the administrator of a new group only from the onboarding service', async () => {

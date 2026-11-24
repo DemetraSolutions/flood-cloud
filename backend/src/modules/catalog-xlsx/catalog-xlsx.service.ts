@@ -4,6 +4,8 @@ import type { Databases } from '../../db/databases.ts';
 import { inGroupTransaction, sessionDatabases } from '../../db/session-databases.ts';
 import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { ActivityEntry } from '../../shared/activity-log/activity-log.ts';
+import { createCatalogLock } from '../../shared/locks/catalog-lock.ts';
+import type { CatalogLock } from '../../shared/locks/catalog-lock.ts';
 import type { ClientContext } from '../../shared/http/client-context.ts';
 import { AppError } from '../../shared/http/errors.ts';
 import { listParamsOf } from '../../shared/http/list.ts';
@@ -107,6 +109,8 @@ export interface CatalogXlsxDeps {
   readonly logger: Logger;
   readonly versionKey: Buffer;
   readonly now: () => number;
+  /** The lock of the catalog of a group (tests replace it); by default the one in `common.settings`, shared with the tobacco synchronization. */
+  readonly lock?: CatalogLock;
   /** Limits (tests lower them). */
   readonly limits?: { readonly maxExportProducts?: number; readonly maxImportMs?: number; readonly rows?: { readonly sheet: number; readonly total: number } };
 }
@@ -147,8 +151,8 @@ export function createCatalogXlsxService(deps: CatalogXlsxDeps): CatalogXlsxServ
   const maxExportProducts = deps.limits?.maxExportProducts ?? MAX_EXPORT_PRODUCTS;
   const maxImportMs = deps.limits?.maxImportMs ?? MAX_IMPORT_MS;
   const reads = createCatalogXlsxRepository(databases);
-  /** The groups with an import in progress in this process: the other instances of the server are not known to it, the transaction is what keeps their writes correct. */
-  const importing = new Set<string>();
+  /** The lock of the catalog of a group, shared with the tobacco synchronization and by every instance of the server: it is in the database. */
+  const lock = deps.lock ?? createCatalogLock({ databases, logger: deps.logger });
 
   /** The services of the catalog over a database accessor (the plain one, or the one of a transaction). */
   const graphOver = (over: Databases, silent: ActivityLog): ImportGraph => {
@@ -289,11 +293,15 @@ export function createCatalogXlsxService(deps: CatalogXlsxDeps): CatalogXlsxServ
       const record = (outcome: 'success' | 'failure', metadata: Record<string, string | number | boolean>): Promise<void> =>
         log({ action: 'catalog.imported', outcome, groupId: access.groupId, resource: { type: 'catalog' }, requestId: client.requestId, ...(client.ip === null ? {} : { ip: client.ip }), metadata: { dryRun, ...metadata } }, principal);
       const group = access.groupId.toHexString();
-      if (importing.has(group)) {
+      // Taken before anything is read or written, by a dry run too; given back whatever happens.
+      const held = await lock.acquire(access.groupId).catch(async (error: unknown) => {
+        await record('failure', { reason: 'error' });
+        throw error;
+      });
+      if (held === null) {
         await record('failure', { reason: 'busy' });
-        throw new AppError('CONFLICT', { message: 'An import of this group is already running' });
+        throw new AppError('CONFLICT', { message: 'An import or a synchronization of this group is already running', details: [{ field: 'group', issue: 'busy' }] });
       }
-      importing.add(group);
       try {
         let workbook;
         try {
@@ -338,7 +346,7 @@ export function createCatalogXlsxService(deps: CatalogXlsxDeps): CatalogXlsxServ
         }
         return { dryRun, sheets: report.sheets };
       } finally {
-        importing.delete(group);
+        await held.release();
       }
     },
   };

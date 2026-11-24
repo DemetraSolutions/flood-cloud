@@ -299,6 +299,16 @@ export const MENU: readonly MenuItem[] = [
         requiresGroup: true,
       },
       {
+        id: 'tobacco-sync',
+        labelKey: 'MENU.TOBACCO_SYNC',
+        icon: 'tag',
+        route: '/groups',
+        groupPath: 'tools/tobacco-sync',
+        permission: 'tobaccos:sync',
+        feature: 'tobaccosGamesMonopoly',
+        requiresGroup: true,
+      },
+      {
         id: 'email-templates',
         labelKey: 'MENU.EMAIL_TEMPLATES',
         icon: 'mail',

@@ -1,0 +1,84 @@
+<header class="page-header">
+  <h1>{{ 'TOBACCO_SYNC.TITLE' | t }}</h1>
+</header>
+<p class="hint">{{ 'TOBACCO_SYNC.HINT' | t }}</p>
+
+@if (state.error()) {
+  <fc-error-state
+    [title]="'TOBACCO_SYNC.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="state.reload()"
+  />
+} @else if (state.value(); as body) {
+  @let status = body.data;
+  <section class="card" aria-labelledby="sync-status-heading">
+    <h2 id="sync-status-heading">{{ 'TOBACCO_SYNC.STATUS.TITLE' | t }}</h2>
+    <dl class="facts">
+      <div>
+        <dt>{{ 'TOBACCO_SYNC.STATUS.ENTRIES' | t }}</dt>
+        <dd>{{ number(status.list.entries) }}</dd>
+      </div>
+      <div>
+        <dt>{{ 'TOBACCO_SYNC.STATUS.IMPORTED_AT' | t }}</dt>
+        <dd>
+          @if (status.list.importedAt; as importedAt) {
+            {{ when(importedAt) }}
+          } @else {
+            {{ 'TOBACCO_SYNC.STATUS.NO_IMPORT' | t }}
+          }
+        </dd>
+      </div>
+      <div>
+        <dt>{{ 'TOBACCO_SYNC.STATUS.LAST_SYNC' | t }}</dt>
+        <dd>
+          @if (status.lastSync; as last) {
+            {{ lastSyncText() }}
+          } @else {
+            {{ 'TOBACCO_SYNC.STATUS.NO_SYNC' | t }}
+          }
+        </dd>
+      </div>
+    </dl>
+
+    @if (!status.available) {
+      <section class="notice" aria-labelledby="sync-unavailable-heading">
+        <h3 id="sync-unavailable-heading">{{ 'TOBACCO_SYNC.UNAVAILABLE_TITLE' | t }}</h3>
+        <ul>
+          @for (key of reasonKeys(); track $index) {
+            <li>{{ key | t }}</li>
+          }
+        </ul>
+      </section>
+    }
+
+    <div class="actions">
+      <button fc-button [disabled]="!status.available" (click)="dialogOpen.set(true)">
+        {{ 'TOBACCO_SYNC.ACTION' | t }}
+      </button>
+    </div>
+  </section>
+
+  @if (done(); as outcome) {
+    <section class="card" aria-labelledby="sync-done-heading">
+      <h2 id="sync-done-heading" data-outcome tabindex="-1">{{ 'TOBACCO_SYNC.DONE_TITLE' | t }}</h2>
+      <p>
+        {{ 'TOBACCO_SYNC.ACTIVITY' | t }}
+        <a *fcCan="'activityLog:read'" routerLink="/activity-log">{{
+          'TOBACCO_SYNC.ACTIVITY_LINK' | t
+        }}</a>
+      </p>
+      <fc-tobacco-sync-counts [outcome]="outcome" [label]="'TOBACCO_SYNC.DONE_TITLE' | t" />
+    </section>
+  }
+
+  <fc-tobacco-sync-dialog
+    [groupId]="groupId()"
+    [status]="status"
+    [open]="dialogOpen()"
+    (openChange)="dialogOpen.set($event)"
+    (synced)="onSynced($event)"
+  />
+} @else {
+  <p class="loading" role="status">{{ 'TOBACCO_SYNC.LOADING' | t }}</p>
+}
