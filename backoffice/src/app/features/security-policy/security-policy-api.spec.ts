@@ -1,15 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { API, backend, provideApiTesting } from '../../../testing/api';
 import { SecurityPolicyApi } from './security-policy-api';
-import { SecurityPolicy } from './security-policy.types';
+import { POLICY } from '../../../testing/security-policy';
 
 const URL_ = `${API}/v1/settings/security-policy`;
-export const POLICY: SecurityPolicy = {
-  nonBrowserRequests: 'report',
-  sustainedLimits: 'report',
-  sources: { nonBrowserRequests: 'default', sustainedLimits: 'default' },
-  limits: { perMinute: 300, perHour: 2000, perDay: 10000 },
-};
 
 afterEach(() => backend().verify());
 

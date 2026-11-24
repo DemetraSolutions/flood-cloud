@@ -6,7 +6,7 @@ import { AppConfig } from '../../core/config/app-config';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { emulateNativeDialog } from '../../../testing/dialog';
 import { SecurityPolicyPage } from './security-policy-page';
-import { POLICY } from './security-policy-api.spec';
+import { POLICY } from '../../../testing/security-policy';
 import { SecurityPolicy } from './security-policy.types';
 
 const URL_ = `${API}/v1/settings/security-policy`;

@@ -3,7 +3,7 @@
 #   docker compose -f backend/compose.yaml up -d --wait
 #   FLOOD_CLOUD_TEST_MONGO_URI=mongodb://127.0.0.1:27027/?directConnection=true
 # The default image is 8.2 because 8.0 does not start on Docker for Mac (SERVER-121912);
-# Atlas runs 8.0, so CI overrides it with FLOOD_CLOUD_MONGO_IMAGE=mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142.
+# Atlas runs 8.0, but CI uses this default too: 8.0 does not start on the recent kernels of the GitHub runners.
 # Images are pinned by digest (multi-arch index): update tag and digest together.
 services:
   mongo:

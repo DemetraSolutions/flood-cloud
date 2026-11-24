@@ -109,6 +109,8 @@ data:
   RATE_LIMIT_UNAUTHENTICATED_PUBLIC_PER_IP: ""
   PUBLIC_API_USAGE_FLUSH_SECONDS: ""
   RATE_LIMIT_API_KEY_ADMIN_PER_USER: ""
+  # Catalog writes (products and categories) per minute per public API key. Default: 60
+  RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY: ""
   # Administration writes per minute per user: countries and provinces, bulk trash operations, price
   # list and activations (default 30 each)
   RATE_LIMIT_COUNTRIES_ADMIN_PER_USER: ""
