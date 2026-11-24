@@ -137,8 +137,63 @@ jobs:
           cluster_name: flood-software
           location: europe-west8
 
-      # Only k8s/*.yaml is applied. The namespace and the real Secret are managed on the cluster,
-      # never in the repository.
+      # The Secret is built from Secret Manager, never from the repository: the secret
+      # flood-cloud-backend-<VARIABLE> gives the environment variable <VARIABLE>. The variables
+      # are a FIXED list (an allowlist): a secret added in Secret Manager can never inject another
+      # variable (NODE_OPTIONS, LD_PRELOAD...) or override the ConfigMap. The labels
+      # app=flood-cloud, component=backend only help to find the secrets in the console.
+      # Values go to files (mode 600) and from there to the cluster, never to the command line or
+      # the log. Server-side apply: no last-applied annotation holding a copy of the values.
+      - name: Sync the Secret from Secret Manager
+        env:
+          REQUIRED_SECRETS: MONGODB_URI LEGACY_PASSWORD_PEPPER VERSION_HMAC_KEY
+          OPTIONAL_SECRETS: MONGODB_ANALYTICS_URI CERVED_API_KEY
+        run: |
+          set -euo pipefail
+          prefix="flood-cloud-backend-"
+          dir="$(mktemp -d)"
+          trap 'rm -rf "${dir}" "${dir}.err"' EXIT
+          umask 077
+          fetch() { # variable, required|optional
+            local name="${prefix}$1" err="${dir}.err"
+            if ! gcloud secrets versions access latest --project=flood-software --secret="${name}" \
+                --out-file="${dir}/$1" 2> "${err}"; then
+              rm -f "${dir}/$1"
+              if [ "$2" = optional ] && grep -q NOT_FOUND "${err}"; then
+                echo "Optional secret ${name} not found: skipped"
+                return 0
+              fi
+              echo "::error::cannot read secret ${name} from Secret Manager"
+              cat "${err}" >&2
+              exit 1
+            fi
+            # A value the server would refuse, or that an environment variable cannot hold, stops
+            # the deploy BEFORE the Secret is replaced (only the name is reported).
+            local file="${dir}/$1"
+            if [ ! -s "${file}" ]; then
+              echo "::error::secret ${name} is empty"; exit 1
+            fi
+            if [ "$(tr -d '\000' < "${file}" | wc -c)" -ne "$(wc -c < "${file}")" ]; then
+              echo "::error::secret ${name} contains a NUL byte"; exit 1
+            fi
+            case "$(tail -c1 "${file}" | od -An -c | tr -d ' ')" in
+              '\n'|'\r') echo "::error::secret ${name} ends with a line break (create it with printf '%s')"; exit 1 ;;
+            esac
+            while IFS= read -r line || [ -n "${line}" ]; do
+              [ -n "${line}" ] && echo "::add-mask::${line}"
+            done < "${file}"
+            echo "::add-mask::$(base64 -w0 < "${file}")"
+          }
+          for var in ${REQUIRED_SECRETS}; do fetch "${var}" required; done
+          for var in ${OPTIONAL_SECRETS}; do fetch "${var}" optional; done
+          echo "Secret keys: $(cd "${dir}" && printf '%s ' *)"
+          checksum="$(cd "${dir}" && for f in *; do printf '%s\0' "${f}"; cat "${f}"; printf '\0'; done | sha256sum | cut -d' ' -f1)"
+          echo "SECRETS_CHECKSUM=${checksum}" >> "${GITHUB_ENV}"
+          kubectl create secret generic flood-cloud-backend-secrets -n "${NAMESPACE}" \
+            --from-file="${dir}" --dry-run=client -o yaml \
+            | kubectl apply --server-side --force-conflicts --field-manager=github-deploy -f -
+
+      # Only k8s/*.yaml is applied. The namespace is managed on the cluster.
       - name: Render and apply manifests
         run: |
           set -euo pipefail
@@ -146,7 +201,7 @@ jobs:
           mkdir -p "${out}"
           for f in backend/k8s/*.yaml; do
             name="$(basename "${f}")"
-            sed "s|:TODO_TAG|:${GITHUB_SHA}|" "${f}" > "${out}/${name}"
+            sed -e "s|:TODO_TAG|:${GITHUB_SHA}|" -e "s|TODO_SECRETS_CHECKSUM|${SECRETS_CHECKSUM}|" "${f}" > "${out}/${name}"
           done
           if grep -rnE '^[^#]*TODO_' "${out}"; then
             echo "::error::unresolved placeholder in the manifests"

@@ -16,12 +16,114 @@ data:
   PORT: "3000"
   # Optional. Address to bind: an IP address or a hostname. Empty: all interfaces.
   HOST: ""
+
+  # MongoDB. The connection strings are secrets (Secret Manager): MONGODB_URI and, optionally,
+  # MONGODB_ANALYTICS_URI (a more powerful node for heavy reads; unset: MONGODB_URI with
+  # readPreference secondaryPreferred).
+  # Optional. Multi-cluster mode: comma-separated cluster ids (^[a-z][a-z0-9-]{0,31}$, at most 16).
+  # Empty: single-cluster mode. Multi-cluster needs MONGODB_URI_<ID> secrets INSTEAD of MONGODB_URI:
+  # the secret list of the pipeline (backend.yml) must change with it.
+  MONGODB_CLUSTERS: ""
+  # Optional. Cluster of the common database; must be in MONGODB_CLUSTERS. Default: the first id
+  MONGODB_COMMON_CLUSTER: ""
+  # Optional. Cluster of the groups whose document has no dataCluster. Default: the common cluster
+  MONGODB_DEFAULT_GROUP_CLUSTER: ""
+  # Optional. Server selection and connect timeout in milliseconds (1000-60000). Default: 5000
+  MONGODB_SERVER_SELECTION_TIMEOUT_MS: ""
+  # Optional. Maximum size of the connection pool (1-500), per pod. Default: 20
+  MONGODB_MAX_POOL_SIZE: ""
+  # Optional. Prefix of every database name (^[A-Za-z0-9_-]{0,27}$): databases are
+  # <prefix><APP_ENV>_common and <prefix><APP_ENV>_<groupId>. Default: empty
+  DB_NAME_PREFIX: ""
+  # ALLOW_ENV_FILE_IN_PRODUCTION is intentionally absent: local machines only, never on a deployed server.
+
   # Optional. Exact number of reverse proxies in front of the server. The global external
   # Application Load Balancer (gke-l7-global-external-managed) appends "client, lb-ip"
   # to X-Forwarded-For, hence 2.
   TRUST_PROXY: "2"
+  # Optional. Exact origins allowed by CORS on /v1 (https only on a deployed server).
   CORS_ALLOWED_ORIGINS: "https://portal.floodsoftware.cloud"
+  # Optional. Sessions of the backoffice, in seconds: access token lifetime (default 900), refresh token
+  # idle lifetime (default 604800), absolute session lifetime >= the idle one (default 2592000), grace
+  # after a refresh during which a retry of the old refresh token is tolerated (0-300, default 30)
+  ACCESS_TOKEN_TTL_SECONDS: ""
+  REFRESH_IDLE_TTL_SECONDS: ""
+  SESSION_MAX_TTL_SECONDS: ""
+  REFRESH_REUSE_GRACE_SECONDS: ""
+  # Optional. Pause in milliseconds (0-20000) between SIGTERM and closing the server, so the load
+  # balancer sees readiness fail first. Default: 5000. terminationGracePeriodSeconds in
+  # deployment.yaml (35 s) covers this pause plus 25 s for in-flight requests: raise it with this value.
+  SHUTDOWN_DRAIN_MS: ""
+  # Optional. Request timeout in milliseconds (1000-300000). Default: 30000
+  REQUEST_TIMEOUT_MS: ""
+  # Optional. true | false. While the legacy system still runs, a password change also writes the
+  # legacy hash so the legacy keeps accepting it. Turn off at the final cutover. Default: true
   LEGACY_PASSWORD_COEXISTENCE: "true"
+
+  # Every value below is optional: empty means the default of the server (see backend/.env.example).
+  # Rate limits per fixed window of one minute (1-100000); beyond them 429 RATE_LIMITED with Retry-After.
+  # Defaults: login per username 5, login per IP 15, refresh per IP 30, username check per user 15
+  RATE_LIMIT_LOGIN_PER_USERNAME: ""
+  RATE_LIMIT_LOGIN_PER_IP: ""
+  RATE_LIMIT_REFRESH_PER_IP: ""
+  RATE_LIMIT_USERNAME_CHECK_PER_USER: ""
+  # User creations and password resets per minute per user (each costs a scrypt run). Default: 20
+  RATE_LIMIT_USER_CREDENTIALS_PER_USER: ""
+  # /v1 API requests per minute per user. Default: 300
+  RATE_LIMIT_API_PER_USER: ""
+  # Sustained use of /v1 per user: per hour (1-10000000, default 2000) and per UTC day (1-100000000,
+  # default 10000)
+  RATE_LIMIT_API_PER_USER_HOUR: ""
+  RATE_LIMIT_API_PER_USER_DAY: ""
+  # report (default) | enforce: default mode of the hourly and daily limits while the PSA has saved
+  # nothing in the backoffice (security policy); the saved setting prevails.
+  RATE_LIMIT_API_SUSTAINED_MODE: ""
+  # on (default) | off: signal (and optional block, a PSA setting) of /v1 requests that do not look like
+  # a browser's. off turns both off: emergency exit.
+  REQUEST_ORIGIN_SIGNAL: ""
+  # off (default) | on: on forces both security policy settings of the PSA to report only. Emergency exit.
+  SECURITY_POLICY_FORCE_REPORT: ""
+  # Browser error reports (POST /v1/client-errors) per minute per user. Default: 30
+  RATE_LIMIT_CLIENT_ERRORS_PER_USER: ""
+  # Image uploads per minute per user (default 30); per day per user (default 300) and per group
+  # (default 2000)
+  RATE_LIMIT_MEDIA_UPLOAD_PER_USER: ""
+  RATE_LIMIT_MEDIA_UPLOAD_PER_USER_DAILY: ""
+  RATE_LIMIT_MEDIA_UPLOAD_PER_GROUP_DAILY: ""
+  # Store keys: requests per minute per key (default 600), activation code exchanges per minute per IP
+  # (default 10), code creations/cancellations/revocations per minute per user (default 20), catalog
+  # writes per minute per key (default 120), minutes an activation code stays valid (5-10080, default 1440)
+  RATE_LIMIT_API_PER_STORE: ""
+  RATE_LIMIT_STORE_ACTIVATION_PER_IP: ""
+  RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: ""
+  RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE: ""
+  STORE_ACTIVATION_CODE_TTL_MINUTES: ""
+  # Public API (/public/v1): default limits of a new key per minute (1-6000, default 60) and per UTC day
+  # (default 10000); cap of all the keys of a group per minute (default 120) and per UTC day (default
+  # 20000); failed authentications per minute per IP (default 300); seconds between two writes of the
+  # usage counters (1-3600, default 30); API key administration per minute per user (default 20)
+  PUBLIC_API_DEFAULT_RATE_LIMIT_PER_MINUTE: ""
+  PUBLIC_API_DEFAULT_DAILY_QUOTA: ""
+  PUBLIC_API_DEFAULT_GROUP_RATE_LIMIT_PER_MINUTE: ""
+  PUBLIC_API_DEFAULT_GROUP_DAILY_QUOTA: ""
+  RATE_LIMIT_UNAUTHENTICATED_PUBLIC_PER_IP: ""
+  PUBLIC_API_USAGE_FLUSH_SECONDS: ""
+  RATE_LIMIT_API_KEY_ADMIN_PER_USER: ""
+  # Administration writes per minute per user: countries and provinces, bulk trash operations, price
+  # list and activations (default 30 each)
+  RATE_LIMIT_COUNTRIES_ADMIN_PER_USER: ""
+  RATE_LIMIT_TRASH_ADMIN_PER_USER: ""
+  RATE_LIMIT_ACTIVATIONS_ADMIN_PER_USER: ""
+  # CSV exports per minute per user: activation statements, diagnostics, documents in error (default 5 each)
+  RATE_LIMIT_ACTIVATIONS_EXPORT_PER_USER: ""
+  RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER: ""
+  RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER: ""
+  # Imports of the tobacco price list per HOUR per user. Default: 5
+  RATE_LIMIT_TOBACCOS_IMPORT_PER_USER: ""
+
+  # Optional. Base URL of the Cerved API: an https URL without credentials, query or fragment.
+  # Empty: default https://api.cerved.com. The key (CERVED_API_KEY) comes from Secret Manager.
+  CERVED_BASE_URL: ""
   # Optional. Lookups per minute allowed to one user (1-100000): each is two paid calls to the provider.
   # Empty: default 10
   RATE_LIMIT_CERVED_LOOKUP_PER_USER: ""

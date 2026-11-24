@@ -23,6 +23,10 @@ spec:
         app.kubernetes.io/name: flood-cloud-backend
         app.kubernetes.io/part-of: flood-cloud
         app.kubernetes.io/component: api
+      annotations:
+        # SHA-256 of the Secret values, written by the pipeline: a value changed in Secret Manager
+        # changes the pod template, so the next deploy restarts the pods (env is read at start only).
+        flood-cloud/secrets-checksum: TODO_SECRETS_CHECKSUM
     spec:
       # Kubernetes service account bound to Google Cloud through Workload Identity (media bucket).
       # The GKE metadata server identifies the pod by it: the API token is not needed in the pod.
