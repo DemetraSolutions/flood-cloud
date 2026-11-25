@@ -43,6 +43,9 @@ data:
   TRUST_PROXY: "2"
   # Optional. Exact origins allowed by CORS on /v1 (https only on a deployed server).
   CORS_ALLOWED_ORIGINS: "https://portal.floodsoftware.cloud"
+  # Required. Public base URL of the API as the browser reaches it: must equal API_BASE_URL of the
+  # backoffice (backoffice/k8s/configmap.yaml). It is the base of the htu claim of the DPoP proofs (D-33).
+  API_PUBLIC_BASE_URL: "https://api-core.floodsoftware.cloud"
   # Optional. Sessions of the backoffice, in seconds: access token lifetime (default 900), refresh token
   # idle lifetime (default 604800), absolute session lifetime >= the idle one (default 2592000), grace
   # after a refresh during which a retry of the old refresh token is tolerated (0-300, default 30)
