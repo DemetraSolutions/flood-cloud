@@ -178,7 +178,7 @@ describe('departments: creation', () => {
     assert.deepEqual(failure(await post({ ...ok, placeIds: Array.from({ length: 201 }, () => hex(new ObjectId())) })).details, [{ field: 'placeIds', issue: 'tooMany' }]);
     assert.deepEqual(failure(await post({ ...ok, image: { imageId: 'x' } })).details, [{ field: 'image.imageId', issue: 'minLength' }]);
     assert.equal(failure(await call(sa(), 'POST', base(), { ...ok, description: { it: 'a'.repeat(70_000) } })).status, 413);
-    const text = await fetch(`${world.office.app.baseUrl}/v1${base()}`, { method: 'POST', headers: { authorization: `Bearer ${await world.as.tokenOf(sa())}`, 'content-type': 'text/plain', 'idempotency-key': randomUUID() }, body: 'x' });
+    const text = await fetch(`${world.office.app.baseUrl}/v1${base()}`, { method: 'POST', headers: { ...world.office.userHeaders('POST', base(), await world.as.tokenOf(sa())), 'content-type': 'text/plain', 'idempotency-key': randomUUID() }, body: 'x' });
     assert.equal(text.status, 415);
   });
 

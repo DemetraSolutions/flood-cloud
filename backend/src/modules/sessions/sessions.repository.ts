@@ -31,6 +31,11 @@ export interface Session {
   readonly ip: string | null;
   readonly revokedAt: Date | null;
   readonly revokeReason: string | null;
+  /**
+   * RFC 7638 thumbprint of the browser key (DPoP, D-33) the session is bound to, fixed at login and never changed by a rotation.
+   * `null` for a document stored without it (created before D-33): such a session is revoked at its first use. Never exposed in any API response.
+   */
+  readonly jkt: string | null;
 }
 
 /** Input of {@link SessionsRepository.create}. */
@@ -43,6 +48,8 @@ export interface NewSession {
   readonly familyExpiresAt: Date;
   readonly userAgent: string | null;
   readonly ip: string | null;
+  /** Thumbprint of the key of the DPoP proof presented at login (`jwkThumbprint`). */
+  readonly jkt: string;
   readonly now: Date;
 }
 
@@ -178,6 +185,8 @@ interface SessionDocument {
   ip: string | null;
   revokedAt: Date | null;
   revokeReason: string | null;
+  /** Absent in a document stored before D-33. */
+  jkt?: string | null;
   expiresAt: Date;
 }
 
@@ -196,6 +205,7 @@ const toSession = (document: SessionDocument): Session => ({
   ip: document.ip,
   revokedAt: document.revokedAt,
   revokeReason: document.revokeReason,
+  jkt: document.jkt ?? null,
 });
 
 /**
@@ -224,6 +234,7 @@ export function createSessionsRepository(databases: Databases): SessionsReposito
         ip: input.ip,
         revokedAt: null,
         revokeReason: null,
+        jkt: input.jkt,
         expiresAt: new Date(input.familyExpiresAt.getTime() + RETENTION_AFTER_FAMILY_MS),
       };
       const { insertedId } = await sessions().insertOne(document as SessionDocument);

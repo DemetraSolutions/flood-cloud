@@ -6,20 +6,31 @@ import { apiBaseUrlInterceptor } from '../app/core/api/api-base-url.interceptor'
 import { apiErrorInterceptor } from '../app/core/api/api-error.interceptor';
 import { AppConfig } from '../app/core/config/app-config';
 import { authInterceptor } from '../app/core/session/auth.interceptor';
+import { serverClockInterceptor } from '../app/core/session/server-clock.interceptor';
 import { SessionService } from '../app/core/session/session.service';
 import { Profile } from '../app/core/session/session.types';
+import { provideDpopTesting } from './dpop';
 import { fakeProfile } from './session';
 
 /** Base URL of the API in tests. */
 export const API = 'https://api.test';
 
-/** The real interceptor chain, in production order, over the testing HTTP backend. */
+/**
+ * The real interceptor chain, in production order, over the testing HTTP backend. Proofs are
+ * fake and synchronous and keys live in memory (see `provideDpopTesting`).
+ */
 export function provideApiTesting() {
   return [
     provideHttpClient(
-      withInterceptors([apiBaseUrlInterceptor, authInterceptor, apiErrorInterceptor]),
+      withInterceptors([
+        apiBaseUrlInterceptor,
+        authInterceptor,
+        apiErrorInterceptor,
+        serverClockInterceptor,
+      ]),
     ),
     provideHttpClientTesting(),
+    ...provideDpopTesting(),
     { provide: AppConfig, useValue: { apiBaseUrl: signal(API).asReadonly() } },
   ];
 }
@@ -53,6 +64,7 @@ const STATUS: Record<string, number> = {
   INVALID_CREDENTIALS: 401,
   UNAUTHENTICATED: 401,
   TOKEN_EXPIRED: 401,
+  INVALID_DPOP_PROOF: 401,
   PASSWORD_CHANGE_REQUIRED: 403,
   FORBIDDEN: 403,
   FEATURE_DISABLED: 403,
@@ -91,6 +103,7 @@ export function backend(): HttpTestingController {
 export async function signInViaApi(profile: Profile = fakeProfile()): Promise<SessionService> {
   const session = TestBed.inject(SessionService);
   const done = session.login('mario.rossi', 'Secret-1234');
+  await settle(); // the browser key is generated before the request is sent
   backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
   await settle();
   backend().expectOne(`${API}/v1/me`).flush({ data: profile });

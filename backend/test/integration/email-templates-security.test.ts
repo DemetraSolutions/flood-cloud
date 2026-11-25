@@ -66,7 +66,7 @@ describe('e-mail templates: rejections of security', () => {
     assert.equal(raw.status, 422);
     const proto = await fetch(`${world.office.app.baseUrl}/v1${base()}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${await world.as.tokenOf(sa())}`, 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      headers: { ...world.office.userHeaders('POST', base(), await world.as.tokenOf(sa())), 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
       body: '{"name":"x","__proto__":{"admin":true},"constructor":{"prototype":{}}}',
     });
     assert.equal(proto.status, 422);

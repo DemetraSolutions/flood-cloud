@@ -21,7 +21,7 @@ declare global {
       storeOperator?: StoreOperator;
       /** Verified API key principal, set by the API key authentication of `/public/v1`; never set together with `auth` or `store`. */
       apiKey?: ApiKeyPrincipal;
-      /** Id of the session whose access token authenticated the request, set by the Bearer middleware. */
+      /** Id of the session whose access token authenticated the request, set by the user authentication. */
       sessionId?: ObjectId;
       /** Set by the Bearer middleware when the user must change a provisional password before doing anything else. */
       passwordChangeRequired?: true;

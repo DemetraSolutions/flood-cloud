@@ -269,7 +269,7 @@ describe('POST /v1/groups/{groupId}/companies', () => {
     await clean();
     const big = await world.office.call('POST', world.path(0), await world.as.tokenOf(world.group(0).sa), { ...body(), name: 'x'.repeat(70_000) });
     assert.equal(big.status, 413);
-    const text = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, { method: 'POST', headers: { authorization: `Bearer ${await world.as.tokenOf(world.group(0).sa)}`, 'content-type': 'text/plain' }, body: 'x' });
+    const text = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, { method: 'POST', headers: { ...world.office.userHeaders('POST', world.path(0), await world.as.tokenOf(world.group(0).sa)), 'content-type': 'text/plain' }, body: 'x' });
     assert.equal(text.status, 415);
     assert.equal((await call(world.group(0).sa, 'POST', world.path(0), [])).status, 422);
     assert.equal((await call(world.group(0).sa, 'POST', world.path(0), 'x')).status, 400);

@@ -198,7 +198,7 @@ describe('loadConfig', () => {
       assert.equal(error.name, 'ConfigError');
       assert.deepEqual(
         error.issues.map((issue) => issue.variable),
-        ['APP_ENV', 'MONGODB_URI', 'PORT', 'TRUST_PROXY', 'LEGACY_PASSWORD_PEPPER', 'VERSION_HMAC_KEY'],
+        ['APP_ENV', 'MONGODB_URI', 'PORT', 'TRUST_PROXY', 'LEGACY_PASSWORD_PEPPER', 'VERSION_HMAC_KEY', 'API_PUBLIC_BASE_URL'],
       );
       assert.ok(!error.message.includes('secret-value'));
       assert.match(error.message, /APP_ENV: must be one of: development, production/);
@@ -209,7 +209,7 @@ describe('loadConfig', () => {
     const issues = issuesOf({});
     assert.deepEqual(
       issues.map((issue) => `${issue.variable}: ${issue.reason}`),
-      ['APP_ENV: is required', 'MONGODB_URI: is required', 'LEGACY_PASSWORD_PEPPER: is required', 'VERSION_HMAC_KEY: is required'],
+      ['APP_ENV: is required', 'MONGODB_URI: is required', 'LEGACY_PASSWORD_PEPPER: is required', 'VERSION_HMAC_KEY: is required', 'API_PUBLIC_BASE_URL: is required'],
     );
   });
 
@@ -229,6 +229,26 @@ describe('loadConfig', () => {
       assert.equal(Buffer.from(config.versionHmacKey.reveal(), 'base64').length, 32);
       assert.ok(!`${config.versionHmacKey}`.includes(value));
     }
+  });
+
+  it('requires API_PUBLIC_BASE_URL and normalizes it: no trailing slash, path prefix kept, default port dropped', () => {
+    const base = validEnv();
+    for (const value of [undefined, '']) {
+      assert.deepEqual(issuesOf({ ...base, API_PUBLIC_BASE_URL: value }).map((issue) => issue.reason), ['is required']);
+    }
+    assert.equal(loadConfig({ ...base, API_PUBLIC_BASE_URL: 'HTTPS://Api.Example.Test:443/' }).apiPublicBaseUrl, 'https://api.example.test');
+    assert.equal(loadConfig({ ...base, API_PUBLIC_BASE_URL: 'https://example.test/api//' }).apiPublicBaseUrl, 'https://example.test/api');
+    assert.equal(loadConfig({ ...base, API_PUBLIC_BASE_URL: 'http://127.0.0.1:3000/' }).apiPublicBaseUrl, 'http://127.0.0.1:3000');
+    assert.equal(loadConfig({ ...base, API_PUBLIC_BASE_URL: 'http://localhost:4200/api' }).apiPublicBaseUrl, 'http://localhost:4200/api');
+  });
+
+  it('refuses an invalid API_PUBLIC_BASE_URL: scheme, plain http off the loopback, credentials, query, fragment', () => {
+    const bad = ['ftp://api.example.test', 'api.example.test', 'not a url', 'http://api.example.test', 'https://user:pass@api.example.test', 'https://api.example.test?x=1', 'https://api.example.test#x'];
+    for (const value of bad) {
+      assert.match(reasonFor({ ...validEnv(), API_PUBLIC_BASE_URL: value }, 'API_PUBLIC_BASE_URL') ?? '', /must be an https URL/, value);
+    }
+    assert.equal(reasonFor({ ...validEnv({ APP_ENV: 'production' }), API_PUBLIC_BASE_URL: 'http://localhost:3000' }, 'API_PUBLIC_BASE_URL'), undefined);
+    assert.equal(reasonFor({ ...validEnv({ APP_ENV: 'production' }), API_PUBLIC_BASE_URL: 'https://api.example.test' }, 'API_PUBLIC_BASE_URL'), undefined);
   });
 
   it('validates HOST as an IP address or a hostname and leaves it unset by default', () => {

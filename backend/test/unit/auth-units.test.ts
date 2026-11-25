@@ -16,6 +16,9 @@ import { clientContextOf, MAX_USER_AGENT_LENGTH } from '../../src/shared/http/cl
 import { hashSecret } from '../../src/shared/security/secrets.ts';
 import type { GroupAvailability } from '../../src/shared/security/scope/groups.repository.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
+import { createDpopRejectedAudit } from '../../src/shared/security/dpop-audit.ts';
+import type { DpopRejectedEvent } from '../../src/shared/security/dpop-audit.ts';
+import { TEST_API_PUBLIC_BASE_URL, newBrowserKey, signProof } from '../helpers/dpop.ts';
 import { memoryActivityLog } from '../helpers/activity.ts';
 import { memoryLogger } from '../helpers/app.ts';
 
@@ -23,6 +26,15 @@ const USER_ID = new ObjectId();
 const GROUP_ID = new ObjectId();
 const NOW = Date.parse('2026-11-04T10:00:00.000Z');
 const CLIENT = { requestId: 'req-12345678', ip: null, userAgent: null };
+const KEY = newBrowserKey();
+const OTHER_KEY = newBrowserKey();
+/** The result of a valid proof of the key the sessions of these tests are bound to. */
+const OK_PROOF = { ok: true as const, proof: { jkt: KEY.jkt, jti: 'j'.repeat(20), iat: NOW / 1000 } };
+/** The events a unit test finds in the proof audit. */
+const dpopRecorder = (): { events: DpopRejectedEvent[]; audit: (event: DpopRejectedEvent) => Promise<void> } => {
+  const events: DpopRejectedEvent[] = [];
+  return { events, audit: (event) => Promise.resolve(void events.push(event)) };
+};
 
 /** An object that throws when a method nobody planned for is called. */
 function fake<T extends object>(planned: Partial<T>): T {
@@ -80,6 +92,7 @@ const session = (overrides: Partial<Session> = {}): Session => ({
   ip: null,
   revokedAt: null,
   revokeReason: null,
+  jkt: KEY.jkt,
   ...overrides,
 });
 
@@ -135,6 +148,7 @@ describe('AuthService: paths a race or a missing address can reach', () => {
   const config = { refreshReuseGraceSeconds: 30, accessTokenTtlSeconds: 900, refreshIdleTtlSeconds: 86_400, sessionMaxTtlSeconds: 172_800, legacyPasswordPepper: pepper };
   const build = (planned: Partial<AuthServiceDeps>) => {
     const activityLog = memoryActivityLog();
+    const dpop = dpopRecorder();
     const service = createAuthService({
       config,
       users: fakeUsers({}),
@@ -142,15 +156,16 @@ describe('AuthService: paths a race or a missing address can reach', () => {
       sessions: fakeSessions({}),
       groups: available,
       activityLog,
+      dpopAudit: dpop.audit,
       now: () => NOW,
       ...planned,
     } as AuthServiceDeps);
-    return { service, activityLog };
+    return { service, activityLog, dpop: dpop.events };
   };
 
   it('logs a refused login without an address when the request has none', async () => {
     const { service, activityLog } = build({ users: fakeUsers({ findByUsernameForLogin: () => Promise.resolve(null) }) });
-    await assert.rejects(service.login({ username: 'nobody', password: 'x' }, CLIENT), { code: 'INVALID_CREDENTIALS' });
+    await assert.rejects(service.login({ username: 'nobody', password: 'x', jkt: KEY.jkt }, CLIENT), { code: 'INVALID_CREDENTIALS' });
     assert.equal('ip' in activityLog.entries[0]!, false);
   });
 
@@ -160,7 +175,7 @@ describe('AuthService: paths a race or a missing address can reach', () => {
       sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve({ kind: 'current' as const, session: current }), revoke: () => Promise.resolve(false) }),
       users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord({ status: 'disabled' })) }),
     });
-    await assert.rejects(service.refresh(`fc_rt_${'A'.repeat(43)}`, CLIENT), { code: 'UNAUTHENTICATED' });
+    await assert.rejects(service.refresh(`fc_rt_${'A'.repeat(43)}`, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
     assert.deepEqual(activityLog.entries, []);
   });
 
@@ -173,9 +188,9 @@ describe('AuthService: paths a race or a missing address can reach', () => {
       sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve(lookups.shift()!), rotate: () => Promise.resolve(rotated), revoke: () => Promise.resolve(true) }),
       users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }),
     });
-    const issued = await service.refresh(token, CLIENT);
+    const issued = await service.refresh(token, OK_PROOF, CLIENT);
     assert.equal(issued.sessionId, current.id.toHexString());
-    await assert.rejects(service.refresh(token, CLIENT), { code: 'UNAUTHENTICATED' });
+    await assert.rejects(service.refresh(token, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
     assert.deepEqual(activityLog.entries.map((entry) => [entry.action, 'ip' in entry]), [['auth.refreshed', false], ['auth.refreshReuseDetected', false]]);
   });
 
@@ -195,14 +210,14 @@ describe('AuthService: paths a race or a missing address can reach', () => {
 
   it('treats a lost rotation race as a retry when the other request just rotated the latest token', async () => {
     const { service, activityLog } = raceBuild([{ kind: 'current', session: current() }, rotated({})], true);
-    await assert.rejects(service.refresh(token, CLIENT), { code: 'UNAUTHENTICATED' });
+    await assert.rejects(service.refresh(token, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
     assert.deepEqual(activityLog.entries.map((entry) => [entry.action, entry.outcome, entry.groupId?.toHexString()]), [['auth.refreshRaceTolerated', 'denied', GROUP_ID.toHexString()]]);
   });
 
   it('refuses without events when the lost race left the session revoked, missing or still current', async () => {
     for (const second of [null, { kind: 'rotated', latest: true, session: session({ revokedAt: new Date(NOW) }) }, { kind: 'current', session: current() }]) {
       const { service, activityLog } = raceBuild([{ kind: 'current', session: current() }, second], true);
-      await assert.rejects(service.refresh(token, CLIENT), { code: 'UNAUTHENTICATED' });
+      await assert.rejects(service.refresh(token, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
       assert.deepEqual(activityLog.entries, []);
     }
   });
@@ -218,7 +233,7 @@ describe('AuthService: paths a race or a missing address can reach', () => {
     ];
     for (const [label, found, grace, expected] of cases) {
       const { service, activityLog } = raceBuild([found], true, grace);
-      await assert.rejects(service.refresh(token, CLIENT), { code: 'UNAUTHENTICATED' });
+      await assert.rejects(service.refresh(token, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
       assert.deepEqual(activityLog.entries.map((entry) => entry.action), expected, label);
     }
   });
@@ -228,14 +243,65 @@ describe('AuthService: paths a race or a missing address can reach', () => {
       sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve(rotated({}, false)), revoke: () => Promise.resolve(true) }),
       users: fakeUsers({ findAuthRecord: () => Promise.resolve(null) }),
     });
-    await assert.rejects(service.refresh(token, CLIENT), { code: 'UNAUTHENTICATED' });
+    await assert.rejects(service.refresh(token, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
     assert.deepEqual(activityLog.entries.map((entry) => [entry.action, entry.groupId]), [['auth.refreshReuseDetected', undefined]]);
   });
 
   it('reports a reuse only when this request is the one that revoked the session', async () => {
     const { service, activityLog } = raceBuild([rotated({}, false)], false);
-    await assert.rejects(service.refresh(token, CLIENT), { code: 'UNAUTHENTICATED' });
+    await assert.rejects(service.refresh(token, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
     assert.deepEqual(activityLog.entries, []);
+  });
+
+  const BAD_PROOF = { ok: false as const, reason: 'claims' as const };
+  const MISMATCH_PROOF = { ok: true as const, proof: { ...OK_PROOF.proof, jkt: OTHER_KEY.jkt } };
+
+  it('answers INVALID_DPOP_PROOF to a refused proof and records it only for a live session, with the user when he exists', async () => {
+    const live = session();
+    const cases: Array<[string, unknown, boolean]> = [['unknown token', null, false], ['revoked session', { kind: 'current', session: session({ revokedAt: new Date(NOW) }) }, false], ['live session', { kind: 'current', session: live }, true], ['rotated token of a live session', rotated({}), true]];
+    for (const [label, found, recorded] of cases) {
+      const { service, dpop, activityLog } = build({ sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve(found as never) }), users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }) });
+      await assert.rejects(service.refresh(token, BAD_PROOF, CLIENT), { code: 'INVALID_DPOP_PROOF' }, label);
+      assert.deepEqual(dpop.map((event) => [event.reason, event.source, event.userId.toHexString(), event.actor.role, event.groupId?.toHexString()]), recorded ? [['claims', 'refresh', USER_ID.toHexString(), 'SA', GROUP_ID.toHexString()]] : [], label);
+      assert.deepEqual(activityLog.entries, [], label);
+    }
+  });
+
+  it('records a refused proof of a live session whose user no longer exists, without role or group', async () => {
+    const { service, dpop } = build({ sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve({ kind: 'current', session: session() }) }), users: fakeUsers({ findAuthRecord: () => Promise.resolve(null) }) });
+    await assert.rejects(service.refresh(token, BAD_PROOF, CLIENT), { code: 'INVALID_DPOP_PROOF' });
+    assert.deepEqual(dpop.map((event) => [event.actor, 'groupId' in event]), [[{ kind: 'user', id: USER_ID }, false]]);
+  });
+
+  it('revokes a session without a key at its first refresh, with no proof event', async () => {
+    const revoked: string[] = [];
+    const { service, dpop, activityLog } = build({
+      sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve({ kind: 'current', session: session({ jkt: null }) }), revoke: (_id: ObjectId, reason: string) => Promise.resolve((revoked.push(reason), true)) }),
+      users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }),
+    });
+    await assert.rejects(service.refresh(token, OK_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
+    assert.deepEqual([revoked, dpop, activityLog.entries.map((entry) => [entry.action, entry.metadata])], [['dpopUnbound'], [], [['session.revoked', { reason: 'dpopUnbound' }]]]);
+  });
+
+  it('revokes the family on a proof of another key, for the current token and for a rotated one, before the grace period and the rotation', async () => {
+    for (const found of [{ kind: 'current', session: session() }, rotated({})]) {
+      const revoked: string[] = [];
+      const { service, dpop, activityLog } = build({
+        sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve(found as never), revoke: (_id: ObjectId, reason: string) => Promise.resolve((revoked.push(reason), true)) }),
+        users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }),
+      });
+      await assert.rejects(service.refresh(token, MISMATCH_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
+      assert.deepEqual([revoked, dpop.map((event) => [event.reason, event.source]), activityLog.entries.map((entry) => entry.action)], [['dpopKeyMismatch'], [['keyMismatch', 'refresh']], ['session.revoked']]);
+    }
+  });
+
+  it('records nothing for a key mismatch when another request revoked the family first', async () => {
+    const { service, dpop, activityLog } = build({
+      sessions: fakeSessions({ findByRefreshHash: () => Promise.resolve({ kind: 'current', session: session() }), revoke: () => Promise.resolve(false) }),
+      users: fakeUsers({ findAuthRecord: () => Promise.resolve(null) }),
+    });
+    await assert.rejects(service.refresh(token, MISMATCH_PROOF, CLIENT), { code: 'UNAUTHENTICATED' });
+    assert.deepEqual([dpop.length, activityLog.entries], [0, []]);
   });
 
   it('logs nothing when there was nothing to end, and still empties the legacy tokens', async () => {
@@ -263,11 +329,12 @@ describe('AuthService: paths a race or a missing address can reach', () => {
   });
 });
 
-describe('Bearer authentication: paths a race or an incident can reach', () => {
+describe('DPoP authentication: paths a race or an incident can reach', () => {
   const token = `fc_at_${'A'.repeat(43)}`;
   const build = (planned: Partial<AuthenticateDeps>) => {
     const { logger, events } = memoryLogger();
     const activityLog = memoryActivityLog();
+    const dpop = dpopRecorder();
     const handler = createAuthenticate({
       sessions: fakeSessions({}),
       users: fakeUsers({}),
@@ -276,16 +343,23 @@ describe('Bearer authentication: paths a race or an incident can reach', () => {
       scope: fake<AuthenticateDeps['scope']>({}),
       activityLog,
       logger,
+      dpopAudit: dpop.audit,
+      apiPublicBaseUrl: TEST_API_PUBLIC_BASE_URL,
       now: () => NOW,
       ...planned,
     } as AuthenticateDeps);
-    const run = async () => {
+    const run = async (extra: Record<string, string | undefined> = {}, proofKey = KEY) => {
       const res = { locals: { requestId: 'req-12345678' } };
       let proceeded = false;
-      await handler({ get: (name: string) => (name === 'authorization' ? `Bearer ${token}` : undefined), ip: '127.0.0.1' } as never, res as never, () => void (proceeded = true));
+      const headers: Record<string, string | undefined> = {
+        authorization: `DPoP ${token}`,
+        dpop: signProof(proofKey, { method: 'GET', path: '/v1/me', iat: NOW / 1000, accessToken: token }),
+        ...extra,
+      };
+      await handler({ get: (name: string) => headers[name], method: 'GET', originalUrl: '/v1/me?x=1', ip: '127.0.0.1' } as never, res as never, () => void (proceeded = true));
       return { res, proceeded };
     };
-    return { run, events, activityLog };
+    return { run, events, activityLog, dpop: dpop.events };
   };
 
   it('does not fail the request when updating the last use fails, and logs it', async () => {
@@ -328,6 +402,62 @@ describe('Bearer authentication: paths a race or an incident can reach', () => {
     });
     await assert.rejects(run(), { code: 'UNAUTHENTICATED' });
     assert.deepEqual(activityLog.entries, []);
+  });
+
+  const eventsOf = (dpop: DpopRejectedEvent[]) => dpop.map((event) => [event.reason, event.source, event.actor.role, event.groupId?.toHexString(), event.sessionId.toString().length]);
+
+  it('answers INVALID_DPOP_PROOF whatever the token is, and records it only for a live session', async () => {
+    const cases: Array<[string, import('../../src/modules/sessions/sessions.repository.ts').Session | null, boolean]> = [['unknown', null, false], ['revoked', session({ revokedAt: new Date(NOW) }), false], ['live', session(), true]];
+    for (const [label, found, recorded] of cases) {
+      const { run, dpop } = build({ sessions: fakeSessions({ findByAccessHash: () => Promise.resolve(found) }), users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }) });
+      await assert.rejects(run({ dpop: undefined }), { code: 'INVALID_DPOP_PROOF', headers: { 'WWW-Authenticate': 'DPoP algs="ES256"' } }, label);
+      assert.equal(dpop.length, recorded ? 1 : 0, label);
+    }
+  });
+
+  it('records a refused proof with the role and the group of the user, or without them when the user is gone', async () => {
+    const known = build({ sessions: fakeSessions({ findByAccessHash: () => Promise.resolve(session()) }), users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }) });
+    await assert.rejects(known.run({ dpop: 'junk' }), { code: 'INVALID_DPOP_PROOF' });
+    assert.deepEqual(eventsOf(known.dpop).map((row) => row.slice(0, 4)), [['malformed', 'api', 'SA', GROUP_ID.toHexString()]]);
+    const gone = build({ sessions: fakeSessions({ findByAccessHash: () => Promise.resolve(session()) }), users: fakeUsers({ findAuthRecord: () => Promise.resolve(null) }) });
+    await assert.rejects(gone.run({ dpop: 'junk' }), { code: 'INVALID_DPOP_PROOF' });
+    assert.deepEqual(gone.dpop.map((event) => [event.actor, 'groupId' in event]), [[{ kind: 'user', id: USER_ID }, false]]);
+  });
+
+  it('refuses a scheme other than DPoP with no lookup at all', async () => {
+    const { run } = build({});
+    for (const authorization of [undefined, `Bearer ${token}`, `DPoP${token}`, 'DPoP ', `DPoP ${token} x`]) {
+      await assert.rejects(run({ authorization }), { code: 'UNAUTHENTICATED' }, String(authorization));
+    }
+  });
+
+  it('revokes a session without a key (no proof event) and the family of a foreign key (with it, also without a user)', async () => {
+    const revoked: string[] = [];
+    const sessions = (found: Session) => fakeSessions({ findByAccessHash: () => Promise.resolve(found), revoke: (_id: ObjectId, reason: string) => Promise.resolve((revoked.push(reason), true)) });
+    const unbound = build({ sessions: sessions(session({ jkt: null })), users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }) });
+    await assert.rejects(unbound.run(), { code: 'UNAUTHENTICATED' });
+    assert.deepEqual([unbound.dpop.length, unbound.activityLog.entries.map((entry) => entry.metadata)], [0, [{ reason: 'dpopUnbound' }]]);
+    const stolen = build({ sessions: sessions(session()), users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }) });
+    await assert.rejects(stolen.run({}, OTHER_KEY), { code: 'UNAUTHENTICATED' });
+    assert.deepEqual([stolen.dpop.map((event) => event.reason), stolen.activityLog.entries.map((entry) => entry.metadata)], [['keyMismatch'], [{ reason: 'dpopKeyMismatch' }]]);
+    assert.deepEqual(revoked, ['dpopUnbound', 'dpopKeyMismatch']);
+    const orphan = build({ sessions: sessions(session()), users: fakeUsers({ findAuthRecord: () => Promise.resolve(null) }) });
+    await assert.rejects(orphan.run({}, OTHER_KEY), { code: 'UNAUTHENTICATED' });
+    assert.equal('groupId' in orphan.activityLog.entries[0]!, false);
+  });
+
+  it('writes neither the revocation nor the theft event of a key mismatch another request already handled', async () => {
+    const { run, dpop, activityLog } = build({ sessions: fakeSessions({ findByAccessHash: () => Promise.resolve(session()), revoke: () => Promise.resolve(false) }), users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }) });
+    await assert.rejects(run({}, OTHER_KEY), { code: 'UNAUTHENTICATED' });
+    assert.deepEqual([dpop.length, activityLog.entries], [0, []]);
+  });
+
+  it('answers TOKEN_EXPIRED only to a valid proof of the key of the session', async () => {
+    const expired = session({ accessExpiresAt: new Date(NOW - 1) });
+    const { run } = build({ sessions: fakeSessions({ findByAccessHash: () => Promise.resolve(expired), revoke: () => Promise.resolve(true) }), users: fakeUsers({ findAuthRecord: () => Promise.resolve(authRecord()) }) });
+    await assert.rejects(run(), { code: 'TOKEN_EXPIRED' });
+    await assert.rejects(run({ dpop: 'junk' }), { code: 'INVALID_DPOP_PROOF' });
+    await assert.rejects(run({}, OTHER_KEY), { code: 'UNAUTHENTICATED' });
   });
 
   it('hashes the presented token before looking it up', async () => {

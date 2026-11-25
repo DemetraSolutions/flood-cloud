@@ -205,7 +205,7 @@ describe('e-mail templates: creation', () => {
   it('refuses a body over the limit with 413 and a body that is not JSON with 415', async () => {
     const big = await call(sa(), 'POST', base(), { name: 'x', html: 'a'.repeat(2 * 1024 * 1024) });
     assert.equal(failure(big).status, 413);
-    const text = await fetch(`${world.office.app.baseUrl}/v1${base()}`, { method: 'POST', headers: { authorization: `Bearer ${await world.as.tokenOf(sa())}`, 'content-type': 'text/plain', 'idempotency-key': randomUUID() }, body: 'x' });
+    const text = await fetch(`${world.office.app.baseUrl}/v1${base()}`, { method: 'POST', headers: { ...world.office.userHeaders('POST', base(), await world.as.tokenOf(sa())), 'content-type': 'text/plain', 'idempotency-key': randomUUID() }, body: 'x' });
     assert.equal(text.status, 415);
   });
 });

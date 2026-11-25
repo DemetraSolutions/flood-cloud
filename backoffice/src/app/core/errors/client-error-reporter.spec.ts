@@ -65,6 +65,19 @@ describe('ClientErrorReporter', () => {
     expect(JSON.stringify(body)).not.toContain('665f1c2e9b1d4a0012ab34a1');
   });
 
+  it('never reports an HTTP failure, so the headers and proofs of the request stay out', () => {
+    const reporter = setup();
+    reporter.report(
+      new HttpErrorResponse({
+        status: 401,
+        url: `${API}/v1/things`,
+        headers: undefined,
+        error: { header: 'DPoP eyJ0eXAiOiJkcG9wK2p3dCJ9.e30.c2ln' },
+      }),
+    );
+    backend().expectNone(URL);
+  });
+
   it('truncates the message and the stack and reports the root route as /', () => {
     const reporter = setup();
     const error = new Error('x'.repeat(MAX_MESSAGE_LENGTH + 50));

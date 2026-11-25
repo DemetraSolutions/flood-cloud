@@ -239,16 +239,25 @@ describe('POST /v1/auth/refresh', () => {
   });
 });
 
-describe('Bearer authentication', () => {
-  it('refuses a missing, malformed or wrongly prefixed credential with the same 401', async () => {
+describe('DPoP authentication', () => {
+  it('refuses a missing, malformed or wrongly prefixed credential with the same 401, with no lookup and no proof needed', async () => {
     const { name } = await addUser();
     const own = await office.tokens(name);
-    const bad = [undefined, 'Basic abc', 'Bearer', 'Bearer ', `Bearer  ${own.accessToken}`, `Token ${own.accessToken}`, `Bearer ${own.refreshToken}`, 'Bearer fc_at_short', `Bearer ${own.accessToken}x`, `Bearer ${own.accessToken} extra`, `Bearer fc_at_${'A'.repeat(43)}`];
+    const bad = [undefined, 'Basic abc', 'DPoP', 'DPoP ', `DPoP  ${own.accessToken}`, `Token ${own.accessToken}`, `DPoP ${own.accessToken} extra`, `Bearer ${own.accessToken}`, `Bearer fc_at_${'A'.repeat(43)}`];
     for (const header of bad) {
-      const response = await fetch(`${office.app.baseUrl}/v1/me`, { headers: header === undefined ? {} : { authorization: header } });
+      const response = await fetch(`${office.app.baseUrl}/v1/me`, { headers: header === undefined ? {} : { ...office.userHeaders('GET', '/me', own.accessToken), authorization: header } });
       assert.deepEqual(await errorOf(response), [401, 'UNAUTHENTICATED'], String(header));
     }
-    assert.equal((await fetch(`${office.app.baseUrl}/v1/me`, { headers: { authorization: `bearer ${own.accessToken}` } })).status, 200);
+  });
+
+  it('refuses a token that is not the current access token of a session, with a valid proof bound to what was presented', async () => {
+    const { name } = await addUser();
+    const own = await office.tokens(name);
+    for (const token of [own.refreshToken, 'fc_at_short', `${own.accessToken}x`, `fc_at_${'A'.repeat(43)}`]) {
+      assert.deepEqual(await errorOf(await me(token)), [401, 'UNAUTHENTICATED'], token);
+    }
+    const lowercase = await fetch(`${office.app.baseUrl}/v1/me`, { headers: { ...office.userHeaders('GET', '/me', own.accessToken), authorization: `dpop ${own.accessToken}` } });
+    assert.equal(lowercase.status, 200);
   });
 
   it('tells an expired token apart, and the refresh then recovers', async () => {

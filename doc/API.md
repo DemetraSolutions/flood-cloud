@@ -54,7 +54,7 @@ Fuori dalle superfici API, per le sonde di GKE.
 
 ## Superficie backoffice — `/v1`
 
-> **Flusso di sessione.** Il login restituisce una coppia di token opachi: l'**access token** (`fc_at_…`, valido 15 minuti) va inviato in `Authorization: Bearer` e il client lo tiene **solo in memoria**; il **refresh token** (`fc_rt_…`) viaggia nel body, non in un cookie, e il client lo conserva in `sessionStorage`. Il client rinnova la coppia **solo quando riceve `401 TOKEN_EXPIRED`**, con **un'unica richiesta di refresh condivisa** tra le chiamate concorrenti, e poi ripete la chiamata originale; ogni altro `401` (`UNAUTHENTICATED`) porta al login. Ogni refresh **ruota** il refresh token: quello precedente non vale più. Un nuovo tentativo con il token appena sostituito, entro **30 secondi** dalla rotazione (risposta persa per la rete), è rifiutato con `401 UNAUTHENTICATED` ma **non** termina la sessione e la coppia già emessa resta valida; un riuso fuori da quella finestra, o di un token più vecchio, fa revocare l'intera sessione. Il logout revoca la sessione corrente (`/auth/logout`) o tutte quelle dell'utente (`/auth/logout-all`). Le scadenze non superano mai la durata massima della sessione.
+> **Flusso di sessione.** Il login restituisce una coppia di token opachi: l'**access token** (`fc_at_…`, valido 15 minuti) va inviato in `Authorization: DPoP fc_at_…` (mai `Bearer`, vedi la nota «Prova di possesso») e il client lo tiene **solo in memoria**; il **refresh token** (`fc_rt_…`) viaggia nel body, non in un cookie, e il client lo conserva in `sessionStorage`. Il client rinnova la coppia **solo quando riceve `401 TOKEN_EXPIRED`**, con **un'unica richiesta di refresh condivisa** tra le chiamate concorrenti, e poi ripete la chiamata originale; ogni altro `401` (`UNAUTHENTICATED`) porta al login. Ogni refresh **ruota** il refresh token: quello precedente non vale più. Un nuovo tentativo con il token appena sostituito, entro **30 secondi** dalla rotazione (risposta persa per la rete), è rifiutato con `401 UNAUTHENTICATED` ma **non** termina la sessione e la coppia già emessa resta valida; un riuso fuori da quella finestra, o di un token più vecchio, fa revocare l'intera sessione. Il logout revoca la sessione corrente (`/auth/logout`) o tutte quelle dell'utente (`/auth/logout-all`). Le scadenze non superano mai la durata massima della sessione.
 > **Password provvisoria.** Quando un amministratore crea l'utente o ne reimposta la password, il login risponde con `passwordChangeRequired: true` (come `GET /v1/me`). Finché la password non è cambiata, tutte le route con Bearer rispondono `403 PASSWORD_CHANGE_REQUIRED`, **tranne** `GET /v1/me`, `PUT /v1/me/password`, `POST /v1/auth/logout`, `POST /v1/auth/logout-all` e `POST /v1/client-errors`. Il client porta l'utente alla schermata di cambio password; dopo il cambio la sessione corrente resta valida e il flag torna `false`.
 > Le risposte che contengono token non sono mai compresse.
 > **Uso prolungato di `/v1` (per utente autenticato):** oltre al limite al minuto (`RATE_LIMIT_API_PER_USER`, 300), `/v1` ha un limite **orario** (`RATE_LIMIT_API_PER_USER_HOUR`, 2 000) e uno **giornaliero UTC** (`RATE_LIMIT_API_PER_USER_DAY`, 10 000), contati per id utente su ogni route `user` (non per la chiave di negozio, non per le route anonime, login e refresh). La modalità (`report` o `enforce`) si imposta dal backoffice (`sustainedLimits` in `GET/PUT /v1/settings/security-policy`, solo PSA): se il PSA non ha salvato nulla vale la variabile `RATE_LIMIT_API_SUSTAINED_MODE`; le soglie restano nelle variabili d'ambiente. Con `report` (default) il superamento **non** blocca: si registra una volta per utente e finestra l'evento di sicurezza `rateLimit.sustainedExceeded` (metadati `bucket`, `window` `hour`/`day`, `limit`, `mode`). Con `enforce` oltre soglia la risposta è `429 RATE_LIMITED` con `Retry-After` fino alla fine della finestra (il giorno se sono superate entrambe) e gli header `RateLimit-*` della finestra più vicina al limite. **PSA e D non sono mai bloccati** da questi due limiti, nemmeno con `enforce`: sono solo segnalati. Non sono mai rifiutate neppure `POST /v1/auth/logout`, `POST /v1/auth/logout-all`, `PUT /v1/me/password`, `PUT /v1/me/pin` e `DELETE /v1/me/sessions/{sessionId}` (contano, ma si possono sempre chiamare). Contano anche le richieste che la route poi rifiuta (`403`, `404`, `422`) e le `HEAD`, mai i preflight CORS. La finestra è fissa. Vincolo di configurazione: limite al minuto ≤ orario ≤ giornaliero. Chi ha bisogno di volumi alti dovrebbe usare le API pubbliche (`/public/v1`).
@@ -63,7 +63,16 @@ Fuori dalle superfici API, per le sonde di GKE.
 >
 > **Header comuni:** dove è applicato un rate limit la risposta porta `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` (secondi alla riapertura della finestra); oltre il limite `429 RATE_LIMITED` aggiunge `Retry-After` (secondi).
 > **Server di punto vendita.** L'app del negozio chiama le stesse route con una **chiave di negozio** (`Authorization: Bearer fc_sk_…`, sezione "Chiave di negozio" più sotto), ma solo quelle che la ammettono (oggi `GET /v1/store-context`, le tre di configurazione completa `GET /v1/store-context/group|company|place` e `GET /v1/store-context/countries` e `GET /v1/store-context/users` e le **quattordici del catalogo** `…/store-context/catalog/…` (sezione "Catalogo per il server di punto vendita"); il punto vendita si legge **solo** da `GET /v1/store-context/place`, il dettaglio `GET /v1/groups/{groupId}/places/{placeId}` non è aperto al negozio): ogni altra route risponde `403 FORBIDDEN` a una chiave di negozio. Una chiave valida con un punto vendita non operativo riceve `403 STORE_DISABLED`.
-> **Errori delle route con Bearer:** `401 UNAUTHENTICATED` (token assente, malformato, sconosciuto o revocato), `401 TOKEN_EXPIRED` (access token scaduto: il client esegue il refresh), `403 FORBIDDEN` (permesso mancante).
+> **Prova di possesso (DPoP, RFC 9449, D-33).** Ogni sessione è legata a una chiave ECDSA P-256 del browser. Il login, il refresh e **ogni** route utente di `/v1` (logout, cambio password e PIN compresi) richiedono l'header `DPoP`: un JWS compatto ES256 di al massimo 2 KB, un solo header.
+> - **Header JOSE:** solo `typ: "dpop+jwt"`, `alg: "ES256"` e `jwk` con i soli `kty: "EC"`, `crv: "P-256"`, `x`, `y` (mai la parte privata). Firma IEEE P1363 (r‖s, 64 byte), come la produce WebCrypto.
+> - **Claim:** `htm` (metodo della richiesta), `htu` (URL pubblico dell'API più il percorso, senza query né frammento: es. `https://api.example.test/api/v1/me`), `iat` (secondi interi, entro ±60 s dall'ora del server), `jti` (16–64 caratteri base64url, casuale); `ath` = base64url(SHA-256(access token)) sulle route utente; `rth` = base64url(SHA-256(refresh token)) sul refresh; né `ath` né `rth` al login. Nessun altro claim (anche `nonce` è rifiutato).
+> - **Legame:** al login il server lega la sessione alla chiave della prova; ogni richiesta e ogni refresh successivi devono essere firmati dalla stessa chiave. Un token valido presentato con la prova di un'altra chiave **revoca l'intera sessione** (`401 UNAUTHENTICATED`). Una sessione creata prima di D-33 è revocata al primo uso.
+> - **Orologio:** il client calcola lo scarto dall'header `Date` delle risposte (esposto via CORS) e lo applica a `iat`; a `INVALID_DPOP_PROOF` si riallinea e ripete una sola volta.
+>
+> **Errori delle route utente:** `401 UNAUTHENTICATED` (`Authorization` assente o non `DPoP`, token malformato, sconosciuto o revocato, chiave diversa da quella della sessione), `401 INVALID_DPOP_PROOF` (prova assente o non valida; risposta con `WWW-Authenticate: DPoP algs="ES256"`, messaggio fisso, nessun dettaglio sul controllo fallito; ha la precedenza su `TOKEN_EXPIRED`), `401 TOKEN_EXPIRED` (access token scaduto con prova valida: il client esegue il refresh), `403 FORBIDDEN` (permesso mancante).
+> ```json
+> { "error": { "code": "INVALID_DPOP_PROOF", "message": "Invalid proof of possession" } }
+> ```
 
 ### POST /v1/auth/login
 - **Superficie:** backoffice
@@ -73,6 +82,7 @@ Fuori dalle superfici API, per le sonde di GKE.
   |---|---|---|---|
   | `username` | stringa | sì | 1–1024 caratteri, usato esattamente come inviato (nessun trim) |
   | `password` | stringa | sì | 1–1024 caratteri, usata esattamente come inviata |
+- **Header obbligatorio:** `DPoP` con una prova senza `ath` né `rth`, verificata **prima** delle credenziali (la chiave della prova viene legata alla sessione)
 - **Header particolari:** `RateLimit-*` (limiti per IP e per username)
 - **Risposta:** `200` (`passwordChangeRequired` è `true` se l'utente ha una password provvisoria da cambiare; solo il login lo restituisce, non il refresh)
   ```json
@@ -92,6 +102,7 @@ Fuori dalle superfici API, per le sonde di GKE.
     ```json
     { "error": { "code": "INVALID_CREDENTIALS", "message": "Invalid credentials" } }
     ```
+  - `401 INVALID_DPOP_PROOF`: prova assente o non valida (le credenziali non vengono nemmeno verificate)
   - `422 VALIDATION_ERROR` (campo mancante, di tipo errato o proprietà sconosciuta), `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`
   - `429 RATE_LIMITED` con `Retry-After`
 
@@ -102,6 +113,7 @@ Fuori dalle superfici API, per le sonde di GKE.
   | Campo | Tipo | Obbligatorio | Vincoli |
   |---|---|---|---|
   | `refreshToken` | stringa | sì | massimo 256 caratteri; il formato è verificato dal server |
+- **Header obbligatorio:** `DPoP` firmato dalla chiave della sessione, con `rth` del refresh token inviato
 - **Header particolari:** `RateLimit-*` (limite per IP)
 - **Risposta:** `200`, stessa forma del login (nuova coppia di token; il refresh token precedente non vale più)
   ```json
@@ -116,7 +128,8 @@ Fuori dalle superfici API, per le sonde di GKE.
   }
   ```
 - **Errori:**
-  - `401 UNAUTHENTICATED`: token malformato, sconosciuto, scaduto o revocato; sessione oltre la durata massima; utente o gruppo non più ammessi (la sessione viene revocata); token già ruotato (vedi la nota sul flusso)
+  - `401 INVALID_DPOP_PROOF`: prova assente o non valida; il refresh token non viene consumato
+  - `401 UNAUTHENTICATED`: token malformato, sconosciuto, scaduto o revocato; sessione oltre la durata massima; utente o gruppo non più ammessi (la sessione viene revocata); token già ruotato (vedi la nota sul flusso); prova di una chiave diversa da quella della sessione (la sessione viene revocata, anche entro i 30 secondi di tolleranza)
   - `422 VALIDATION_ERROR`, `400 MALFORMED_JSON`, `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`
   - `429 RATE_LIMITED` con `Retry-After`
 

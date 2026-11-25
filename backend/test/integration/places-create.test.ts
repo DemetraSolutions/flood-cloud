@@ -240,7 +240,7 @@ describe('POST /v1/groups/{groupId}/places', () => {
     const token = await world.as.tokenOf(world.office.cluster.dealerA);
     const large = await world.office.call('POST', world.placePath(0), token, body({ name: 'x'.repeat(300_000) }));
     assert.equal(large.status, 413);
-    const text = await fetch(`${world.office.app.baseUrl}/v1${world.placePath(0)}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'text/plain' }, body: 'x' });
+    const text = await fetch(`${world.office.app.baseUrl}/v1${world.placePath(0)}`, { method: 'POST', headers: { ...world.office.userHeaders('POST', world.placePath(0), token), 'content-type': 'text/plain' }, body: 'x' });
     assert.equal(text.status, 415);
     assert.equal(await ctx.databases.common().collection('places').countDocuments({ name: /^xxx/ }), 0);
   });

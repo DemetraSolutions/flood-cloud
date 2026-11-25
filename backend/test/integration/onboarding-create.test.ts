@@ -354,7 +354,7 @@ describe('POST /v1/groups: refusals', () => {
     const big = onboardingBody({ group: { name: 'G'.repeat(40_000) } });
     assert.equal((await call(psa(), 'POST', '/groups', big)).status, 413);
     const token = await world.as.tokenOf(psa());
-    const response = await fetch(`${world.office.app.baseUrl}/v1/groups`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'text/plain', 'idempotency-key': randomUUID() }, body: 'x' });
+    const response = await fetch(`${world.office.app.baseUrl}/v1/groups`, { method: 'POST', headers: { ...world.office.userHeaders('POST', '/groups', token), 'content-type': 'text/plain', 'idempotency-key': randomUUID() }, body: 'x' });
     assert.equal(response.status, 415);
   });
 });
@@ -363,7 +363,7 @@ describe('POST /v1/groups: idempotency', () => {
   it('needs the Idempotency-Key (422 required, 422 format)', async () => {
     const token = await world.as.tokenOf(psa());
     const send = (headers: Record<string, string>) =>
-      fetch(`${world.office.app.baseUrl}/v1/groups`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...headers }, body: JSON.stringify(onboardingBody({ group: { name: 'Senza chiave' } })) });
+      fetch(`${world.office.app.baseUrl}/v1/groups`, { method: 'POST', headers: { ...world.office.userHeaders('POST', '/groups', token), 'content-type': 'application/json', ...headers }, body: JSON.stringify(onboardingBody({ group: { name: 'Senza chiave' } })) });
     const missing = await send({});
     assert.deepEqual([missing.status, ((await missing.json()) as { error: { details: unknown } }).error.details], [422, [{ field: 'Idempotency-Key', issue: 'required' }]]);
     const bad = await send({ 'idempotency-key': 'not-a-uuid' });
@@ -520,7 +520,7 @@ describe('POST /v1/groups: what stays behind', () => {
     const raw = (fragment: string) => `{"group":{"name":"G","features":${fragment}},"company":${JSON.stringify(company)},"place":{"name":"P"},"user":{"username":"x.y.z","password":"Aaaaaaaaaaaa1"},"taxes":[{"rate":1,"department":1}]}`;
     const token = await world.as.tokenOf(psa());
     const post = async (payload: string) =>
-      (await fetch(`${world.office.app.baseUrl}/v1/groups`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': randomUUID() }, body: payload })).json() as Promise<{ error: { details: Array<{ field: string; issue: string }> } }>;
+      (await fetch(`${world.office.app.baseUrl}/v1/groups`, { method: 'POST', headers: { ...world.office.userHeaders('POST', '/groups', token), 'content-type': 'application/json', 'idempotency-key': randomUUID() }, body: payload })).json() as Promise<{ error: { details: Array<{ field: string; issue: string }> } }>;
     assert.deepEqual((await post(raw('{"a.b":true}'))).error.details, [{ field: 'group.features.(key)', issue: 'forbiddenKey' }]);
     assert.deepEqual((await post(raw('{"__proto__":{"x":1}}'))).error.details.map((detail) => detail.issue), ['forbiddenKey']);
     assert.deepEqual((await post(raw('{}').replace('"province":"MI"', '"province":"MI","$where":"1"'))).error.details, [{ field: 'company.address.(key)', issue: 'forbiddenKey' }]);

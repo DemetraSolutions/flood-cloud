@@ -16,12 +16,23 @@ import { ApiError } from '../api/api-error';
 import { I18nService } from '../i18n/i18n.service';
 import { ToastService } from '../../shared/ui/toast/toast.service';
 import { installFakeLocks, FakeLocks } from '../../../testing/locks';
+import { DPOP_KEY_RECORDS } from './dpop-key-store';
+import { MemoryKeyRecords, sharedKeyPair } from '../../../testing/dpop';
 import { SessionService } from './session.service';
+
+const keyRecords = () => TestBed.inject(DPOP_KEY_RECORDS) as MemoryKeyRecords;
 
 const SESSION_ID = '665f1c2e9b1d4a0012ab34cd';
 
 function setup() {
   TestBed.configureTestingModule({ providers: provideApiTesting() });
+  if (sessionStorage.getItem('fc.session') !== null) {
+    keyRecords().map.set(SESSION_ID, {
+      sessionId: SESSION_ID,
+      keyPair: sharedKeyPair,
+      createdAt: Date.now(),
+    });
+  }
   const router = TestBed.inject(Router);
   const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
   const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
@@ -33,6 +44,7 @@ function setup() {
 async function signedIn(profile = fakeProfile()) {
   const ctx = setup();
   const done = ctx.session.login('mario.rossi', 'Secret-1234');
+  await settle();
   backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
   await settle();
   backend().expectOne(`${API}/v1/me`).flush({ data: profile });
@@ -114,6 +126,7 @@ describe('SessionService', () => {
       sessionStorage.setItem('fc.lastGroupId', '665f1c2e9b1d4a0012ab34a1');
       sessionStorage.setItem('fc.lastGroupName', 'Left by an earlier session');
       const done = session.login('mario.rossi', 'Secret-1234');
+      await settle();
       const login = backend().expectOne(`${API}/v1/auth/login`);
       expect(sessionStorage.getItem('fc.lastGroupId')).not.toBeNull();
       expect(login.request.method).toBe('POST');
@@ -122,7 +135,7 @@ describe('SessionService', () => {
       login.flush(tokenBody(1, { passwordChangeRequired: false }));
       await settle();
       const me = backend().expectOne(`${API}/v1/me`);
-      expect(me.request.headers.get('Authorization')).toBe('Bearer fc_at_1');
+      expect(me.request.headers.get('Authorization')).toBe('DPoP fc_at_1');
       me.flush({ data: fakeProfile() });
       await done;
       expect(session.status()).toBe('authenticated');
@@ -156,6 +169,7 @@ describe('SessionService', () => {
     it('rejects wrong credentials and leaves nothing behind', async () => {
       const { session } = setup();
       const done = session.login('mario.rossi', 'wrong');
+      await settle();
       failRequest(backend(), '/v1/auth/login', 'INVALID_CREDENTIALS');
       await expect(done).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
       expect(session.bearerToken()).toBeNull();
@@ -181,6 +195,7 @@ describe('SessionService', () => {
     ])('rejects a response with %s', async (_label, body) => {
       const { session } = setup();
       const done = session.login('u', 'p');
+      await settle();
       backend().expectOne(`${API}/v1/auth/login`).flush(body);
       await expect(done).rejects.toThrow('Unexpected authentication response');
       expect(session.bearerToken()).toBeNull();
@@ -190,12 +205,13 @@ describe('SessionService', () => {
     it('ends the session when the profile cannot be loaded', async () => {
       const { session } = setup();
       const done = session.login('u', 'p');
+      await settle();
       backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
       await settle();
       failRequest(backend(), '/v1/me', 'INTERNAL_ERROR');
       await settle();
       const logout = backend().expectOne(`${API}/v1/auth/logout`);
-      expect(logout.request.headers.get('Authorization')).toBe('Bearer fc_at_1');
+      expect(logout.request.headers.get('Authorization')).toBe('DPoP fc_at_1');
       logout.flush(null, { status: 204, statusText: 'No Content' });
       await expect(done).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
       expect(session.status()).toBe('anonymous');
@@ -207,6 +223,7 @@ describe('SessionService', () => {
   it('logs only "unexpected" when revoking a half-open login fails oddly', async () => {
     const { session } = setup();
     const done = session.login('u', 'p');
+    await settle();
     backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
     await settle();
     vi.spyOn(TestBed.inject(HttpClient), 'post').mockReturnValue(throwError(() => new Error('x')));
@@ -372,7 +389,7 @@ describe('SessionService', () => {
       const done = session.logout();
       const request = backend().expectOne(`${API}/v1/auth/logout`);
       expect(request.request.method).toBe('POST');
-      expect(request.request.headers.get('Authorization')).toBe('Bearer fc_at_1');
+      expect(request.request.headers.get('Authorization')).toBe('DPoP fc_at_1');
       request.flush(null, { status: 204, statusText: 'No Content' });
       await done;
       expect(session.status()).toBe('anonymous');
@@ -464,7 +481,7 @@ describe('SessionService', () => {
       refresh.flush(tokenBody(7));
       await settle();
       const me = backend().expectOne(`${API}/v1/me`);
-      expect(me.request.headers.get('Authorization')).toBe('Bearer fc_at_7');
+      expect(me.request.headers.get('Authorization')).toBe('DPoP fc_at_7');
       me.flush({ data: fakeProfile() });
       await done;
       expect(session.status()).toBe('authenticated');
@@ -627,6 +644,7 @@ describe('SessionService', () => {
     it('swaps the lock when a new session starts', async () => {
       const { session } = await signedIn();
       const done = session.login('u', 'p');
+      await settle();
       backend()
         .expectOne(`${API}/v1/auth/login`)
         .flush(tokenBody(2, { sessionId: 'other-session' }));
@@ -660,6 +678,66 @@ describe('SessionService', () => {
       expect(sessionStorage.getItem('fc.session')).toBeNull();
     });
 
+    it('lets only one of two tabs restoring the same session at once own it', async () => {
+      store();
+      const winner = setup().session;
+      const loser = TestBed.runInInjectionContext(() => new SessionService());
+      const done = Promise.all([winner.restore(), loser.restore()]);
+      await settle();
+      backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(7));
+      await settle();
+      backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+      await done;
+      expect(winner.status()).toBe('authenticated');
+      expect(loser.status()).toBe('anonymous');
+      expect(keyRecords().map.has(SESSION_ID)).toBe(true);
+      expect(locks.held.has(name)).toBe(true);
+      // The loser ending its (empty) session must not delete the key the winner uses.
+      loser.expire();
+      await settle();
+      expect(keyRecords().map.has(SESSION_ID)).toBe(true);
+      expect(locks.held.has(name)).toBe(true);
+    });
+
+    it('releases the lock taken at restore when the session expires', async () => {
+      store();
+      const { session } = setup();
+      const done = session.restore();
+      await settle();
+      backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(7));
+      await settle();
+      backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+      await done;
+      session.expire();
+      await settle();
+      expect(locks.held.size).toBe(0);
+    });
+
+    it('releases the lock taken at restore when the browser key is missing', async () => {
+      store();
+      const { session } = setup();
+      keyRecords().map.clear();
+      await session.restore();
+      await settle();
+      expect(session.status()).toBe('anonymous');
+      expect(locks.held.size).toBe(0);
+    });
+
+    it('proceeds as the owner, warning, when the lock request fails at restore', async () => {
+      locks.uninstall();
+      locks = installFakeLocks({ failRequests: true });
+      store();
+      const { session } = setup();
+      const done = session.restore();
+      await settle();
+      backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(7));
+      await settle();
+      backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+      await done;
+      expect(session.status()).toBe('authenticated');
+      expect(console.warn).toHaveBeenCalledWith('Cannot hold the session lock');
+    });
+
     it('warns when the lock cannot be requested, keeping the session', async () => {
       locks.uninstall();
       locks = installFakeLocks({ failRequests: true });
@@ -676,6 +754,279 @@ describe('SessionService', () => {
       expect(console.warn).toHaveBeenCalledWith(
         'Web Locks are not available: the session is not exclusive to this tab',
       );
+    });
+  });
+});
+
+describe('SessionService browser key (D-33)', () => {
+  const OLD = 30 * 24 * 60 * 60 * 1000;
+  let locks: FakeLocks | null = null;
+
+  function store() {
+    sessionStorage.setItem(
+      'fc.session',
+      JSON.stringify({
+        sessionId: SESSION_ID,
+        refreshToken: refreshTokenOf(99),
+        refreshTokenExpiresAt: '2099-01-08T00:00:00.000Z',
+      }),
+    );
+  }
+
+  const record = (sessionId: string, ageMs: number) => ({
+    sessionId,
+    keyPair: sharedKeyPair,
+    createdAt: Date.now() - ageMs,
+  });
+
+  async function restoreOk() {
+    const ctx = setup();
+    const done = ctx.session.restore();
+    await settle();
+    backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(7));
+    await settle();
+    backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+    await done;
+    return ctx;
+  }
+
+  afterEach(() => {
+    locks?.uninstall();
+    locks = null;
+  });
+
+  describe('login', () => {
+    it('signs the login with a new key and stores it under the session id', async () => {
+      const { session } = setup();
+      expect(session.signingKey()).toBeNull();
+      const done = session.login('u', 'p');
+      await settle();
+      expect(session.signingKey()).toBe(sharedKeyPair);
+      expect(keyRecords().map.size).toBe(0);
+      backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
+      await settle();
+      backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+      await done;
+      expect(keyRecords().map.get(SESSION_ID)?.keyPair).toBe(sharedKeyPair);
+      expect(session.signingKey()).toBe(sharedKeyPair);
+    });
+
+    it('drops the key when the login is refused or answered nonsense', async () => {
+      const { session } = setup();
+      let done = session.login('u', 'p');
+      await settle();
+      failRequest(backend(), '/v1/auth/login', 'INVALID_CREDENTIALS');
+      await expect(done).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+      expect(session.signingKey()).toBeNull();
+      done = session.login('u', 'p');
+      await settle();
+      backend().expectOne(`${API}/v1/auth/login`).flush({});
+      await expect(done).rejects.toThrow('Unexpected authentication response');
+      expect(session.signingKey()).toBeNull();
+      expect(keyRecords().map.size).toBe(0);
+    });
+
+    it('keeps the session in memory, warning, when the key cannot be stored', async () => {
+      const { session } = setup();
+      keyRecords().failing.add('put');
+      const done = session.login('u', 'p');
+      await settle();
+      backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
+      await settle();
+      backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+      await done;
+      expect(session.status()).toBe('authenticated');
+      expect(session.signingKey()).toBe(sharedKeyPair);
+      expect(console.warn).toHaveBeenCalledWith(
+        'Cannot persist the browser key: the session will not survive a reload',
+      );
+    });
+
+    it('deletes the key when the profile cannot be loaded', async () => {
+      const { session } = setup();
+      const done = session.login('u', 'p');
+      await settle();
+      backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
+      await settle();
+      failRequest(backend(), '/v1/me', 'INTERNAL_ERROR');
+      await settle();
+      backend()
+        .expectOne(`${API}/v1/auth/logout`)
+        .flush(null, { status: 204, statusText: 'No Content' });
+      await expect(done).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+      await settle();
+      expect(keyRecords().map.size).toBe(0);
+      expect(session.signingKey()).toBeNull();
+    });
+  });
+
+  describe('end of the session', () => {
+    it('is deleted at logout, even when the server fails', async () => {
+      const { session } = await signedIn();
+      expect(keyRecords().map.has(SESSION_ID)).toBe(true);
+      const done = session.logout();
+      failRequest(backend(), '/v1/auth/logout', 'INTERNAL_ERROR');
+      await done;
+      await settle();
+      expect(keyRecords().map.size).toBe(0);
+      expect(session.signingKey()).toBeNull();
+    });
+
+    it('is deleted at logout of every device', async () => {
+      const { session } = await signedIn();
+      const done = session.logoutAll();
+      backend()
+        .expectOne(`${API}/v1/auth/logout-all`)
+        .flush(null, { status: 204, statusText: 'x' });
+      await done;
+      await settle();
+      expect(keyRecords().map.size).toBe(0);
+    });
+
+    it('is deleted when the session expires', async () => {
+      const { session } = await signedIn();
+      session.expire();
+      await settle();
+      expect(keyRecords().map.size).toBe(0);
+      expect(session.signingKey()).toBeNull();
+    });
+
+    it('is deleted when the refresh is refused during the restore', async () => {
+      store();
+      const { session } = setup();
+      const done = session.restore();
+      await settle();
+      failRequest(backend(), '/v1/auth/refresh', 'UNAUTHENTICATED');
+      await done;
+      await settle();
+      expect(session.status()).toBe('anonymous');
+      expect(keyRecords().map.size).toBe(0);
+    });
+
+    it('stays in the storage when deleting it fails, with a warning', async () => {
+      const { session } = await signedIn();
+      keyRecords().failing.add('delete');
+      session.expire();
+      await settle();
+      expect(keyRecords().map.has(SESSION_ID)).toBe(true);
+      expect(console.warn).toHaveBeenCalledWith('Cannot delete the browser key');
+    });
+  });
+
+  describe('restore', () => {
+    it('signs with the stored key of the session', async () => {
+      store();
+      const { session } = await restoreOk();
+      expect(session.status()).toBe('authenticated');
+      expect(session.signingKey()).toBe(sharedKeyPair);
+      expect(keyRecords().map.has(SESSION_ID)).toBe(true);
+    });
+
+    it.each([
+      ['missing', false],
+      ['unreadable', true],
+    ])('goes anonymous without calling the server when the key is %s', async (_label, fails) => {
+      store();
+      const { session, navigate } = setup();
+      if (fails) {
+        keyRecords().failing.add('get');
+      } else {
+        keyRecords().map.clear();
+      }
+      await session.restore();
+      backend().expectNone(`${API}/v1/auth/refresh`);
+      expect(session.status()).toBe('anonymous');
+      expect(session.signingKey()).toBeNull();
+      expect(sessionStorage.getItem('fc.session')).toBeNull();
+      expect(navigate).not.toHaveBeenCalled();
+      expect(console.warn).toHaveBeenCalledWith('The browser key of the session is missing');
+    });
+
+    it('does not delete the key, nor anything else, of a session in use by another tab', async () => {
+      locks = installFakeLocks();
+      store();
+      locks.holdExternally(`fc.session:${SESSION_ID}`);
+      const { session } = setup();
+      keyRecords().map.set('stale', record('stale', OLD));
+      await session.restore();
+      await settle();
+      expect(session.status()).toBe('anonymous');
+      expect(keyRecords().map.has(SESSION_ID)).toBe(true);
+      expect(session.signingKey()).toBeNull();
+    });
+  });
+
+  describe('key usage', () => {
+    it('records the use of the key after a successful refresh', async () => {
+      const { session } = await signedIn();
+      keyRecords().map.set(SESSION_ID, { ...record(SESSION_ID, OLD), lastUsedAt: 1 });
+      const done = session.refreshOnce();
+      backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(2));
+      await done;
+      expect(Date.now() - (keyRecords().map.get(SESSION_ID)?.lastUsedAt ?? 0)).toBeLessThan(5000);
+    });
+
+    it('never breaks the refresh when the usage cannot be recorded', async () => {
+      const { session } = await signedIn();
+      keyRecords().failing.add('put');
+      const done = session.refreshOnce();
+      backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(2));
+      await done;
+      expect(session.status()).toBe('authenticated');
+      expect(console.warn).toHaveBeenCalledWith('Cannot update the browser key usage');
+    });
+  });
+
+  describe('orphan cleanup', () => {
+    it('deletes old keys of other sessions whose lock is free, and only those', async () => {
+      locks = installFakeLocks();
+      store();
+      locks.holdExternally('fc.session:in-use');
+      const { session } = setup();
+      const records = keyRecords().map;
+      records.set('orphan', record('orphan', OLD));
+      records.set('young', record('young', 60_000));
+      records.set('in-use', record('in-use', OLD));
+      const done = session.restore();
+      await settle();
+      backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(7));
+      await settle();
+      backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+      await done;
+      await settle();
+      expect([...records.keys()].sort()).toEqual([SESSION_ID, 'in-use', 'young']);
+    });
+
+    it('also runs when nobody is signed in', async () => {
+      locks = installFakeLocks();
+      const { session } = setup();
+      keyRecords().map.set('orphan', record('orphan', OLD));
+      await session.restore();
+      await settle();
+      expect(keyRecords().map.size).toBe(0);
+    });
+
+    it('is skipped without Web Locks: nobody could tell which keys are still in use', async () => {
+      const { session } = setup();
+      keyRecords().map.set('orphan', record('orphan', OLD));
+      await session.restore();
+      await settle();
+      expect(keyRecords().map.size).toBe(1);
+    });
+
+    it('never blocks the restore when it fails', async () => {
+      locks = installFakeLocks();
+      store();
+      const { session } = setup();
+      keyRecords().failing.add('all');
+      const done = session.restore();
+      await settle();
+      backend().expectOne(`${API}/v1/auth/refresh`).flush(tokenBody(7));
+      await settle();
+      backend().expectOne(`${API}/v1/me`).flush({ data: fakeProfile() });
+      await done;
+      expect(session.status()).toBe('authenticated');
+      expect(console.warn).toHaveBeenCalledWith('Cannot clean up the stored browser keys');
     });
   });
 });

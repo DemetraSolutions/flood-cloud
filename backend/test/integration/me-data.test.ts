@@ -54,7 +54,7 @@ describe('PATCH /v1/me: the picture and the POS preferences', () => {
     assert.deepEqual(await failure({ avatar: 'data:image/svg+xml;base64,PHN2Zy8+' }), invalid(['avatar', 'format']));
     assert.deepEqual(await failure({ pos: { options: { favoritesId: 'nope' } } }), invalid(['pos.options.favoritesId', 'incorrect']));
     assert.deepEqual(await failure({ pin: '1234' }), invalid(['pin', 'unknown']));
-    const big = await fetch(`${office.app.baseUrl}/v1/me`, { method: 'PATCH', headers: { authorization: `Bearer ${await as.tokenOf(g0().pa)}`, 'content-type': 'application/json' }, body: JSON.stringify({ firstName: 'x'.repeat(600_000) }) });
+    const big = await fetch(`${office.app.baseUrl}/v1/me`, { method: 'PATCH', headers: { ...office.userHeaders('PATCH', '/me', await as.tokenOf(g0().pa)), 'content-type': 'application/json' }, body: JSON.stringify({ firstName: 'x'.repeat(600_000) }) });
     assert.equal(big.status, 413);
   });
 

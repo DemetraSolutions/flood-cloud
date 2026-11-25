@@ -77,7 +77,7 @@ export async function startMediaWorld(ctx: TestDatabases, options: BackofficeOpt
       }
       const response = await fetch(`${office.app.baseUrl}/v1${path(groupIndex)}${query}`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${await as.tokenOf(actor)}`, ...headers },
+        headers: { ...office.userHeaders('POST', `${path(groupIndex)}${query}`, await as.tokenOf(actor)), ...headers },
         body: form,
       });
       const text = await response.text();

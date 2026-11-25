@@ -38,7 +38,7 @@ async function importAs(actor: ObjectId, parts: Array<{ name: string; bytes: Buf
       form.append(part.name, new Blob([new Uint8Array(Buffer.from(part.bytes))]), part.filename);
     }
   }
-  const response = await fetch(`${office.app.baseUrl}/v1/tobaccos/import`, { method: 'POST', headers: { authorization: `Bearer ${await as.tokenOf(actor)}`, ...headers }, body: form });
+  const response = await fetch(`${office.app.baseUrl}/v1/tobaccos/import`, { method: 'POST', headers: { ...office.userHeaders('POST', '/tobaccos/import', await as.tokenOf(actor)), ...headers }, body: form });
   const text = await response.text();
   return { status: response.status, headers: response.headers, body: text === '' ? undefined : JSON.parse(text) };
 }
@@ -189,7 +189,7 @@ describe('POST /v1/tobaccos/import', () => {
     // 413: more than 10 MB.
     assert.equal((await upload(Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(10 * 1024 * 1024)]))).status, 413);
     // 400: a multipart header with a body that is not multipart.
-    const broken = await fetch(`${office.app.baseUrl}/v1/tobaccos/import`, { method: 'POST', headers: { authorization: `Bearer ${await as.tokenOf(psa())}`, 'content-type': 'multipart/form-data; boundary=xyz', ...key() }, body: 'not a multipart body' });
+    const broken = await fetch(`${office.app.baseUrl}/v1/tobaccos/import`, { method: 'POST', headers: { ...office.userHeaders('POST', '/tobaccos/import', await as.tokenOf(psa())), 'content-type': 'multipart/form-data; boundary=xyz', ...key() }, body: 'not a multipart body' });
     assert.equal(broken.status, 400);
     assert.equal(await tobaccos().countDocuments(), 0);
   });

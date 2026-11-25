@@ -214,7 +214,7 @@ describe('the public API keys in the logs', () => {
 
 describe('key classification', () => {
   it('splits secrets from personal data; stdout redacts both', () => {
-    for (const key of ['password', 'Pin', 'x-api-key', 'set-cookie', 'mongodbUri', 'smtpPassword', 'accessToken', 'privateKey']) {
+    for (const key of ['password', 'Pin', 'x-api-key', 'set-cookie', 'mongodbUri', 'smtpPassword', 'accessToken', 'privateKey', 'DPoP', 'dpop']) {
       assert.equal(isSecretKey(key), true, key);
       assert.equal(isPersonalDataKey(key), false, key);
       assert.equal(isSensitiveKey(key), true, key);

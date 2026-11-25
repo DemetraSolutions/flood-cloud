@@ -34,6 +34,7 @@ import { createPublicController } from './modules/public-api/public.controller.t
 import { createPublicRepository } from './modules/public-api/public.repository.ts';
 import { createPublicRoutes } from './modules/public-api/public.routes.ts';
 import { createPublicService } from './modules/public-api/public.service.ts';
+import { createDpopRejectedAudit } from './shared/security/dpop-audit.ts';
 import { createNonBrowserGuard } from './shared/security/non-browser-signal.ts';
 import type { NonBrowserGuard } from './shared/security/non-browser-signal.ts';
 import type { SecurityPolicyProvider } from './shared/security/security-policy.ts';
@@ -201,7 +202,7 @@ const publicApiLimitsOf = (config: Config): PublicApiLimits => ({
 export interface BackofficeModules {
   /** Routes to mount on `/v1`. */
   readonly routes: readonly RouteDefinition[];
-  /** Bearer authentication of the users of `/v1`. */
+  /** DPoP authentication of the users of `/v1`. */
   readonly authenticate: RequestHandler;
   /** Authentication of the store keys of `/v1` (`fc_sk_…`): the app mounts it next to `authenticate`, which dispatches by the prefix of the secret. */
   readonly authenticateStore: RequestHandler;
@@ -259,6 +260,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const dealers = createDealersRepository(databases);
   const rules = createRateLimitRules(config);
 
+  const dpopAudit = createDpopRejectedAudit({ activityLog, rateLimiter, logger });
   const authenticate = createAuthenticate({
     sessions,
     users,
@@ -267,6 +269,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
     scope: { ...createDealerGroupsRepository(databases), ...createCompanyPlacesRepository(databases) },
     activityLog,
     logger,
+    dpopAudit,
+    apiPublicBaseUrl: config.apiPublicBaseUrl,
     now,
   });
   const settingsRepository = createSettingsRepository(databases);
@@ -274,7 +278,8 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const securityPolicy = createSecurityPolicyProvider({ read: () => settingsRepository.readSecurityPolicy(), sustainedDefault: config.rateLimitApiSustainedMode, forceReport: config.securityPolicyForceReport === 'on', logger, now });
   const nonBrowserGuard = config.requestOriginSignal === 'on' ? createNonBrowserGuard({ activityLog, rateLimiter, logger, allowedOrigins: config.corsAllowedOrigins, policy: securityPolicy }) : undefined;
   const auth = createAuthController(
-    createAuthService({ config, users, credentials, sessions, groups, activityLog, now }),
+    createAuthService({ config, users, credentials, sessions, groups, activityLog, dpopAudit, now }),
+    { apiPublicBaseUrl: config.apiPublicBaseUrl, now },
     nonBrowserGuard,
   );
   const catalogsRepository = createCatalogsRepository(databases);

@@ -292,7 +292,7 @@ describe('POST /v1/groups/{groupId}/users: the request is validated', () => {
     const token = await as.tokenOf(g0().sa);
     const big = await send(office, 'POST', path(), token, body({ firstName: 'x'.repeat(600_000) }));
     assert.equal(big.status, 413);
-    const text = await fetch(`${office.app.baseUrl}/v1${path()}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'text/plain' }, body: 'x' });
+    const text = await fetch(`${office.app.baseUrl}/v1${path()}`, { method: 'POST', headers: { ...office.userHeaders('POST', path(), token), 'content-type': 'text/plain' }, body: 'x' });
     assert.equal(text.status, 415);
   });
 });

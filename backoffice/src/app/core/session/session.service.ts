@@ -9,6 +9,7 @@ import { I18nService } from '../i18n/i18n.service';
 import { isSupportedLanguage, Language } from '../i18n/language';
 import { isThemeChoice, ThemeService } from '../theme/theme.service';
 import { ToastService } from '../../shared/ui/toast/toast.service';
+import { DpopKeys } from './dpop-key-store';
 import { Profile, SessionStatus, TokenPair } from './session.types';
 import { forgetWorkingGroup } from '../groups/working-group-storage';
 import { clearStoredSession, readStoredSession, writeStoredSession } from './session-storage';
@@ -48,7 +49,9 @@ function isTokenRejection(error: unknown): boolean {
 
 /**
  * Session of the signed-in user (decision D-12): the access token lives only in this service's
- * memory, the refresh token also in `sessionStorage`. Tokens and passwords are never logged.
+ * memory, the refresh token also in `sessionStorage`. Every session is bound to a browser key
+ * (D-33, {@link DpopKeys}): generated at login, kept in memory and IndexedDB, deleted only by the
+ * tab that owns the session. Tokens, keys, proofs and passwords are never logged.
  *
  * Refresh happens only when the interceptor reports `TOKEN_EXPIRED`, through one request shared
  * by every concurrent caller ({@link refreshOnce}).
@@ -60,12 +63,15 @@ export class SessionService {
   private readonly toast = inject(ToastService);
   private readonly i18n = inject(I18nService);
   private readonly theme = inject(ThemeService);
+  private readonly keys = inject(DpopKeys);
 
   private readonly accessToken = signal<string | null>(null);
   private refreshToken: string | null = null;
   private refreshInFlight: Promise<void> | null = null;
   private lockedSessionId: string | null = null;
   private releaseLock: (() => void) | null = null;
+  /** Session whose browser key this tab may delete (`null` when it owns none). */
+  private ownedSessionId: string | null = null;
   private readonly statusState = signal<SessionStatus>('unknown');
   private readonly meState = signal<Profile | null>(null);
 
@@ -92,26 +98,41 @@ export class SessionService {
     return this.accessToken();
   }
 
+  /** Key pair signing the API requests now; for the interceptor only. `null` when there is none. */
+  signingKey(): CryptoKeyPair | null {
+    return this.keys.current();
+  }
+
   /**
    * Restores the session at startup from the refresh token kept in `sessionStorage`. If the
    * server refuses the token the session is anonymous and the storage is cleared. A transient
    * failure (network, 429, 5xx) is rethrown and the storage is kept, so the startup error page
    * can offer a retry instead of discarding a valid session. If another live tab holds the
-   * session (Web Locks), this tab does not take it over: it starts anonymous.
+   * session (Web Locks), this tab does not take it over: it starts anonymous and touches
+   * neither the key nor anything else of the other tab. A stored session whose browser key is
+   * missing cannot sign any request: it is dropped without calling the server (a new key is never
+   * created for an existing session). Keys of vanished sessions are cleaned up in the background.
    *
    * @throws Error on a transient failure.
    */
   async restore(): Promise<void> {
     const stored = readStoredSession();
+    void this.cleanupOrphanKeys(stored?.sessionId ?? null);
     if (stored === null) {
       this.clear();
       return;
     }
-    if (!(await this.isSessionFree(stored.sessionId))) {
+    if (!(await this.acquireLock(stored.sessionId))) {
       console.warn('The session is in use by another tab');
       this.clear();
       return;
     }
+    if (!(await this.keys.load(stored.sessionId))) {
+      console.warn('The browser key of the session is missing');
+      this.clear();
+      return;
+    }
+    this.ownedSessionId = stored.sessionId;
     this.refreshToken = stored.refreshToken;
     try {
       await this.refreshOnce();
@@ -133,13 +154,23 @@ export class SessionService {
    * @throws ApiError `INVALID_CREDENTIALS`, `RATE_LIMITED`, `NETWORK_ERROR`…
    */
   async login(username: string, password: string): Promise<void> {
-    const body = await firstValueFrom(
-      this.http.post<ApiData<unknown>>('/v1/auth/login', { username, password }),
-    );
+    await this.keys.generate();
+    let tokens: TokenPair;
+    try {
+      tokens = parseTokenPair(
+        await firstValueFrom(
+          this.http.post<ApiData<unknown>>('/v1/auth/login', { username, password }),
+        ),
+      );
+    } catch (error) {
+      this.keys.forget();
+      throw error;
+    }
     // A new session never inherits the working group of an earlier one: it could be a group of
     // another user or of another environment, which the lists would answer with a 404.
     forgetWorkingGroup();
-    this.storeTokens(parseTokenPair(body));
+    this.storeTokens(tokens);
+    await this.keys.persist(tokens.sessionId);
     try {
       await this.loadProfile();
     } catch (error) {
@@ -211,7 +242,9 @@ export class SessionService {
       const body = await firstValueFrom(
         this.http.post<ApiData<unknown>>('/v1/auth/refresh', { refreshToken: this.refreshToken }),
       );
-      this.storeTokens(parseTokenPair(body));
+      const tokens = parseTokenPair(body);
+      this.storeTokens(tokens);
+      await this.keys.touch(tokens.sessionId);
     } catch (error) {
       if (this.refreshToken === null || isTokenRejection(error)) {
         this.expire();
@@ -276,13 +309,55 @@ export class SessionService {
     });
   }
 
-  /** Whether no other live tab holds the lock of this session. */
-  private async isSessionFree(sessionId: string): Promise<boolean> {
+  /** Background cleanup of the browser keys of vanished sessions; needs Web Locks to tell. */
+  private async cleanupOrphanKeys(currentSessionId: string | null): Promise<void> {
+    if (typeof navigator.locks === 'undefined') {
+      return;
+    }
+    await this.keys.cleanupOrphans(currentSessionId, (id) => this.isSessionFree(id));
+  }
+
+  /** Whether no other live tab holds the lock of this session (Web Locks must exist). */
+  private isSessionFree(sessionId: string): Promise<boolean> {
+    return navigator.locks.request(
+      LOCK_PREFIX + sessionId,
+      { ifAvailable: true },
+      (lock) => lock !== null,
+    );
+  }
+
+  /**
+   * Atomically takes the lock of a session (`ifAvailable`) and keeps holding it until
+   * {@link unlock}. Only a tab that obtained it may become the owner of the session. Without Web
+   * Locks, or when the request itself fails (warned), the tab proceeds as the owner.
+   *
+   * @returns `false` when another tab holds the lock.
+   */
+  private acquireLock(sessionId: string): Promise<boolean> {
     const locks = webLocks();
     if (locks === null) {
-      return true;
+      return Promise.resolve(true);
     }
-    return locks.request(LOCK_PREFIX + sessionId, { ifAvailable: true }, (lock) => lock !== null);
+    this.unlock();
+    return new Promise<boolean>((resolve) => {
+      locks
+        .request(LOCK_PREFIX + sessionId, { ifAvailable: true }, (lock) => {
+          if (lock === null) {
+            resolve(false);
+            return undefined;
+          }
+          const held = new Promise<void>((release) => {
+            this.releaseLock = release;
+          });
+          this.lockedSessionId = sessionId;
+          resolve(true);
+          return held;
+        })
+        .catch(() => {
+          console.warn('Cannot hold the session lock');
+          resolve(true);
+        });
+    });
   }
 
   /** Holds the session lock for the life of the page (released by {@link clear}). */
@@ -330,6 +405,7 @@ export class SessionService {
   private storeTokens(tokens: TokenPair): void {
     this.accessToken.set(tokens.accessToken);
     this.refreshToken = tokens.refreshToken;
+    this.ownedSessionId = tokens.sessionId;
     this.holdLock(tokens.sessionId);
     writeStoredSession({
       sessionId: tokens.sessionId,
@@ -338,7 +414,17 @@ export class SessionService {
     });
   }
 
+  /**
+   * Ends the local session. The browser key is deleted from IndexedDB only when this tab owns
+   * the session (a tab that found it in use elsewhere owns nothing).
+   */
   private clear(): void {
+    const owned = this.ownedSessionId;
+    this.ownedSessionId = null;
+    this.keys.forget();
+    if (owned !== null) {
+      void this.keys.remove(owned);
+    }
     this.unlock();
     this.accessToken.set(null);
     this.refreshToken = null;

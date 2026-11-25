@@ -310,7 +310,7 @@ describe('HTTP pipeline', () => {
   });
 
   describe('CORS', () => {
-    const exposed = 'X-Request-Id, Location, ETag, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Retry-After';
+    const exposed = 'X-Request-Id, Location, ETag, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Retry-After, Date, WWW-Authenticate';
 
     it('adds headers for an allowed origin', async () => {
       const res = await fetch(`${t.baseUrl}/v1/items`, { headers: { Origin: ORIGIN } });
@@ -336,7 +336,7 @@ describe('HTTP pipeline', () => {
       assert.equal(res.headers.get('access-control-allow-methods'), 'GET, POST, PUT, PATCH, DELETE');
       assert.equal(
         res.headers.get('access-control-allow-headers'),
-        'Authorization, Content-Type, Idempotency-Key, If-Match, If-None-Match, X-Request-Id',
+        'Authorization, Content-Type, Idempotency-Key, If-Match, If-None-Match, X-Request-Id, DPoP',
       );
       assert.equal(res.headers.get('access-control-max-age'), '600');
       assert.equal(res.headers.get('access-control-allow-credentials'), null);

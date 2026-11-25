@@ -153,7 +153,7 @@ describe('POST /v1/groups/{groupId}/media/images', () => {
     // 415: not multipart at all, and a file that is not a JPEG, PNG or WebP by its bytes whatever it is called.
     const json = await world.as.call(sa(), 'POST', world.path(0), { file: 'x' });
     assert.deepEqual(failure(json), plain(415, 'UNSUPPORTED_MEDIA_TYPE'));
-    const bare = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, { method: 'POST', headers: { authorization: `Bearer ${await world.as.tokenOf(sa())}` } });
+    const bare = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, { method: 'POST', headers: world.office.userHeaders('POST', world.path(0), await world.as.tokenOf(sa())) });
     assert.equal(bare.status, 415);
     for (const [content, name, type] of [
       [GIF, 'animation.gif', 'image/gif'],
@@ -177,13 +177,13 @@ describe('POST /v1/groups/{groupId}/media/images', () => {
     // 400: a multipart header with a body that is not multipart.
     const malformed = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${await world.as.tokenOf(sa())}`, 'content-type': 'multipart/form-data; boundary=xyz' },
+      headers: { ...world.office.userHeaders('POST', world.path(0), await world.as.tokenOf(sa())), 'content-type': 'multipart/form-data; boundary=xyz' },
       body: 'this is not a multipart body',
     });
     assert.equal(malformed.status, 400);
     const noBoundary = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${await world.as.tokenOf(sa())}`, 'content-type': 'multipart/form-data' },
+      headers: { ...world.office.userHeaders('POST', world.path(0), await world.as.tokenOf(sa())), 'content-type': 'multipart/form-data' },
       body: 'x',
     });
     assert.equal(noBoundary.status, 400);
@@ -356,7 +356,7 @@ describe('who an image belongs to', () => {
     const { accessToken } = ((await login.json()) as { data: { accessToken: string } }).data;
     const form = new FormData();
     form.append('file', new Blob([new Uint8Array(bytes)], { type: 'image/png' }), 'a.png');
-    const response = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, { method: 'POST', headers: { authorization: `Bearer ${accessToken}` }, body: form });
+    const response = await fetch(`${world.office.app.baseUrl}/v1${world.path(0)}`, { method: 'POST', headers: world.office.userHeaders('POST', world.path(0), accessToken), body: form });
     assert.deepEqual([response.status, ((await response.json()) as { error: { code: string } }).error.code], [403, 'PASSWORD_CHANGE_REQUIRED']);
   });
 });

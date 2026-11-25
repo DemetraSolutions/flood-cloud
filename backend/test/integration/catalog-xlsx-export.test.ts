@@ -613,18 +613,18 @@ describe('catalog export: sparse documents', () => {
 describe('catalog export: a download that goes wrong', () => {
   const heldPath = () => `/groups/${hex(gid())}/export-held`;
   const url = (path: string) => `${world.office.app.baseUrl}/v1${path}`;
-  const withToken = async (actor: ObjectId) => ({ authorization: `Bearer ${await world.as.tokenOf(actor)}` });
+  const withToken = async (actor: ObjectId, path: string) => world.office.userHeaders('GET', path, await world.as.tokenOf(actor));
 
   it('lets one export run at a time for a user and answers the second with 429, then frees the user when the first ends', async () => {
     await seed({ name: { it: 'Acqua' } });
     const hold = newHold();
     armed = hold;
-    const first = fetch(url(heldPath()), { headers: await withToken(sa()) });
+    const first = fetch(url(heldPath()), { headers: await withToken(sa(), heldPath()) });
     await hold.started;
-    const second = await fetch(url(heldPath()), { headers: await withToken(sa()) });
+    const second = await fetch(url(heldPath()), { headers: await withToken(sa(), heldPath()) });
     assert.equal(second.status, 429);
     assert.equal(((await second.json()) as { error: { code: string } }).error.code, 'RATE_LIMITED');
-    const otherUser = await fetch(url(heldPath()), { headers: await withToken(ca()) });
+    const otherUser = await fetch(url(heldPath()), { headers: await withToken(ca(), heldPath()) });
     assert.equal(otherUser.status, 200, 'the lock is per user');
     await otherUser.arrayBuffer();
     hold.release(true);
@@ -633,7 +633,7 @@ describe('catalog export: a download that goes wrong', () => {
     const tables = tablesOf(Buffer.from(await done.arrayBuffer()));
     assert.deepEqual(tables.Prodotti.rows.map((row) => row['NOME']), ['Acqua']);
     await hold.finished;
-    const again = await fetch(url(heldPath()), { headers: await withToken(sa()) });
+    const again = await fetch(url(heldPath()), { headers: await withToken(sa(), heldPath()) });
     assert.equal(again.status, 200);
     await again.arrayBuffer();
     assert.deepEqual(audit.entries.map((entry) => entry.outcome), ['success', 'success', 'success']);
@@ -642,14 +642,14 @@ describe('catalog export: a download that goes wrong', () => {
   it('frees the user when the export fails before the first byte', async () => {
     const hold = newHold();
     armed = hold;
-    const first = fetch(url(heldPath()), { headers: await withToken(sa()) });
+    const first = fetch(url(heldPath()), { headers: await withToken(sa(), heldPath()) });
     await hold.started;
-    const invalid = await fetch(`${url(heldPath())}?references=x`, { headers: await withToken(sa()) });
+    const invalid = await fetch(`${url(heldPath())}?references=x`, { headers: await withToken(sa(), heldPath()) });
     assert.equal(invalid.status, 422, 'validation comes before the lock');
     hold.release(true);
     await (await first).arrayBuffer();
     await hold.finished;
-    const again = await fetch(url(heldPath()), { headers: await withToken(sa()) });
+    const again = await fetch(url(heldPath()), { headers: await withToken(sa(), heldPath()) });
     assert.equal(again.status, 200);
     await again.arrayBuffer();
   });
@@ -659,7 +659,7 @@ describe('catalog export: a download that goes wrong', () => {
     const hold = newHold();
     armed = hold;
     const abort = new AbortController();
-    const response = await fetch(url(heldPath()), { headers: await withToken(sa()), signal: abort.signal });
+    const response = await fetch(url(heldPath()), { headers: await withToken(sa(), heldPath()), signal: abort.signal });
     assert.equal(response.status, 200);
     await hold.started;
     abort.abort();
@@ -667,7 +667,7 @@ describe('catalog export: a download that goes wrong', () => {
     hold.release(true);
     await hold.finished;
     assert.deepEqual(audit.entries.map((entry) => [entry.action, entry.outcome, entry.metadata]), [['catalog.exported', 'failure', { references: 'ids', products: 0, variants: 0, categories: 0 }]]);
-    const next = await fetch(url(heldPath()), { headers: await withToken(sa()) });
+    const next = await fetch(url(heldPath()), { headers: await withToken(sa(), heldPath()) });
     assert.equal(next.status, 200, 'the user is free again');
     await next.arrayBuffer();
   });
@@ -676,14 +676,14 @@ describe('catalog export: a download that goes wrong', () => {
     const timeoutPath = `/groups/${hex(gid())}/export-timeout`;
     const hold = newHold();
     armed = hold;
-    const response = await fetch(url(timeoutPath), { headers: await withToken(sa()) });
+    const response = await fetch(url(timeoutPath), { headers: await withToken(sa(), timeoutPath) });
     assert.equal(response.status, 200, 'the status was sent with the first byte');
     await assert.rejects(response.arrayBuffer(), 'the connection is closed before the end of the file');
     await hold.closed;
     hold.release(false);
     await hold.finished;
     assert.deepEqual(audit.entries.map((entry) => entry.outcome), ['failure']);
-    const next = await fetch(url(timeoutPath), { headers: await withToken(sa()) });
+    const next = await fetch(url(timeoutPath), { headers: await withToken(sa(), timeoutPath) });
     assert.equal(next.status, 200, 'the user is free again');
     await next.body?.cancel();
   });

@@ -1343,7 +1343,7 @@ async function rawUpload(parts: Array<{ name: string; bytes: Buffer | string; fi
   const token = options.token === undefined ? await world.as.tokenOf(options.actor ?? sa()) : options.token;
   const response = await fetch(`${world.office.app.baseUrl}/v1${options.path ?? base()}${options.query ?? ''}`, {
     method: 'POST',
-    headers: { ...(token === null ? {} : { authorization: `Bearer ${token}` }), ...(options.headers ?? { 'idempotency-key': randomUUID() }) },
+    headers: { ...(token === null ? {} : world.office.userHeaders('POST', `${options.path ?? base()}${options.query ?? ''}`, token)), ...(options.headers ?? { 'idempotency-key': randomUUID() }) },
     body: form,
   });
   const text = await response.text();
@@ -1368,7 +1368,7 @@ describe('catalog import: the request', () => {
       assert.equal((await rawUpload([{ name: 'file', bytes, filename: 'a.xlsx' }], { headers: key() })).status, 415);
     }
     assert.equal((await rawUpload([{ name: 'file', bytes: Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(10 * 1024 * 1024)]), filename: 'a.xlsx' }], { headers: key() })).status, 413);
-    const broken = await fetch(`${world.office.app.baseUrl}/v1${base()}`, { method: 'POST', headers: { authorization: `Bearer ${await world.as.tokenOf(sa())}`, 'content-type': 'multipart/form-data; boundary=xyz', ...key() }, body: 'not a multipart body' });
+    const broken = await fetch(`${world.office.app.baseUrl}/v1${base()}`, { method: 'POST', headers: { ...world.office.userHeaders('POST', base(), await world.as.tokenOf(sa())), 'content-type': 'multipart/form-data; boundary=xyz', ...key() }, body: 'not a multipart body' });
     assert.equal(broken.status, 400);
     assert.equal(await db.categories.countDocuments(), 0);
     assert.deepEqual(imported(0), []);

@@ -35,7 +35,7 @@ export async function catalogWorkbook(sheets: Partial<Record<SheetKind, TestShee
 
 /** What the helpers need of a test world (`startPlacesWorld`). */
 export interface CatalogWorld {
-  readonly office: { readonly app: { readonly baseUrl: string } };
+  readonly office: Pick<import('./backoffice.ts').Backoffice, 'app' | 'userHeaders'>;
   readonly as: { tokenOf(actor: import('mongodb').ObjectId): Promise<string> };
 }
 
@@ -48,7 +48,7 @@ export interface CatalogWorld {
  * @param headers More headers.
  */
 export async function downloadWorkbook(world: CatalogWorld, path: string, actor: import('mongodb').ObjectId, headers: Record<string, string> = {}): Promise<{ status: number; headers: Headers; bytes: Buffer }> {
-  const response = await fetch(`${world.office.app.baseUrl}/v1${path}`, { headers: { authorization: `Bearer ${await world.as.tokenOf(actor)}`, ...headers } });
+  const response = await fetch(`${world.office.app.baseUrl}/v1${path}`, { headers: { ...world.office.userHeaders('GET', path, await world.as.tokenOf(actor)), ...headers } });
   return { status: response.status, headers: response.headers, bytes: Buffer.from(await response.arrayBuffer()) };
 }
 
@@ -66,7 +66,7 @@ export async function uploadWorkbook(world: CatalogWorld, path: string, bytes: B
   form.append('file', new Blob([new Uint8Array(bytes)]), 'catalogo.xlsx');
   const response = await fetch(`${world.office.app.baseUrl}/v1${path}`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${await world.as.tokenOf(actor)}`, ...(headers ?? { 'idempotency-key': crypto.randomUUID() }) },
+    headers: { ...world.office.userHeaders('POST', path, await world.as.tokenOf(actor)), ...(headers ?? { 'idempotency-key': crypto.randomUUID() }) },
     body: form,
   });
   const text = await response.text();

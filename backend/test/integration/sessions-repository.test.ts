@@ -35,6 +35,7 @@ const newSession = (overrides: Partial<NewSession> = {}): NewSession => ({
   familyExpiresAt: at(30 * 86_400_000),
   userAgent: 'Fixture/1.0',
   ip: '127.0.0.1',
+  jkt: 'jkt-fixture',
   now: NOW,
   ...overrides,
 });
@@ -55,6 +56,17 @@ describe('create and find', () => {
     assert.equal(await repository.findByAccessHash(hash()), null);
     assert.equal(await repository.findByRefreshHash(hash()), null);
     assert.equal('previousRefreshHashes' in (await repository.findByAccessHash(input.accessTokenHash))!, false);
+  });
+
+  it('binds the session to the key thumbprint, keeps it through a rotation and maps a document without it to null', async () => {
+    const created = await repository.create(newSession({ jkt: 'thumbprint-1' }));
+    assert.equal(created.jkt, 'thumbprint-1');
+    assert.equal((await sessions().findOne({ _id: created.id }))?.['jkt'], 'thumbprint-1');
+    const next = { accessTokenHash: hash(), accessExpiresAt: at(2_000_000), refreshTokenHash: hash(), refreshExpiresAt: at(9_000_000), now: at(1_000_000) };
+    assert.equal((await repository.rotate(created.id, created.refreshTokenHash, next))?.jkt, 'thumbprint-1');
+    assert.equal((await repository.findByAccessHash(next.accessTokenHash))?.jkt, 'thumbprint-1');
+    await sessions().updateOne({ _id: created.id }, { $unset: { jkt: '' } });
+    assert.equal((await repository.findByAccessHash(next.accessTokenHash))?.jkt, null);
   });
 
   it('keeps token hashes unique', async () => {

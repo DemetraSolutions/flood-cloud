@@ -260,7 +260,7 @@ describe('creating a key', () => {
 
   it('answers 415 to a body that is not JSON, 413 to one that is too large and 422 to none', async () => {
     const token = await world.as.tokenOf(psa());
-    const send = (init: RequestInit) => fetch(`${world.office.app.baseUrl}/v1${world.keysPath(0)}`, { method: 'POST', ...init, headers: { authorization: `Bearer ${token}`, ...(init.headers as Record<string, string>) } });
+    const send = (init: RequestInit) => fetch(`${world.office.app.baseUrl}/v1${world.keysPath(0)}`, { method: 'POST', ...init, headers: { ...world.office.userHeaders('POST', world.keysPath(0), token), ...(init.headers as Record<string, string>) } });
     assert.equal((await send({ headers: { 'content-type': 'text/plain' }, body: 'x' })).status, 415);
     assert.equal((await send({ headers: { 'content-type': 'application/json' }, body: JSON.stringify(body({ name: 'x'.repeat(20000) })) })).status, 413);
     assert.equal((await send({ headers: { 'content-type': 'application/json' }, body: 'not json' })).status, 400);

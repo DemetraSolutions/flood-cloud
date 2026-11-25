@@ -118,6 +118,7 @@
       "INVALID_CREDENTIALS": "Nome utente o password non corretti.",
       "TOKEN_EXPIRED": "La sessione è scaduta.",
       "CLOCK_SKEW": "L’orologio del dispositivo non è allineato.",
+      "INVALID_DPOP_PROOF": "La sessione di questo browser non è valida: accedi di nuovo.",
       "FORBIDDEN": "Non hai i permessi per questa operazione.",
       "PASSWORD_CHANGE_REQUIRED": "Devi cambiare la password provvisoria prima di continuare.",
       "NOT_FOUND": "Elemento non trovato.",

@@ -2,9 +2,9 @@ import type { RequestHandler } from 'express';
 
 /** Response headers a browser client may read. */
 export const CORS_EXPOSED_HEADERS =
-  'X-Request-Id, Location, ETag, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Retry-After';
+  'X-Request-Id, Location, ETag, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Retry-After, Date, WWW-Authenticate';
 const ALLOWED_METHODS = 'GET, POST, PUT, PATCH, DELETE';
-const ALLOWED_HEADERS = 'Authorization, Content-Type, Idempotency-Key, If-Match, If-None-Match, X-Request-Id';
+const ALLOWED_HEADERS = 'Authorization, Content-Type, Idempotency-Key, If-Match, If-None-Match, X-Request-Id, DPoP';
 const PREFLIGHT_MAX_AGE_SECONDS = '600';
 
 /**

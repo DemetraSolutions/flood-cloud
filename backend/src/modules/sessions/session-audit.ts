@@ -8,7 +8,7 @@ export interface SessionsRevoked {
   readonly actor: ActivityActor;
   /** Group of the user, for the activity log scope. */
   readonly groupId?: ObjectId | null;
-  /** Reason code (`logout`, `logoutAll`, `passwordChanged`, `userDisabled`, `refreshReuse`…). */
+  /** Reason code (`logout`, `logoutAll`, `passwordChanged`, `userDisabled`, `refreshReuse`, `dpopUnbound`, `dpopKeyMismatch`…). */
   readonly reason: string;
   /** The session, when exactly one was revoked. */
   readonly sessionId?: ObjectId;

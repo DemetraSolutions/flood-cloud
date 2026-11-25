@@ -198,7 +198,7 @@ describe('PATCH /v1/me', () => {
     assert.deepEqual(await patch({ language: null }), [422, 'VALIDATION_ERROR', [{ field: 'language', issue: 'type' }]]);
     assert.deepEqual(await patch({}), [422, 'VALIDATION_ERROR', [{ field: '(body)', issue: 'required' }]]);
     assert.deepEqual(await patch([]), [422, 'VALIDATION_ERROR', [{ field: '(body)', issue: 'type' }]]);
-    const wrongType = await fetch(`${office.app.baseUrl}/v1/me`, { method: 'PATCH', headers: { authorization: `Bearer ${own.accessToken}`, 'content-type': 'text/plain' }, body: 'x' });
+    const wrongType = await fetch(`${office.app.baseUrl}/v1/me`, { method: 'PATCH', headers: { ...office.userHeaders('PATCH', '/me', own.accessToken), 'content-type': 'text/plain' }, body: 'x' });
     assert.equal(wrongType.status, 415);
   });
 

@@ -88,6 +88,11 @@ export interface Config {
    * (for example `openssl rand -base64 32`). Without it the version would be a plain hash of data (credentials included) that anyone who reads the `ETag` could check offline.
    */
   readonly versionHmacKey: Secret;
+  /**
+   * Public base URL of the API as the browser sees it (`API_PUBLIC_BASE_URL`), normalized without trailing slash: it must equal the base URL the backoffice calls.
+   * Used to check the `htu` claim of DPoP proofs; never rebuilt from `Host` or `X-Forwarded-*`.
+   */
+  readonly apiPublicBaseUrl: string;
   /** Whether the legacy system still runs, so password changes also write the legacy hash (`LEGACY_PASSWORD_COEXISTENCE`). */
   readonly legacyPasswordCoexistence: boolean;
   /** Requests per minute allowed to a login username (`RATE_LIMIT_LOGIN_PER_USERNAME`). */
@@ -422,6 +427,30 @@ function readCervedBaseUrl(env: Env, issues: ConfigIssue[], appEnv: AppEnv | und
     }
   }
   issues.push({ variable: 'CERVED_BASE_URL', reason: 'must be an https URL without credentials, query or fragment (http only for localhost and 127.0.0.1 when APP_ENV=development)' });
+  return undefined;
+}
+
+/**
+ * Reads the required `API_PUBLIC_BASE_URL`: an `https` URL without credentials, query or fragment. Plain `http` is accepted
+ * only for `localhost` and `127.0.0.1`, in every environment (like `CORS_ALLOWED_ORIGINS`, to run any configuration locally;
+ * browsers treat the loopback as a secure context, so WebCrypto works there).
+ *
+ * @returns The URL without the trailing slashes, or `undefined` after recording an issue.
+ */
+function readApiPublicBaseUrl(env: Env, issues: ConfigIssue[]): string | undefined {
+  const raw = optionalVariable(env, 'API_PUBLIC_BASE_URL');
+  if (raw === undefined) {
+    issues.push({ variable: 'API_PUBLIC_BASE_URL', reason: 'is required' });
+    return undefined;
+  }
+  if (URL.canParse(raw)) {
+    const url = new URL(raw);
+    const secure = url.protocol === 'https:' || (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname));
+    if (secure && url.username === '' && url.password === '' && url.search === '' && url.hash === '') {
+      return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+    }
+  }
+  issues.push({ variable: 'API_PUBLIC_BASE_URL', reason: 'must be an https URL without credentials, query or fragment (http only for localhost and 127.0.0.1)' });
   return undefined;
 }
 
@@ -777,6 +806,8 @@ export function loadConfig(env: Env): Config {
     versionHmacKey = new Secret(versionKeyRaw);
   }
 
+  const apiPublicBaseUrl = readApiPublicBaseUrl(env, issues);
+
   const coexistenceRaw = optionalVariable(env, 'LEGACY_PASSWORD_COEXISTENCE');
   let legacyPasswordCoexistence: boolean | undefined = true;
   if (coexistenceRaw === 'true' || coexistenceRaw === 'false') {
@@ -799,6 +830,7 @@ export function loadConfig(env: Env): Config {
     shutdownDrainMs === undefined ||
     legacyPasswordPepper === undefined ||
     versionHmacKey === undefined ||
+    apiPublicBaseUrl === undefined ||
     legacyPasswordCoexistence === undefined ||
     rateLimitLoginPerUsername === undefined ||
     rateLimitLoginPerIp === undefined ||
@@ -862,6 +894,7 @@ export function loadConfig(env: Env): Config {
     requestTimeoutMs,
     legacyPasswordPepper,
     versionHmacKey,
+    apiPublicBaseUrl,
     legacyPasswordCoexistence,
     rateLimitLoginPerUsername,
     rateLimitLoginPerIp,

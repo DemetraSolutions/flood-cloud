@@ -27,6 +27,7 @@ export const SECURITY_ACTIONS = Object.freeze([
   'auth.refreshed',
   'auth.refreshReuseDetected',
   'auth.refreshRaceTolerated',
+  'auth.dpopRejected',
   'auth.passwordCheckFailed',
   'session.revoked',
   'user.roleChanged',
@@ -121,6 +122,8 @@ const SECURITY_METADATA: Readonly<Record<(typeof SECURITY_ACTIONS)[number], read
   'auth.refreshed': [],
   'auth.refreshReuseDetected': [],
   'auth.refreshRaceTolerated': [],
+  // A request refused because the DPoP proof of possession (D-33) was missing or invalid, or valid but signed by a key other than the one the session is bound to: why (`malformed`, `signature`, `claims`, `clockSkew`, `keyMismatch`) and where (`source`: `login`, `refresh` or `api`). Never the proof, a token or a key. Resource: the session.
+  'auth.dpopRejected': ['reason', 'source'],
   'auth.passwordCheckFailed': [],
   'session.revoked': ['reason'],
   'user.roleChanged': ['from', 'to'],

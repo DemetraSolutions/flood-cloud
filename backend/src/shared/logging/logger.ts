@@ -18,7 +18,7 @@ export interface Logger {
 }
 
 /** Normalized (lower case, alphanumerics only) names of secret fields, redacted exactly. */
-const SECRET_KEYS: ReadonlySet<string> = new Set(['pin', 'mongodburi', 'activationcode']);
+const SECRET_KEYS: ReadonlySet<string> = new Set(['pin', 'mongodburi', 'activationcode', 'dpop']);
 
 /** Normalized (lower case, alphanumerics only) names of personal data fields. */
 const PERSONAL_DATA_KEYS: ReadonlySet<string> = new Set(['name', 'email', 'telephone', 'phone', 'surname', 'firstname', 'lastname', 'fiscalcode']);

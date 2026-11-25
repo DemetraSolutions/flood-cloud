@@ -4,6 +4,10 @@ import type { ActivityActor, ActivityLog } from '../../shared/activity-log/activ
 import type { ClientContext } from '../../shared/http/client-context.ts';
 import { AppError } from '../../shared/http/errors.ts';
 import { isRole } from '../../shared/security/rbac/permissions.ts';
+import { safeEqual } from '../../shared/security/compare.ts';
+import { invalidDpopProof } from '../../shared/security/dpop.ts';
+import type { DpopResult } from '../../shared/security/dpop.ts';
+import type { DpopEventReason, DpopRejectedAudit } from '../../shared/security/dpop-audit.ts';
 import { generateSecret, hashSecret, parseSecret } from '../../shared/security/secrets.ts';
 import { verifyDummyPassword, verifyUserPassword } from '../../shared/security/password-verifier.ts';
 import { hashPassword } from '../../shared/security/scrypt.ts';
@@ -46,6 +50,8 @@ export interface LoginResult extends IssuedSession {
 export interface LoginInput {
   readonly username: string;
   readonly password: string;
+  /** RFC 7638 thumbprint of the key of the DPoP proof already verified by the controller: the session is bound to it (D-33). */
+  readonly jkt: string;
 }
 
 /** Sign-in, refresh and sign-out of backoffice users (`doc/Security-Model.md` section 4). */
@@ -57,22 +63,25 @@ export interface AuthService {
    * An unknown or locked account still costs one scrypt run, so the response time tells nothing.
    * The reason goes to the activity log, never the username.
    *
-   * @param input Username and password.
+   * @param input Username, password and the thumbprint of the proven browser key, which the new session is bound to.
    * @param client Request context for the session and the log.
    * @returns The new token pair, and `passwordChangeRequired` when an administrator set the password.
    * @throws {AppError} `INVALID_CREDENTIALS`.
    */
   login(input: LoginInput, client: ClientContext, gate?: SessionGate): Promise<LoginResult>;
   /**
-   * Rotates a refresh token. A token that was already used revokes the whole session family and
-   * is reported as `auth.refreshReuseDetected`. Every refusal is `401 UNAUTHENTICATED`.
+   * Rotates a refresh token. Order of the checks (D-33): the DPoP proof (a refusal is `401 INVALID_DPOP_PROOF`, and recorded when the token belongs to an active session), the token, the key
+   * (a session without `jkt` is revoked as `dpopUnbound`; a valid proof of another key revokes the family as `dpopKeyMismatch`, whether the token is the current one or a rotated one: a token presented
+   * with the wrong key never enjoys the grace period and never rotates), then the reuse of a rotated token (the whole family is revoked and reported as `auth.refreshReuseDetected`), the state of the account (a denial revokes the session, also when the refresh token is expired), the expiry
+   * of the refresh token and of the family, and the rotation. The `keyMismatch` event is written only by the request that actually revoked the family. Every other refusal is `401 UNAUTHENTICATED`.
    *
    * @param refreshToken The refresh token as sent by the client (untrusted).
+   * @param proof The result of verifying the DPoP proof against this request and this refresh token (`rth`).
    * @param client Request context.
    * @returns The new token pair.
-   * @throws {AppError} `UNAUTHENTICATED`.
+   * @throws {AppError} `INVALID_DPOP_PROOF`, `UNAUTHENTICATED`.
    */
-  refresh(refreshToken: string, client: ClientContext, gate?: SessionGate): Promise<IssuedSession>;
+  refresh(refreshToken: string, proof: DpopResult, client: ClientContext, gate?: SessionGate): Promise<IssuedSession>;
   /**
    * Revokes one session family (logout).
    *
@@ -102,6 +111,8 @@ export interface AuthServiceDeps {
   readonly sessions: SessionsRepository;
   readonly groups: GroupsRepository;
   readonly activityLog: ActivityLog;
+  /** Records the refused proofs (`auth.dpopRejected`, capped per user except `keyMismatch`). */
+  readonly dpopAudit: DpopRejectedAudit;
   /** Clock in epoch milliseconds. */
   readonly now: () => number;
 }
@@ -128,7 +139,7 @@ const inBounds = (value: string): boolean => value.length >= 1 && value.length <
  * @param deps Repositories, configuration, activity log and clock.
  */
 export function createAuthService(deps: AuthServiceDeps): AuthService {
-  const { config, users, credentials, sessions, groups, activityLog } = deps;
+  const { config, users, credentials, sessions, groups, activityLog, dpopAudit } = deps;
   const date = (): Date => new Date(deps.now());
 
   /** Token pair for a family ending at `familyExpiresAt`; no expiry goes beyond the family. */
@@ -173,9 +184,10 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
     throw new AppError('INVALID_CREDENTIALS');
   };
 
-  /** Revokes the family of a session reused or over, records both events and refuses. */
-  const revokeForState = async (session: Session, reason: string, user: User | null, client: ClientContext): Promise<void> => {
-    if (await sessions.revoke(session.id, reason, date())) {
+  /** Revokes the family of a session and records `auth.sessionsRevoked`; returns whether this request is the one that revoked it. */
+  const revokeForState = async (session: Session, reason: string, user: User | null, client: ClientContext): Promise<boolean> => {
+    const revoked = await sessions.revoke(session.id, reason, date());
+    if (revoked) {
       await auditSessionsRevoked(activityLog, {
         actor: { kind: 'system' },
         ...(user === null ? {} : groupOf(user)),
@@ -184,6 +196,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
         client,
       });
     }
+    return revoked;
   };
 
   /** Group of a user known by id, for the events that only have the session. */
@@ -212,8 +225,21 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
     throw new AppError('UNAUTHENTICATED');
   };
 
+  /** Records the refusal of a proof for the user of a session (source `refresh`). */
+  const recordRejection = async (session: Session, user: User | null, reason: DpopEventReason, client: ClientContext): Promise<void> => {
+    await dpopAudit({
+      userId: session.userId,
+      actor: user === null ? { kind: 'user', id: session.userId } : userActor(user),
+      ...(user === null ? {} : groupOf(user)),
+      sessionId: session.id,
+      reason,
+      source: 'refresh',
+      context: client,
+    });
+  };
+
   return {
-    login: async ({ username, password }, client, gate) => {
+    login: async ({ username, password, jkt }, client, gate) => {
       if (!inBounds(username) || !inBounds(password)) {
         return denyLogin(client, 'invalidInput');
       }
@@ -264,6 +290,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
         familyExpiresAt,
         userAgent: client.userAgent,
         ip: client.ip,
+        jkt,
         now,
       });
       await activityLog.record({
@@ -278,24 +305,41 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
       return { ...issued(pair, session.id), passwordChangeRequired: stored?.mustChangePassword === true };
     },
 
-    refresh: async (refreshToken, client, gate) => {
+    refresh: async (refreshToken, proof, client, gate) => {
       const token = parseSecret(refreshToken, 'fc_rt_');
       const found = token === null ? null : await sessions.findByRefreshHash(hashSecret(token));
-      if (found === null || found.session.revokedAt !== null) {
+      const live = found !== null && found.session.revokedAt === null ? found : null;
+      if (!proof.ok) {
+        if (live !== null) {
+          await recordRejection(live.session, (await users.findAuthRecord(live.session.userId))?.user ?? null, proof.reason, client);
+        }
+        throw invalidDpopProof();
+      }
+      if (live === null) {
         throw new AppError('UNAUTHENTICATED');
       }
-      const { session } = found;
-      if (found.kind === 'rotated') {
-        return handleRotated(found, client);
-      }
-      const now = date();
-      if (now.getTime() >= session.refreshExpiresAt.getTime() || now.getTime() >= session.familyExpiresAt.getTime()) {
+      const { session } = live;
+      if (session.jkt === null || !safeEqual(proof.proof.jkt, session.jkt)) {
+        // Before the grace period, the reuse detection and the rotation: a token presented with the wrong key is refused for good and ends the family.
+        const mismatch = session.jkt !== null;
+        const user = (await users.findAuthRecord(session.userId))?.user ?? null;
+        const revoked = await revokeForState(session, mismatch ? 'dpopKeyMismatch' : 'dpopUnbound', user, client);
+        if (mismatch && revoked) {
+          await recordRejection(session, user, 'keyMismatch', client);
+        }
         throw new AppError('UNAUTHENTICATED');
+      }
+      if (live.kind === 'rotated') {
+        return handleRotated(live, client);
       }
       const user = (await users.findAuthRecord(session.userId))?.user ?? null;
       const denial = await checkAccount(user, groups);
       if (denial !== null) {
         await revokeForState(session, denial, user, client);
+        throw new AppError('UNAUTHENTICATED');
+      }
+      const now = date();
+      if (now.getTime() >= session.refreshExpiresAt.getTime() || now.getTime() >= session.familyExpiresAt.getTime()) {
         throw new AppError('UNAUTHENTICATED');
       }
       await gate?.(subjectOf(user!));

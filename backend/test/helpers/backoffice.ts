@@ -9,6 +9,8 @@ import { legacyPasswordHash } from '../../src/shared/security/legacy-password.ts
 import { Secret } from '../../src/shared/security/secret.ts';
 import type { RateLimiter } from '../../src/shared/security/rate-limit/rate-limiter.ts';
 import type { RouteDefinition } from '../../src/shared/http/routes.ts';
+import { newBrowserKey, signProof } from './dpop.ts';
+import type { BrowserKey } from './dpop.ts';
 import { memoryActivityLog, memoryRateLimiter } from './activity.ts';
 import type { MemoryActivityLog } from './activity.ts';
 import { memoryLogger, startApp, testConfig } from './app.ts';
@@ -45,6 +47,20 @@ export interface Clock {
   advance(ms: number): void;
 }
 
+/** What a test may change in the proof that {@link Backoffice.userHeaders} signs. */
+export interface ProofOptions {
+  /** Sign with this key instead of the one of the token. */
+  readonly key?: BrowserKey;
+  /** `iat` in seconds since the epoch; by default the clock of the app. */
+  readonly iat?: number;
+  /** `htm` of the proof; by default the method of the request. */
+  readonly method?: string;
+  /** Path of the proof (`htu`) relative to `/v1`; by default the one of the request. */
+  readonly path?: string;
+  /** Token the proof is bound to (`ath`) instead of the presented one. */
+  readonly boundTo?: string;
+}
+
 /** The app under test with the real backoffice modules over a throw-away MongoDB. */
 export interface Backoffice {
   readonly app: TestServer;
@@ -55,7 +71,17 @@ export interface Backoffice {
   login(userName: string, password?: string, headers?: Record<string, string>): Promise<Response>;
   /** Logs in and returns the tokens (the response must be a 200). */
   tokens(userName: string, headers?: Record<string, string>): Promise<Tokens>;
-  /** A request to `/v1` with a Bearer access token. */
+  /**
+   * The `Authorization: DPoP` and `DPoP` headers of a request to `/v1` made with `accessToken`, signed with the key of the login that issued it (a token the helper does not know gets a fresh key).
+   * For the requests a test builds by hand (uploads, wrong content types); `path` is relative to `/v1`.
+   */
+  userHeaders(method: string, path: string, accessToken: string, options?: ProofOptions): Record<string, string>;
+  /** The browser key of the login (or refresh) that issued a token; a token the helper does not know gets a fresh key. */
+  keyOf(token: string): BrowserKey;
+  /**
+   * A request to `/v1`. With an access token it carries `Authorization: DPoP` and a proof of the key of that token (a store key, `fc_sk_…`, is sent as a plain `Bearer`). The login and the refresh carry their own proof (a new key at each login, the key of the
+   * refresh token at each refresh) and the helper remembers the key of the tokens they return.
+   */
   call(method: string, path: string, accessToken: string | undefined, body?: unknown, headers?: Record<string, string>): Promise<Response>;
   /** A request to `/public/v1` with an `X-Api-Key` (none when `apiKey` is `undefined`); the body of the response is not read. */
   publicCall(method: string, path: string, apiKey: string | undefined, headers?: Record<string, string>, body?: unknown): Promise<Response>;
@@ -139,16 +165,48 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
     },
     env,
   );
-  const call: Backoffice['call'] = (method, path, accessToken, body, headers = {}) =>
-    fetch(`${app.baseUrl}/v1${path}`, {
+  const keys = new Map<string, BrowserKey>();
+  const keyOf = (token: string): BrowserKey => {
+    let key = keys.get(token);
+    if (key === undefined) {
+      key = newBrowserKey();
+      keys.set(token, key);
+    }
+    return key;
+  };
+  const nowSeconds = (): number => Math.floor(clock.now() / 1000);
+  const userHeaders: Backoffice['userHeaders'] = (method, path, accessToken, options = {}) => ({
+    authorization: `DPoP ${accessToken}`,
+    dpop: signProof(options.key ?? keyOf(accessToken), {
+      method: options.method ?? method,
+      path: `/v1${options.path ?? path}`,
+      iat: options.iat ?? nowSeconds(),
+      accessToken: options.boundTo ?? accessToken,
+    }),
+  });
+  const call: Backoffice['call'] = async (method, path, accessToken, body, headers = {}) => {
+    const refreshToken = (body as { refreshToken?: unknown } | undefined)?.refreshToken;
+    const issuing = accessToken === undefined && method === 'POST' && (path === '/auth/login' || path === '/auth/refresh');
+    const key = path === '/auth/refresh' && typeof refreshToken === 'string' ? keyOf(refreshToken) : newBrowserKey();
+    const proof = (): Record<string, string> => ({
+      dpop: signProof(key, { method, path: `/v1${path}`, iat: nowSeconds(), ...(path === '/auth/refresh' && typeof refreshToken === 'string' ? { refreshToken } : {}) }),
+    });
+    const response = await fetch(`${app.baseUrl}/v1${path}`, {
       method,
       headers: {
-        ...(accessToken === undefined ? {} : { authorization: `Bearer ${accessToken}` }),
+        ...(accessToken === undefined ? (issuing ? proof() : {}) : accessToken.startsWith('fc_sk_') ? { authorization: `Bearer ${accessToken}` } : userHeaders(method, path, accessToken)),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         ...headers,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+    if (issuing && response.status === 200) {
+      const issued = ((await response.clone().json()) as { data: Tokens }).data;
+      keys.set(issued.accessToken, key);
+      keys.set(issued.refreshToken, key);
+    }
+    return response;
+  };
   const publicCall: Backoffice['publicCall'] = (method, path, apiKey, headers = {}, body) =>
     fetch(`${app.baseUrl}/public/v1${path}`, {
       method,
@@ -165,6 +223,8 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
     logEvents: logs.events,
     login,
     call,
+    userHeaders,
+    keyOf,
     publicCall,
     meter: publicApi.meter,
     tokens: async (name, headers) => {

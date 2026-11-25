@@ -124,7 +124,7 @@ describe('POST /v1/client-errors', () => {
     const token = (await office.tokens('user-001')).accessToken;
     const big = await office.call('POST', '/client-errors', token, { ...report, stack: 'x'.repeat(9000) });
     assert.equal(big.status, 413);
-    const wrongType = await fetch(`${office.app.baseUrl}/v1/client-errors`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'text/plain' }, body: 'x' });
+    const wrongType = await fetch(`${office.app.baseUrl}/v1/client-errors`, { method: 'POST', headers: { ...office.userHeaders('POST', '/client-errors', token), 'content-type': 'text/plain' }, body: 'x' });
     assert.equal(wrongType.status, 415);
   });
 

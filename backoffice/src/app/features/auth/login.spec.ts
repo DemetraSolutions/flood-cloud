@@ -37,6 +37,7 @@ async function render(returnUrl?: string) {
   };
   const signIn = async (profile = fakeProfile()) => {
     await submitForm(fixture);
+    await settle();
     backend().expectOne(`${API}/v1/auth/login`).flush(tokenBody(1));
     await settle();
     backend().expectOne(`${API}/v1/me`).flush({ data: profile });
@@ -104,6 +105,7 @@ describe('Login', () => {
   it('shows every missing field on submit, focuses the first and sends nothing', async () => {
     const { fixture } = await render();
     await submitForm(fixture);
+    await settle();
     expect(errorOf(fixture, 'AUTH.LOGIN.USERNAME')).toBe('FORM.ISSUE.REQUIRED');
     expect(errorOf(fixture, 'AUTH.LOGIN.PASSWORD')).toBe('FORM.ISSUE.REQUIRED');
     expect(document.activeElement).toBe(findControl(fixture, 'AUTH.LOGIN.USERNAME'));
@@ -114,6 +116,7 @@ describe('Login', () => {
     const { fixture } = await render();
     await typeInto(fixture, 'AUTH.LOGIN.USERNAME', 'mario.rossi');
     await submitForm(fixture);
+    await settle();
     expect(document.activeElement).toBe(findControl(fixture, 'AUTH.LOGIN.PASSWORD'));
   });
 
@@ -157,6 +160,7 @@ describe('Login', () => {
       const { fixture, fill } = await render();
       await fill(' mario ', ' pass word ');
       await submitForm(fixture);
+      await settle();
       const request = backend().expectOne(`${API}/v1/auth/login`);
       expect(request.request.body).toEqual({ username: ' mario ', password: ' pass word ' });
       request.flush(errorBody('INVALID_CREDENTIALS'), { status: 401, statusText: 'x' });
@@ -172,6 +176,7 @@ describe('Login', () => {
       const ctx = await render();
       await ctx.fill();
       await submitForm(ctx.fixture);
+      await settle();
       failRequest(backend(), '/v1/auth/login', code, { headers });
       await settle();
       await ctx.fixture.whenStable();
@@ -209,6 +214,7 @@ describe('Login', () => {
       await ctx.fixture.whenStable();
       await ctx.fill();
       await submitForm(ctx.fixture);
+      await settle();
       failRequest(backend(), '/v1/auth/login', 'INVALID_CREDENTIALS');
       await settle();
       await ctx.fixture.whenStable();
@@ -231,6 +237,7 @@ describe('Login', () => {
       const { fixture, alert, fill } = await render();
       await fill();
       await submitForm(fixture);
+      await settle();
       backend().expectOne(`${API}/v1/auth/login`).error(new ProgressEvent('error'));
       await settle();
       await fixture.whenStable();
@@ -242,6 +249,7 @@ describe('Login', () => {
       const { fixture, alert, fill } = await render();
       await fill();
       await submitForm(fixture);
+      await settle();
       backend().expectOne(`${API}/v1/auth/login`).flush({});
       await settle();
       await fixture.whenStable();
@@ -253,6 +261,7 @@ describe('Login', () => {
       const { fixture, alert, fill } = await failWith('INVALID_CREDENTIALS');
       await fill('mario.rossi', 'other-pass');
       await submitForm(fixture);
+      await settle();
       expect(alert()).toBeNull();
       backend().expectOne(`${API}/v1/auth/login`).flush(errorBody('INVALID_CREDENTIALS'), {
         status: 401,
@@ -265,9 +274,11 @@ describe('Login', () => {
     const { fixture, fill, submitButton } = await render();
     await fill();
     await submitForm(fixture);
+    await settle();
     expect(submitButton().getAttribute('aria-busy')).toBe('true');
     expect(submitButton().disabled).toBe(true);
     await submitForm(fixture);
+    await settle();
     const request = backend().expectOne(`${API}/v1/auth/login`);
     request.flush(errorBody('INVALID_CREDENTIALS'), { status: 401, statusText: 'x' });
     await settle();
