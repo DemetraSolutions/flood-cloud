@@ -44,3 +44,14 @@ export function createApiKeyCallers(databases: Databases): ApiKeyCallers {
     },
   };
 }
+
+/**
+ * The caller of a verified key for the data that has no perimeter of places: the contacts, their groups and the advanced loyalty cards belong to the whole group, as they do for a company or place administrator in the backoffice. The restrictions of the key to
+ * companies or places are not applied (the catalog is the only part of the public API they narrow), so the caller always has the scope `group`; it carries the permissions of the key, which the services use to decide what a contact shows of its cards.
+ *
+ * @param principal The verified key.
+ * @returns A frozen caller with the scope of the group of the key.
+ */
+export function groupCallerOf(principal: ApiKeyPrincipal): ApiKeyCaller {
+  return Object.freeze({ kind: 'apiKey' as const, keyId: principal.keyId, prefix: principal.prefix, permissions: principal.permissions, scope: Object.freeze({ kind: 'group' as const, groupId: principal.groupId }) });
+}

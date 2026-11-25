@@ -129,4 +129,30 @@ describe('POST /v1/groups/{groupId}/places/{placeId}/duplicate', () => {
     assert.deepEqual(failure(await call(world.office.cluster.psa, 'POST', path(P(102), '/duplicate'))), { status: 409, code: 'CONFLICT', details: [{ field: 'companyId', issue: 'incorrect' }] });
     assert.equal(await ctx.databases.group(world.group(0).groupId, 'cluster0').collection('places').countDocuments({}), before);
   });
+  it('never copies the activation code of Satispay an old place may still hold, and copies everything else of the integrations as it is, whatever shape they have', async () => {
+    const satispay = { status: true, activationCode: 'OLDCODE12345', keyId: 'fake-satispay-key-id', type: 'checkin' };
+    const withCode = await world.seedPlace(0, 104, 1, { integrations: { dojo: { status: true, apiKey: 'fixture-integration-secret' }, satispay, tsh: { status: false } } });
+    const odd: Array<[number, unknown]> = [[105, null], [106, { satispay: 'not an object' }], [107, { satispay: null }], [108, { satispay: { status: true, keyId: null } }]];
+    for (const [n, integrations] of odd) {
+      await world.seedPlace(0, n, 1, { integrations });
+    }
+    const missing = await world.seedPlace(0, 109, 1);
+    await ctx.databases.group(world.group(0).groupId, 'cluster0').collection('places').updateOne({ _id: missing }, { $unset: { integrations: '' } });
+    for (const [source, expected] of [
+      [withCode, { dojo: { status: true, apiKey: 'fixture-integration-secret' }, satispay: { status: true, keyId: 'fake-satispay-key-id', type: 'checkin' }, tsh: { status: false } }],
+      ...odd.map(([n, integrations]) => [P(n), integrations] as const),
+    ] as const) {
+      const reply = await call(world.office.cluster.psa, 'POST', path(source, '/duplicate'));
+      assert.equal(reply.status, 201, JSON.stringify(reply.body));
+      const copy = (await world.storedPlace(0, ObjectId.createFromHexString(reply.body.data.id)))!;
+      assert.deepEqual(copy['integrations'], expected);
+      assert.ok(sameDocument(expectedCopy(copy, world.group(0).groupId), (await world.copyOfPlace(ObjectId.createFromHexString(reply.body.data.id)))!));
+    }
+    // The key order of the integrations is the source's, and the source keeps its code.
+    assert.deepEqual(Object.keys(((await world.storedPlace(0, withCode))!['integrations'] as Document)), ['dojo', 'satispay', 'tsh']);
+    assert.equal((((await world.storedPlace(0, withCode))!['integrations'] as Document)['satispay'] as Document)['activationCode'], 'OLDCODE12345');
+    const none = await call(world.office.cluster.psa, 'POST', path(missing, '/duplicate'));
+    assert.equal(none.status, 201);
+    assert.ok(!Object.hasOwn((await world.storedPlace(0, ObjectId.createFromHexString(none.body.data.id)))!, 'integrations'));
+  });
 });

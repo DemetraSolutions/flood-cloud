@@ -31,9 +31,18 @@
         </button>
       }
       @if (canDelete()) {
-        <button fc-button variant="danger" [disabled]="busy()" (click)="deleteOpen.set(true)">
+        <button
+          fc-button
+          variant="danger"
+          [disabled]="busy() || tooManyToDelete()"
+          [attr.aria-describedby]="tooManyToDelete() ? 'trash-delete-limit' : null"
+          (click)="deleteOpen.set(true)"
+        >
           {{ 'TRASH.DELETE.ACTION' | t }}
         </button>
+        @if (tooManyToDelete()) {
+          <span id="trash-delete-limit" role="status">{{ deleteLimitMessage() }}</span>
+        }
       }
     }
     @if (emptyNeedsGroup()) {
@@ -80,6 +89,9 @@
       }
     </ng-template>
     <ng-template fcCell="name" let-row>
+      <a [routerLink]="detailRoute(row)">{{ label(row) }}</a>
+    </ng-template>
+    <ng-template fcCell="displayName" let-row>
       <a [routerLink]="detailRoute(row)">{{ label(row) }}</a>
     </ng-template>
     <ng-template fcCell="username" let-row>

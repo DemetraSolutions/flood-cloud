@@ -112,10 +112,14 @@ src/
     security/            # token, hash, scrypt, policy RBAC, rate limit, audit
     validation/          # validatore per allowlist
   modules/<dominio>/     # routes, controller, service, repository, schemas, mapper, indexes
-  integrations/<provider>/
+  infrastructure/gcs/    # storage delle immagini (GCS): infrastruttura del core, non un'integrazione sganciabile
+  integrations/          # modulo sganciabile dei provider esterni: un solo ingresso (index.ts), client HTTP comune (http/), un
+                         # sottomodulo per provider (cerved/, dojo/, satispay/, tsh/, geocoding/)
 test/
   unit/  integration/  helpers/
 ```
+`integrations/` è un **modulo a sé** (passo IN): ha un solo ingresso, `integrations/index.ts` (`createIntegrations(deps)`), e `composition.ts` è l'unico file del core che lo importa. `modules/`, `shared/` e `db/` non importano mai da `integrations/`; il modulo importa solo da `shared/` e dalle **porte** che il core gli passa (`shared/integrations/ports.ts`, implementate in `modules/places`), mai da `modules/`, `db/`, `infrastructure/` né dal pacchetto `mongodb`, e non legge `process.env`. Un test di architettura sugli import lo garantisce. Sganciarlo significa togliere quella chiamata in `composition.ts`. Lo storage GCS sta in `infrastructure/` perché è infrastruttura del core, non un provider opzionale.
+
 Pipeline di ogni route: **autenticazione → rate limit → autorizzazione → validazione → controller → service → repository**. Il builder delle route rifiuta all'avvio una route senza autenticazione dichiarata (skill `express-module-scaffold`).
 
 ### 5.3 Backoffice

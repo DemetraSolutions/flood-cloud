@@ -1,0 +1,13 @@
+<section class="block" role="alert" aria-labelledby="contact-reference-heading">
+  <h2 id="contact-reference-heading">{{ heading() }}</h2>
+  <p>{{ message() }}</p>
+  <ul>
+    @for (entry of kinds(); track entry.kind) {
+      <li>{{ 'CONTACTS.REFERENCE.ITEM' | t: { kind: kindLabel(entry.kind), count: countText(entry.count) } }}</li>
+    }
+  </ul>
+  <p class="note">{{ 'CONTACTS.REFERENCE.MORE_AFTER' | t }}</p>
+  <button fc-button variant="secondary" type="button" (click)="closed.emit()">
+    {{ 'COMMON.CLOSE' | t }}
+  </button>
+</section>

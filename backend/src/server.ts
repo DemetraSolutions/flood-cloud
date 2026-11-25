@@ -5,8 +5,8 @@ import type { AddressInfo } from 'node:net';
 import type { MongoClient } from 'mongodb';
 import { createApp } from './app.ts';
 import { createBackofficeModules, createPublicApiModules } from './composition.ts';
-import { createMediaStorage } from './integrations/gcs/index.ts';
-import type { MediaStorage } from './integrations/gcs/index.ts';
+import { createMediaStorage } from './infrastructure/gcs/index.ts';
+import type { MediaStorage } from './infrastructure/gcs/index.ts';
 import { loadConfig } from './config.ts';
 import type { Config } from './config.ts';
 import { closeClusters, connectClusters, createClusterClients } from './db/clusters.ts';
@@ -172,7 +172,7 @@ export async function run(
   });
   const rateLimiter = createRateLimiter(databases);
   const backoffice = createBackofficeModules({ config, databases, activityLog, logger, rateLimiter, mediaStorage });
-  const publicApi = createPublicApiModules({ config, databases, activityLog, logger, rateLimiter, catalog: backoffice.catalog });
+  const publicApi = createPublicApiModules({ config, databases, activityLog, logger, rateLimiter, catalog: backoffice.catalog, crm: backoffice.crm });
   const app = createApp({
     config,
     logger,

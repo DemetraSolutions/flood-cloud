@@ -807,7 +807,7 @@ describe('companies and places writer: the blocks of a place', () => {
     ] as const) {
       await assert.rejects(() => writerOn().updatePlace(P(1), version, { [field]: value } as never), invalid(field), field);
     }
-    for (const field of ['platform', 'platform.ip', 'general', 'general.unknownKey', 'openingTime', 'delivery', 'delivery.unknownKey', 'roomsSettings', 'roomsSettings.reservation', 'integrations', 'integrations.dojo', 'integrations.floodOrders', 'integrations.tsh.tshCategories', 'devices.0.info', 'server']) {
+    for (const field of ['platform', 'platform.ip', 'general', 'general.unknownKey', 'openingTime', 'delivery', 'delivery.unknownKey', 'roomsSettings', 'roomsSettings.reservation', 'integrations', 'integrations.dojo', 'integrations.floodOrders', 'integrations.satispay.activationCode', 'devices.0.info', 'server']) {
       await assert.rejects(() => writerOn().updatePlace(P(1), version, { [field]: {} } as never), invalid(field), field);
     }
     // A date key that is not a date is kept as it is, and an operator is not.

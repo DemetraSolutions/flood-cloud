@@ -1,6 +1,6 @@
 import type { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
-import { createMediaStorage } from '../../src/integrations/gcs/index.ts';
+import { createMediaStorage } from '../../src/infrastructure/gcs/index.ts';
 import { startBackoffice } from './backoffice.ts';
 import type { Backoffice, BackofficeOptions } from './backoffice.ts';
 import { startFakeGcs } from './fake-gcs.ts';

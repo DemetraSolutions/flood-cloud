@@ -2,7 +2,7 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Double, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
-import { OBJECT_CACHE_CONTROL } from '../../src/integrations/gcs/gcs-storage.ts';
+import { OBJECT_CACHE_CONTROL } from '../../src/infrastructure/gcs/gcs-storage.ts';
 import { IMAGE_SIZES, IMAGE_SIZE_NAMES } from '../../src/modules/media/image.types.ts';
 import { MAX_IMAGE_BYTES } from '../../src/modules/media/upload.ts';
 import { FILES_OWNED_FIELDS } from '../../src/db/collections.ts';

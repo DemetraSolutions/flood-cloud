@@ -619,7 +619,7 @@ describe('a concurrent restore during a bulk delete', () => {
       transaction: (work) => ctx.databases.transaction(work),
       now: () => Date.now(),
     });
-    const trash = createTrashService({ companies, places, users: usersService, groups: { restoreFromTrash: async () => ({ done: false, issue: 'notFound' }) }, products: { restoreFromTrash: async () => ({ done: false, issue: 'notFound' }), deleteFromTrash: async () => ({ done: false, issue: 'notFound' }), trashedIds: async () => [], countTrashed: async () => 0 }, activityLog });
+    const trash = createTrashService({ companies, places, users: usersService, groups: { restoreFromTrash: async () => ({ done: false, issue: 'notFound' }) }, products: { restoreFromTrash: async () => ({ done: false, issue: 'notFound' }), deleteFromTrash: async () => ({ done: false, issue: 'notFound' }), trashedIds: async () => [], countTrashed: async () => 0 }, contacts: { restoreFromTrash: async () => ({ done: false, issue: 'notFound' }), deleteFromTrash: async () => ({ done: false, issue: 'notFound' }), trashedIds: async () => [], countTrashed: async () => 0 }, activityLog });
     return { trash, activityLog, principal, companies, places };
   };
   const accessOf = async () => (await accessFor(SA(), g0().groupId, TEST_CLUSTER))!;

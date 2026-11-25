@@ -36,6 +36,8 @@ export class Dialog {
   readonly wide = input(false, { transform: booleanAttribute });
   /** Announces the dialog as an alert (`alertdialog`): for warnings that need an answer before going on. */
   readonly alert = input(false, { transform: booleanAttribute });
+  /** The dialog cannot be dismissed (Esc, the close button) while it is `true`: for a request that must finish before the user leaves. */
+  readonly locked = input(false, { transform: booleanAttribute });
   /** Whether the dialog is open (two-way). */
   readonly open = model(false);
   /** Emitted after the dialog closed, whatever the reason. */
@@ -56,6 +58,13 @@ export class Dialog {
         element.close();
       }
     });
+  }
+
+  /** Esc asks the native dialog to cancel: a locked dialog stays open. */
+  protected onCancel(event: Event): void {
+    if (this.locked()) {
+      event.preventDefault();
+    }
   }
 
   protected onClose(): void {

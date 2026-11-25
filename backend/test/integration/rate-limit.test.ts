@@ -41,6 +41,15 @@ describe('rate limiter (real MongoDB)', () => {
     assert.ok(stored!.expiresAt.getTime() > midnight + DAY * 1000);
   });
 
+  it('adds an amount in one atomic update and flags the request that takes the counter over the limit, once', async () => {
+    const limiter = createRateLimiter(ctx.databases, () => BASE);
+    const sums = [30_000, 20_000, 60_000, 5_000].map((cents) => limiter.consume('sum:test', 'k', 100_000, 3600, cents));
+    const decisions = await Promise.all(sums);
+    assert.deepEqual(decisions.map((decision) => decision.firstExcess).filter(Boolean).length, 1, 'only one request crosses the limit');
+    assert.equal(decisions.filter((decision) => decision.allowed).length >= 2, true);
+    assert.equal((await counters().findOne({ _id: `sum:test:${createHash('sha256').update('k').digest('hex')}:${String(Math.floor(BASE / 1000 / 3600) * 3600)}` }))?.count, 115_000);
+  });
+
   it('counts per window, reports remaining and reset, and flags only the first excess', async () => {
     const start = BASE + 10_000;
     const limiter = createRateLimiter(ctx.databases, () => start);

@@ -1,0 +1,11 @@
+@if (warning(); as found) {
+  <p class="note" role="status">
+    {{ 'CONTACTS.WARNING.DUPLICATE' | t }}
+    @for (link of links(); track link.id; let last = $last) {
+      <a [routerLink]="link.route">{{ link.label }}</a>{{ last ? '' : ', ' }}
+    }
+    @if (found.others > 0) {
+      {{ 'CONTACTS.WARNING.OTHERS' | t: { count: found.others } }}
+    }
+  </p>
+}

@@ -1,0 +1,45 @@
+<fieldset>
+  <legend>{{ legend() }}</legend>
+  <div class="grid">
+    <fc-text-field
+      [formField]="form().street"
+      autocomplete="off"
+      [label]="'CONTACTS.ADDRESS.STREET' | t"
+      [error]="error(form().street)"
+      (blurred)="form().street().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="form().postcode"
+      autocomplete="off"
+      [label]="'CONTACTS.ADDRESS.POSTCODE' | t"
+      [error]="error(form().postcode)"
+      (blurred)="form().postcode().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="form().city"
+      autocomplete="off"
+      [label]="'CONTACTS.ADDRESS.CITY' | t"
+      [error]="error(form().city)"
+      (blurred)="form().city().markAsTouched()"
+    />
+    <fc-select
+      [formField]="form().countryCode"
+      [label]="'CONTACTS.ADDRESS.COUNTRY' | t"
+      [placeholder]="'CONTACTS.NONE' | t"
+      [options]="countryOptions()"
+      [error]="error(form().countryCode)"
+      (valueChange)="onCountry($event)"
+      (blurred)="form().countryCode().markAsTouched()"
+    />
+    @if (areas().length > 0) {
+      <fc-select
+        [formField]="form().areaCode"
+        [label]="'CONTACTS.ADDRESS.PROVINCE' | t"
+        [placeholder]="'CONTACTS.NONE' | t"
+        [options]="provinceOptions()"
+        [error]="error(form().areaCode)"
+        (blurred)="form().areaCode().markAsTouched()"
+      />
+    }
+  </div>
+</fieldset>

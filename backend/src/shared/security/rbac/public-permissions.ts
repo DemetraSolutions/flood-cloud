@@ -1,8 +1,9 @@
 /**
  * Catalog of the permissions of the public API (`/public/v1`), kept apart from the backoffice permissions: a public API key
- * holds some of these and nothing else. `GET /me` needs none. Every entry must be described in `doc/Public-API.md`.
+ * holds some of these and nothing else. `GET /me` needs none. `contacts:*` is the contacts and their groups (personal data), `fidelityCards:*` the advanced loyalty cards (`fidelityCards:write` moves prepaid
+ * credit); `*:write` never implies `*:read`, and a key holds each one on its own. Every entry must be described in `doc/Public-API.md`.
  */
-export const PUBLIC_PERMISSIONS = Object.freeze(['places:read', 'companies:read', 'catalog:read', 'catalog:write'] as const);
+export const PUBLIC_PERMISSIONS = Object.freeze(['places:read', 'companies:read', 'catalog:read', 'catalog:write', 'contacts:read', 'contacts:write', 'fidelityCards:read', 'fidelityCards:write'] as const);
 
 /** A permission a public API key may hold. */
 export type PublicPermission = (typeof PUBLIC_PERMISSIONS)[number];

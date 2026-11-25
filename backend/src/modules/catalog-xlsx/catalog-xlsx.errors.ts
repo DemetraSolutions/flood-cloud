@@ -32,12 +32,12 @@ export const ROW_ERROR_MESSAGES = Object.freeze({
 /** A code of {@link ROW_ERROR_MESSAGES}. */
 export type RowErrorCode = keyof typeof ROW_ERROR_MESSAGES;
 
-/** A problem of the workbook: the sheet, the row (`null` for a problem of the whole sheet), the column (its header), a stable code and a text. */
-export interface RowError {
+/** A problem of the workbook: the sheet, the row (`null` for a problem of the whole sheet), the column (its header), a stable code and a text. The workbooks of the contacts and of the cards use their own codes (`C`). */
+export interface RowError<C extends string = RowErrorCode> {
   readonly sheet: string;
   readonly row: number | null;
   readonly column: string | null;
-  readonly code: RowErrorCode;
+  readonly code: C;
   readonly message: string;
 }
 
@@ -77,7 +77,7 @@ export class ErrorCollector {
 /** The refusal of an import whose workbook has problems: nothing was written. The controller answers `422` with the list. */
 export class ImportRefusal extends Error {
   /** The problems listed, at most {@link MAX_REPORTED_ERRORS}. */
-  readonly errors: readonly RowError[];
+  readonly errors: readonly RowError<string>[];
   /** How many problems the import found (counted up to {@link MAX_COLLECTED_ERRORS}). */
   readonly errorCount: number;
 
@@ -85,7 +85,7 @@ export class ImportRefusal extends Error {
    * @param errors The problems listed.
    * @param errorCount How many problems there are.
    */
-  constructor(errors: readonly RowError[], errorCount: number) {
+  constructor(errors: readonly RowError<string>[], errorCount: number) {
     super('The workbook has problems: nothing was imported');
     this.name = 'ImportRefusal';
     this.errors = errors;

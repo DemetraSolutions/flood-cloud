@@ -1,0 +1,23 @@
+<fieldset>
+  <legend>{{ 'INTEGRATIONS.TSH_MAP.LEGEND' | t }}</legend>
+  <p class="note">{{ 'INTEGRATIONS.TSH_MAP.HINT' | t }}</p>
+  @if (!hasCopy()) {
+    <p class="note">{{ 'INTEGRATIONS.TSH_MAP.NO_CATEGORIES' | t }}</p>
+  } @else if (rows().length === 0) {
+    <p class="note">{{ 'INTEGRATIONS.TSH_MAP.NO_PRODUCT_CATEGORIES' | t }}</p>
+  }
+  @if (hasCopy()) {
+    <div class="grid">
+      @for (row of rows(); track row.id) {
+        <fc-select
+          [label]="row.name"
+          [options]="row.options"
+          [placeholder]="'INTEGRATIONS.TSH_MAP.NONE' | t"
+          [value]="row.value"
+          [disabled]="!state.canWrite()"
+          (valueChange)="set(row.id, $event)"
+        />
+      }
+    </div>
+  }
+</fieldset>

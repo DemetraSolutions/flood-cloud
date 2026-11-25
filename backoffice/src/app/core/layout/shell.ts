@@ -13,6 +13,7 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router
 import { filter, map } from 'rxjs';
 import { SecurityAlerts } from '../activity/security-alerts';
 import { I18nService } from '../i18n/i18n.service';
+import { NonFiscalMode } from '../sales/non-fiscal-mode';
 import { TPipe } from '../i18n/t-pipe';
 import { CountBadge } from '../../shared/ui/count-badge/count-badge';
 import { IconButton } from '../../shared/ui/icon-button/icon-button';
@@ -52,6 +53,7 @@ export class Shell {
   private readonly features = inject(GroupFeatures);
   private readonly alerts = inject(SecurityAlerts);
   private readonly i18n = inject(I18nService);
+  private readonly nonFiscal = inject(NonFiscalMode);
 
   /** Counter of the activity log entry: the text shown and the one read by screen readers, `null` when there are no new alerts. */
   protected readonly alertBadge = computed(() => {
@@ -146,6 +148,11 @@ export class Shell {
       this.menuOpen.set(false);
       this.focusAfterRender(() => this.toggle().nativeElement);
     }
+  }
+
+  /** A click on the name of the application (seven of them turn the UM mode on, one turns it off). */
+  protected onBrandClick(): void {
+    this.nonFiscal.brandClick();
   }
 
   protected onEscape(): void {

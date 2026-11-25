@@ -42,6 +42,8 @@ export interface CatalogLockDeps {
   readonly logger: Logger;
   /** Lifetime of a lock in milliseconds. */
   readonly lifetimeMs?: number;
+  /** The prefix of the key of the lock document ({@link CATALOG_LOCK_PREFIX} by default): the workbooks of the contacts and of the loyalty cards take a lock of their own, so an import of one does not wait for another. */
+  readonly prefix?: string;
 }
 
 /**
@@ -54,7 +56,8 @@ export function createCatalogLock(deps: CatalogLockDeps): CatalogLock {
   /** The expiry, as an expression of the database clock. */
   const expiry = { $dateAdd: { startDate: '$$NOW', unit: 'millisecond', amount: lifetime } };
   const settings = () => deps.databases.common().collection('settings');
-  const keyOf = (groupId: ObjectId): string => `${CATALOG_LOCK_PREFIX}${groupId.toHexString()}`;
+  const prefix = deps.prefix ?? CATALOG_LOCK_PREFIX;
+  const keyOf = (groupId: ObjectId): string => `${prefix}${groupId.toHexString()}`;
   const unavailable = (error: unknown): AppError => {
     deps.logger.error('the lock of the catalog of a group could not be taken or renewed', { error });
     return new AppError('SERVICE_UNAVAILABLE');

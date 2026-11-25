@@ -41,8 +41,9 @@ describe('media storage configuration', () => {
     assert.equal(defaults.rateLimitPublicCatalogWritePerKey, 60);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY: '9' })).rateLimitPublicCatalogWritePerKey, 9);
     assert.deepEqual([defaults.rateLimitApiPerStore, defaults.rateLimitStoreActivationPerIp, defaults.rateLimitStoreKeyAdminPerUser, defaults.storeActivationCodeTtlMinutes], [600, 10, 20, 1440]);
-    const custom = loadConfig(validEnv({ RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE: '7', RATE_LIMIT_API_PER_STORE: '1000000', RATE_LIMIT_STORE_ACTIVATION_PER_IP: '1', RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: '100000', STORE_ACTIVATION_CODE_TTL_MINUTES: '5' }));
+    const custom = loadConfig(validEnv({ RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE: '7', RATE_LIMIT_API_PER_STORE: '1000000', RATE_LIMIT_STORE_ACTIVATION_PER_IP: '1', RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: '100000', STORE_ACTIVATION_CODE_TTL_MINUTES: '5', STORE_CREDIT_ALERT_PER_OPERATION: '250', STORE_CREDIT_ALERT_PER_DAY: '1000000000' }));
     assert.equal(custom.rateLimitStoreCatalogWritePerStore, 7);
+    assert.deepEqual([defaults.storeCreditAlertPerOperation, defaults.storeCreditAlertPerDay, custom.storeCreditAlertPerOperation, custom.storeCreditAlertPerDay], [500, 5000, 250, 1_000_000_000]);
     assert.deepEqual([custom.rateLimitApiPerStore, custom.rateLimitStoreActivationPerIp, custom.rateLimitStoreKeyAdminPerUser, custom.storeActivationCodeTtlMinutes], [1_000_000, 1, 100_000, 5]);
     assert.equal(loadConfig(validEnv({ STORE_ACTIVATION_CODE_TTL_MINUTES: '10080' })).storeActivationCodeTtlMinutes, 10080);
     assert.equal(defaults.rateLimitDiagnosticsExportPerUser, 5);
@@ -51,7 +52,7 @@ describe('media storage configuration', () => {
     assert.equal(defaults.rateLimitTobaccosImportPerUser, 5);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_TOBACCOS_IMPORT_PER_USER: '100000' })).rateLimitTobaccosImportPerUser, 100000);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER: '100000' })).rateLimitDiagnosticsExportPerUser, 100000);
-    for (const [variable, bad] of [['RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE', '0'], ['RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY', '0'], ['RATE_LIMIT_API_PER_STORE', '0'], ['RATE_LIMIT_API_PER_STORE', '1000001'], ['RATE_LIMIT_STORE_ACTIVATION_PER_IP', '100001'], ['RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 'x'], ['RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', '0'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '4'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '10081']] as const) {
+    for (const [variable, bad] of [['RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE', '0'], ['RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY', '0'], ['RATE_LIMIT_API_PER_STORE', '0'], ['RATE_LIMIT_API_PER_STORE', '1000001'], ['RATE_LIMIT_STORE_ACTIVATION_PER_IP', '100001'], ['RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 'x'], ['RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', '0'], ['STORE_CREDIT_ALERT_PER_OPERATION', '0'], ['STORE_CREDIT_ALERT_PER_DAY', '1000000001'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '4'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '10081']] as const) {
       assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/, `${variable}=${bad}`);
     }
   });

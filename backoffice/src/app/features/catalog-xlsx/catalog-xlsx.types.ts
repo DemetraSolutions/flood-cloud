@@ -1,7 +1,7 @@
 import { ApiErrorRow } from '../../core/api/api.types';
 import { I18nService } from '../../core/i18n/i18n.service';
 
-/** The sheets of the workbook, as the import answers list them. */
+/** The sheets of the workbook of the catalog, as the import answers list them (the contacts and the cards have one sheet each: see `xlsx-tools.ts`). */
 export const SHEET_KEYS = ['products', 'variants', 'categories'] as const;
 
 /** A sheet of the workbook. */
@@ -25,11 +25,12 @@ export interface SheetCounts {
   readonly unchanged: number;
 }
 
-/** What `POST /v1/groups/{groupId}/catalog-import` answers. */
+/** What `POST /v1/groups/{groupId}/<catalog|contacts|fidelity-cards>-import` answers. */
 export interface ImportOutcome {
   /** `true` when nothing was written (the check). */
   readonly dryRun: boolean;
-  readonly sheets: Readonly<Record<SheetKey, SheetCounts>>;
+  /** The counts of each sheet of the workbook, by sheet key. */
+  readonly sheets: Readonly<Record<string, SheetCounts>>;
 }
 
 /** How the export writes the columns that accept an id or a name. */
@@ -63,13 +64,24 @@ export const ROW_ERROR_CODES = [
   'tooSlow',
 ] as const;
 
-/** A code of {@link ROW_ERROR_CODES}. */
-export type RowErrorCode = (typeof ROW_ERROR_CODES)[number];
+/** The stable codes the workbooks of the contacts and of the cards add to the ones of the catalog (`records-xlsx.errors.ts`); the other codes of those workbooks are in {@link ROW_ERROR_CODES}. */
+export const RECORD_ROW_ERROR_CODES = ['duplicateCode', 'balanceChange', 'pointsChange'] as const;
+
+/** Every code of a problem of a row any of the workbooks can list. */
+export const ALL_ROW_ERROR_CODES: readonly RowErrorCode[] = [
+  ...ROW_ERROR_CODES,
+  ...RECORD_ROW_ERROR_CODES,
+];
+
+/** A code of {@link ROW_ERROR_CODES} or of {@link RECORD_ROW_ERROR_CODES}. */
+export type RowErrorCode =
+  | (typeof ROW_ERROR_CODES)[number]
+  | (typeof RECORD_ROW_ERROR_CODES)[number];
 
 /** Codes whose server message ends with a fixed detail in parentheses (the field and the issue the catalog gave) that the dictionary text cannot know. */
 const CODES_WITH_DETAIL: ReadonlySet<string> = new Set(['invalid', 'conflict']);
 
-const KNOWN_CODES: ReadonlySet<string> = new Set(ROW_ERROR_CODES);
+const KNOWN_CODES: ReadonlySet<string> = new Set(ALL_ROW_ERROR_CODES);
 
 /** Dictionary key of the text of a known problem code (`notFoundReference` is `CATALOG_XLSX.ROW_ERROR.NOT_FOUND_REFERENCE`). */
 export function rowErrorKey(code: RowErrorCode): string {
@@ -92,15 +104,23 @@ export function problemText(i18n: I18nService, problem: ApiErrorRow): string {
   return detail === undefined ? text : `${text} (${detail})`;
 }
 
-/** The sheets of an outcome in the order of the workbook, with their counts. */
-export function sheetCounts(outcome: ImportOutcome): { key: SheetKey; counts: SheetCounts }[] {
-  return SHEET_KEYS.map((key) => ({ key, counts: outcome.sheets[key] }));
+/**
+ * The sheets of an outcome in the order of the workbook, with their counts.
+ *
+ * @param outcome What the server answered.
+ * @param keys The sheets of the workbook in order (the ones of the catalog when omitted).
+ */
+export function sheetCounts(
+  outcome: ImportOutcome,
+  keys: readonly string[] = SHEET_KEYS,
+): { key: string; counts: SheetCounts }[] {
+  return keys.map((key) => ({ key, counts: outcome.sheets[key] }));
 }
 
 /** The counts of all the sheets of an outcome added up. */
 export function totalCounts(outcome: ImportOutcome): SheetCounts {
-  return sheetCounts(outcome).reduce<SheetCounts>(
-    (total, { counts }) => ({
+  return Object.values(outcome.sheets).reduce<SheetCounts>(
+    (total, counts) => ({
       inserted: total.inserted + counts.inserted,
       updated: total.updated + counts.updated,
       removed: total.removed + counts.removed,

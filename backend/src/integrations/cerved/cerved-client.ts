@@ -1,7 +1,7 @@
 import type { Secret } from '../../shared/security/secret.ts';
 import { CervedError } from './cerved-error.ts';
-import { getJson } from './http.ts';
-import type { HttpOptions } from './http.ts';
+import { createHttpClient } from '../http/index.ts';
+import type { HttpClient, HttpClientOptions, ProviderHttpError } from '../http/index.ts';
 
 /** Longest text taken from an answer of the provider. */
 const MAX_TEXT = 300;
@@ -49,8 +49,11 @@ export interface CervedClient {
   findPec(subjectId: string): Promise<string | null>;
 }
 
+/** The collaborators of the HTTP calls of the client that a test replaces (the provider, the base URL and the retries are fixed by the client). */
+export type CervedHttpOptions = Pick<HttpClientOptions, 'fetch' | 'timeoutMs' | 'totalTimeoutMs' | 'maxBodyBytes' | 'now' | 'sleep' | 'random'>;
+
 /** Settings of {@link createCervedClient}. */
-export interface CervedClientOptions extends HttpOptions {
+export interface CervedClientOptions extends CervedHttpOptions {
   /** The key of the account, `null` when not configured. */
   readonly apiKey: Secret | null;
   /** Base URL, validated by the configuration (`CERVED_BASE_URL`), without trailing slash. */
@@ -74,13 +77,28 @@ function subjectIdOf(value: unknown): string | null {
   return id !== null && SUBJECT_ID.test(id) ? id : null;
 }
 
+/** The failure of the HTTP client in the vocabulary of the Cerved adapter. */
+function cervedError(error: ProviderHttpError): CervedError {
+  return new CervedError(error.operation, error.reason === 'invalidResponse' ? 'malformed' : error.reason, error.status);
+}
+
 /**
  * Builds the Cerved client. The URLs are made with `URLSearchParams`, so a value can never add a parameter or a path.
  *
  * @param options Key, base URL and the collaborators a test replaces.
  */
 export function createCervedClient(options: CervedClientOptions): CervedClient {
-  const { apiKey, baseUrl, ...http } = options;
+  const { apiKey, baseUrl, ...collaborators } = options;
+  // One attempt per call: a lookup is two paid calls, so the adapter never repeats one.
+  const http: HttpClient = createHttpClient({ provider: 'Cerved', baseUrl, retries: 0, ...collaborators });
+  const getJson = async (operation: string, url: string, key: string): Promise<unknown> => {
+    try {
+      return await http.getJson({ operation, url, headers: { apikey: key } });
+    } catch (error) {
+      // The HTTP client throws nothing but its own error.
+      throw cervedError(error as ProviderHttpError);
+    }
+  };
   const keyed = (): string => {
     if (apiKey === null) {
       throw new CervedError('request', 'configuration');
@@ -92,7 +110,7 @@ export function createCervedClient(options: CervedClientOptions): CervedClient {
 
     findCompanyByVat: async (vatNumber) => {
       const key = keyed();
-      const body = objectOf(await getJson(http, 'search', `${baseUrl}/cervedApi/v1/entitySearch/live?${new URLSearchParams({ testoricerca: vatNumber }).toString()}`, key));
+      const body = objectOf(await getJson('search', `${baseUrl}/cervedApi/v1/entitySearch/live?${new URLSearchParams({ testoricerca: vatNumber }).toString()}`, key));
       const companies = body?.['companies'];
       if (!Array.isArray(companies)) {
         throw new CervedError('search', 'malformed');
@@ -118,7 +136,7 @@ export function createCervedClient(options: CervedClientOptions): CervedClient {
 
     findPec: async (subjectId) => {
       const key = keyed();
-      const body = objectOf(await getJson(http, 'profile', `${baseUrl}/cervedApi/v1/entityProfile/live?${new URLSearchParams({ id_soggetto: subjectId }).toString()}`, key));
+      const body = objectOf(await getJson('profile', `${baseUrl}/cervedApi/v1/entityProfile/live?${new URLSearchParams({ id_soggetto: subjectId }).toString()}`, key));
       const emails = objectOf(objectOf(body?.['dati_anagrafici'])?.['pec'])?.['email'];
       const first = Array.isArray(emails) ? textOf(emails[0]) : null;
       return first !== null && first.length <= MAX_EMAIL && /^[^\s@]+@[^\s@]+$/.test(first) ? first : null;

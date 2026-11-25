@@ -1,0 +1,276 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'FIDELITY_CARDS.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ 'FIDELITY_CARDS.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  <fc-page-header
+    [heading]="isNew() ? ('FIDELITY_CARDS.FORM.NEW_TITLE' | t) : (item()?.code ?? '')"
+  >
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{ 'FIDELITY_CARDS.FORM.BACK' | t }}</a>
+      @if (canWrite()) {
+        <button
+          fc-button
+          type="submit"
+          form="fidelity-card-form"
+          [loading]="submitting()"
+          [disabled]="!unsaved()"
+        >
+          {{ isNew() ? ('FIDELITY_CARDS.FORM.CREATE' | t) : ('COMMON.SAVE' | t) }}
+        </button>
+      }
+      @if (canWrite() && !isNew()) {
+        <button
+          fc-button
+          variant="danger"
+          type="button"
+          [disabled]="busy()"
+          (click)="deleteOpen.set(true)"
+        >
+          {{ 'FIDELITY_CARDS.DELETE.ACTION' | t }}
+        </button>
+      }
+    </ng-container>
+  </fc-page-header>
+  <fc-record-group [groupId]="groupId()" />
+
+  @if (item(); as current) {
+    <p class="meta">{{ 'FIDELITY_CARDS.FORM.UPDATED' | t: { date: date(current.updatedAt) } }}</p>
+  }
+  @if (!canWrite()) {
+    <p class="note" role="note">{{ 'FIDELITY_CARDS.READ_ONLY_NOTE' | t }}</p>
+  }
+  @if (failure(); as message) {
+    <fc-form-error [message]="message" />
+    @if (stale()) {
+      <button fc-button variant="secondary" type="button" (click)="reload()">
+        {{ 'FIDELITY_CARDS.FORM.RELOAD' | t }}
+      </button>
+    }
+  }
+
+  <fc-tab-list
+    [label]="'FIDELITY_CARDS.SECTIONS' | t"
+    idPrefix="fidelity-card"
+    [tabs]="tabs()"
+    [active]="section()"
+    (activeChange)="select($event)"
+  />
+
+  <section
+    id="fidelity-card-panel-general"
+    role="tabpanel"
+    aria-labelledby="fidelity-card-tab-general"
+    [hidden]="section() !== 'general'"
+  >
+    <form id="fidelity-card-form" novalidate (submit)="onSubmit($event)">
+      <fc-checkbox [formField]="cardForm.enabled" [label]="'FIDELITY_CARDS.FIELD.ENABLED' | t" />
+      <div class="grid">
+        @if (isNew()) {
+          <fc-text-field
+            [formField]="cardForm.code"
+            autocomplete="off"
+            [label]="'FIDELITY_CARDS.FIELD.CODE' | t"
+            [error]="error(cardForm.code)"
+            (blurred)="cardForm.code().markAsTouched()"
+          />
+        } @else {
+          <div>
+            <p class="code">{{ item()?.code }}</p>
+            <p class="hint">{{ 'FIDELITY_CARDS.FIELD.CODE_READ_ONLY' | t }}</p>
+          </div>
+        }
+        <fc-select
+          [formField]="cardForm.cardTypeId"
+          [label]="'FIDELITY_CARDS.FIELD.TYPE' | t"
+          [placeholder]="'FIDELITY_CARDS.FIELD.TYPE_PLACEHOLDER' | t"
+          [options]="typeOptions()"
+          [error]="error(cardForm.cardTypeId)"
+          (valueChange)="onType($event)"
+          (blurred)="cardForm.cardTypeId().markAsTouched()"
+        />
+      </div>
+
+      @if (isNew()) {
+        @if (askBalance()) {
+          <fc-text-field
+            [formField]="cardForm.initialBalance"
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="'FIDELITY_CARDS.FIELD.INITIAL_BALANCE' | t"
+            [hint]="'FIDELITY_CARDS.FIELD.INITIAL_BALANCE_HINT' | t"
+            [error]="error(cardForm.initialBalance)"
+            (blurred)="cardForm.initialBalance().markAsTouched()"
+          />
+        }
+        @if (askPoints()) {
+          <fieldset>
+            <legend>{{ 'FIDELITY_CARDS.FIELD.INITIAL_POINTS' | t }}</legend>
+            @for (row of model().initialPoints; track row.collectionId; let index = $index) {
+              <fc-text-field
+                inputmode="numeric"
+                autocomplete="off"
+                [label]="'FIDELITY_CARDS.FIELD.POINTS_OF' | t: { name: row.name }"
+                [value]="row.points"
+                [disabled]="!canWrite()"
+                [error]="pointsError(row.points)"
+                (valueChange)="setInitialPoints(index, $event)"
+              />
+            }
+          </fieldset>
+        }
+        <fieldset>
+          <legend>{{ 'FIDELITY_CARDS.FIELD.CUSTOMERS' | t }}</legend>
+          <p class="hint">{{ 'FIDELITY_CARDS.FIELD.CUSTOMERS_HINT' | t: { max: maxCustomers } }}</p>
+          <ul>
+            @for (customer of model().customers; track customer.id) {
+              <li>
+                {{ customer.name }}
+                <button
+                  fc-button
+                  variant="ghost"
+                  type="button"
+                  [attr.aria-label]="
+                    'FIDELITY_CARDS.FIELD.CUSTOMER_REMOVE' | t: { name: customer.name }
+                  "
+                  (click)="removeCustomer(customer.id)"
+                >
+                  {{ 'FIDELITY_CARDS.FIELD.REMOVE' | t }}
+                </button>
+              </li>
+            }
+          </ul>
+          @if (!canReadContacts()) {
+            <p class="note">{{ 'FIDELITY_CARDS.FIELD.CUSTOMERS_NO_ACCESS' | t }}</p>
+          } @else if (canWrite() && model().customers.length < maxCustomers) {
+            <fc-search-combobox
+              [label]="'FIDELITY_CARDS.FIELD.CUSTOMER_SEARCH' | t"
+              value=""
+              [search]="searchCustomers"
+              [minChars]="minChars"
+              [placeholder]="'FIDELITY_CARDS.FIELD.CUSTOMER_PLACEHOLDER' | t"
+              [clearLabel]="'FIDELITY_CARDS.FIELD.CUSTOMER_CLEAR' | t"
+              (choice)="addCustomer($event)"
+            />
+          }
+        </fieldset>
+      }
+    </form>
+
+    @if (!isNew()) {
+      <fieldset>
+        <legend>{{ 'FIDELITY_CARDS.BALANCES.TITLE' | t }}</legend>
+        @if (prepaid()) {
+          <p>{{ 'FIDELITY_CARDS.BALANCES.CREDIT' | t: { amount: creditText() } }}</p>
+        }
+        @if (item()?.cardType?.pointsCollect) {
+          <ul>
+            @for (row of pointsRows(); track row.collectionId) {
+              <li>
+                {{ 'FIDELITY_CARDS.BALANCES.POINTS' | t: { name: row.name, points: row.text } }}
+                @if (!row.active) {
+                  <fc-status-badge tone="warning">{{
+                    'FIDELITY_CARDS.BALANCES.INACTIVE' | t
+                  }}</fc-status-badge>
+                }
+              </li>
+            } @empty {
+              <li class="note">{{ 'FIDELITY_CARDS.BALANCES.NO_POINTS' | t }}</li>
+            }
+          </ul>
+        }
+        @if (!prepaid() && !item()?.cardType?.pointsCollect) {
+          <p class="note">{{ 'FIDELITY_CARDS.BALANCES.NONE' | t }}</p>
+        }
+        @if (canAdjust()) {
+          <div>
+            <button fc-button variant="secondary" type="button" (click)="adjustOpen.set(true)">
+              {{ 'FIDELITY_CARDS.BALANCES.ADJUST' | t }}
+            </button>
+          </div>
+        }
+      </fieldset>
+
+      <fieldset>
+        <legend>{{ 'FIDELITY_CARDS.CUSTOMERS.TITLE' | t }}</legend>
+        <p class="hint">{{ 'FIDELITY_CARDS.CUSTOMERS.EXPLANATION' | t }}</p>
+        <ul>
+          @for (customer of customers(); track customer.id) {
+            <li>
+              @if (canReadContacts()) {
+                <a [routerLink]="customer.route">{{ customer.name }}</a>
+              } @else {
+                {{ customer.name }}
+              }
+            </li>
+          } @empty {
+            <li class="note">{{ 'FIDELITY_CARDS.CUSTOMERS.NONE' | t }}</li>
+          }
+          @if (moreCustomers() > 0) {
+            <li class="note">
+              {{ 'FIDELITY_CARDS.CUSTOMERS.MORE' | t: { count: moreCustomers() } }}
+            </li>
+          }
+        </ul>
+      </fieldset>
+    }
+  </section>
+
+  @if (!isNew()) {
+    <section
+      id="fidelity-card-panel-movements"
+      role="tabpanel"
+      aria-labelledby="fidelity-card-tab-movements"
+      [hidden]="section() !== 'movements'"
+    >
+      <fc-fidelity-card-movements
+        [groupId]="groupId()"
+        [cardId]="cardId()!"
+        [refresh]="movementsRefresh()"
+      />
+    </section>
+  }
+
+  @if (figures(); as card) {
+    <fc-fidelity-card-adjust-dialog
+      [groupId]="groupId()"
+      [card]="card"
+      [prepaid]="prepaid()"
+      [currency]="currency()"
+      [collections]="adjustable()"
+      [open]="adjustOpen()"
+      (openChange)="adjustOpen.set($event)"
+      (adjusted)="onAdjusted($event)"
+      (uncertain)="onUncertain()"
+    />
+  }
+}
+
+<fc-confirm-dialog
+  [heading]="'FIDELITY_CARDS.LEAVE.TITLE' | t"
+  [message]="'FIDELITY_CARDS.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'FIDELITY_CARDS.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>
+<fc-confirm-dialog
+  [heading]="'FIDELITY_CARDS.DELETE.TITLE' | t"
+  [message]="deleteMessage()"
+  [confirmLabel]="'FIDELITY_CARDS.DELETE.ACTION' | t"
+  [danger]="true"
+  [alert]="true"
+  [busy]="busy()"
+  [open]="deleteOpen()"
+  (openChange)="deleteOpen.set($event)"
+  (confirmed)="remove()"
+/>

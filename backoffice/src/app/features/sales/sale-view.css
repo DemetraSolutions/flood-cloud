@@ -1,0 +1,44 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 64rem;
+}
+
+section {
+  margin-block-start: var(--space-4);
+}
+
+h2 {
+  margin-block: 0 var(--space-2);
+  font-size: var(--font-size-lg);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--color-text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--color-text-muted);
+}
+
+.product {
+  display: flex;
+  flex-direction: column;
+}
+
+.product small {
+  color: var(--color-text-muted);
+}

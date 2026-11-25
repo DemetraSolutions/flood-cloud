@@ -1,0 +1,65 @@
+<div class="filters" role="search">
+  <fc-text-field type="date" [label]="'SALES.FILTER.FROM' | t" [value]="from()" (valueChange)="from.set($event)" />
+  <fc-text-field
+    type="date"
+    [label]="'SALES.FILTER.TO' | t"
+    [value]="to()"
+    [error]="rangeError() ? ('SALES.FILTER.RANGE_ERROR' | t) : null"
+    (valueChange)="to.set($event)"
+  />
+  <fc-select
+    [label]="'SALES.FILTER.PLACE' | t"
+    [placeholder]="'SALES.FILTER.ALL_PLACES' | t"
+    [options]="placeOptions()"
+    [value]="placeId()"
+    (valueChange)="placeId.set($event)"
+  />
+</div>
+
+@if (failed()) {
+  <fc-error-state
+    [title]="'SALES.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else if (!rangeError()) {
+  @if (tiles().length > 0) {
+    <ul class="tiles" [attr.aria-label]="'SALES.TILES' | t">
+      @for (tile of tiles(); track tile.key) {
+        <li>
+          <span class="label">{{ tile.label }}</span>
+          <strong class="value">{{ tile.value }}</strong>
+        </li>
+      }
+    </ul>
+  }
+  <fc-data-table
+    [caption]="'SALES.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    rowHeader="number"
+    [loading]="loading()"
+    [emptyTitle]="'SALES.EMPTY' | t"
+    [emptyMessage]="'SALES.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="number" let-row>
+      <span class="number">
+        <a [routerLink]="saleLink(row)">{{ numberText(row) }}</a>
+        @for (badge of badgesOf(row); track badge.key) {
+          <fc-status-badge [tone]="badge.tone">{{ badgeLabel(badge) }}</fc-status-badge>
+        }
+      </span>
+    </ng-template>
+  </fc-data-table>
+  <fc-cursor-paginator
+    [limit]="limit()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="loading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}

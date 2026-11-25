@@ -61,7 +61,7 @@ describe('GET /v1/me', () => {
       pin: sentinels[0],
       tokens: [{ token: sentinels[1] }],
       avatar: 'data:image/png;base64,iVBORw0KGgo=',
-      permissions: { status: true, groups: { r: true, w: true }, users: { r: true, w: true }, companies: { r: true, w: true }, places: { r: true, w: true }, fidelity: { r: true, w: true }, products: { r: true, w: true }, logs: { r: true, w: true }, apps: { cash: { status: true, note: sentinels[3], sub: { productsStatus: sentinels[2] }, options: { service: sentinels[2] } } } },
+      permissions: { status: true, groups: { r: true, w: true }, users: { r: true, w: true }, companies: { r: true, w: true }, places: { r: true, w: true }, fidelity: { r: true, w: true }, products: { r: true, w: true }, contacts: { r: true, w: true }, documents: { r: true, w: true }, logs: { r: true, w: true }, apps: { cash: { status: true, note: sentinels[3], sub: { productsStatus: sentinels[2] }, options: { service: sentinels[2] } } } },
     });
     await ctx.databases.common().collection('groups').updateOne({ _id: group.groupId }, { $set: { apiKey: sentinels[4], 'settings.email.password': sentinels[5] } });
     const own = await office.tokens(name);

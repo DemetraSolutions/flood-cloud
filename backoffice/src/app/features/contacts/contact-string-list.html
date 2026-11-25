@@ -1,0 +1,39 @@
+<fieldset [attr.aria-describedby]="error() ? errorId : null">
+  <legend>{{ legend() }}</legend>
+  <ul class="rows">
+    @for (entry of rows(); track $index) {
+      <li>
+        <fc-text-field
+          autocomplete="off"
+          [type]="type()"
+          [label]="entry.label"
+          [value]="entry.text"
+          [disabled]="disabled()"
+          [error]="entry.error"
+          (valueChange)="change(entry.index, $event)"
+        />
+        @if (!disabled()) {
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="'CONTACTS.LIST.REMOVE_LABEL' | t: { name: entry.label }"
+            (click)="remove(entry.index)"
+          >
+            {{ 'CONTACTS.LIST.REMOVE' | t }}
+          </button>
+        }
+      </li>
+    }
+  </ul>
+  @if (!disabled()) {
+    <div class="actions">
+      <button fc-button variant="secondary" type="button" [disabled]="value().length >= limit()" (click)="add()">
+        {{ addKey() | t }}
+      </button>
+    </div>
+  }
+  @if (error()) {
+    <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+  }
+</fieldset>

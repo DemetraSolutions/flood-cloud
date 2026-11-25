@@ -179,7 +179,13 @@ describe('POST /v1/groups: the customer', () => {
       assert.deepEqual([department['groupId'], department['status'], department['trash'], department['placesAvailability'], department['medias'], department['description']], [groupId, true, false, [], { images: {} }, { it: '' }]);
       assert.ok(department['insertDate'] instanceof Date && department['updateDate'] instanceof Date);
     }
-    assert.deepEqual((await groupDb(groupId).listCollections().toArray()).map((collection) => collection.name).sort(), ['companies', 'places', 'products_departments']);
+    assert.deepEqual((await groupDb(groupId).listCollections().toArray()).map((collection) => collection.name).sort(), ['companies', 'fidelity_cards', 'places', 'products_departments', 'sales']);
+    // The sales collection has the index of the purchases of a customer, and nothing else but `_id`.
+    const salesIndexes = await groupDb(groupId).collection('sales').indexes();
+    assert.deepEqual(salesIndexes.map((index) => [index.name, index.key]), [['_id_', { _id: 1 }], ['customer._id_1_date_-1', { 'customer._id': 1, date: -1 }]]);
+    // The group gets the unique index on the code of the loyalty cards, the same one the legacy creates.
+    const cardIndex = (await groupDb(groupId).collection('fidelity_cards').indexes()).find((index) => index.name === 'code_1')!;
+    assert.deepEqual([cardIndex.key, cardIndex.unique], [{ code: 1 }, true]);
 
     // The activity log: one entry per entity, no secret.
     const entries = world.office.activity.entries.slice(mark);

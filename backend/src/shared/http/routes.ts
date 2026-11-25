@@ -16,7 +16,8 @@ import { requireApiKeyPermission } from '../security/scope/api-key-guards.ts';
 import { reportCrossGroupAccess, requireApiKeyGroupAccess, requireGroupAccess, requireStoreGroupAccess } from '../security/scope/group-access.ts';
 import type { GroupAccessDeps } from '../security/scope/group-access.ts';
 import { requireFeature } from '../security/scope/require-feature.ts';
-import { refuseStore, requireStore, requireStoreParams, requireStorePermission, requireStorePlace } from '../security/scope/store-guards.ts';
+import { refuseStore, requireStore, requireStoreParams, requireStoreText, requireStorePermission, requireStorePlace } from '../security/scope/store-guards.ts';
+import type { Schema } from '../validation/schema.ts';
 import { AppError } from './errors.ts';
 
 /** HTTP methods a route may declare. */
@@ -66,10 +67,19 @@ export interface UserAuth {
 }
 
 /**
- * The only path parameters a store route may have: the ids of the entries of the catalog it reads or writes (`/store-context/catalog/products/:productId`). The builder checks each one is the text of
+ * The only path parameters a store route may have: the ids of the entries it reads or writes (the catalog `/store-context/catalog/products/:productId`, the contacts and the loyalty cards). The builder checks each one is the text of
  * an id before anything else of the route runs; the group, the company and the place are never a parameter, they come from the store key.
  */
-export const STORE_PATH_PARAMETERS = Object.freeze(['productId', 'categoryId', 'brandId', 'attributeGroupId'] as const);
+export const STORE_PATH_PARAMETERS = Object.freeze(['productId', 'categoryId', 'brandId', 'attributeGroupId', 'contactId', 'cardId'] as const);
+
+/**
+ * The path parameters of a store route that are text, not ids: the code of a loyalty card (`/store-context/contacts/:contactId/fidelity-cards/:code/points-adjustments`). A route that has one **declares** it, with the schema
+ * that judges it, in `text` of its auth: the builder validates it (`422` with the name of the parameter) next to the ids, before the body is read, and refuses at start-up a text parameter in the path that has no schema declared.
+ */
+export const STORE_TEXT_PATH_PARAMETERS = Object.freeze(['code'] as const);
+
+/** A text path parameter a store route may declare. */
+export type StoreTextParameter = (typeof STORE_TEXT_PATH_PARAMETERS)[number];
 
 /** A path parameter a store route may declare. */
 export type StoreParameter = (typeof STORE_PATH_PARAMETERS)[number];
@@ -85,6 +95,10 @@ export interface StoreAuth {
    * a store route has no other parameter and never reads one unchecked.
    */
   readonly params?: readonly StoreParameter[];
+  /**
+   * The text path parameters of the route (one of {@link STORE_TEXT_PATH_PARAMETERS}) with the schema of each: exactly the ones in its path that are not ids. The builder validates them with the ids, before the body is read.
+   */
+  readonly text?: Readonly<Partial<Record<StoreTextParameter, Schema<unknown>>>>;
   /**
    * The check of who stands at the till, declared **exactly** by the routes that write (every method but `GET`): it runs after the group access and the declared rate limit rules and before the body is read, so the body of a store
    * that has no verified operator is never parsed. A read declares none.
@@ -190,7 +204,7 @@ function normalizePath(path: string): string {
   return lower.length > 1 && lower.endsWith('/') ? lower.slice(0, -1) : lower;
 }
 
-type AuthFields = { kind?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown; store?: unknown; params?: unknown; operator?: unknown };
+type AuthFields = { kind?: unknown; permission?: unknown; anyPermission?: unknown; group?: unknown; feature?: unknown; allowWithPendingPasswordChange?: unknown; store?: unknown; params?: unknown; text?: unknown; operator?: unknown };
 
 /** The problems of a `user` route that declares `store`. */
 function storeProblems(label: string, route: RouteDefinition, auth: AuthFields, options: MountOptions): string[] {
@@ -234,10 +248,15 @@ function storeOnlyProblems(label: string, route: RouteDefinition, auth: AuthFiel
   if (declared !== undefined && !(Array.isArray(declared) && declared.length > 0 && new Set(declared).size === declared.length && declared.every((name) => (STORE_PATH_PARAMETERS as readonly unknown[]).includes(name)))) {
     problems.push(`${label}: a store route's params are a list, without repetitions, of ${STORE_PATH_PARAMETERS.join(', ')}`);
   }
+  const text: unknown = auth.text;
+  const textNames = typeof text === 'object' && text !== null ? Object.keys(text) : [];
+  if (text !== undefined && (typeof text !== 'object' || text === null || textNames.length === 0 || !textNames.every((name) => (STORE_TEXT_PATH_PARAMETERS as readonly unknown[]).includes(name) && typeof (text as Record<string, { parse?: unknown }>)[name]?.parse === 'function'))) {
+    problems.push(`${label}: a store route's text is a list of schemas for ${STORE_TEXT_PATH_PARAMETERS.join(', ')}`);
+  }
   const inPath = [...String(route.path).matchAll(/:(\w+)/g)].map((match) => match[1]);
-  const listed = Array.isArray(declared) ? (declared as unknown[]) : [];
+  const listed = [...(Array.isArray(declared) ? (declared as unknown[]) : []), ...textNames];
   if (String(route.path).replace(/:\w+/g, '').includes(':') || inPath.length !== listed.length || !inPath.every((name) => listed.includes(name))) {
-    problems.push(`${label}: a store route has no path parameter other than the ids it declares in params`);
+    problems.push(`${label}: a store route has no path parameter other than the ids it declares in params and the text it declares in text`);
   }
   if (auth.operator !== undefined && typeof auth.operator !== 'function') {
     problems.push(`${label}: a store route's operator must be a function`);
@@ -559,6 +578,7 @@ export function mountRoutes(router: Router, routes: readonly RouteDefinition[], 
         requireStore,
         ...(route.auth.group === true ? [requireStoreGroupAccess(groupAccess!.groups)] : []),
         ...(route.auth.params === undefined ? [] : [requireStoreParams(route.auth.params)]),
+        ...(route.auth.text === undefined ? [] : [requireStoreText(route.auth.text)]),
         ...beforeBody,
         ...(route.auth.operator === undefined ? [] : [route.auth.operator]),
       );

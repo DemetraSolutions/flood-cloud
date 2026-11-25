@@ -21,14 +21,15 @@ export interface RequireOperatorDeps {
 /**
  * Builds the check of the operator of a write of the server of a point of sale (the `operator` of a `store` route, which the builder runs after the group access and before the body is read). The operator
  * is **declared** by the store in `X-Operator-Id` and **verified** here: he must be a user of the very set the store reads (an `E` or `PA` of the place, the `CA` of its company, an `SA` of the group; never a
- * PSA, a dealer, a trashed user or one of another group), active, and hold the write flag of the products in his own stored matrix (`permissions.products.w`). Every failure is the same `403
+ * PSA, a dealer, a trashed user or one of another group), active, and hold the write flag of the module the route is about in his own stored matrix (`permissions.<module>.w`: `products` for the catalog, `contacts` for the contacts and the loyalty cards). Every failure is the same `403
  * OPERATOR_NOT_ALLOWED`, so the response tells nothing about the users of the group; the reason goes to the activity log (`store.operatorRejected`, throttled). The operator is not authenticated (the cloud
  * has no secret of his): he grants nothing the store key cannot do, he only has to exist and be allowed, and he is what the activity log records next to the store.
  *
  * @param deps The reader of the users of the place and the audit.
+ * @param module The module of the legacy permission matrix whose write flag the operator must hold (`products` by default).
  * @returns The handler; on success it sets `res.locals.storeOperator`.
  */
-export function createRequireOperator(deps: RequireOperatorDeps): RequestHandler {
+export function createRequireOperator(deps: RequireOperatorDeps, module: 'products' | 'contacts' = 'products'): RequestHandler {
   return async (req, res, next) => {
     const store = res.locals.store!;
     const refuse = async (reason: OperatorRejection, declared: ObjectId | null): Promise<never> => {
@@ -50,7 +51,7 @@ export function createRequireOperator(deps: RequireOperatorDeps): RequestHandler
     if (user.status !== 'active') {
       return refuse('disabled', id);
     }
-    if (!flagsOf(user.permissions, 'products').w) {
+    if (!flagsOf(user.permissions, module).w) {
       return refuse('noPermission', id);
     }
     res.locals.storeOperator = Object.freeze({ id, language: user.language });

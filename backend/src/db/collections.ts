@@ -453,6 +453,80 @@ export const RESERVE_WITH_GOOGLE_OWNED_FIELDS: readonly string[] = Object.freeze
 ]);
 
 /**
+ * Fields of the legacy `contacts` documents of a group database (customers and suppliers, step K1) this backend writes: the general data, the personal data, the company data, the e-invoicing leaves, the loyalty cards, the services,
+ * the leaves of the customer account and the dates. A new document has all of them; a modification `$set`s the ones it changes. The two containers that hold keys the backend must never touch are owned leaf by leaf:
+ * `fattura_elettronica` (only the ten leaves of the form) and `account` (only `email` and `telephone`: `password` and `tokens` are dead keys of the legacy that are never read nor written). `fidelities` is owned as an array but is
+ * written **element by element** (`$push` of a new card with zero points, `$pull` of a removed one) and never replaced, so the points a sale adds with `$inc` are never overwritten; the only other write to it is the `$inc` of a points
+ * adjustment on `fidelities.$[].points`. `cGroup` and `associatedCompany` (denormalized copies the point of sale saves into the contact) and every key the backend does not know are never read nor written. The collection has
+ * unique partial indexes of the legacy on the account, which the backend never creates and answers with `409 taken` when they refuse a write.
+ */
+export const CONTACTS_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'customer',
+  'supplier',
+  'contactCode',
+  'cGroupId',
+  'listId',
+  'note',
+  'name',
+  'surname',
+  'code',
+  'birthDate',
+  'address',
+  'postcode',
+  'city',
+  'countryCode',
+  'countryAreaCode',
+  'telephone',
+  'email',
+  'discount',
+  'associatedCompanyId',
+  'companyName',
+  'companyCode',
+  'companyCode2',
+  'companyAddress',
+  'companyPostcode',
+  'companyCity',
+  'companyCountryCode',
+  'companyCountryAreaCode',
+  'companyTelephone',
+  'companyEmail',
+  'companyFax',
+  'companyDiscount',
+  'companyLists',
+  'fattura_elettronica.formato_trasmissione',
+  'fattura_elettronica.identificativo',
+  'fattura_elettronica.codice_destinatario',
+  'fattura_elettronica.pec',
+  'fattura_elettronica.condizioni_pagamento',
+  'fattura_elettronica.modalita_pagamento',
+  'fattura_elettronica.regime_fiscale',
+  'fattura_elettronica.riferimento_amministrazione',
+  'fattura_elettronica.split_payment',
+  'fattura_elettronica.richiedi_dati_ordine_acquisto',
+  'fidelities',
+  'services',
+  'account.email',
+  'account.telephone',
+  'trash',
+  'trashDate',
+  'insertDate',
+  'updateDate',
+]);
+
+/**
+ * Fields of the legacy `fidelity_cards` documents of a group database (the advanced loyalty cards, step F1) this backend writes: a new document has all of them (`code` only at creation, it never changes),
+ * a modification `$set`s `cardTypeId`, `status` and `updateDate`, and the sales and the adjustments move `balance` and `pointsCollections.<collectionId>` only with `$inc`, never with a `$set`. Every other key is the legacy's
+ * and is never touched. The legacy has a unique index on `code`, which the backend never creates and answers with `409 taken` when it refuses a write.
+ */
+export const FIDELITY_CARDS_OWNED_FIELDS: readonly string[] = Object.freeze(['code', 'cardTypeId', 'status', 'balance', 'pointsCollections', 'insertDate', 'updateDate']);
+
+/** Fields of the legacy `fidelity_cards_movements` documents (the history of a card) this backend writes: whole new documents of type `manually` (`apiKeyId` is the public API key that made it, with `userId` `null`, and `storeKeyId` the store key of a point of sale, with `userId` the operator it declared: the legacy never reads or rewrites them), inserted and never changed (a card is deleted only when it has none). */
+export const FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS: readonly string[] = Object.freeze(['userId', 'apiKeyId', 'storeKeyId', 'cardId', 'cardCode', 'date', 'type', 'balance', 'pointsCollectionId', 'points']);
+
+/** Fields of the legacy `contacts_groups` documents of a group database (the groups of contacts, step K1, which have no trash) this backend writes: the name, the price list and the discount of the group, and the dates. */
+export const CONTACTS_GROUPS_OWNED_FIELDS: readonly string[] = Object.freeze(['name', 'priceListId', 'discountPercentage', 'insertDate', 'updateDate']);
+
+/**
  * Fields of the legacy `tobaccos` documents of the common database (the national tobacco price list: the legacy replaces the whole collection with the official file, and its catalog synchronization
  * reads it) this backend writes (`doc/Tasks.md` 9-bis, step T3): only whole new documents, inserted by the import of the list inside the transaction that deletes the previous ones; no field of an
  * existing document is ever changed. The names are the legacy's, and the documents carry nothing else. The legacy creates no index on the collection; this backend adds non-unique ones for the search and the sort.
@@ -543,8 +617,18 @@ export const COLLECTIONS = {
     // The brands and the groups of attributes of the catalog (step C1): created, changed and deleted by their routes; also read by the catalog profile of the legacy tool.
     products_brands: { ownership: 'legacy-write', ownedFields: PRODUCTS_BRANDS_OWNED_FIELDS },
     products_attributes: { ownership: 'legacy-write', ownedFields: PRODUCTS_ATTRIBUTES_OWNED_FIELDS },
-    contacts: { ownership: 'legacy-read' },
-    contacts_groups: { ownership: 'legacy-read' },
+    // The contacts of the group and their groups (step K1): created, changed, trashed and deleted by the contact routes; also read by the lookups, the products (the suppliers) and the catalogs (the promotions).
+    contacts: { ownership: 'legacy-write', ownedFields: CONTACTS_OWNED_FIELDS },
+    contacts_groups: { ownership: 'legacy-write', ownedFields: CONTACTS_GROUPS_OWNED_FIELDS },
+    // The sales, the documents, the appointments, the table reservations and the warehouse movements of the group (the legacy owns them): read only, one id at a time, to refuse the deletion of a contact that they still name (step K1). No index is created, with one exception decided by the user: the sales are also read by the sales module (step V1), which creates at run time the index `{ customer._id, date }` of the purchases of a customer (`modules/sales/sales.indexes.ts`); nothing is ever written to them.
+    // The advanced loyalty cards and their history (step F1): created, changed and deleted (only without history) by the card routes; the movements are only inserted. Also read for the cards a contact shows and for the card types and points collections in use.
+    fidelity_cards: { ownership: 'legacy-write', ownedFields: FIDELITY_CARDS_OWNED_FIELDS },
+    fidelity_cards_movements: { ownership: 'legacy-write', ownedFields: FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS },
+    sales: { ownership: 'legacy-read' },
+    documents: { ownership: 'legacy-read' },
+    calendar: { ownership: 'legacy-read' },
+    table_reservation: { ownership: 'legacy-read' },
+    warehouse: { ownership: 'legacy-read' },
   },
   // The legacy send queue (`<prefix><env>_queue`, step 9-ter/3): written only by the legacy services and by its `CronEngine`; read here, only by the error documents repository, through `Databases.queue()`.
   // No index: this backend never creates anything in that database.

@@ -5,7 +5,7 @@ import type { Logger } from '../../shared/logging/logger.ts';
 import type { RateLimiter } from '../../shared/security/rate-limit/rate-limiter.ts';
 import type { StorePrincipal } from '../../shared/security/scope/principal.ts';
 
-/** Why the operator of a write was refused: the header is missing or malformed, no such user in the set the store may read (unknown, trashed, of another place or role: one reason, they are told apart by nobody), disabled, or without the write permission on the products. */
+/** Why the operator of a write was refused: the header is missing or malformed, no such user in the set the store may read (unknown, trashed, of another place or role: one reason, they are told apart by nobody), disabled, or without the write permission on the module of the route (the products, the contacts). */
 export type OperatorRejection = 'missing' | 'malformed' | 'notFound' | 'disabled' | 'noPermission';
 
 /** The token of the counter for a request whose address is unknown. */

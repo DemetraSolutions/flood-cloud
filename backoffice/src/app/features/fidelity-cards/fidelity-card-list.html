@@ -1,0 +1,91 @@
+<header class="page-header">
+  <h1>{{ 'FIDELITY_CARDS.TITLE' | t }}</h1>
+  <a *fcCan="'fidelityCards:export'" class="import-export" [routerLink]="importExportRoute()">{{
+    'CATALOG_XLSX.LINK' | t
+  }}</a>
+  <a *fcCan="'fidelity:update'" [routerLink]="newRoute()">{{ 'FIDELITY_CARDS.NEW' | t }}</a>
+</header>
+<p class="hint">{{ 'FIDELITY_CARDS.HINT' | t }}</p>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    autocomplete="off"
+    [label]="'FIDELITY_CARDS.SEARCH' | t"
+    [hint]="'FIDELITY_CARDS.SEARCH_HINT' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+  <fc-select
+    [label]="'FIDELITY_CARDS.FILTER.TYPE' | t"
+    [options]="typeOptions()"
+    [value]="typeValue()"
+    (valueChange)="onType($event)"
+  />
+  <fc-select
+    [label]="'FIDELITY_CARDS.STATE.LABEL' | t"
+    [options]="stateOptions()"
+    [value]="stateValue()"
+    (valueChange)="onState($event)"
+  />
+</form>
+
+@if (entries.error()) {
+  <fc-error-state
+    [title]="'FIDELITY_CARDS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'FIDELITY_CARDS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    rowHeader="code"
+    [loading]="entries.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'FIDELITY_CARDS.EMPTY' | t"
+    [emptyMessage]="'FIDELITY_CARDS.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'fidelity:update'" fcEmptyAction [routerLink]="newRoute()">{{
+      'FIDELITY_CARDS.NEW' | t
+    }}</a>
+    <ng-template fcCell="code" let-row>
+      <a [routerLink]="detailRoute(row)">{{ row.code }}</a>
+    </ng-template>
+    <ng-template fcCell="customer" let-row>
+      @if (row.contact; as contact) {
+        @if (canReadContacts()) {
+          <a [routerLink]="contactRoute(contact.id)">{{ customerName(row) }}</a>
+        } @else {
+          {{ customerName(row) }}
+        }
+        @if (row.contactsCount > 1) {
+          {{ 'FIDELITY_CARDS.LIST.MORE_CUSTOMERS' | t: { count: row.contactsCount - 1 } }}
+        }
+      } @else {
+        {{ 'FIDELITY_CARDS.LIST.NO_CUSTOMER' | t }}
+      }
+    </ng-template>
+    <ng-template fcCell="enabled" let-row>
+      @if (row.enabled) {
+        <fc-status-badge tone="success">{{ 'FIDELITY_CARDS.STATE.ENABLED' | t }}</fc-status-badge>
+      } @else {
+        <fc-status-badge>{{ 'FIDELITY_CARDS.STATE.DISABLED' | t }}</fc-status-badge>
+      }
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="entries.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}

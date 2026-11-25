@@ -236,9 +236,21 @@ export interface CredentialModel {
   clear: boolean;
 }
 
-/** The integrations: the switches and settings by key, and the credentials by key. */
+/** A category of charge of TS Hospitality in the copy the place keeps. */
+export interface TshCategoryRow {
+  id: string;
+  name: string;
+}
+
+/**
+ * The integrations: the switches and settings by key, the credentials by key, the copy of the
+ * categories of charge of TS Hospitality (written only by the synchronization, never sent) and
+ * the map from the product categories to them (`categoriesMap`, a category of the place by id).
+ */
 export interface IntegrationsModel extends ScalarBlock {
   secrets: Record<string, CredentialModel>;
+  tshCategories: TshCategoryRow[];
+  tshMap: Record<string, string>;
 }
 
 /** A device (numbers and ids held as text). A device not saved yet has an empty `id`. */
@@ -887,7 +899,19 @@ export function toModel(record: PlaceRecord | null): PlaceModel {
         MEDIA_SLOTS.map((slot) => [slot, logoOf(record?.media[slot])]),
       ) as Record<MediaSlot, LogoModel | null>,
     },
-    integrations: { f: scalarsOf('integrations', record), secrets: secretsOf(record) },
+    integrations: {
+      f: scalarsOf('integrations', record),
+      secrets: secretsOf(record),
+      tshCategories: list(valueAt(blockOf(record, 'integrations'), 'tsh.categories')).map((raw) => ({
+        id: text(object(raw)['id']),
+        name: text(object(raw)['name']),
+      })),
+      tshMap: Object.fromEntries(
+        Object.entries(object(valueAt(blockOf(record, 'integrations'), 'tsh.categoriesMap'))).map(
+          ([category, target]) => [category, text(target)],
+        ),
+      ),
+    },
     dealerSettings: { f: scalarsOf('dealerSettings', record) },
     devices: {
       items: (record?.devices.items ?? []).map(deviceRow),
@@ -945,6 +969,24 @@ export function withSections(
     (next as unknown as Record<string, unknown>)[id] = saved[id];
   }
   return next;
+}
+
+/**
+ * A copy of a place with one value of its integrations changed (what an action of the integrations
+ * module did on the server, which the page learns without reading the place again).
+ *
+ * @param record The place.
+ * @param path Dotted path inside the integrations (`tsh.categories`).
+ * @param value The new value.
+ */
+export function withIntegrationValue(
+  record: PlaceRecord,
+  path: string,
+  value: unknown,
+): PlaceRecord {
+  const copy = structuredClone(record) as { integrations: Record<string, unknown> };
+  setAt(copy.integrations, path, value);
+  return copy as unknown as PlaceRecord;
 }
 
 // Bodies.
@@ -1290,8 +1332,17 @@ export function blockBody(
       };
     case 'integrations':
       return merged(
-        scalarsBody(section, model.integrations.f),
-        secretsBody(model.integrations.secrets),
+        merged(
+          scalarsBody(section, model.integrations.f),
+          secretsBody(model.integrations.secrets),
+        ),
+        {
+          tsh: {
+            categoriesMap: Object.fromEntries(
+              Object.entries(model.integrations.tshMap).filter(([, target]) => target !== ''),
+            ),
+          },
+        },
       );
     case 'devices':
       return { items: model.devices.items.map(deviceBody) };

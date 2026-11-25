@@ -1,3 +1,4 @@
+import { backend } from '../../../testing/api';
 import { LIST_2, PLACE_URL, fakePlace, renderPlace } from '../../../testing/places';
 import {
   cleanUp,
@@ -145,5 +146,53 @@ describe('PlaceDelivery', () => {
     expect(view.button('COMMON.SAVE')).toBeUndefined();
     expect(view.button('PLACES.DELIVERY.ADD_COST')).toBeUndefined();
     expect(view.button('PLACES.REMOVE')).toBeUndefined();
+  });
+});
+
+describe('PlaceDelivery: coordinates', () => {
+  const CALC = 'INTEGRATIONS.COORDINATES.CALCULATE';
+  const open = (options: Parameters<typeof renderPlace>[0] = {}) =>
+    renderPlace({
+      path: 'settings/delivery',
+      lookupData: { providers: { geocoding: true } },
+      ...options,
+    });
+
+  it('shows no button when the geocoding is not configured on the platform', async () => {
+    const view = await renderPlace({ path: 'settings/delivery' });
+    expect(view.button(CALC)).toBeUndefined();
+  });
+
+  it('shows no button to a user who cannot update the place', async () => {
+    const view = await open({ permissions: READ_ONLY });
+    expect(view.button(CALC)).toBeUndefined();
+  });
+
+  it('puts the coordinates of the address of the form in the area, for the user to save', async () => {
+    const view = await open();
+    await view.click(CALC);
+    const request = backend().expectOne(`${PLACE_URL}/geocoding`);
+    expect(request.request.body).toEqual({
+      street: 'Via Roma 1',
+      postcode: '20100',
+      city: 'Milano',
+      province: 'MI',
+      country: 'IT',
+    });
+    request.flush({ data: { lat: 45.4642, lng: 9.19 } });
+    await view.view();
+    expect(view.control(f('LAT')).value).toBe('45.4642');
+    expect(view.control(f('LNG')).value).toBe('9.19');
+    expect(view.button('COMMON.SAVE')?.disabled).toBe(false);
+    let block = withValue(storedBlock('delivery'), 'lat', 45.4642);
+    block = withValue(block, 'lng', 9.19);
+    await savePut(view, 'settings/delivery', block);
+  });
+
+  it('warns about the missing fields of the address and calls nothing', async () => {
+    const view = await open({ place: fakePlace({ address: { ...fakePlace().address, city: '' } }) });
+    await view.click(CALC);
+    backend().expectNone(`${PLACE_URL}/geocoding`);
+    expect(view.text()).toContain('INTEGRATIONS.COORDINATES.FIELD.CITY');
   });
 });

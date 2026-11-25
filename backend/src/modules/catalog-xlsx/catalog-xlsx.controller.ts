@@ -5,10 +5,24 @@ import { clientContextOf } from '../../shared/http/client-context.ts';
 import { sendData } from '../../shared/http/envelope.ts';
 import { AppError } from '../../shared/http/errors.ts';
 import { MAX_REPORTED_ERRORS, ImportRefusal } from './catalog-xlsx.errors.ts';
-import type { CatalogXlsxService, WorkbookFile } from './catalog-xlsx.service.ts';
+import type { WorkbookFile } from './catalog-xlsx.service.ts';
 import type { ExportQuery, ImportQuery } from './catalog-xlsx.schemas.ts';
 import { inputOf } from '../../shared/validation/middleware.ts';
+import type { ClientContext } from '../../shared/http/client-context.ts';
+import type { GroupAccess } from '../../shared/security/scope/group-access.ts';
+import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
+import type { ReferenceMode } from './catalog-xlsx.export.ts';
 import { XLSX_CONTENT_TYPE } from '../../shared/xlsx/writer.ts';
+
+/**
+ * What the controller needs of the service of a workbook (the catalog, the contacts, the loyalty cards): the empty model, the export and the import, each for the verified caller and group. The import answers with
+ * the counts of its domain, which the controller sends as they are.
+ */
+export interface WorkbookService {
+  template(principal: AuthPrincipal, access: GroupAccess): Promise<WorkbookFile>;
+  export(principal: AuthPrincipal, access: GroupAccess, mode: ReferenceMode, client: ClientContext): Promise<WorkbookFile>;
+  import(principal: AuthPrincipal, access: GroupAccess, file: Buffer, dryRun: boolean, client: ClientContext): Promise<unknown>;
+}
 
 /** HTTP handlers of the workbook routes. */
 export interface CatalogXlsxController {
@@ -47,7 +61,7 @@ async function sendWorkbook(res: Response, file: WorkbookFile, timeoutMs: number
  * @param service The service.
  * @param exportTimeoutMs Longest a download may take (tests lower it).
  */
-export function createCatalogXlsxController(service: CatalogXlsxService, exportTimeoutMs = EXPORT_TIMEOUT_MS): CatalogXlsxController {
+export function createCatalogXlsxController(service: WorkbookService, exportTimeoutMs = EXPORT_TIMEOUT_MS): CatalogXlsxController {
   const exporting = new Set<string>();
   return {
     template: async (_req, res) => {

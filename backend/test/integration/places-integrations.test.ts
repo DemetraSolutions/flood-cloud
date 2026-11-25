@@ -44,7 +44,6 @@ const SECRETS: ReadonlyArray<readonly [string, string]> = [
   ['plateform.password', 'fake-plateform-pass'],
   ['cooperto.apiKey', 'fake-cooperto-key-1'],
   ['dojo.apiKey', 'fake-dojo-key-1'],
-  ['satispay.activationCode', 'ABC123'],
   ['satispay.keyId', 'fake-satispay-key-id'],
   ['qodeup.apiKey', 'fake-qodeup-key-1'],
   ['tomatoai.apiKey', 'fake-tomatoai-key-1'],
@@ -133,7 +132,8 @@ describe('PUT …/integrations: the credentials', () => {
     await bad({ floodPay: { stripe: { privateKey: 'pk_test_xyz' } } }, ['integrations.floodPay.stripe.privateKey', 'pattern']);
     await bad({ floodPay: { stripe: { webhookPrivateKey: 'sk_test_xyz' } } }, ['integrations.floodPay.stripe.webhookPrivateKey', 'pattern']);
     await bad({ floodPay: { stripe: { publicKey: 'sk_test_xyz' } } }, ['integrations.floodPay.stripe.publicKey', 'pattern']);
-    await bad({ satispay: { activationCode: 'AB 12' } }, ['integrations.satispay.activationCode', 'pattern']);
+    // The activation code of Satispay is no longer a key of the place: it travels in the activation call only.
+    await bad({ satispay: { activationCode: 'AB12' } }, ['integrations.satispay.activationCode', 'unknown']);
     await bad({ dojo: { apiKey: 'has a space' } }, ['integrations.dojo.apiKey', 'pattern']);
     await bad({ dojo: { apiKey: 'x'.repeat(513) } }, ['integrations.dojo.apiKey', 'maxLength']);
     await bad({ phlex: { password: 5 } }, ['integrations.phlex.password', 'type']);
@@ -208,9 +208,70 @@ describe('PUT …/integrations: the switches and the other keys', () => {
   it('completes an integration that is missing in the stored place with the defaults of its keys', async () => {
     await world.seedPlace(0, 312, 1, { integrations: { dojo: { status: true, apiKey: 'fake-dojo-key-1' } } });
     assert.equal((await patch(psa(), P(312), { integrations: { satispay: { keyId: 'fake-satispay-key-id' } } })).status, 200);
-    assert.deepEqual((await integrationsOf(P(312)))['satispay'], { status: false, activationCode: null, keyId: 'fake-satispay-key-id', type: 'checkin' });
+    assert.deepEqual((await integrationsOf(P(312)))['satispay'], { status: false, keyId: 'fake-satispay-key-id', type: 'checkin' });
     const read = (await current(P(312))).integrations;
     assert.deepEqual([read.satispay.type, read.floodPay.qrCodePayment.type, read.tsh.categoriesMap, read.tsh.categories, read.reserveWithGoogle.category], ['checkin', 'static', {}, [], 'restaurant']);
+  });
+});
+
+describe('PUT …/integrations: Satispay and TS Hospitality', () => {
+  it('never returns the activation code a place may still hold from the old backoffice, as a value or as a flag, and never writes it', async () => {
+    await world.seedPlace(0, 360, 1, { integrations: { satispay: { status: true, activationCode: 'OLDCODE12345', keyId: 'fake-satispay-key-id', type: 'checkin' } } });
+    const reply = await call(psa(), 'GET', path(P(360)));
+    assert.equal(reply.status, 200);
+    assert.deepEqual(reply.body.data.integrations.satispay, { status: true, keyIdSet: true, type: 'checkin' });
+    assert.ok(!JSON.stringify(reply.body).includes('OLDCODE12345') && !JSON.stringify(reply.body).includes('activationCode'));
+    // A write of the block leaves what it does not own, and the code is not a key a request can send.
+    assert.equal((await put(psa(), P(360), 'integrations', reply.body.data.integrations)).status, 200);
+    assert.equal((await integrationsOf(P(360)))['satispay']!['activationCode'], 'OLDCODE12345');
+    assert.deepEqual(failure(await put(psa(), P(360), 'integrations', { ...reply.body.data.integrations, satispay: { ...reply.body.data.integrations.satispay, activationCode: 'NEWCODE' } })), issues(['satispay.activationCode', 'unknown']));
+  });
+
+  it('lets only a PSA or a dealer change the test mode of TS Hospitality, as the switches, and lets any role send it back unchanged', async () => {
+    await world.seedPlace(0, 361, 1);
+    const own = world.group(0).ownPlaceId;
+    for (const actor of [sa(), ca()]) {
+      assert.deepEqual(failure(await patch(actor, P(361), { integrations: { tsh: { testMode: true } } })), notAllowed('integrations.tsh.testMode'));
+    }
+    assert.deepEqual(failure(await patch(pa(), own, { integrations: { tsh: { testMode: true } } })), notAllowed('integrations.tsh.testMode'));
+    assert.equal((await patch(dealer(), P(361), { integrations: { tsh: { testMode: false } } })).status, 200);
+    assert.equal((await patch(psa(), P(361), { integrations: { tsh: { testMode: true } } })).status, 200);
+    assert.equal((await integrationsOf(P(361)))['tsh']!['testMode'], true);
+    assert.equal((await patch(sa(), P(361), { integrations: { tsh: { testMode: true, serviceName: 'svc' } } })).status, 200);
+    assert.deepEqual([(await integrationsOf(P(361)))['tsh']!['testMode'], (await integrationsOf(P(361)))['tsh']!['serviceName']], [true, 'svc']);
+    assert.deepEqual(failure(await patch(sa(), P(361), { integrations: { tsh: { testMode: false } } })), notAllowed('integrations.tsh.testMode'));
+  });
+
+  it('checks the form of the property id of TS Hospitality where it changes, and keeps a historical one that is sent back', async () => {
+    await world.seedPlace(0, 362, 1);
+    for (const propertyId of ['../x', 'a/b', 'a?b', 'a#b', 'a b', 'é']) {
+      assert.deepEqual(failure(await patch(psa(), P(362), { integrations: { tsh: { propertyId } } })), issues(['integrations.tsh.propertyId', 'pattern']), propertyId);
+    }
+    assert.deepEqual(failure(await patch(psa(), P(362), { integrations: { tsh: { propertyId: 'x'.repeat(65) } } })), issues(['integrations.tsh.propertyId', 'maxLength']));
+    assert.equal((await patch(sa(), P(362), { integrations: { tsh: { propertyId: 'prop_1-A' } } })).status, 200);
+    assert.equal((await patch(sa(), P(362), { integrations: { tsh: { propertyId: 'p'.repeat(64) } } })).status, 200);
+    await ctx.databases.group(world.group(0).groupId, 'cluster0').collection('places').updateOne({ _id: P(362) }, { $set: { 'integrations.tsh.propertyId': 'historical id/1' } });
+    assert.equal((await patch(sa(), P(362), { integrations: { tsh: { propertyId: 'historical id/1', serviceName: 'svc' } } })).status, 200);
+    assert.equal((await put(sa(), P(362), 'integrations', (await current(P(362))).integrations)).status, 200);
+    assert.equal((await patch(sa(), P(362), { integrations: { tsh: { propertyId: null } } })).status, 200);
+    assert.equal((await integrationsOf(P(362)))['tsh']!['propertyId'], null);
+  });
+
+  it('accepts in the map of the categories of TS Hospitality only the ids of the copy of the provider’s list for the values that change', async () => {
+    const listed = [{ id: 't1', name: 'Bar' }, { id: 't2', name: 'Cucina' }];
+    await world.seedPlace(0, 363, 1, { integrations: { tsh: { status: true, testMode: false, id: null, secret: null, propertyId: null, serviceName: null, categoriesMap: { c1: 't1', c9: 'gone' }, tshCategories: listed } } });
+    const map = (categoriesMap: Document) => patch(sa(), P(363), { integrations: { tsh: { categoriesMap } } });
+    assert.deepEqual(failure(await map({ c1: 't9' })), issues(['integrations.tsh.categoriesMap.c1', 'incorrect']));
+    assert.deepEqual(failure(await map({ c1: 't1', c2: 'nope', c3: 'zz' })), issues(['integrations.tsh.categoriesMap.c2', 'incorrect'], ['integrations.tsh.categoriesMap.c3', 'incorrect']));
+    // The ones the copy lists are fine, and a historical value that is sent back as it is stays.
+    assert.equal((await map({ c1: 't2', c2: 't1', c9: 'gone' })).status, 200);
+    assert.deepEqual((await integrationsOf(P(363)))['tsh']!['categoriesMap'], { c1: 't2', c2: 't1', c9: 'gone' });
+    assert.equal((await put(sa(), P(363), 'integrations', (await current(P(363))).integrations)).status, 200);
+    assert.equal((await map({})).status, 200);
+    // A place that has no copy of the list yet can map nothing new.
+    await world.seedPlace(0, 364, 1);
+    assert.deepEqual(failure(await patch(sa(), P(364), { integrations: { tsh: { categoriesMap: { c1: 't1' } } } })), issues(['integrations.tsh.categoriesMap.c1', 'incorrect']));
+    assert.equal((await patch(sa(), P(364), { integrations: { tsh: { categoriesMap: {} } } })).status, 200);
   });
 });
 
@@ -280,7 +341,7 @@ describe('PUT …/integrations: the credentials of the payments', () => {
       [{ dojo: { apiKey: null } }, ['integrations.dojo.apiKey']],
       [{ floodPay: { stripe: { privateKey: 'sk_test_fakeprivatekey123' } } }, ['integrations.floodPay.stripe.privateKey']], // gitleaks:allow (fake test value)
       [{ floodPay: { stripe: { webhookPrivateKey: 'whsec_fakewebhooksecret123', publicKey: 'pk_test_abc' } } }, ['integrations.floodPay.stripe.publicKey', 'integrations.floodPay.stripe.webhookPrivateKey']], // gitleaks:allow (fake test value)
-      [{ satispay: { activationCode: 'ABC123', keyId: 'fake-satispay-key-id' } }, ['integrations.satispay.activationCode', 'integrations.satispay.keyId']],
+      [{ satispay: { keyId: 'fake-satispay-key-id' } }, ['integrations.satispay.keyId']],
       [{ qodeup: { apiKey: 'fake-qodeup-key-1' } }, ['integrations.qodeup.apiKey']],
       [{ multisafepay: { terminalGroupApiKey: 'fake-msp-group-key', websiteApiKey: 'fake-msp-site-key' } }, ['integrations.multisafepay.terminalGroupApiKey', 'integrations.multisafepay.websiteApiKey']],
     ];

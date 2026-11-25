@@ -1,0 +1,27 @@
+@if (visible()) {
+  <section class="action" [attr.aria-label]="'INTEGRATIONS.COORDINATES.TITLE' | t">
+    <button
+      fc-button
+      variant="secondary"
+      [loading]="busy()"
+      [disabled]="blockedBy() !== null"
+      (click)="locate()"
+    >
+      {{ 'INTEGRATIONS.COORDINATES.CALCULATE' | t }}
+    </button>
+    @if (blockedBy(); as reason) {
+      <p class="note">{{ reason }}</p>
+    }
+    @if (warning(); as message) {
+      <p class="problem" role="alert">{{ message }}</p>
+    }
+    @if (failure(); as message) {
+      <p class="problem" role="alert">{{ message }}</p>
+    }
+    <p class="note" role="status">
+      @if (done()) {
+        {{ 'INTEGRATIONS.COORDINATES.DONE' | t }}
+      }
+    </p>
+  </section>
+}

@@ -5,7 +5,7 @@ import { BSON, Double, Int32, ObjectId } from 'mongodb';
 import { COMPANIES_OWNED_FIELDS, GROUPS_OWNED_FIELDS, GROUPS_PLACES_FIELD, PLACES_OWNED_FIELDS, COLLECTIONS } from '../../src/db/collections.ts';
 import { DEFAULT_PLAN, DEFAULT_STORAGE_NAME, DEFAULT_TIMEZONE, companyContainerDefaults, newCompanyDocument, newPlaceDocument, placeContainerDefaults } from '../../src/shared/legacy-write/defaults.ts';
 import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from '../../src/shared/legacy-write/errors.ts';
-import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkFields, checkObjectId, requireFields } from '../../src/shared/legacy-write/fields.ts';
+import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkFields, checkObjectId, checkUnset, requireFields } from '../../src/shared/legacy-write/fields.ts';
 import { LIST_PATHS } from '../../src/shared/legacy-write/place-lists.ts';
 import { SETTING_LEGACY_PATHS } from '../../src/shared/legacy-write/place-settings.ts';
 import { reserveWithGoogleRecord } from '../../src/shared/legacy-write/reserve-with-google.ts';
@@ -34,13 +34,13 @@ describe('legacy write: registry and allowlists', () => {
     for (const field of ['devices', 'rooms', 'storages', 'printStations', 'productionCenter', 'server.ip', 'connectorAddress', 'platform.sentry']) {
       assert.ok(PLACES_OWNED_FIELDS.includes(field), field);
     }
-    for (const field of ['integrations', 'integrations.floodPay', 'integrations.floodPay.stripe', 'server', 'platform', 'platform.ip', 'roomsSettings', 'general', 'ordering', 'receipt', 'openingTime', 'delivery', 'delivery.time', 'devices.info', 'rooms.view', 'groupId', '_id', 'insertDate', 'integrations.tsh.tshCategories', 'integrations.floodOrders']) {
+    for (const field of ['integrations', 'integrations.floodPay', 'integrations.floodPay.stripe', 'server', 'platform', 'platform.ip', 'roomsSettings', 'general', 'ordering', 'receipt', 'openingTime', 'delivery', 'delivery.time', 'devices.info', 'rooms.view', 'groupId', '_id', 'insertDate', 'integrations.satispay.activationCode', 'integrations.floodOrders']) {
       assert.ok(!PLACES_OWNED_FIELDS.includes(field), field);
     }
     // Every credential is owned once (the flag shares its path) and the keys of the integrations are leaves.
     assert.equal(new Set(PLACES_OWNED_FIELDS).size, PLACES_OWNED_FIELDS.length);
     assert.ok(PLACES_OWNED_FIELDS.filter((field) => field.startsWith('integrations.')).every((field) => field.split('.').length >= 3));
-    for (const field of ['plan', 'status', 'expirationDate', 'platform.sentry', 'general.priceLists', 'openingTime.weekGeneric', 'openingTime.daySpecial', 'delivery.time.weekGeneric', 'delivery.time.daySpecial', 'timezone', 'invoicePS', 'listId', 'ecommerceListId', 'companyId', 'integrations.floodPay.stripe.privateKey', 'integrations.reserveWithGoogle.geo.address.country', 'integrations.tsh.categoriesMap']) {
+    for (const field of ['plan', 'status', 'expirationDate', 'platform.sentry', 'general.priceLists', 'openingTime.weekGeneric', 'openingTime.daySpecial', 'delivery.time.weekGeneric', 'delivery.time.daySpecial', 'timezone', 'invoicePS', 'listId', 'ecommerceListId', 'companyId', 'integrations.floodPay.stripe.privateKey', 'integrations.reserveWithGoogle.geo.address.country', 'integrations.tsh.categoriesMap', 'integrations.tsh.tshCategories']) {
       assert.ok(PLACES_OWNED_FIELDS.includes(field), field);
     }
     assert.equal(PLACES_OWNED_FIELDS.length, 17 + 1 + 5 + SETTING_LEGACY_PATHS.length + LIST_PATHS.length + 2);
@@ -87,10 +87,19 @@ describe('legacy write: field checks', () => {
   });
 
   it('rejects fields outside the allowlist, also the ones the POS and the legacy own and the prototype keys', () => {
-    for (const field of ['integrations', 'integrations.floodOrders', 'integrations.tsh.tshCategories', 'server', 'trash', 'updateDate', 'groupId', '_id', 'unknown', 'toString', '__proto__', 'constructor']) {
+    for (const field of ['integrations', 'integrations.floodOrders', 'integrations.satispay.activationCode', 'server', 'trash', 'updateDate', 'groupId', '_id', 'unknown', 'toString', '__proto__', 'constructor']) {
       assert.throws(() => checkFields(PLACE_FIELD_KINDS, JSON.parse(`{ "${field}": 1 }`)), invalid(field), field);
     }
     assert.throws(() => checkFields(COMPANY_FIELD_KINDS, { settings: {} }), invalid('settings'));
+  });
+
+  it('allows to remove only the paths the registry lists, each once, and never one the same update sets', () => {
+    assert.deepEqual(checkUnset([], {}), []);
+    assert.deepEqual(checkUnset(['integrations.satispay.activationCode'], { 'integrations.satispay.keyId': 'k' }), ['integrations.satispay.activationCode']);
+    for (const unset of [['integrations.satispay.keyId'], ['integrations'], ['name'], ['integrations.satispay.activationCode', 'integrations.satispay.activationCode']]) {
+      assert.throws(() => checkUnset(unset, {}), invalid(unset.at(-1)!), unset.join());
+    }
+    assert.throws(() => checkUnset(['integrations.satispay.activationCode'], { 'integrations.satispay.activationCode': 'x' }), invalid('integrations.satispay.activationCode'));
   });
 
   it('rejects values of the wrong kind, naming the field and never the value', () => {

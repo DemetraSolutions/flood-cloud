@@ -24,6 +24,7 @@ function emulateNativeDialog(): void {
       heading="Titolo"
       [wide]="wide()"
       [alert]="alert()"
+      [locked]="locked()"
       [(open)]="open"
       (closed)="closes.set(closes() + 1)"
     >
@@ -36,6 +37,7 @@ class Host {
   readonly closes = signal(0);
   readonly wide = signal(false);
   readonly alert = signal(false);
+  readonly locked = signal(false);
 }
 
 async function render() {
@@ -47,6 +49,10 @@ async function render() {
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   return { fixture, host: fixture.componentInstance, root, dialog: root.querySelector('dialog')! };
+}
+
+function root(fixture: { nativeElement: unknown }): HTMLElement {
+  return fixture.nativeElement as HTMLElement;
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -115,5 +121,27 @@ describe('Dialog', () => {
     host.wide.set(true);
     await fixture.whenStable();
     expect(dialog.classList.contains('wide')).toBe(true);
+  });
+
+  it('lets Esc cancel an unlocked dialog', async () => {
+    const { fixture, host, dialog } = await render();
+    host.open.set(true);
+    await fixture.whenStable();
+    const cancel = new Event('cancel', { cancelable: true });
+    dialog.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(false);
+    expect(root(fixture).querySelector<HTMLButtonElement>('header button')!.disabled).toBe(false);
+  });
+
+  it('stays open on Esc and disables the close button while locked', async () => {
+    const { fixture, host, dialog } = await render();
+    host.locked.set(true);
+    host.open.set(true);
+    await fixture.whenStable();
+    const cancel = new Event('cancel', { cancelable: true });
+    dialog.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(dialog.open).toBe(true);
+    expect(root(fixture).querySelector<HTMLButtonElement>('header button')!.disabled).toBe(true);
   });
 });

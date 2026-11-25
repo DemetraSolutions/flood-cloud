@@ -182,10 +182,10 @@ describe('POST /v1/groups/{groupId}/companies', () => {
     }
     assert.deepEqual(failure(await hubOf(world.office.cluster.dealerA, `aruba__${dealerB}`)), notAllowed('eInvoicing.hub'));
     // Unknown values are 422 incorrect: bad shape, a user that is not a dealer, a dealer in the trash, a made-up id.
-    for (const hub of ['fiskaly', 'aruba__', 'aruba__xyz', `aruba__${hex(world.group(0).sa)}`, `aruba__${hex(TRASHED_DEALER)}`, `aruba__${hex(new ObjectId())}`, `ARUBA`, `Aruba__${dealerA}`]) {
+    for (const hub of ['unknown-hub', 'aruba__', 'aruba__xyz', `aruba__${hex(world.group(0).sa)}`, `aruba__${hex(TRASHED_DEALER)}`, `aruba__${hex(new ObjectId())}`, `ARUBA`, `Aruba__${dealerA}`]) {
       assert.deepEqual(failure(await hubOf(psa(), hub)), issues(['eInvoicing.hub', 'incorrect']), hub);
     }
-    assert.deepEqual(failure(await hubOf(world.office.cluster.dealerA, 'fiskaly')), issues(['eInvoicing.hub', 'incorrect']));
+    assert.deepEqual(failure(await hubOf(world.office.cluster.dealerA, 'unknown-hub')), issues(['eInvoicing.hub', 'incorrect']));
     assert.equal(await ctx.databases.common().collection('companies').countDocuments({ name: 'Acme Test' }), 0);
   });
 

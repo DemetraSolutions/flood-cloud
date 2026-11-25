@@ -2,8 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
-import { COLLECTIONS, GROUPS_INSERT_ONLY_FIELDS, PRODUCTS_CATEGORIES_OWNED_FIELDS, PRODUCTS_CATEGORIES_OWNED_TREES, GROUPS_OWNED_FIELDS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
+import { join, relative } from 'node:path';
+import { COLLECTIONS, CONTACTS_OWNED_FIELDS, GROUPS_INSERT_ONLY_FIELDS, PRODUCTS_CATEGORIES_OWNED_FIELDS, PRODUCTS_CATEGORIES_OWNED_TREES, GROUPS_OWNED_FIELDS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
 import { SESSIONS_INDEXES } from '../../src/db/sessions-schema.ts';
 import { DEALERS_INDEXES } from '../../src/db/dealers-schema.ts';
 import type { CollectionRegistry } from '../../src/db/collections.ts';
@@ -23,14 +23,14 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes', () => {
     assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'countries', 'dealers', 'groups', 'idempotencyKeys', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
-    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['companies', 'contacts', 'contacts_groups', 'email_templates', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments']);
+    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['calendar', 'companies', 'contacts', 'contacts_groups', 'documents', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'sales', 'table_reservation', 'warehouse']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
       const isMirror = ['companies', 'places'].includes(name) && COLLECTIONS.common[name as 'companies' | 'places'] === spec;
       const expected = isMirror
         ? 'mirror'
         : ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'dealers', 'idempotencyKeys', 'rateLimits', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials'].includes(name)
           ? 'new'
-          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || name === 'countries' || (['companies', 'email_templates', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments'].includes(name) && !isMirror)
+          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || name === 'countries' || (['companies', 'contacts', 'contacts_groups', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments'].includes(name) && !isMirror)
             ? 'legacy-write'
             : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
@@ -58,6 +58,21 @@ describe('collection registry', () => {
       assert.equal(COLLECTIONS.group.products_categories.ownedFields.includes(field), false, field);
     }
     assert.deepEqual([...COLLECTIONS.group.products_attributes.ownedFields].sort(), ['attributes', 'insertDate', 'name', 'updateDate']);
+    // The contacts (step K1): the two containers are owned leaf by leaf, and what the legacy keeps dead or denormalized there is never owned.
+    assert.deepEqual([...COLLECTIONS.group.contacts_groups.ownedFields].sort(), ['discountPercentage', 'insertDate', 'name', 'priceListId', 'updateDate']);
+    assert.equal(COLLECTIONS.group.contacts.ownedFields, CONTACTS_OWNED_FIELDS);
+    for (const field of ['fidelities', 'services', 'account.email', 'account.telephone', 'fattura_elettronica.pec', 'fattura_elettronica.richiedi_dati_ordine_acquisto', 'trash', 'trashDate', 'cGroupId', 'contactCode', 'companyLists']) {
+      assert.ok(CONTACTS_OWNED_FIELDS.includes(field), field);
+    }
+    for (const field of ['account', 'account.password', 'account.tokens', 'password', 'tokens', 'cGroup', 'associatedCompany', 'fattura_elettronica', 'fidelities.points', 'fidelities.code']) {
+      assert.equal(CONTACTS_OWNED_FIELDS.includes(field), false, field);
+    }
+    // The advanced cards (step F1): the code is written only at creation, the credit and the points only move with `$inc`, and the history is only inserted.
+    assert.deepEqual([...COLLECTIONS.group.fidelity_cards.ownedFields].sort(), ['balance', 'cardTypeId', 'code', 'insertDate', 'pointsCollections', 'status', 'updateDate']);
+    assert.deepEqual([...COLLECTIONS.group.fidelity_cards_movements.ownedFields].sort(), ['apiKeyId', 'balance', 'cardCode', 'cardId', 'date', 'points', 'pointsCollectionId', 'storeKeyId', 'type', 'userId']);
+    for (const name of ['sales', 'documents', 'calendar', 'table_reservation', 'warehouse'] as const) {
+      assert.deepEqual(COLLECTIONS.group[name], { ownership: 'legacy-read' }, name);
+    }
     assert.deepEqual([...COLLECTIONS.common.users.ownedFields].sort(), [...USERS_OWNED_FIELDS].sort());
     for (const field of ['name', 'surname', 'email', 'telephone', 'settings.language', 'settings.theme', 'settings.hiddenInStats', 'status', 'trash', 'role', 'groupId', 'dealerId', 'companyId', 'placeId', 'placesId', 'permissions.status', 'permissions.users.r', 'permissions.users.w', 'permissions.logs.r', 'permissions.stats.r', 'permissions.documents.w', 'description', 'avatar', 'pin', 'servicesId', 'shiftTime.status', 'shiftTime.weeksGeneric', 'shiftTime.daySpecial', 'permissions.apps.cash.status', 'permissions.apps.cash.sub.preblling', 'permissions.apps.cash.sub.automaticCash.glory.withdrawal', 'permissions.apps.cash.options.priceLists', 'password', 'tokens', 'userName', 'insertDate', 'updateDate']) {
       assert.ok(COLLECTIONS.common.users.ownedFields.includes(field), field);
@@ -96,7 +111,7 @@ describe('collection registry', () => {
     ]);
     assert.deepEqual(COLLECTIONS.common.storeActivationCodes.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null]), [['codeHash_1', true, null], ['placeId_1', true, null], ['expiresAt_1', false, 0]]);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'documents', 'email_templates', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'calendar', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'documents', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sales', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'table_reservation', 'tobaccos', 'userCredentials', 'users', 'warehouse']);
   });
 
   it('registers the documents of the legacy send queue as read only, with no index, and refuses anything else there', () => {
@@ -218,20 +233,89 @@ describe('collection registry', () => {
     }
   });
 
-  it('keeps the collections of the legacy queue out of the common and group databases: its names are used only by the queue repository, through queue()', async () => {
-    const queueOnly = Object.keys(COLLECTIONS.queue).filter((name) => !(name in COLLECTIONS.common) && !(name in COLLECTIONS.group));
-    assert.deepEqual(queueOnly, ['documents']);
+  it('keeps the collections of the legacy queue out of the common and group databases, except the one name both have: `documents` is read from the queue only by the queue repository, through queue()', async () => {
+    const queueNames = Object.keys(COLLECTIONS.queue);
+    assert.deepEqual(queueNames, ['documents']);
+    // The group database has a `documents` collection of its own (the invoices and receipts of the legacy): the contacts repository reads it, through the group access, to refuse the deletion of a contact a document names.
+    const groupToo = queueNames.filter((name) => name in COLLECTIONS.group);
+    assert.deepEqual(groupToo, ['documents']);
+    assert.equal(queueNames.filter((name) => name in COLLECTIONS.common).length, 0);
     for (const file of await sourceFiles()) {
       const text = await readFile(file, 'utf8');
-      for (const name of queueOnly) {
+      for (const name of queueNames) {
         const uses = [...text.matchAll(new RegExp(`(.{0,60})\\.collection(?:<[^>]*>)?\\(\\s*['"\`]${name}['"\`]`, 'g'))];
+        const viaQueue = uses.filter((use) => use[1]!.includes('.queue()'));
         if (file.endsWith('modules/error-documents/error-documents.repository.ts')) {
-          assert.ok(uses.length > 0 && uses.every((use) => use[1]!.includes('.queue()')), `${file}: "${name}" must be read through queue()`);
+          assert.ok(uses.length > 0 && viaQueue.length === uses.length, `${file}: "${name}" must be read through queue()`);
         } else {
-          assert.equal(uses.length, 0, `${file}: "${name}" belongs to the queue database only`);
+          assert.equal(viaQueue.length, 0, `${file}: "${name}" of the queue is read only by the queue repository`);
+          // The name of the group database, in the files that may read it.
+          if (file.endsWith('modules/contacts/contacts.repository.ts')) {
+            assert.ok(uses.length > 0 && uses.every((use) => /\bdb$/.test(use[1]!)), `${file}: "${name}" is read from the group database`);
+          } else {
+            assert.equal(uses.length, 0, `${file}: "${name}" is not read here`);
+          }
         }
       }
     }
+  });
+
+  it('opens the advanced cards only in their repository, and only to read them in the contacts repository; never writes the history but by insertion', async () => {
+    for (const file of await sourceFiles()) {
+      const text = await readFile(file, 'utf8');
+      const cards = [...text.matchAll(/\.collection(?:<[^>]*>)?\(\s*['"`]fidelity_cards['"`]\s*\)\s*\.(\w+)\(/g)].map((match) => match[1]);
+      const any = [...text.matchAll(/\.collection(?:<[^>]*>)?\(\s*['"`]fidelity_cards['"`]/g)].length;
+      const history = [...text.matchAll(/\.collection(?:<[^>]*>)?\(\s*['"`]fidelity_cards_movements['"`]/g)].length;
+      if (file.endsWith('modules/contacts/contacts.repository.ts')) {
+        assert.ok(any > 0 && cards.length === any && cards.every((method) => method === 'find' || method === 'findOne'), `${file}: the cards are only read`);
+        assert.equal(history, 0);
+      } else if (file.endsWith('modules/fidelity-cards/fidelity-cards.indexes.ts') || file.endsWith('modules/groups/onboarding.repository.ts')) {
+        // Only the unique index on the code: the one the legacy creates on every group.
+        assert.ok(!/\.collection\(\s*'fidelity_cards'\s*\)\s*\.(?!createIndex\()/.test(text) && !/fidelity_cards_movements/.test(text), `${file}: only the index of the code`);
+      } else if (file.endsWith('modules/fidelity-cards/fidelity-cards.repository.ts')) {
+        assert.ok(any > 0 && history > 0);
+        assert.ok(!/history\(principal, access\)\s*\.(update|replace|findOneAndUpdate|bulkWrite)/.test(text), 'the history is never changed');
+      } else {
+        assert.equal(any + history, 0, `${file} does not open the cards`);
+      }
+    }
+  });
+
+  it('reads the legacy collections that name a contact only from the contacts repository, and never writes them', async () => {
+    const names = ['sales', 'documents', 'calendar', 'table_reservation', 'warehouse'];
+    for (const file of await sourceFiles()) {
+      const text = await readFile(file, 'utf8');
+      for (const name of names) {
+        const any = [...text.matchAll(new RegExp(`\\.collection(?:<[^>]*>)?\\(\\s*['"\`]${name}['"\`]`, 'g'))];
+        const found = [...text.matchAll(new RegExp(`\\.collection(?:<[^>]*>)?\\(\\s*['"\`]${name}['"\`]\\s*\\)\\s*\\.find\\(`, 'g'))];
+        if (file.endsWith('modules/contacts/contacts.repository.ts')) {
+          // Every occurrence, whatever follows it, is a `find`.
+          assert.ok(any.length > 0 && found.length === any.length, `${file}: "${name}" is only found`);
+        } else if (name === 'sales' && (file.endsWith('modules/sales/sales.repository.ts') || file.endsWith('modules/sales/sales.indexes.ts'))) {
+          // The sales (step V1): the repository only reads them, the index guard only creates the index of the purchases of a customer (the one exception decided by the user).
+          assert.equal(any.length, 1, file);
+        } else if (!file.endsWith('modules/error-documents/error-documents.repository.ts')) {
+          assert.equal(any.length, 0, `${file}: "${name}" is not used here`);
+        }
+      }
+    }
+  });
+
+  it('only reads the sales: no write, no other index than the purchases of a customer, no other module opens them', async () => {
+    const repository = await readFile(join(SRC, 'modules', 'sales', 'sales.repository.ts'), 'utf8');
+    const code = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/\b(insert|update|replace|delete|bulkWrite|createIndex|createIndexes|dropIndex|drop|rename|findOneAnd|createCollection|\$out|\$merge)/i.test(code(repository).replace(/\bupdateDate\b/g, '')), 'the repository of the sales only reads');
+    const indexes = code(await readFile(join(SRC, 'modules', 'sales', 'sales.indexes.ts'), 'utf8'));
+    assert.deepEqual([...indexes.matchAll(/\.(createIndex(?:es)?|dropIndex(?:es)?|insert\w*|update\w*|delete\w*|replace\w*|bulkWrite|drop|rename\w*)\(/g)].map((match) => match[1]), ['createIndex']);
+    assert.ok(indexes.includes("createIndex({ ...SALES_CUSTOMER_INDEX.key }, { ...SALES_CUSTOMER_INDEX.options })"));
+    // Only the sales module (the service takes the type of the guard), the composition root and the onboarding of a group (which uses the function of the index) reach the indexes of the sales.
+    const users: string[] = [];
+    for (const file of await sourceFiles()) {
+      if (/sales\.indexes\.ts['"]/.test(await readFile(file, 'utf8'))) {
+        users.push(relative(SRC, file).split('\\').join('/'));
+      }
+    }
+    assert.deepEqual(users.sort(), ['composition.ts', 'modules/groups/onboarding.repository.ts', 'modules/sales/sales.service.ts']);
   });
 
   it('no module outside src/db/databases.ts selects a database directly', async () => {

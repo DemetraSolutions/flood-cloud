@@ -35,9 +35,15 @@ export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze(
   companies: { read: [P.COMPANIES_READ], write: [P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH, P.COMPANIES_DELETE] },
   places: { read: [P.PLACES_READ], write: [P.PLACES_CREATE, P.PLACES_UPDATE, P.PLACES_TRASH, P.PLACES_DELETE] },
   // Group-wide loyalty and catalog data kept in the group document (card types, points collections, prize catalogues; favorites and promotions): the legacy menus are governed by these two modules.
-  fidelity: { read: [P.FIDELITY_READ], write: [P.FIDELITY_UPDATE] },
+  // `fidelityCards:export` and `fidelityCards:import` (step K3, the XLSX workbook of the advanced cards) follow `fidelity.r` and `fidelity.w`, inside the ceiling of PSA, D and SA only.
+  fidelity: { read: [P.FIDELITY_READ, P.FIDELITY_CARDS_EXPORT], write: [P.FIDELITY_UPDATE, P.FIDELITY_CARDS_IMPORT] },
   // `tobaccos:sync` (step C7, the synchronization of the tobacco price list into the products of the group): it follows `products.w`, inside the ceiling of the roles that have it (PSA, D, SA).
   products: { read: [P.PRODUCTS_READ], write: [P.PRODUCTS_UPDATE, P.TOBACCOS_SYNC] },
+  // The contacts of the group and their groups (step K1): the contacts are of the whole group, shared by every place, so the module is not limited to a perimeter.
+  // `contacts:export` and `contacts:import` (step K3, the XLSX workbook of the contacts) follow `contacts.r` and `contacts.w`, inside the ceiling of PSA, D and SA only.
+  contacts: { read: [P.CONTACTS_READ, P.CONTACTS_EXPORT], write: [P.CONTACTS_WRITE, P.CONTACTS_IMPORT] },
+  // The sales of the group are documents of the legacy matrix (step V1, decision of the user): `documents.r` grants `sales:read`, the module has no write permission yet (a flag with an empty list grants nothing).
+  documents: { read: [P.SALES_READ], write: [] },
   logs: { read: [P.ACTIVITY_LOG_READ], write: [] },
 });
 
@@ -118,7 +124,7 @@ const NONE: ModuleFlags = { r: false, w: false };
 
 /**
  * Every module of the legacy matrix, in the order of the legacy form: the core ones (see {@link CORE_MODULES}) produce permissions, the others
- * (`documents`, `calendar`, `warehouse`, `contacts`, `settings`, `stats`) are data of the matrix that this backend stores and shows but that no
+ * (`calendar`, `warehouse`, `settings`, `stats`) are data of the matrix that this backend stores and shows but that no
  * permission of the catalog follows yet. `logs` has only the read flag in the legacy documents.
  */
 export const LEGACY_MODULES: readonly string[] = Object.freeze([

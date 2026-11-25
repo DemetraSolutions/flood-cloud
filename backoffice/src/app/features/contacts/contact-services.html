@@ -1,0 +1,51 @@
+<fieldset [attr.aria-describedby]="error() ? errorId : null">
+  <legend>{{ 'CONTACTS.SERVICES.TITLE' | t }}</legend>
+  <p class="hint">{{ 'CONTACTS.SERVICES.HINT' | t }}</p>
+  <ul class="rows">
+    @for (entry of rows(); track $index) {
+      <li>
+        <p class="name">{{ entry.name }}</p>
+        <fc-text-field
+          autocomplete="off"
+          [hint]="'CONTACTS.SERVICES.DURATION_HINT' | t"
+          [label]="'CONTACTS.SERVICES.DURATION' | t: { name: entry.name }"
+          [value]="entry.row.duration"
+          [disabled]="disabled()"
+          [error]="entry.error"
+          (valueChange)="setDuration(entry.index, $event)"
+        />
+        @if (!disabled()) {
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="'CONTACTS.LIST.REMOVE_LABEL' | t: { name: entry.name }"
+            (click)="remove(entry.index)"
+          >
+            {{ 'CONTACTS.LIST.REMOVE' | t }}
+          </button>
+        }
+      </li>
+    } @empty {
+      <li class="note">{{ 'CONTACTS.SERVICES.EMPTY' | t }}</li>
+    }
+  </ul>
+  @if (!disabled()) {
+    @if (value().length < limit) {
+      <fc-search-combobox
+        [label]="'CONTACTS.SERVICES.SEARCH' | t"
+        value=""
+        [search]="search"
+        [minChars]="minChars"
+        [placeholder]="'CONTACTS.SERVICES.SEARCH_PLACEHOLDER' | t"
+        [clearLabel]="'CONTACTS.SERVICES.CLEAR' | t"
+        (choice)="add($event)"
+      />
+    } @else {
+      <p class="note">{{ 'CONTACTS.SERVICES.LIMIT' | t: { max: limit } }}</p>
+    }
+  }
+  @if (error()) {
+    <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+  }
+</fieldset>

@@ -136,6 +136,8 @@ describe('the Cerved client: failures', () => {
     }
     fake.onSearch = () => ({ status: 204 });
     assert.equal(await reasonOf(client().findCompanyByVat(VAT)), 'malformed');
+    fake.onSearch = () => ({ raw: '{"companies":[]}', noContentType: true });
+    assert.equal(await reasonOf(client().findCompanyByVat(VAT)), 'malformed', 'a body not declared as JSON');
   });
 
   it('times out when the provider never answers, and when it stops in the middle of the body', async () => {

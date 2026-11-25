@@ -11,12 +11,12 @@ import {
 } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
-import { failureMessage } from '../../shared/forms/form-errors';
 import { Button } from '../../shared/ui/button/button';
 import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { Dialog } from '../../shared/ui/dialog/dialog';
 import { ToastService } from '../../shared/ui/toast/toast.service';
 import { TrashApi } from './trash-api';
+import { trashFailureMessage } from './trash-errors';
 import { GroupTrashKind, TrashEmptyResponse, TrashItemResult } from './trash.types';
 
 /** Progress of the emptying: items deleted so far and items still in the trash (`null` before the first answer). */
@@ -119,7 +119,7 @@ export class TrashEmptyDialog {
         }));
       } while (after !== null && !this.stopping());
     } catch (error) {
-      this.toast.error(failureMessage(this.i18n, error));
+      this.toast.error(trashFailureMessage(this.i18n, this.kind(), error));
     } finally {
       this.running.set(false);
     }

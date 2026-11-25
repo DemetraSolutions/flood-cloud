@@ -1,5 +1,7 @@
 import type { RequestHandler } from 'express';
 import { AppError } from '../../http/errors.ts';
+import { validate } from '../../validation/schema.ts';
+import type { Schema } from '../../validation/schema.ts';
 import type { Permission } from '../rbac/permissions.ts';
 
 /**
@@ -36,6 +38,21 @@ export function requireStoreParams(names: readonly string[]): RequestHandler {
     const malformed = names.filter((name) => !OBJECT_ID_TEXT.test(String(req.params[name])));
     if (malformed.length > 0) {
       throw new AppError('VALIDATION_ERROR', { details: malformed.map((field) => ({ field, issue: 'format' })) });
+    }
+    next();
+  };
+}
+
+/**
+ * Builds the check of the text path parameters of a store route (`text` of its auth): each one is judged by the schema the route declared, `422 VALIDATION_ERROR` with the name of the parameter otherwise, before the body is read.
+ *
+ * @param schemas The schema of each text parameter, by name.
+ * @returns The handler.
+ */
+export function requireStoreText(schemas: Readonly<Record<string, Schema<unknown> | undefined>>): RequestHandler {
+  return (req, _res, next) => {
+    for (const [name, schema] of Object.entries(schemas)) {
+      validate(schema!, req.params[name], name);
     }
     next();
   };

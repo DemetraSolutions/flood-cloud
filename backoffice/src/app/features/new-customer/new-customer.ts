@@ -51,6 +51,7 @@ import { DEALER_PLANS, PLANS } from '../places/place.types';
 import { PasswordGenerator } from '../users/password-generator';
 import { USERNAME_PATTERN } from '../users/user-form-state';
 import { UsersApi } from '../users/users-api';
+import { VatLookup, VatLookupField } from '../integrations';
 import { NewCustomerApi } from './new-customer-api';
 import {
   buildBody,
@@ -72,7 +73,6 @@ import {
   vatIssue,
   VatFillField,
   VatFillPlan,
-  VatLookup,
   planVatFill,
 } from './new-customer.types';
 
@@ -99,12 +99,6 @@ const VAT_FIELD_LABELS: Record<VatFillField, string> = {
   province: 'NEW_CUSTOMER.FIELD.PROVINCE',
   pec: 'NEW_CUSTOMER.FIELD.PEC',
 };
-
-/** What the VAT lookup shows under the field: a confirmation or a failure. */
-interface LookupNotice {
-  readonly kind: 'done' | 'error';
-  readonly text: string;
-}
 
 /** `{ issue }` for a validator, nothing when the value is fine. */
 function issueOf(kind: string | undefined): { kind: string } | undefined {
@@ -135,6 +129,7 @@ function issueOf(kind: string | undefined): { kind: string } | undefined {
     Select,
     TextField,
     TPipe,
+    VatLookupField,
   ],
   templateUrl: './new-customer.html',
   styleUrl: './new-customer.css',
@@ -270,7 +265,8 @@ export class NewCustomer {
 
   // --- VAT lookup (Cerved): an explicit action of the operator.
   protected readonly lookupBusy = signal(false);
-  protected readonly lookupNotice = signal<LookupNotice | null>(null);
+  /** The lookup component that found the answer waiting to be applied (it is told when the form is filled). */
+  private vatLookup!: VatLookupField;
   /** The answer waiting for the operator to confirm the overwrite. */
   private readonly pendingFill = signal<VatFillPlan | null>(null);
   protected readonly confirmOpen = signal(false);
@@ -393,20 +389,6 @@ export class NewCustomer {
 
   // --- VAT lookup.
 
-  /** Asks the backend for the company with the VAT number and fills the form with the answer. */
-  protected async lookupVat(): Promise<void> {
-    this.lookupBusy.set(true);
-    this.lookupNotice.set(null);
-    try {
-      const found = await this.api.lookupVat(this.model().vatNumber.trim());
-      this.applyLookup(found);
-    } catch (error) {
-      this.lookupNotice.set({ kind: 'error', text: this.lookupFailure(error) });
-    } finally {
-      this.lookupBusy.set(false);
-    }
-  }
-
   /** The operator confirmed: every field of the answer is written, also the ones that differ. */
   protected confirmFill(): void {
     const plan = this.pendingFill()!;
@@ -423,11 +405,9 @@ export class NewCustomer {
     }
   }
 
-  private applyLookup(found: VatLookup): void {
-    if (found.vatNumber !== this.model().vatNumber.trim()) {
-      this.lookupNotice.set({ kind: 'done', text: this.i18n.t('NEW_CUSTOMER.LOOKUP.STALE') });
-      return;
-    }
+  /** The lookup found the company of the VAT number in the form: fills the form, asking before it replaces anything. */
+  protected applyLookup(found: VatLookup, source: VatLookupField): void {
+    this.vatLookup = source;
     const provinces = this.countries.areas('IT').map((area) => area.code);
     const plan = planVatFill(this.model(), found, provinces);
     if (Object.keys(plan.overwrite).length === 0) {
@@ -445,42 +425,7 @@ export class NewCustomer {
 
   private fill(values: Readonly<Partial<Record<VatFillField, string>>>): void {
     this.model.update((model) => ({ ...model, ...values, country: 'IT' }));
-    this.lookupNotice.set({ kind: 'done', text: this.i18n.t('NEW_CUSTOMER.LOOKUP.DONE') });
-  }
-
-  private lookupFailure(error: unknown): string {
-    if (error instanceof ApiError) {
-      const key: Record<number, string> = {
-        404: 'NEW_CUSTOMER.LOOKUP.NOT_FOUND',
-        422: 'NEW_CUSTOMER.LOOKUP.INVALID',
-        503: 'NEW_CUSTOMER.LOOKUP.UNAVAILABLE',
-      };
-      if (key[error.status] !== undefined) {
-        return this.i18n.t(key[error.status]);
-      }
-      if (error.status === 429) {
-        return this.rateLimited(error.retryAfterSeconds);
-      }
-    }
-    return failureMessage(this.i18n, error);
-  }
-
-  /** The wait of a `429` in the largest sensible unit: the daily cap can ask for hours. */
-  private rateLimited(seconds: number | null): string {
-    if (seconds === null) {
-      return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED');
-    }
-    if (seconds < 120) {
-      return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT', { seconds });
-    }
-    if (seconds < 7200) {
-      return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT_MINUTES', {
-        minutes: Math.ceil(seconds / 60),
-      });
-    }
-    return this.i18n.t('NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT_HOURS', {
-      hours: Math.ceil(seconds / 3600),
-    });
+    this.vatLookup.filled();
   }
 
   // --- Submission.

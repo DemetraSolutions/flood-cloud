@@ -10,6 +10,8 @@ export interface FakeCervedReply {
   readonly json?: unknown;
   /** Answered as it is (not JSON, or JSON of the wrong size). */
   readonly raw?: string;
+  /** Leave out the `Content-Type` that a `raw` answer is given by default (JSON). */
+  readonly noContentType?: true;
   /** Extra response headers. */
   readonly headers?: Record<string, string>;
   /** Never answer (the client's timeout fires). */
@@ -98,6 +100,7 @@ export async function startFakeCerved(): Promise<FakeCerved> {
       return;
     }
     if (reply.streamMegabytes !== undefined) {
+      response.setHeader('Content-Type', 'application/json');
       const chunk = Buffer.alloc(1024 * 1024, 0x20);
       for (let sent = 0; sent < reply.streamMegabytes; sent += 1) {
         response.write(chunk);
@@ -109,6 +112,9 @@ export async function startFakeCerved(): Promise<FakeCerved> {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify(reply.json));
       return;
+    }
+    if (reply.raw !== undefined && response.getHeader('Content-Type') === undefined && reply.noContentType !== true) {
+      response.setHeader('Content-Type', 'application/json');
     }
     response.end(reply.raw);
   };

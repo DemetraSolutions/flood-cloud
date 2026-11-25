@@ -4,7 +4,7 @@ import { Double, Int32, ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { leafWrites } from '../../src/modules/companies/company.mapper.ts';
 import { PLACE_LEAVES, PLACE_SUMMARY_PROJECTION, toPlace, toPlaceSummary } from '../../src/modules/places/place.mapper.ts';
-import { DEPRECATED_ROOMS_PATHS, SETTING_FIELDS } from '../../src/shared/legacy-write/place-settings.ts';
+import { DEPRECATED_ROOMS_PATHS, SERVER_WRITTEN_PATHS, SETTING_FIELDS } from '../../src/shared/legacy-write/place-settings.ts';
 import { PLACES_OWNED_FIELDS } from '../../src/db/collections.ts';
 import { PRICE_LIST, SLOT, fullLegacyPlace } from '../helpers/place-fixtures.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
@@ -138,7 +138,8 @@ describe('place mapper: the list item', () => {
 
 describe('place mapper: the table of keys', () => {
   it('has a leaf for every stored path the backend owns, and only for those', () => {
-    const owned = PLACES_OWNED_FIELDS.filter((field) => field !== 'updateDate' && !DEPRECATED_ROOMS_PATHS.includes(field as never));
+    // The copy of the provider's categories is owned and written by the server (the synchronization), but the leaf that reads it is read only.
+    const owned = PLACES_OWNED_FIELDS.filter((field) => field !== 'updateDate' && !DEPRECATED_ROOMS_PATHS.includes(field as never) && !SERVER_WRITTEN_PATHS.includes(field));
     const writable = PLACE_LEAVES.filter((leaf) => leaf.readOnly !== true).map((leaf) => leaf.legacy);
     assert.deepEqual([...writable].sort(), owned.filter((field) => field !== 'trash' && field !== 'trashDate').sort());
     // The read-only keys: the state and the dates, the flag of every credential (at the path of the credential) and the list of categories the provider gave.
@@ -152,7 +153,7 @@ describe('place mapper: the table of keys', () => {
     assert.ok(flags.every((leaf) => leaf.readOnly === true && leaf.codec.write(true, undefined) === true));
     // The credentials are write-only leaves: never in a representation.
     const secrets = PLACE_LEAVES.filter((leaf) => leaf.writeOnly === true);
-    assert.equal(secrets.length, 19);
+    assert.equal(secrets.length, 18);
     assert.ok(secrets.every((leaf) => leaf.legacy.startsWith('integrations.') && PLACE_LEAVES.some((flag) => flag.legacy === leaf.legacy && flag.domain === `${leaf.domain}Set`)));
     assert.equal(new Set(PLACE_LEAVES.map((leaf) => leaf.domain)).size, PLACE_LEAVES.length);
   });

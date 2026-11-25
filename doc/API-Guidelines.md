@@ -58,6 +58,7 @@
 | `422` | validazione fallita (con `details` per campo) | `VALIDATION_ERROR` |
 | `429` | rate limit o quota (+ `Retry-After`) | `RATE_LIMITED`, `QUOTA_EXCEEDED` |
 | `500` | errore interno, senza dettagli | `INTERNAL_ERROR` |
+| `502` | errore di un provider esterno (irraggiungibile, timeout, risposta inattesa), senza dettagli del provider; distinto da `503` (integrazione non configurata o sganciata) e da `422` (credenziali rifiutate dal provider, sul campo della credenziale) | `PROVIDER_ERROR` |
 | `503` | servizio non pronto (readiness, arresto in corso) | `SERVICE_UNAVAILABLE` |
 ```json
 { "error": { "code": "VALIDATION_ERROR", "message": "Invalid request", "details": [{ "field": "price", "issue": "minimum" }] } }

@@ -3,8 +3,11 @@ import { issueMessageKey } from '../../../core/api/field-issues';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { failureMessage } from '../../../shared/forms/form-errors';
 
+/** Most cards the server lists in a refusal. */
+const MAX_LISTED_CARDS = 20;
+
 /** Kinds of element that can still use a catalog element (the first part of a `referenced` field). */
-const REFERENCING = ['cardTypes', 'pointsCollections'] as const;
+const REFERENCING = ['cardTypes', 'pointsCollections', 'fidelityCards'] as const;
 
 /**
  * Counts the elements that use the one being deleted, by kind, from the `referenced` details of
@@ -27,7 +30,8 @@ function referencedMessage(i18n: I18nService, error: ApiError): string {
       (REFERENCING as readonly string[]).includes(kind)
         ? `CATALOG.REFERENCED.${kind.toUpperCase()}`
         : 'CATALOG.REFERENCED.OTHER',
-      { count },
+      // The server lists at most 20 cards: 20 means "20 or more".
+      { count: kind === 'fidelityCards' && count >= MAX_LISTED_CARDS ? i18n.t('CATALOG.REFERENCED.MANY', { count }) : count },
     ),
   );
   return i18n.t('CATALOG.ERROR.REFERENCED', { users: users.join(', ') });

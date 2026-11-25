@@ -9,7 +9,7 @@ import { EXACT_TYPES, expectedCopy } from './copy-rule.ts';
 import { COMPANY_CONTAINERS } from './company-paths.ts';
 import { companyContainerDefaults, newCompanyDocument, newPlaceDocument, placeContainerDefaults } from './defaults.ts';
 import { CrossClusterWriteError, InvalidWriteInputError, MalformedDocumentError } from './errors.ts';
-import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkObjectId } from './fields.ts';
+import { COMPANY_FIELD_KINDS, PLACE_FIELD_KINDS, checkChanges, checkObjectId, checkUnset } from './fields.ts';
 import type { CompanyChanges, NewCompanyFields, NewPlaceFields, PlaceChanges } from './fields.ts';
 import { PLACE_LISTS, isEditable, itemKey, mergeList } from './place-lists.ts';
 import type { ListDef } from './place-lists.ts';
@@ -153,12 +153,13 @@ export interface CompaniesPlacesWriter {
    * @param id Id of the place.
    * @param expectedVersion The version the caller read.
    * @param changes The fields to change, at least one.
+   * @param unset The stored paths to remove in the same write (`$unset`), only the ones of `UNSETTABLE_PATHS` (the activation code of Satispay an old place may still hold), none of them also in `changes`.
    * @returns `written`, `notFound`, `conflict` or `companyNotFound`.
-   * @throws {InvalidWriteInputError} If a field is not allowed or invalid, or there is none.
+   * @throws {InvalidWriteInputError} If a field is not allowed or invalid, or there is none, or a path to remove is not removable.
    * @throws {MalformedDocumentError} If a block the change writes into is not an object in the stored document.
    * @throws {CrossClusterWriteError} If the group is not on the cluster of the common database.
    */
-  updatePlace(id: ObjectId, expectedVersion: string, changes: PlaceChanges): Promise<WriteOutcome>;
+  updatePlace(id: ObjectId, expectedVersion: string, changes: PlaceChanges, unset?: readonly string[]): Promise<WriteOutcome>;
   /**
    * Duplicates a place: everything of the stored document is replicated (every key, the devices, the rooms, the storages with the same ids, the integrations and the keys the backend
    * does not know), with a new `_id`, `insertDate` and `updateDate` now, `trash: false`, the `groupId` of the verified access and the name of the legacy duplicate (`<name> (Copy)`). In one
@@ -236,6 +237,22 @@ function mergeLists(current: Document, set: Document): Document | null {
 
 /** The result of the version check: the document as stored, or the outcome that stops the write. */
 type Gate = { readonly current: Document } | { readonly stop: WriteOutcome };
+
+/**
+ * The `integrations` of a place for its copy: the same, without the activation code of Satispay an old place may still hold. The code is single use and secret, and the copy is a new place that never
+ * received one, so it is the one thing of the integrations that is not copied. Everything else (the other keys, their order, the type of every value) is untouched.
+ *
+ * @param integrations The `integrations` of the source place, of any type.
+ * @returns The same value when there is no code to remove, a copy of it without the code otherwise.
+ */
+function withoutActivationCode(integrations: unknown): unknown {
+  const satispay = (integrations as { satispay?: unknown } | null | undefined)?.satispay;
+  if (typeof satispay !== 'object' || satispay === null || !Object.hasOwn(satispay, 'activationCode')) {
+    return integrations;
+  }
+  const { activationCode: _removed, ...rest } = satispay as Document;
+  return { ...(integrations as Document), satispay: rest };
+}
 
 const NOT_FOUND = Object.freeze({ outcome: 'notFound' }) satisfies WriteOutcome;
 const CONFLICT = Object.freeze({ outcome: 'conflict' }) satisfies WriteOutcome;
@@ -474,6 +491,7 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
     effect: (session: ClientSession) => Promise<void>,
     uses?: ObjectId,
     trashing?: boolean,
+    unset: readonly string[] = [],
   ): Promise<WriteOutcome> =>
     run(async (session) => {
       const passed = await gate(kind, checkObjectId(id, 'id'), expected, session);
@@ -493,7 +511,10 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
       // The informational date of the trash is written with the flag, in the same update, and removed with it when the item comes back.
       await original(kind).updateOne(
         { _id: id },
-        { $set: { ...written, ...completion, ...(trashing === true ? { trashDate: now } : {}), updateDate: now }, ...(trashing === false ? { $unset: { trashDate: '' } } : {}) },
+        {
+          $set: { ...written, ...completion, ...(trashing === true ? { trashDate: now } : {}), updateDate: now },
+          ...(trashing === false || unset.length > 0 ? { $unset: { ...(trashing === false ? { trashDate: '' } : {}), ...Object.fromEntries(unset.map((path) => [path, ''])) } } : {}),
+        },
         { session },
       );
       const outcome = await mirror(kind, id, session);
@@ -584,11 +605,12 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
       });
     },
 
-    updatePlace: async (id, expected, changes) => {
+    updatePlace: async (id, expected, changes, unset = []) => {
       const set = checkChanges(PLACE_FIELD_KINDS, changes);
+      const removed = checkUnset(unset, set);
       // The feed carries the company and the Reserve with Google data of the place: it follows a change of either.
       const feeds = Object.keys(set).some((path) => path === 'companyId' || path.startsWith('integrations.reserveWithGoogle.'));
-      return change('places', id, expected, set, (session) => placeEffects(session, feeds ? () => syncFeed(id, session) : null), set['companyId'] as ObjectId | undefined);
+      return change('places', id, expected, set, (session) => placeEffects(session, feeds ? () => syncFeed(id, session) : null), set['companyId'] as ObjectId | undefined, undefined, removed);
     },
 
     duplicatePlace: async (id) => {
@@ -614,6 +636,7 @@ function createWriter(principal: ScopeHolder, groupDb: Db, access: GroupAccess, 
           trash: false,
           insertDate: now,
           updateDate: now,
+          ...(Object.hasOwn(source, 'integrations') ? { integrations: withoutActivationCode(source['integrations']) } : {}),
         };
         await original('places').insertOne(document, { session });
         const written = await mirror('places', copyId, session);

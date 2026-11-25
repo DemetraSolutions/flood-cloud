@@ -52,7 +52,7 @@ export interface RateLimitRules {
   readonly storeActivationPerIp: RateLimitRule;
   /** Writes of the catalog (products and categories) per store key per minute, declared by the write routes of `/store-context/catalog`. */
   readonly storeCatalogWritePerStore: RateLimitRule;
-  /** Writes of the catalog (products and categories) per public API key per minute, declared by the write routes of `/public/v1`. */
+  /** Writes per public API key per minute, declared by the write routes of `/public/v1` (the catalog, the contacts and the advanced loyalty cards share this one budget). */
   readonly publicCatalogWritePerKey: RateLimitRule;
   /** Creations and cancellations of activation codes and revocations of store keys per authenticated user. */
   readonly storeKeyAdminPerUser: RateLimitRule;
@@ -62,6 +62,8 @@ export interface RateLimitRules {
   readonly countriesAdminPerUser: RateLimitRule;
   /** Bulk restores, deletions and emptying of the trash per authenticated user per minute: one call is one request, whatever the number of items. */
   readonly trashAdminPerUser: RateLimitRule;
+  /** Definitive deletions of contacts per authenticated user per hour, counted by the service for every contact (alone or in a bulk call): each one searches the collections of the legacy that have no index. */
+  readonly contactDeletePerUser: RateLimitRule;
   /** Writes of the price list, of the price overrides of a dealer, of the renewal bases and of the month closures per authenticated user per minute (the PSA only). */
   readonly activationsAdminPerUser: RateLimitRule;
   /** CSV exports of the statements of the activations per authenticated user: each reads the lines of a dealer for a month. */
@@ -70,6 +72,9 @@ export interface RateLimitRules {
 
 /** Length of an hourly window. */
 const HOUR_SECONDS = 3600;
+
+/** Most contacts a user may delete for good per hour (`contactDeletePerUser`): a fixed protection of the database, not a setting. */
+export const CONTACT_DELETE_PER_HOUR = 60;
 
 /** Length of a daily quota window. */
 const DAY_SECONDS = 86_400;
@@ -131,6 +136,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     apiKeyAdminPerUser: Object.freeze({ bucket: 'apiKeyAdmin:user', limit: config.rateLimitApiKeyAdminPerUser, key: perUser }),
     countriesAdminPerUser: Object.freeze({ bucket: 'countriesAdmin:user', limit: config.rateLimitCountriesAdminPerUser, key: perUser }),
     trashAdminPerUser: Object.freeze({ bucket: 'trashAdmin:user', limit: config.rateLimitTrashAdminPerUser, key: perUser }),
+    contactDeletePerUser: Object.freeze({ bucket: 'contact-delete:user', limit: CONTACT_DELETE_PER_HOUR, windowSeconds: HOUR_SECONDS, key: perUser }),
     activationsAdminPerUser: Object.freeze({ bucket: 'activationsAdmin:user', limit: config.rateLimitActivationsAdminPerUser, key: perUser }),
     activationsExportPerUser: Object.freeze({ bucket: 'activations-export:user', limit: config.rateLimitActivationsExportPerUser, key: perUser }),
   });

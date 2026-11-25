@@ -14,7 +14,7 @@ const f = (key: string) => `PLACES.F.INTEGRATIONS.${key}`;
 const STRIPE_PRIVATE = f('FLOOD_PAY.STRIPE.PRIVATE_KEY');
 const STRIPE_WEBHOOK = f('FLOOD_PAY.STRIPE.WEBHOOK_PRIVATE_KEY');
 const DOJO = f('DOJO.API_KEY');
-const SATISPAY_CODE = f('SATISPAY.ACTIVATION_CODE');
+const SATISPAY_KEY = f('SATISPAY.KEY_ID');
 const QODEUP = f('QODEUP.API_KEY');
 const APP_TOKEN = f('EASYAPPEAR.APP_TOKEN');
 const SWITCH = f('DOJO.STATUS');
@@ -40,7 +40,7 @@ function withCredentials() {
     'dojo.apiKeySet',
     'floodPay.stripe.privateKeySet',
     'floodPay.stripe.webhookPrivateKeySet',
-    'satispay.activationCodeSet',
+    'satispay.keyIdSet',
     'easyappear.appTokenSet',
   ]) {
     block = withValue(block, key, true);
@@ -83,7 +83,7 @@ function sentBlock(
     typeof node === 'object' && node !== null
       ? Object.fromEntries(
           Object.entries(node)
-            .filter(([key]) => !key.endsWith('Set'))
+            .filter(([key]) => !key.endsWith('Set') && key !== 'categories')
             .map(([key, value]) => [key, strip(value)]),
         )
       : node;
@@ -203,7 +203,7 @@ describe('PlaceIntegrations', () => {
     ['dealer', 'D'],
   ] as const)('lets a %s set and remove the payment credentials', async (_name, role) => {
     const view = await open({ place: withCredentials(), profile: { role } });
-    for (const label of [STRIPE_PRIVATE, STRIPE_WEBHOOK, DOJO, SATISPAY_CODE]) {
+    for (const label of [STRIPE_PRIVATE, STRIPE_WEBHOOK, DOJO, SATISPAY_KEY]) {
       expect(buttonsOf(view, label)).toEqual([CHANGE, REMOVE]);
     }
     expect(buttonsOf(view, QODEUP)).toEqual([SET_NEW]);
@@ -213,7 +213,7 @@ describe('PlaceIntegrations', () => {
     'shows only the state of the payment credentials to a $role',
     async (profile) => {
       const view = await open({ place: withCredentials(), profile });
-      for (const label of [STRIPE_PRIVATE, STRIPE_WEBHOOK, DOJO, SATISPAY_CODE, QODEUP]) {
+      for (const label of [STRIPE_PRIVATE, STRIPE_WEBHOOK, DOJO, SATISPAY_KEY, QODEUP]) {
         expect(buttonsOf(view, label)).toEqual([]);
       }
       expect(stateOf(view, DOJO)).toBe('PLACES.CREDENTIAL.SET');

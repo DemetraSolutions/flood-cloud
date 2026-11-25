@@ -1,0 +1,39 @@
+<form novalidate (submit)="$event.preventDefault()">
+  @for (group of groups; track group) {
+    <fc-place-fields block="integrations" [only]="[group]" />
+    @if (state.canWrite() && !state.isNew()) {
+      @switch (group) {
+        @case ('DOJO') {
+          <fc-dojo-terminals
+            [groupId]="state.groupId()"
+            [placeId]="state.placeId()"
+            [blockedBy]="blockedBy()"
+          />
+        }
+        @case ('SATISPAY') {
+          <fc-satispay-activation
+            [groupId]="state.groupId()"
+            [placeId]="state.placeId()"
+            [etag]="etag()"
+            [blockedBy]="blockedBy()"
+            (activated)="state.adoptSatispayKey($event)"
+            (stale)="state.markStale()"
+          />
+        }
+        @case ('TSH') {
+          <fc-tsh-sync
+            [groupId]="state.groupId()"
+            [placeId]="state.placeId()"
+            [etag]="etag()"
+            [blockedBy]="blockedBy()"
+            (synced)="onSynced($event)"
+            (stale)="state.markStale()"
+          />
+        }
+      }
+    }
+    @if (group === 'TSH') {
+      <fc-place-tsh-map />
+    }
+  }
+</form>

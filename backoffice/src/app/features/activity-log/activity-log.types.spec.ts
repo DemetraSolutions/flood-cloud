@@ -108,6 +108,43 @@ describe('activity log types', () => {
     expect(alertSummary(i18n, { action: 'store.activeKeyReplaced', metadata: null })).toBeNull();
   });
 
+  it('describes the store credit, card and contact read entries with euros and counts only', () => {
+    const i18n = { t: (key: string, params?: object) => `${key}${JSON.stringify(params ?? {})}` };
+    const sentence = (action: string, metadata: Record<string, unknown> | null) =>
+      alertSummary(i18n, { action, metadata: metadata as never });
+    for (const action of [
+      'store.creditAlert',
+      'store.advancedCardRelinked',
+      'store.contactsRead',
+    ]) {
+      expect(ACTIVITY_ACTIONS).toContain(action);
+      expect(sentence(action, null)).toBeNull();
+    }
+    expect(
+      sentence('store.creditAlert', { reason: 'operation', amount: 600.5, threshold: 500 }),
+    ).toMatch(
+      /^ACTIVITY\.ALERTS\.CREDIT_OPERATION\{"amount":"600,50\s€","threshold":"500,00\s€"\}$/,
+    );
+    expect(
+      sentence('store.creditAlert', { reason: 'daily', amount: 5200, threshold: 5000 }),
+    ).toContain('ACTIVITY.ALERTS.CREDIT_DAILY');
+    expect(sentence('store.creditAlert', { reason: 'x', amount: 1, threshold: 1 })).toBeNull();
+    expect(
+      sentence('store.creditAlert', { reason: 'daily', amount: '1', threshold: 1 }),
+    ).toBeNull();
+    expect(
+      sentence('store.creditAlert', { reason: 'daily', amount: 1, threshold: null }),
+    ).toBeNull();
+    expect(sentence('store.advancedCardRelinked', { otherContacts: 2 })).toBe(
+      'ACTIVITY.ALERTS.CARD_RELINKED{"count":2}',
+    );
+    expect(sentence('store.advancedCardRelinked', { otherContacts: '2' })).toBeNull();
+    expect(sentence('store.contactsRead', { count: 40, hour: 1 })).toBe(
+      'ACTIVITY.ALERTS.CONTACTS_READ{"count":40}',
+    );
+    expect(sentence('store.contactsRead', { count: null })).toBeNull();
+  });
+
   it('describes a request that did not come from a browser, the program as plain text', () => {
     const i18n = { t: (key: string, params?: object) => `${key}${JSON.stringify(params ?? {})}` };
     const entry = (metadata: Record<string, unknown> | null) => ({

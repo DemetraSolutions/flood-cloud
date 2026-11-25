@@ -8,6 +8,7 @@ import { fakeFeatureFlags } from '../../../testing/groups';
 import { signIn } from '../../../testing/session';
 import { GroupContext } from '../groups/group-context';
 import { I18nService } from '../i18n/i18n.service';
+import { NonFiscalMode } from '../sales/non-fiscal-mode';
 import { SessionService } from '../session/session.service';
 import { Profile } from '../session/session.types';
 import { PageAnnouncer } from './page-announcer';
@@ -68,6 +69,18 @@ describe('Shell', () => {
     link.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(root.querySelector('main'));
+  });
+
+  it('sends the clicks on the name of the application to the UM mode', async () => {
+    const { root } = await render();
+    const mode = TestBed.inject(NonFiscalMode);
+    const brand = root.querySelector<HTMLElement>('header .brand')!;
+    for (let click = 0; click < 7; click++) {
+      brand.click();
+    }
+    expect(mode.nonFiscalVisible()).toBe(true);
+    brand.click();
+    expect(mode.nonFiscalVisible()).toBe(false);
   });
 
   it('lists the visible menu entries with the current page marked', async () => {

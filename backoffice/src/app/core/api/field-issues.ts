@@ -32,6 +32,8 @@ export const FIELD_ISSUES = [
   'invalidCharacters',
   'mismatch',
   'semicolon',
+  'pipe',
+  'nameOrCompany',
 ] as const;
 
 /** Name of a known field issue. */

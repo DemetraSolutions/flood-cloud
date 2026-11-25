@@ -1,0 +1,84 @@
+<div class="grid">
+  <fc-text-field
+    [formField]="form().name"
+    autocomplete="off"
+    [label]="'CONTACTS.COMPANY.NAME' | t"
+    [error]="error(form().name)"
+    (blurred)="form().name().markAsTouched()"
+  />
+  <div>
+    <fc-text-field
+      [formField]="form().vatNumber"
+      autocomplete="off"
+      autocapitalize="characters"
+      [label]="'CONTACTS.COMPANY.VAT_NUMBER' | t"
+      [hint]="vatWarning() ? ('CONTACTS.WARNING.FIELD_HINT' | t) : null"
+      [error]="error(form().vatNumber)"
+      (blurred)="form().vatNumber().markAsTouched()"
+    />
+    <fc-contact-warning-note [groupId]="groupId()" [warning]="vatWarning()" />
+  </div>
+  <div>
+    <fc-text-field
+      [formField]="form().taxCode"
+      autocomplete="off"
+      autocapitalize="characters"
+      [label]="'CONTACTS.COMPANY.TAX_CODE' | t"
+      [hint]="taxCodeWarning() ? ('CONTACTS.WARNING.FIELD_HINT' | t) : null"
+      [error]="error(form().taxCode)"
+      (blurred)="form().taxCode().markAsTouched()"
+    />
+    <fc-contact-warning-note [groupId]="groupId()" [warning]="taxCodeWarning()" />
+  </div>
+  <fc-text-field
+    [formField]="form().discountPercent"
+    inputmode="decimal"
+    autocomplete="off"
+    [label]="'CONTACTS.COMPANY.DISCOUNT' | t"
+    [error]="error(form().discountPercent)"
+    (blurred)="form().discountPercent().markAsTouched()"
+  />
+</div>
+
+<fc-contact-address [form]="form().address" [legend]="'CONTACTS.COMPANY.ADDRESS' | t" />
+
+<div class="grid">
+  <fc-contact-string-list
+    [formField]="form().phones"
+    type="tel"
+    [legend]="'CONTACTS.COMPANY.PHONES' | t"
+    itemKey="CONTACTS.COMPANY.PHONE_N"
+    addKey="CONTACTS.COMPANY.ADD_PHONE"
+    [limit]="phoneLimit"
+    [issue]="phoneIssue"
+    [error]="error(form().phones)"
+  />
+  <fc-contact-string-list
+    [formField]="form().emails"
+    type="email"
+    [legend]="'CONTACTS.COMPANY.EMAILS' | t"
+    itemKey="CONTACTS.COMPANY.EMAIL_N"
+    addKey="CONTACTS.COMPANY.ADD_EMAIL"
+    [limit]="emailLimit"
+    [issue]="emailIssue"
+    [error]="error(form().emails)"
+  />
+  <fc-contact-string-list
+    [formField]="form().faxes"
+    type="tel"
+    [legend]="'CONTACTS.COMPANY.FAXES' | t"
+    itemKey="CONTACTS.COMPANY.FAX_N"
+    addKey="CONTACTS.COMPANY.ADD_FAX"
+    [limit]="phoneLimit"
+    [issue]="phoneIssue"
+    [error]="error(form().faxes)"
+  />
+</div>
+
+<fc-contact-e-invoicing [form]="invoicing()" />
+
+<fc-contact-supplier-lists
+  [formField]="form().supplierPriceLists"
+  [highlighted]="supplier()"
+  [error]="error(form().supplierPriceLists)"
+/>

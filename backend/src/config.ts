@@ -1,3 +1,5 @@
+import { createPublicKey } from 'node:crypto';
+import type { KeyObject } from 'node:crypto';
 import { isIP } from 'node:net';
 import { PUBLIC_API_MAX_DAILY_QUOTA, PUBLIC_API_MAX_RATE_LIMIT_PER_MINUTE, PUBLIC_API_MIN_LIMIT } from './shared/security/public-api-limits.ts';
 import { Secret } from './shared/security/secret.ts';
@@ -129,6 +131,10 @@ export interface Config {
   readonly rateLimitStoreKeyAdminPerUser: number;
   /** Writes of the catalog allowed to a store key per minute (`RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE`). */
   readonly rateLimitStoreCatalogWritePerStore: number;
+  /** Credit a store key may add to a loyalty card in one operation before an alert is raised, in currency units (`STORE_CREDIT_ALERT_PER_OPERATION`). Nothing is refused. */
+  readonly storeCreditAlertPerOperation: number;
+  /** Credit a store key may add in a day (UTC) before an alert is raised, in currency units (`STORE_CREDIT_ALERT_PER_DAY`). Nothing is refused. */
+  readonly storeCreditAlertPerDay: number;
   /** Writes of the catalog allowed to a public API key per minute (`RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY`). */
   readonly rateLimitPublicCatalogWritePerKey: number;
   /** Creations, changes and revocations of public API keys per minute allowed to a user (`RATE_LIMIT_API_KEY_ADMIN_PER_USER`). */
@@ -167,6 +173,32 @@ export interface Config {
   readonly cervedApiKey: Secret | null;
   /** Base URL of the Cerved API (`CERVED_BASE_URL`): an `https` origin (`http` only for `localhost` and `127.0.0.1`), without trailing slash. */
   readonly cervedBaseUrl: string;
+  /** Base URL of the Dojo API (`DOJO_BASE_URL`), the real one by default. */
+  readonly dojoBaseUrl: string;
+  /** Identifier of the reseller sent to Dojo (`DOJO_RESELLER_ID`); `null` when not configured. Dojo is on only with this and {@link Config.dojoSoftwareHouseId}. */
+  readonly dojoResellerId: string | null;
+  /** Identifier of the software house sent to Dojo (`DOJO_SOFTWARE_HOUSE_ID`); `null` when not configured. */
+  readonly dojoSoftwareHouseId: string | null;
+  /** Version of the Dojo API sent in the `version` header (`DOJO_API_VERSION`, a date). */
+  readonly dojoApiVersion: string;
+  /** Base URL of the authentication service of Satispay (`SATISPAY_AUTH_BASE_URL`): one of the two Satispay hosts (production, staging); `null` when not configured. Satispay is on only with this and {@link Config.satispayPublicKey}. */
+  readonly satispayAuthBaseUrl: string | null;
+  /** The RSA public key of the platform in PEM form (`SATISPAY_PUBLIC_KEY`), checked at start-up (RSA, at least 2048 bits); `null` when not configured. It is public, but it is deployed with the secrets. */
+  readonly satispayPublicKey: string | null;
+  /** Base URL of the authentication service of TS Hospitality (`TSH_AUTH_BASE_URL`); `null` when not configured. TS Hospitality is on only with this and {@link Config.tshApiBaseUrl}. */
+  readonly tshAuthBaseUrl: string | null;
+  /** Base URL of the API of TS Hospitality (`TSH_API_BASE_URL`); `null` when not configured. */
+  readonly tshApiBaseUrl: string | null;
+  /** Base URL of the authentication service of the test environment of TS Hospitality (`TSH_TEST_AUTH_BASE_URL`); `null` when not configured (a place in test mode then gets `503`). */
+  readonly tshTestAuthBaseUrl: string | null;
+  /** Base URL of the API of the test environment of TS Hospitality (`TSH_TEST_API_BASE_URL`); `null` when not configured. */
+  readonly tshTestApiBaseUrl: string | null;
+  /** Key of the Google Maps Geocoding API (`GOOGLE_MAPS_API_KEY`), a secret; `null` when not configured: the geocoding is then off. */
+  readonly googleMapsApiKey: Secret | null;
+  /** Base URL of the Geocoding API (`GEOCODING_BASE_URL`), the real one by default. */
+  readonly geocodingBaseUrl: string;
+  /** Calls to the Geocoding API per day allowed to the whole platform (`GEOCODING_DAILY_LIMIT`). */
+  readonly geocodingDailyLimit: number;
   /** Files host written in the `filesHost` of the groups the onboarding creates (`GROUP_FILES_HOST`, an `https` URL without trailing slash), `''` when unset. */
   readonly groupFilesHost: string;
   /** Minutes an activation code of a store key stays valid (`STORE_ACTIVATION_CODE_TTL_MINUTES`). */
@@ -409,25 +441,107 @@ function readCervedKey(env: Env, issues: ConfigIssue[]): Secret | null | undefin
   return new Secret(raw);
 }
 
+/** Why a base URL is refused (the same for every provider; the value is never echoed). */
+const BASE_URL_REASON = 'must be an https URL without credentials, query, fragment or IP address (http only for localhost and 127.0.0.1 when APP_ENV=development)';
+
 /**
- * Reads `CERVED_BASE_URL`: an `https` URL without credentials, query or fragment (`http` only for `localhost` and `127.0.0.1` when `APP_ENV=development`, for the tests).
+ * Reads a base URL of a provider: an `https` URL without credentials, query or fragment and whose host is a name, never an IP address (`http` only for `localhost` and `127.0.0.1` when `APP_ENV=development`, for the tests).
  *
- * @returns The URL without the trailing slashes, the default when unset, or `undefined` after recording an issue.
+ * @param variable Name of the variable.
+ * @param fallback The URL when the variable is unset (`null`: the provider is off).
+ * @param allow An extra check of the parsed URL (the Satispay allowlist), `undefined` for none.
+ * @returns The URL without the trailing slashes, the fallback when unset, or `undefined` after recording an issue.
  */
-function readCervedBaseUrl(env: Env, issues: ConfigIssue[], appEnv: AppEnv | undefined): string | undefined {
-  const raw = optionalVariable(env, 'CERVED_BASE_URL');
+function readBaseUrl<F extends string | null>(env: Env, issues: ConfigIssue[], appEnv: AppEnv | undefined, variable: string, fallback: F, allow?: (url: URL) => boolean): string | F | undefined {
+  const raw = optionalVariable(env, variable);
   if (raw === undefined) {
-    return DEFAULT_CERVED_BASE_URL;
+    return fallback;
   }
   if (URL.canParse(raw)) {
     const url = new URL(raw);
-    const secure = url.protocol === 'https:' || (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname) && appEnv === 'development');
-    if (secure && url.username === '' && url.password === '' && url.search === '' && url.hash === '') {
+    const loopback = url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname) && appEnv === 'development';
+    const secure = (url.protocol === 'https:' && isIP(url.hostname.replace(/^\[|\]$/g, '')) === 0) || loopback;
+    if (secure && url.username === '' && url.password === '' && url.search === '' && url.hash === '' && (allow === undefined || loopback || allow(url))) {
       return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
     }
   }
-  issues.push({ variable: 'CERVED_BASE_URL', reason: 'must be an https URL without credentials, query or fragment (http only for localhost and 127.0.0.1 when APP_ENV=development)' });
+  issues.push({ variable, reason: BASE_URL_REASON });
   return undefined;
+}
+
+/** Base URL of the Dojo API when `DOJO_BASE_URL` is not set. */
+export const DEFAULT_DOJO_BASE_URL = 'https://api.dojo.tech';
+
+/** Version of the Dojo API when `DOJO_API_VERSION` is not set. */
+export const DEFAULT_DOJO_API_VERSION = '2024-02-05';
+
+/** Base URL of the Geocoding API when `GEOCODING_BASE_URL` is not set. */
+export const DEFAULT_GEOCODING_BASE_URL = 'https://maps.googleapis.com';
+
+/** Calls to the Geocoding API per day, for the whole platform, when `GEOCODING_DAILY_LIMIT` is not set. */
+export const DEFAULT_GEOCODING_DAILY_LIMIT = 2000;
+
+/** The only hosts of the authentication service of Satispay: production and staging. */
+const SATISPAY_HOSTS: ReadonlySet<string> = new Set(['authservices.satispay.com', 'staging.authservices.satispay.com']);
+
+/** An identifier the provider gave (the reseller and the software house of Dojo, which can be a company name): it travels in a header, so letters, digits, spaces, dots, dashes and underscores, never at the ends. */
+const PROVIDER_ID = /^[A-Za-z0-9](?:[A-Za-z0-9 ._-]{0,62}[A-Za-z0-9])?$/;
+
+/** A key of the Geocoding API: it travels in a query string. */
+const GOOGLE_KEY = /^[A-Za-z0-9_-]{16,128}$/;
+
+/** A version of the Dojo API: a date. */
+const DOJO_VERSION = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Reads an optional text variable that must match a form.
+ *
+ * @returns The value, `null` when unset, or `undefined` after recording an issue.
+ */
+function readFormed(env: Env, issues: ConfigIssue[], variable: string, form: RegExp, reason: string): string | null | undefined {
+  const raw = optionalVariable(env, variable);
+  if (raw === undefined) {
+    return null;
+  }
+  if (!form.test(raw)) {
+    issues.push({ variable, reason });
+    return undefined;
+  }
+  return raw;
+}
+
+/**
+ * Reads `SATISPAY_PUBLIC_KEY`: a PEM public key, RSA of at least 2048 bits (a `\n` typed in a one-line value counts as a line break). It is returned in the canonical PEM form.
+ *
+ * @returns The PEM, `null` when unset, or `undefined` after recording an issue.
+ */
+function readSatispayPublicKey(env: Env, issues: ConfigIssue[]): string | null | undefined {
+  const raw = optionalVariable(env, 'SATISPAY_PUBLIC_KEY');
+  if (raw === undefined) {
+    return null;
+  }
+  let key: KeyObject | undefined;
+  try {
+    key = createPublicKey(raw.trim().replaceAll('\\n', '\n'));
+  } catch {
+    // Not a key at all: the issue below says so (the message of the parser may echo a part of the value).
+    key = undefined;
+  }
+  if (key?.asymmetricKeyType === 'rsa' && (key.asymmetricKeyDetails?.modulusLength ?? 0) >= 2048) {
+    return key.export({ type: 'spki', format: 'pem' }).toString();
+  }
+  issues.push({ variable: 'SATISPAY_PUBLIC_KEY', reason: 'must be a PEM RSA public key of at least 2048 bits' });
+  return undefined;
+}
+
+/**
+ * Reads `GOOGLE_MAPS_API_KEY`: optional, a text of letters, digits, dashes and underscores. The value is never echoed.
+ *
+ * @returns The secret, `null` when unset, or `undefined` after recording an issue.
+ */
+function readGoogleKey(env: Env, issues: ConfigIssue[]): Secret | null | undefined {
+  const raw = readFormed(env, issues, 'GOOGLE_MAPS_API_KEY', GOOGLE_KEY, 'must be 16 to 128 letters, digits, dashes or underscores');
+  return raw === null || raw === undefined ? raw : new Secret(raw);
 }
 
 /**
@@ -758,6 +872,8 @@ export function loadConfig(env: Env): Config {
   const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
   const rateLimitStoreCatalogWritePerStore = readInteger(env, issues, 'RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE', 120, 1, 1_000_000);
+  const storeCreditAlertPerOperation = readInteger(env, issues, 'STORE_CREDIT_ALERT_PER_OPERATION', 500, 1, 1_000_000_000);
+  const storeCreditAlertPerDay = readInteger(env, issues, 'STORE_CREDIT_ALERT_PER_DAY', 5000, 1, 1_000_000_000);
   const rateLimitPublicCatalogWritePerKey = readInteger(env, issues, 'RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY', 60, 1, 1_000_000);
   const rateLimitApiKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_API_KEY_ADMIN_PER_USER', 20, 1, 100000);
   const rateLimitCountriesAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_COUNTRIES_ADMIN_PER_USER', 30, 1, 100000);
@@ -776,7 +892,21 @@ export function loadConfig(env: Env): Config {
   const rateLimitCervedLookupPerUser = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER', 10, 1, 100000);
   const rateLimitCervedLookupPerUserDaily = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY', 200, 1, 1_000_000);
   const cervedApiKey = readCervedKey(env, issues);
-  const cervedBaseUrl = readCervedBaseUrl(env, issues, appEnv);
+  const cervedBaseUrl = readBaseUrl(env, issues, appEnv, 'CERVED_BASE_URL', DEFAULT_CERVED_BASE_URL);
+  const dojoBaseUrl = readBaseUrl(env, issues, appEnv, 'DOJO_BASE_URL', DEFAULT_DOJO_BASE_URL);
+  const dojoResellerId = readFormed(env, issues, 'DOJO_RESELLER_ID', PROVIDER_ID, 'must be 1 to 64 letters, digits, spaces, dots, dashes or underscores, not starting or ending with a space');
+  const dojoSoftwareHouseId = readFormed(env, issues, 'DOJO_SOFTWARE_HOUSE_ID', PROVIDER_ID, 'must be 1 to 64 letters, digits, spaces, dots, dashes or underscores, not starting or ending with a space');
+  const dojoVersionRaw = readFormed(env, issues, 'DOJO_API_VERSION', DOJO_VERSION, 'must be a date (YYYY-MM-DD)');
+  const dojoApiVersion = dojoVersionRaw === null ? DEFAULT_DOJO_API_VERSION : dojoVersionRaw;
+  const satispayAuthBaseUrl = readBaseUrl(env, issues, appEnv, 'SATISPAY_AUTH_BASE_URL', null, (url) => SATISPAY_HOSTS.has(url.hostname) && url.pathname === '/');
+  const satispayPublicKey = readSatispayPublicKey(env, issues);
+  const tshAuthBaseUrl = readBaseUrl(env, issues, appEnv, 'TSH_AUTH_BASE_URL', null);
+  const tshApiBaseUrl = readBaseUrl(env, issues, appEnv, 'TSH_API_BASE_URL', null);
+  const tshTestAuthBaseUrl = readBaseUrl(env, issues, appEnv, 'TSH_TEST_AUTH_BASE_URL', null);
+  const tshTestApiBaseUrl = readBaseUrl(env, issues, appEnv, 'TSH_TEST_API_BASE_URL', null);
+  const googleMapsApiKey = readGoogleKey(env, issues);
+  const geocodingBaseUrl = readBaseUrl(env, issues, appEnv, 'GEOCODING_BASE_URL', DEFAULT_GEOCODING_BASE_URL);
+  const geocodingDailyLimit = readInteger(env, issues, 'GEOCODING_DAILY_LIMIT', DEFAULT_GEOCODING_DAILY_LIMIT, 1, 1_000_000);
   const storeActivationCodeTtlMinutes = readInteger(env, issues, 'STORE_ACTIVATION_CODE_TTL_MINUTES', 1440, 5, 10080);
   const groupFilesHost = readFilesHost(env, issues);
   const media = readMedia(env, issues);
@@ -852,6 +982,8 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp === undefined ||
     rateLimitStoreKeyAdminPerUser === undefined ||
     rateLimitStoreCatalogWritePerStore === undefined ||
+    storeCreditAlertPerOperation === undefined ||
+    storeCreditAlertPerDay === undefined ||
     rateLimitPublicCatalogWritePerKey === undefined ||
     rateLimitApiKeyAdminPerUser === undefined ||
     rateLimitCountriesAdminPerUser === undefined ||
@@ -871,6 +1003,19 @@ export function loadConfig(env: Env): Config {
     rateLimitCervedLookupPerUserDaily === undefined ||
     cervedApiKey === undefined ||
     cervedBaseUrl === undefined ||
+    dojoBaseUrl === undefined ||
+    dojoResellerId === undefined ||
+    dojoSoftwareHouseId === undefined ||
+    dojoApiVersion === undefined ||
+    satispayAuthBaseUrl === undefined ||
+    satispayPublicKey === undefined ||
+    tshAuthBaseUrl === undefined ||
+    tshApiBaseUrl === undefined ||
+    tshTestAuthBaseUrl === undefined ||
+    tshTestApiBaseUrl === undefined ||
+    googleMapsApiKey === undefined ||
+    geocodingBaseUrl === undefined ||
+    geocodingDailyLimit === undefined ||
     storeActivationCodeTtlMinutes === undefined ||
     groupFilesHost === undefined ||
     media === undefined ||
@@ -916,6 +1061,8 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp,
     rateLimitStoreKeyAdminPerUser,
     rateLimitStoreCatalogWritePerStore,
+    storeCreditAlertPerOperation,
+    storeCreditAlertPerDay,
     rateLimitPublicCatalogWritePerKey,
     rateLimitApiKeyAdminPerUser,
     rateLimitCountriesAdminPerUser,
@@ -935,6 +1082,19 @@ export function loadConfig(env: Env): Config {
     rateLimitCervedLookupPerUserDaily,
     cervedApiKey,
     cervedBaseUrl,
+    dojoBaseUrl,
+    dojoResellerId,
+    dojoSoftwareHouseId,
+    dojoApiVersion,
+    satispayAuthBaseUrl,
+    satispayPublicKey,
+    tshAuthBaseUrl,
+    tshApiBaseUrl,
+    tshTestAuthBaseUrl,
+    tshTestApiBaseUrl,
+    googleMapsApiKey,
+    geocodingBaseUrl,
+    geocodingDailyLimit,
     storeActivationCodeTtlMinutes,
     groupFilesHost,
     media,

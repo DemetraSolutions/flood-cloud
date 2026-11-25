@@ -1,5 +1,6 @@
 import { FEATURE_NAMES, FeatureFlags, FeatureName } from '../../core/groups/feature-catalog';
 import { Role } from '../../core/session/session.types';
+import type { VatLookup } from '../integrations';
 
 /** The types of customer of the quick tool: each one presets the form (the type is never sent). */
 export const CUSTOMER_TYPES = ['risto', 'retail', 'beauty'] as const;
@@ -368,22 +369,6 @@ export function eInvoicingIssue(model: NewCustomerModel): string | undefined {
   return model.country === 'IT' && model.recipientCode.trim() === '' && model.pec.trim() === ''
     ? 'required'
     : undefined;
-}
-
-/** The subject the VAT lookup (`GET /v1/vat-lookups/{vatNumber}`) found; a missing text is `null`. */
-export interface VatLookup {
-  readonly vatNumber: string;
-  readonly name: string | null;
-  readonly fiscalCode: string | null;
-  readonly address: {
-    readonly street: string | null;
-    readonly postcode: string | null;
-    readonly city: string | null;
-    /** Two-letter province code. */
-    readonly province: string | null;
-    readonly country: 'IT';
-  };
-  readonly pec: string | null;
 }
 
 /** Company fields the VAT lookup can fill. The recipient code is never one of them. */

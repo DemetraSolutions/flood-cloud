@@ -12,7 +12,9 @@ const ROWS: ApiErrorRow[] = [
   { sheet: '<img src=x onerror=alert(1)>', row: 3, column: '=HYPERLINK("x")', code: 'invalid', message: 'refused (name: tooLong)' },
 ];
 
-async function render(inputs: { rows?: ApiErrorRow[]; errorCount?: number | null; moreErrors?: boolean } = {}) {
+async function render(
+  inputs: { rows?: ApiErrorRow[]; errorCount?: number | null; moreErrors?: boolean; fileName?: string } = {},
+) {
   TestBed.configureTestingModule({ providers: [...provideApiTesting()] });
   vi.spyOn(TestBed.inject(I18nService), 't').mockImplementation((key, params) =>
     params === undefined ? key : `${key} ${JSON.stringify(params)}`,
@@ -24,6 +26,9 @@ async function render(inputs: { rows?: ApiErrorRow[]; errorCount?: number | null
   }
   if (inputs.moreErrors !== undefined) {
     fixture.componentRef.setInput('moreErrors', inputs.moreErrors);
+  }
+  if (inputs.fileName !== undefined) {
+    fixture.componentRef.setInput('fileName', inputs.fileName);
   }
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -182,6 +187,18 @@ describe('ImportProblems', () => {
       expect(clicked[0]!.download).toBe('catalog-import-problems.txt');
       expect(created[0]!.type).toBe('text/plain;charset=utf-8');
       expect(await created[0]!.text()).toBe(expectedText());
+    });
+
+    it('names the file after the tool that shows the list', async () => {
+      URL.createObjectURL = vi.fn(() => 'blob:test');
+      URL.revokeObjectURL = vi.fn();
+      const clicked: HTMLAnchorElement[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        clicked.push(this);
+      });
+      const { button } = await render({ rows: [ROWS[0]!], fileName: 'contacts-import-problems.txt' });
+      button('CATALOG_XLSX.PROBLEMS.SAVE').click();
+      expect(clicked[0]!.download).toBe('contacts-import-problems.txt');
     });
   });
 });

@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TPipe } from '../../core/i18n/t-pipe';
+import { CoordinatesLookup, GeocodingAddress } from '../integrations';
 import { KeyedValues } from './keyed-values';
 import { PlaceFieldsView } from './place-fields-view';
 import { PlaceState } from './place-state';
@@ -11,12 +12,12 @@ export const MAX_SHIPPING_COSTS = 50;
 
 /**
  * Take-away and delivery tab of the place: the take-away and delivery options, the price lists
- * of the orders, the delivery costs by distance, the delivery area and the minimum order for each
- * currency of the group.
+ * of the orders, the delivery costs by distance, the delivery area (with the calculation of its
+ * coordinates from the address of the form) and the minimum order for each currency of the group.
  */
 @Component({
   selector: 'fc-place-delivery',
-  imports: [KeyedValues, PlaceFieldsView, RowsEditor, TPipe],
+  imports: [CoordinatesLookup, KeyedValues, PlaceFieldsView, RowsEditor, TPipe],
   templateUrl: './place-delivery.html',
   styleUrl: './place-section.css',
 })
@@ -40,6 +41,10 @@ export class PlaceDelivery {
     { key: 'taxed', type: 'number', label: this.i18n.t('PLACES.DELIVERY.COST') },
     { key: 'toKm', type: 'number', label: this.i18n.t('PLACES.DELIVERY.TO_KM') },
   ]);
+  /** The address as the form holds it now, for the calculation of the coordinates. */
+  protected readonly address = computed<GeocodingAddress>(
+    () => this.state.model().general.address,
+  );
   protected readonly currencyLabel = (code: string): string => code;
 
   constructor() {

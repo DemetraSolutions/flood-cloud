@@ -9,8 +9,8 @@ import { GroupTrashKind, TrashEmptyResponse, TrashResponse } from './trash.types
  * Bulk operations on the trash. The lists of the tabs are read with `httpResource` in the page.
  * The calls carry no `If-Match` (the selections come from lists without versions): the server
  * checks every item atomically, and one that cannot be handled is skipped with its reason. A write
- * that can change the compact lists of companies and places makes the reference store read them
- * again.
+ * that can change the compact lists of companies, places and contacts makes the reference store
+ * read them again.
  */
 @Service()
 export class TrashApi {
@@ -83,6 +83,9 @@ export class TrashApi {
     );
     if (kind === 'companies' || kind === 'places') {
       this.store.invalidate(groupId, kind);
+    } else if (kind === 'contacts') {
+      this.store.invalidate(groupId, 'customers');
+      this.store.invalidate(groupId, 'suppliers');
     }
     return response.data;
   }

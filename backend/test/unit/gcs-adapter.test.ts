@@ -1,12 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, createPrivateKey, generateKeyPairSync } from 'node:crypto';
-import { createGcsStorage, OBJECT_CACHE_CONTROL, STORAGE_BASE_URL } from '../../src/integrations/gcs/gcs-storage.ts';
-import { MAX_ATTEMPTS, REQUEST_TIMEOUT_MS, requestWithRetry } from '../../src/integrations/gcs/http.ts';
-import { createMediaStorage, StorageError } from '../../src/integrations/gcs/index.ts';
-import { OAUTH_TOKEN_URL, parseServiceAccount, signAssertion, STORAGE_SCOPE } from '../../src/integrations/gcs/service-account.ts';
-import { createMetadataTokenProvider, createServiceAccountTokenProvider, METADATA_TOKEN_URL } from '../../src/integrations/gcs/token-provider.ts';
-import type { TokenProvider } from '../../src/integrations/gcs/token-provider.ts';
+import { createGcsStorage, OBJECT_CACHE_CONTROL, STORAGE_BASE_URL } from '../../src/infrastructure/gcs/gcs-storage.ts';
+import { MAX_ATTEMPTS, REQUEST_TIMEOUT_MS, requestWithRetry } from '../../src/infrastructure/gcs/http.ts';
+import { createMediaStorage, StorageError } from '../../src/infrastructure/gcs/index.ts';
+import { OAUTH_TOKEN_URL, parseServiceAccount, signAssertion, STORAGE_SCOPE } from '../../src/infrastructure/gcs/service-account.ts';
+import { createMetadataTokenProvider, createServiceAccountTokenProvider, METADATA_TOKEN_URL } from '../../src/infrastructure/gcs/token-provider.ts';
+import type { TokenProvider } from '../../src/infrastructure/gcs/token-provider.ts';
 import { credentialsFile, parseRelated, startFakeGcs, testKeyPair } from '../helpers/fake-gcs.ts';
 import type { FakeGcs } from '../helpers/fake-gcs.ts';
 

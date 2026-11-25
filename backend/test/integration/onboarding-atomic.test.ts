@@ -5,6 +5,7 @@ import type { ClientSession } from 'mongodb';
 import { createCompaniesRepository } from '../../src/modules/companies/companies.repository.ts';
 import { createDealersRepository } from '../../src/modules/dealers/dealers.repository.ts';
 import { createCatalogsRepository } from '../../src/modules/groups/catalogs/catalogs.repository.ts';
+import { memoryLogger } from '../helpers/app.ts';
 import { createOnboardingRepository } from '../../src/modules/groups/onboarding.repository.ts';
 import { createOnboardingService } from '../../src/modules/groups/onboarding.service.ts';
 import type { OnboardingService } from '../../src/modules/groups/onboarding.service.ts';
@@ -48,7 +49,7 @@ type Step = 'group' | 'user' | 'company' | 'place' | 'departments';
 /** The service over the real databases, with a failure injected right after a step has written, and the id of the group it tried to create. */
 function serviceFailingAt(step: Step | null, extra: { readonly placeOutcome?: 'notFound' } = {}): { service: OnboardingService; access: () => GroupAccess; log: ReturnType<typeof memoryActivityLog> } {
   const databases = ctx.databases;
-  const repository = createOnboardingRepository(databases);
+  const repository = createOnboardingRepository(databases, memoryLogger().logger);
   const activityLog = memoryActivityLog();
   const usersService = createUsersService({
     config: { legacyPasswordPepper: new Secret(TEST_PEPPER), legacyPasswordCoexistence: true },
@@ -74,6 +75,8 @@ function serviceFailingAt(step: Step | null, extra: { readonly placeOutcome?: 'n
     repository: {
       insertGroup: (document, session) => after('group', repository.insertGroup(document, session)),
       insertDepartments: (principal, access, documents, session) => after('departments', repository.insertDepartments(principal, access, documents, session)),
+      createCardIndex: (principal, access) => repository.createCardIndex(principal, access),
+      createSalesIndex: (principal, access) => repository.createSalesIndex(principal, access),
     },
     users: { prepareGroupAdmin: async (principal, input) => {
       const prepared = await usersService.prepareGroupAdmin(principal, input);

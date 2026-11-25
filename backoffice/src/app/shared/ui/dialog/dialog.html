@@ -3,6 +3,7 @@
   [attr.role]="alert() ? 'alertdialog' : null"
   [attr.aria-labelledby]="headingId"
   [attr.aria-describedby]="alert() ? bodyId : null"
+  (cancel)="onCancel($event)"
   (close)="onClose()"
 >
   <div class="panel">
@@ -12,6 +13,7 @@
         fc-icon-button
         icon="close"
         [label]="'COMMON.CLOSE' | t"
+        [disabled]="locked()"
         (click)="open.set(false)"
       ></button>
     </header>

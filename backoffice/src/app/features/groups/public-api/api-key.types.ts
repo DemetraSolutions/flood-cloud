@@ -1,5 +1,14 @@
 /** Permissions of the public catalog a key may hold (`/public/v1`), not those of the backoffice. */
-export const PUBLIC_PERMISSIONS = ['places:read', 'companies:read', 'catalog:read', 'catalog:write'] as const;
+export const PUBLIC_PERMISSIONS = [
+  'places:read',
+  'companies:read',
+  'catalog:read',
+  'catalog:write',
+  'contacts:read',
+  'contacts:write',
+  'fidelityCards:read',
+  'fidelityCards:write',
+] as const;
 
 /** A permission of the public catalog. */
 export type PublicPermission = (typeof PUBLIC_PERMISSIONS)[number];

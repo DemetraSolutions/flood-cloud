@@ -6,7 +6,7 @@ import { requireGroupAccesses } from '../../shared/security/scope/group-access.t
 import type { CrossGroupAccessHandler } from '../../shared/security/scope/group-access.ts';
 import type { GroupsRepository } from '../../shared/security/scope/groups.repository.ts';
 import { inputOf, validateBody, validateParams } from '../../shared/validation/middleware.ts';
-import { KIND_PERMISSIONS, TRASH_BODY_LIMIT, TRASH_KINDS, fixedKind, idsBody, parseEmptyBody, trashParams } from './trash.schemas.ts';
+import { KIND_PERMISSIONS, TRASH_BODY_LIMIT, TRASH_KINDS, contactsDeleteBody, fixedKind, idsBody, parseEmptyBody, trashParams } from './trash.schemas.ts';
 import type { IdsBody } from './trash.schemas.ts';
 import type { TrashController } from './trash.controller.ts';
 
@@ -48,7 +48,8 @@ export function createTrashRoutes(
       path: `${base}/${kind}/delete`,
       auth: { kind: 'user', permission: KIND_PERMISSIONS.delete[kind], group: true },
       ...common,
-      middleware: [fixedKind(kind), validateBody(idsBody)],
+      // The deletion of a contact searches collections without an index: a call names at most 10.
+      middleware: [fixedKind(kind), validateBody(kind === 'contacts' ? contactsDeleteBody : idsBody)],
       handler: controller.remove,
     }),
   ]);

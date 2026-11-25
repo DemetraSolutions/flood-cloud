@@ -2,6 +2,8 @@ import type { ObjectId } from 'mongodb';
 import type { ActivityActor } from '../../shared/activity-log/activity-log.ts';
 import { actorOf } from '../../shared/activity-log/actor.ts';
 import { AppError } from '../../shared/http/errors.ts';
+import type { ReadOnlySet } from '../../shared/security/frozen.ts';
+import type { PublicPermission } from '../../shared/security/rbac/public-permissions.ts';
 import type { AuthPrincipal, ScopeHolder } from '../../shared/security/scope/principal.ts';
 import type { Scope } from '../../shared/security/scope/scope.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
@@ -49,6 +51,11 @@ export interface ApiKeyCaller extends ScopeHolder {
   /** The first characters of the key, which recognize it in a list (never the secret): kept in the entries of the activity log. */
   readonly prefix: string;
   readonly scope: Extract<Scope, { readonly kind: 'group' | 'places' }>;
+  /**
+   * What the key may do (the public permissions it holds). Set only for the callers of the contacts and of the loyalty cards, where a service decides what to show by the permissions of the key (the detail of an advanced card in a contact
+   * needs `fidelityCards:read`); the callers of the catalog do not carry it.
+   */
+  readonly permissions?: ReadOnlySet<PublicPermission>;
 }
 
 /**

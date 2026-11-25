@@ -29,14 +29,19 @@ function rateLimited(i18n: I18nService, error: ApiError, key: string): string {
  *
  * @param i18n Translation service.
  * @param error The caught error.
+ * @param prefix Dictionary prefix of the tool, for the text of its limits (`<prefix>.DOWNLOAD_ERROR.TOO_LARGE`).
  */
-export function downloadFailureMessage(i18n: I18nService, error: unknown): string {
+export function downloadFailureMessage(
+  i18n: I18nService,
+  error: unknown,
+  prefix = 'CATALOG_XLSX',
+): string {
   if (!(error instanceof ApiError)) {
     return i18n.t('CATALOG_XLSX.DOWNLOAD_ERROR.GENERIC');
   }
   switch (error.status) {
     case 413:
-      return i18n.t('CATALOG_XLSX.DOWNLOAD_ERROR.TOO_LARGE');
+      return i18n.t(`${prefix}.DOWNLOAD_ERROR.TOO_LARGE`);
     case 429:
       return rateLimited(i18n, error, 'CATALOG_XLSX.DOWNLOAD_ERROR');
     case 409:
@@ -49,13 +54,13 @@ export function downloadFailureMessage(i18n: I18nService, error: unknown): strin
 }
 
 /** Dictionary key of the message of a `422` that is about the file as a whole. */
-function fileIssueKey(error: ApiError): string {
+function fileIssueKey(error: ApiError, prefix: string): string {
   const issue = error.details.find((detail) => detail.field === 'file')?.issue;
   switch (issue) {
     case 'incorrect':
       return 'CATALOG_XLSX.IMPORT.ERROR.INCORRECT';
     case 'tooMany':
-      return 'CATALOG_XLSX.IMPORT.ERROR.TOO_MANY';
+      return `${prefix}.IMPORT.ERROR.TOO_MANY`;
     case 'required':
       return 'CATALOG_XLSX.IMPORT.ERROR.EMPTY';
     default:
@@ -68,8 +73,13 @@ function fileIssueKey(error: ApiError): string {
  *
  * @param i18n Translation service.
  * @param error The caught error.
+ * @param prefix Dictionary prefix of the tool, for the texts of its limits and of its lock (`<prefix>.IMPORT.ERROR.TOO_MANY`, `<prefix>.IMPORT.ERROR.BUSY`).
  */
-export function importFailure(i18n: I18nService, error: unknown): ImportFailure {
+export function importFailure(
+  i18n: I18nService,
+  error: unknown,
+  prefix = 'CATALOG_XLSX',
+): ImportFailure {
   const failure = (message: string, refused = false, source?: ApiError): ImportFailure => ({
     message,
     rows: source?.rows ?? [],
@@ -91,13 +101,13 @@ export function importFailure(i18n: I18nService, error: unknown): ImportFailure 
         i18n.t(
           error.details.some((detail) => detail.field === 'Idempotency-Key')
             ? 'CATALOG_XLSX.IMPORT.ERROR.KEY_REUSED'
-            : 'CATALOG_XLSX.IMPORT.ERROR.BUSY',
+            : `${prefix}.IMPORT.ERROR.BUSY`,
         ),
       );
     case 422:
       return error.rows.length > 0
         ? failure(i18n.t('CATALOG_XLSX.IMPORT.ERROR.ROWS'), true, error)
-        : failure(i18n.t(fileIssueKey(error)), true);
+        : failure(i18n.t(fileIssueKey(error, prefix)), true);
     case 429:
       return failure(rateLimited(i18n, error, 'CATALOG_XLSX.IMPORT.ERROR'));
     case 503:

@@ -1,0 +1,90 @@
+<fc-dialog
+  [heading]="'FIDELITY_CARDS.ADJUST.TITLE' | t: { code: card().code }"
+  [wide]="true"
+  [locked]="busy()"
+  [open]="open()"
+  (openChange)="open.set($event)"
+  (closed)="onClosed()"
+>
+  @if (result(); as done) {
+    <p data-outcome tabindex="-1" role="status">{{ 'FIDELITY_CARDS.ADJUST.DONE' | t }}</p>
+    <ul>
+      @if (prepaid()) {
+        <li>
+          {{ 'FIDELITY_CARDS.ADJUST.NEW_CREDIT' | t: { amount: format(done.balance ?? 0, true) } }}
+        </li>
+      }
+      @for (points of done.points; track points.collectionId) {
+        <li>
+          {{
+            'FIDELITY_CARDS.ADJUST.NEW_POINTS'
+              | t: { name: points.name ?? '', points: format(points.points) }
+          }}
+        </li>
+      }
+    </ul>
+  } @else {
+    <form id="fidelity-card-adjust-form" novalidate (submit)="submit($event)">
+      <p class="note">{{ 'FIDELITY_CARDS.ADJUST.IMMEDIATE' | t }}</p>
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+      }
+      @for (line of lines(); track line.entry.id) {
+        <fieldset>
+          <legend>{{ line.entry.label }}</legend>
+          <fc-select
+            [label]="'FIDELITY_CARDS.ADJUST.DIRECTION' | t"
+            [options]="directions()"
+            [value]="line.entry.direction"
+            (valueChange)="setDirection(line.index, $event)"
+          />
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="
+              (line.money
+                ? 'FIDELITY_CARDS.ADJUST.AMOUNT_MONEY'
+                : 'FIDELITY_CARDS.ADJUST.AMOUNT_POINTS'
+              ) | t
+            "
+            [hint]="
+              (line.money
+                ? 'FIDELITY_CARDS.ADJUST.AMOUNT_HINT_MONEY'
+                : 'FIDELITY_CARDS.ADJUST.AMOUNT_HINT'
+              ) | t
+            "
+            [value]="line.entry.amount"
+            [error]="line.error"
+            (valueChange)="setAmount(line.index, $event)"
+            (blurred)="touched.set(true)"
+          />
+          @if (line.next !== null) {
+            <p role="status">{{ 'FIDELITY_CARDS.ADJUST.PREVIEW' | t: { value: format(line.next, line.money) } }}</p>
+          }
+        </fieldset>
+      }
+      <fc-text-field
+        autocomplete="off"
+        [label]="'FIDELITY_CARDS.ADJUST.REASON' | t"
+        [hint]="'FIDELITY_CARDS.ADJUST.REASON_HINT' | t: { max: reasonLimit }"
+        [value]="reason()"
+        [error]="reasonError()"
+        (valueChange)="reason.set($event)"
+      />
+    </form>
+  }
+  <ng-container ngProjectAs="[fcDialogActions]">
+    @if (result()) {
+      <button fc-button variant="secondary" (click)="open.set(false)">
+        {{ 'COMMON.CLOSE' | t }}
+      </button>
+    } @else {
+      <button fc-button variant="secondary" [disabled]="busy()" (click)="open.set(false)">
+        {{ 'COMMON.CANCEL' | t }}
+      </button>
+      <button fc-button type="submit" form="fidelity-card-adjust-form" [loading]="busy()">
+        {{ 'FIDELITY_CARDS.ADJUST.SUBMIT' | t }}
+      </button>
+    }
+  </ng-container>
+</fc-dialog>

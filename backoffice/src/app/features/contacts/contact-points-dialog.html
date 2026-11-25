@@ -1,0 +1,54 @@
+<fc-dialog [heading]="'CONTACTS.POINTS.TITLE' | t: { code: code() }" [locked]="busy()" [open]="open()" (openChange)="open.set($event)" (closed)="onClosed()">
+  @if (result(); as done) {
+    <p data-outcome tabindex="-1" role="status">{{ 'CONTACTS.POINTS.DONE' | t: { points: format(done.points) } }}</p>
+  } @else {
+    <form id="contact-points-form" novalidate (submit)="submit($event)">
+      <p>{{ 'CONTACTS.POINTS.BALANCE' | t: { points: format(points()) } }}</p>
+      <p class="note">{{ 'CONTACTS.POINTS.IMMEDIATE' | t }}</p>
+      @if (failure(); as message) {
+        <fc-form-error [message]="message" />
+      }
+      <fc-select
+        [label]="'CONTACTS.POINTS.DIRECTION' | t"
+        [options]="directions()"
+        [value]="direction()"
+        (valueChange)="direction.set($any($event))"
+      />
+      <fc-text-field
+        inputmode="numeric"
+        autocomplete="off"
+        [label]="'CONTACTS.POINTS.AMOUNT' | t"
+        [hint]="'CONTACTS.POINTS.AMOUNT_HINT' | t"
+        [value]="amount()"
+        [error]="amountError()"
+        (valueChange)="amount.set($event)"
+        (blurred)="touched.set(true)"
+      />
+      @if (newBalance() !== null) {
+        <p role="status">{{ 'CONTACTS.POINTS.PREVIEW' | t: { points: format(newBalance()!) } }}</p>
+      }
+      <fc-text-field
+        autocomplete="off"
+        [label]="'CONTACTS.POINTS.REASON' | t"
+        [hint]="'CONTACTS.POINTS.REASON_HINT' | t: { max: reasonLimit }"
+        [value]="reason()"
+        [error]="reasonError()"
+        (valueChange)="reason.set($event)"
+      />
+    </form>
+  }
+  <ng-container ngProjectAs="[fcDialogActions]">
+    @if (result()) {
+      <button fc-button variant="secondary" (click)="open.set(false)">
+        {{ 'COMMON.CLOSE' | t }}
+      </button>
+    } @else {
+      <button fc-button variant="secondary" [disabled]="busy()" (click)="open.set(false)">
+        {{ 'COMMON.CANCEL' | t }}
+      </button>
+      <button fc-button type="submit" form="contact-points-form" [loading]="busy()">
+        {{ 'CONTACTS.POINTS.SUBMIT' | t }}
+      </button>
+    }
+  </ng-container>
+</fc-dialog>

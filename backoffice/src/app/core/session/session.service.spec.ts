@@ -1,3 +1,4 @@
+import { NonFiscalMode } from '../sales/non-fiscal-mode';
 import { HttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
@@ -397,6 +398,20 @@ describe('SessionService', () => {
       expect(session.bearerToken()).toBeNull();
       expect(sessionStorage.getItem('fc.session')).toBeNull();
       expect(navigateByUrl).toHaveBeenCalledWith('/login');
+    });
+
+    it('turns the UM mode off, so the next session starts without it', async () => {
+      const { session } = await signedIn();
+      const mode = TestBed.inject(NonFiscalMode);
+      for (let click = 0; click < 7; click++) {
+        mode.brandClick(click);
+      }
+      expect(mode.nonFiscalVisible()).toBe(true);
+      const done = session.logout();
+      backend().expectOne(`${API}/v1/auth/logout`).flush(null, { status: 204, statusText: 'No Content' });
+      await done;
+      expect(mode.nonFiscalVisible()).toBe(false);
+      expect(sessionStorage.getItem('fc.nonFiscalVisible')).toBeNull();
     });
 
     it('clears the local state even when the server fails, logging only the code', async () => {

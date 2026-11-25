@@ -1,4 +1,6 @@
 import type { I18nService } from '../../core/i18n/i18n.service';
+import { formatMoney } from '../../core/i18n/format';
+import { DEFAULT_LANGUAGE } from '../../core/i18n/language';
 import { Role } from '../../core/session/session.types';
 
 /** Categories of the activity log. */
@@ -36,6 +38,9 @@ const SECURITY_ACTIONS = [
   'store.activationCodeForActivePlace',
   'store.activeKeyReplaced',
   'store.activeKeyRevoked',
+  'store.creditAlert',
+  'store.advancedCardRelinked',
+  'store.contactsRead',
   'request.nonBrowser',
   'settings.securityPolicyUpdated',
   'apiKey.created',
@@ -152,6 +157,45 @@ const KEY_ALERTS: Readonly<Record<string, string>> = {
   'store.activeKeyRevoked': 'ACTIVITY.ALERTS.KEY_REVOKED',
 };
 
+function euro(amount: number): string {
+  return formatMoney(Math.round(amount * 100), 'EUR', DEFAULT_LANGUAGE);
+}
+
+/**
+ * Sentence of the entries of a store key about contacts and cards (credit alert, advanced card
+ * linked again, contacts read): amounts in euro and counts only, never a card code.
+ *
+ * @returns The sentence, `null` when the metadata is not as expected, `undefined` for another action.
+ */
+function storeAlertSummary(
+  i18n: Pick<I18nService, 't'>,
+  action: string,
+  metadata: ActivityEntry['metadata'],
+): string | null | undefined {
+  const { reason, amount, threshold, otherContacts, count } = metadata ?? {};
+  if (action === 'store.creditAlert') {
+    return (reason === 'operation' || reason === 'daily') &&
+      typeof amount === 'number' &&
+      typeof threshold === 'number'
+      ? i18n.t(
+          reason === 'operation'
+            ? 'ACTIVITY.ALERTS.CREDIT_OPERATION'
+            : 'ACTIVITY.ALERTS.CREDIT_DAILY',
+          { amount: euro(amount), threshold: euro(threshold) },
+        )
+      : null;
+  }
+  if (action === 'store.advancedCardRelinked') {
+    return typeof otherContacts === 'number'
+      ? i18n.t('ACTIVITY.ALERTS.CARD_RELINKED', { count: otherContacts })
+      : null;
+  }
+  if (action === 'store.contactsRead') {
+    return typeof count === 'number' ? i18n.t('ACTIVITY.ALERTS.CONTACTS_READ', { count }) : null;
+  }
+  return undefined;
+}
+
 /**
  * Readable sentence for the metadata of a security alert entry: for a sustained limit the window
  * that was exceeded, the threshold and whether the request was only reported or also blocked; for
@@ -179,6 +223,10 @@ export function alertSummary(
     return typeof keyHint === 'string' && keyHint !== ''
       ? i18n.t(KEY_ALERTS[entry.action], { hint: keyHint })
       : null;
+  }
+  const storeSummary = storeAlertSummary(i18n, entry.action, entry.metadata);
+  if (storeSummary !== undefined) {
+    return storeSummary;
   }
   if (
     entry.action !== 'rateLimit.sustainedExceeded' ||

@@ -107,6 +107,11 @@ export function blockDefaults(block: SettingsBlockName): Record<string, unknown>
       setAt(body, definition.key, defaultValue(definition));
     }
   }
+  if (block === 'integrations') {
+    // The map of the categories of TS Hospitality and the copy the synchronization keeps (read only).
+    setAt(body, 'tsh.categoriesMap', {});
+    setAt(body, 'tsh.categories', []);
+  }
   return body;
 }
 
@@ -406,10 +411,12 @@ export interface PlaceLookupData {
   currencies?: unknown;
   priceLists?: unknown;
   categories?: unknown;
+  /** Which providers the platform has configured (`GET /v1/integrations`); none by default. */
+  providers?: Partial<Record<'cerved' | 'dojo' | 'satispay' | 'tsh' | 'geocoding', boolean>>;
 }
 
 const LOOKUP_URL =
-  /\/v1\/countries$|\/currencies$|\/lookup\/price-lists$|\/companies$|\/places$|\/lookup\/product-categories$|\/lookup\/email-templates$|\/lookup\/languages$|\/invoice-series$|\/taxes$|\/product-favorites$|\/users\?limit=100$/;
+  /\/v1\/integrations$|\/v1\/countries$|\/currencies$|\/lookup\/price-lists$|\/companies$|\/places$|\/lookup\/product-categories$|\/lookup\/email-templates$|\/lookup\/languages$|\/invoice-series$|\/taxes$|\/product-favorites$|\/users\?limit=100$/;
 
 const page = (data: unknown[]) => ({ data, page: { limit: 100, next: null } });
 
@@ -420,7 +427,18 @@ export async function answerPlaceLookups(data: PlaceLookupData = {}): Promise<vo
       continue;
     }
     const url = request.request.url;
-    if (url.endsWith('/countries')) {
+    if (url.endsWith('/v1/integrations')) {
+      request.flush({
+        data: {
+          cerved: false,
+          dojo: false,
+          satispay: false,
+          tsh: false,
+          geocoding: false,
+          ...data.providers,
+        },
+      });
+    } else if (url.endsWith('/countries')) {
       request.flush(data.countries ?? COUNTRIES);
     } else if (url.endsWith('/currencies')) {
       request.flush(data.currencies ?? { data: [{ code: 'EUR' }, { code: 'USD' }] });

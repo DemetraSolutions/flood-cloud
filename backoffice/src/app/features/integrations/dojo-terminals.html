@@ -1,0 +1,47 @@
+@if (visible()) {
+  <section class="action" [attr.aria-label]="'INTEGRATIONS.DOJO.TITLE' | t">
+    <button
+      fc-button
+      variant="secondary"
+      [loading]="loading()"
+      [disabled]="blockedBy() !== null"
+      (click)="load()"
+    >
+      {{ 'INTEGRATIONS.DOJO.LOAD' | t }}
+    </button>
+    @if (blockedBy(); as reason) {
+      <p class="note">{{ reason }}</p>
+    }
+    @if (failure(); as message) {
+      <p class="problem" role="alert">{{ message }}</p>
+    } @else if (loaded()) {
+      <p class="note">{{ 'INTEGRATIONS.DOJO.HINT' | t }}</p>
+      <fc-data-table
+        [caption]="'INTEGRATIONS.DOJO.CAPTION' | t"
+        [columns]="columns()"
+        [rows]="rows()"
+        [rowKey]="rowKey"
+        [emptyTitle]="'INTEGRATIONS.DOJO.EMPTY' | t"
+        [emptyMessage]="'INTEGRATIONS.DOJO.EMPTY_MESSAGE' | t"
+      >
+        <ng-template fcRowActions let-row>
+          <button
+            fc-button
+            variant="ghost"
+            [attr.aria-label]="copyLabel(row)"
+            (click)="copy(row)"
+          >
+            {{ 'INTEGRATIONS.DOJO.COPY' | t }}
+          </button>
+        </ng-template>
+      </fc-data-table>
+    }
+    <p class="note" role="status">
+      @if (copied(); as tid) {
+        {{ 'INTEGRATIONS.DOJO.COPIED' | t: { tid } }}
+      } @else if (copyFailed()) {
+        {{ 'INTEGRATIONS.DOJO.COPY_FAILED' | t }}
+      }
+    </p>
+  </section>
+}

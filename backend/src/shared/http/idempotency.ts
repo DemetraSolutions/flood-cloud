@@ -35,6 +35,8 @@ export interface IdempotencyRequest {
   readonly key: string;
   /** Keyed fingerprint (HMAC-SHA256, hexadecimal) of the canonical JSON of the body: see {@link IdempotencyStore.fingerprint}. */
   readonly bodyHash: string;
+  /** `true` for a request that moves money (see {@link IdempotencyOptions.inProgressNeverExpires}): its key is held for the whole {@link IDEMPOTENCY_TTL_MS}, even when it never finishes. */
+  readonly pinned?: boolean;
 }
 
 /** The result of {@link IdempotencyStore.begin}. */
@@ -45,8 +47,8 @@ export type IdempotencyBegin =
   | { readonly kind: 'replay'; readonly response: StoredResponse }
   /** Same key, different body. */
   | { readonly kind: 'mismatch' }
-  /** Same key and body, the first request is still running. */
-  | { readonly kind: 'busy' };
+  /** Same key and body, the first request is still running (or, when `pinned`, never finished and is held until its key expires). */
+  | { readonly kind: 'busy'; readonly pinned?: boolean };
 
 /** The record of the keys in use (`common.idempotencyKeys`): a unique index on principal, route and key makes the first request win. */
 export interface IdempotencyStore {
@@ -64,6 +66,7 @@ export interface IdempotencyStore {
 }
 
 interface KeyDocument extends IdempotencyRequest {
+  pinned?: boolean;
   _id: ObjectId;
   state: 'inProgress' | 'done';
   response?: StoredResponse;
@@ -95,7 +98,7 @@ export function createIdempotencyStore(databases: Databases, bodyKey: Buffer, no
     const at = now();
     const id = new ObjectId();
     try {
-      await keys().insertOne({ _id: id, ...request, state: 'inProgress', createdAt: new Date(at), expiresAt: new Date(at + IDEMPOTENCY_IN_PROGRESS_MS) });
+      await keys().insertOne({ _id: id, ...request, state: 'inProgress', createdAt: new Date(at), expiresAt: new Date(at + (request.pinned === true ? IDEMPOTENCY_TTL_MS : IDEMPOTENCY_IN_PROGRESS_MS)) });
       return { kind: 'new', id };
     } catch (error) {
       if ((error as { code?: unknown }).code !== DUPLICATE_KEY) {
@@ -114,7 +117,7 @@ export function createIdempotencyStore(databases: Databases, bodyKey: Buffer, no
     if (existing.bodyHash !== request.bodyHash) {
       return { kind: 'mismatch' };
     }
-    return existing.state === 'done' ? { kind: 'replay', response: existing.response as StoredResponse } : { kind: 'busy' };
+    return existing.state === 'done' ? { kind: 'replay', response: existing.response as StoredResponse } : existing.pinned === true ? { kind: 'busy', pinned: true } : { kind: 'busy' };
   };
   return {
     fingerprint: (body) => createHmac('sha256', bodyKey).update(canonicalJson(body)).digest('hex'),
@@ -156,6 +159,15 @@ function idempotencyPrincipalOf(res: Response): string {
   return res.locals.apiKey === undefined ? res.locals.auth!.userId.toHexString() : `apikey:${res.locals.apiKey.keyId.toHexString()}`;
 }
 
+/** Options of {@link idempotent}. */
+export interface IdempotencyOptions {
+  /**
+   * For the routes that move money (the adjustments and the creation of the loyalty cards): a key that is `inProgress` is held for the whole {@link IDEMPOTENCY_TTL_MS} instead of {@link IDEMPOTENCY_IN_PROGRESS_MS}, so a request
+   * that crashed (or whose outcome is unknown) is never repeated by a retry with the same key: it answers `409` with `Idempotency-Key`/`pending` until the key expires. A request that fails with a `4xx` still frees the key.
+   */
+  readonly inProgressNeverExpires?: true;
+}
+
 /**
  * Makes a creation idempotent (`doc/API-Guidelines.md` section 6): wraps the handler of a `POST`. The `Idempotency-Key` header (a UUID) is required (`422`, `required` or `format`); the
  * same key with the same body answers again what the first request answered (status, body, `Location`, `ETag`); the same key with another body, or while the first request is still running,
@@ -164,13 +176,15 @@ function idempotencyPrincipalOf(res: Response): string {
  * @param store The record of the keys.
  * @param handler The handler of the route.
  */
-export function idempotent(store: IdempotencyStore, handler: RequestHandler): RequestHandler {
+export function idempotent(store: IdempotencyStore, handler: RequestHandler, options: IdempotencyOptions = {}): RequestHandler {
+  const pinned = options.inProgressNeverExpires === true;
   return async (req: Request, res, next) => {
     const begun = await store.begin({
       principal: idempotencyPrincipalOf(res),
       route: `${req.method} ${req.baseUrl}${req.path}`,
       key: idempotencyKeyOf(req),
       bodyHash: store.fingerprint(req.body ?? null),
+      ...(pinned ? { pinned } : {}),
     });
     if (begun.kind === 'replay') {
       const { status, body, location, etag } = begun.response;
@@ -187,7 +201,8 @@ export function idempotent(store: IdempotencyStore, handler: RequestHandler): Re
       throw new AppError('CONFLICT', { details: [{ field: 'Idempotency-Key', issue: 'reused' }] });
     }
     if (begun.kind === 'busy') {
-      throw new AppError('CONFLICT');
+      // A pinned key that never finished is not freed: the operator checks what the first request did before it is used again.
+      throw new AppError('CONFLICT', begun.pinned === true ? { details: [{ field: 'Idempotency-Key', issue: 'pending' }] } : {});
     }
     let captured: StoredResponse | null = null;
     const send = res.json.bind(res) as (body: unknown) => typeof res;
@@ -198,7 +213,10 @@ export function idempotent(store: IdempotencyStore, handler: RequestHandler): Re
     try {
       await handler(req, res, next);
     } catch (error) {
-      await store.abandon(begun.id);
+      // A refusal (a `4xx`) wrote nothing and frees the key. Any other failure of a pinned request may have written: the key stays held until it expires.
+      if (!pinned || (error instanceof AppError && error.status < 500)) {
+        await store.abandon(begun.id);
+      }
       throw error;
     }
     const answer = captured as StoredResponse | null;

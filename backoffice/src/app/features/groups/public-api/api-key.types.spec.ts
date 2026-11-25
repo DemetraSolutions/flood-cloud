@@ -26,6 +26,9 @@ describe('api key types', () => {
   });
 
   it('builds the dictionary keys of the catalog write permission', () => {
+    expect(permissionTextKey('fidelityCards:write', 'HINT')).toBe(
+      'PUBLIC_API.PERMISSION.FIDELITYCARDS_WRITE.HINT',
+    );
     expect(permissionTextKey('catalog:write', 'LABEL')).toBe(
       'PUBLIC_API.PERMISSION.CATALOG_WRITE.LABEL',
     );

@@ -500,7 +500,7 @@ function placeBlocks(): Document {
       plateform: { status: false, username: null, password: null },
       cooperto: { status: false, apiKey: null },
       dojo: { status: false, apiKey: null },
-      satispay: { status: false, activationCode: null, keyId: null, type: 'checkin' },
+      satispay: { status: false, keyId: null, type: 'checkin' },
       multisafepay: { status: false, terminalGroupId: null, terminalGroupApiKey: null, websiteApiKey: null, qrSecondsActive: 600, qrStatus: false },
       qodeup: { status: false, apiKey: null },
       tomatoai: { status: false, apiKey: null },

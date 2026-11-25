@@ -1,0 +1,91 @@
+<div class="grid">
+  <fc-text-field
+    [formField]="form().firstName"
+    autocomplete="off"
+    [label]="'CONTACTS.PERSON.FIRST_NAME' | t"
+    [error]="error(form().firstName)"
+    (blurred)="form().firstName().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().lastName"
+    autocomplete="off"
+    [label]="'CONTACTS.PERSON.LAST_NAME' | t"
+    [error]="error(form().lastName)"
+    (blurred)="form().lastName().markAsTouched()"
+  />
+  <div>
+    <fc-text-field
+      [formField]="form().taxCode"
+      autocomplete="off"
+      autocapitalize="characters"
+      [label]="'CONTACTS.PERSON.TAX_CODE' | t"
+      [hint]="taxCodeWarning() ? ('CONTACTS.WARNING.FIELD_HINT' | t) : null"
+      [error]="error(form().taxCode)"
+      (blurred)="form().taxCode().markAsTouched()"
+    />
+    <fc-contact-warning-note [groupId]="groupId()" [warning]="taxCodeWarning()" />
+  </div>
+  <fc-text-field
+    [formField]="form().birthDate"
+    type="date"
+    autocomplete="off"
+    [label]="'CONTACTS.PERSON.BIRTH_DATE' | t"
+    [error]="error(form().birthDate)"
+    (blurred)="form().birthDate().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().discountPercent"
+    inputmode="decimal"
+    autocomplete="off"
+    [label]="'CONTACTS.PERSON.DISCOUNT' | t"
+    [error]="error(form().discountPercent)"
+    (blurred)="form().discountPercent().markAsTouched()"
+  />
+</div>
+
+<fc-contact-address [form]="form().address" [legend]="'CONTACTS.PERSON.ADDRESS' | t" />
+
+<div class="grid">
+  <fc-contact-string-list
+    [formField]="form().phones"
+    type="tel"
+    [legend]="'CONTACTS.PERSON.PHONES' | t"
+    itemKey="CONTACTS.PERSON.PHONE_N"
+    addKey="CONTACTS.PERSON.ADD_PHONE"
+    [limit]="phoneLimit"
+    [issue]="phoneIssue"
+    [error]="error(form().phones)"
+  />
+  <fc-contact-string-list
+    [formField]="form().emails"
+    type="email"
+    [legend]="'CONTACTS.PERSON.EMAILS' | t"
+    itemKey="CONTACTS.PERSON.EMAIL_N"
+    addKey="CONTACTS.PERSON.ADD_EMAIL"
+    [limit]="emailLimit"
+    [issue]="emailIssue"
+    [error]="error(form().emails)"
+  />
+</div>
+
+<fieldset>
+  <legend>{{ 'CONTACTS.PERSON.COMPANY' | t }}</legend>
+  <p class="hint">{{ 'CONTACTS.PERSON.COMPANY_HINT' | t }}</p>
+  @if (locked()) {
+    <p>{{ companyLabel() ?? ('CONTACTS.NONE' | t) }}</p>
+  } @else {
+    <fc-search-combobox
+      [label]="'CONTACTS.PERSON.COMPANY_SEARCH' | t"
+      [value]="companyId()"
+      [valueLabel]="companyLabel()"
+      [search]="search"
+      [minChars]="minChars"
+      [placeholder]="'CONTACTS.NONE' | t"
+      [clearLabel]="'CONTACTS.PERSON.COMPANY_CLEAR' | t"
+      (choice)="onCompany($event)"
+    />
+  }
+  @if (error(form().associatedCompanyId); as message) {
+    <p class="problem" role="alert">{{ message }}</p>
+  }
+</fieldset>

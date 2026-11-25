@@ -8,9 +8,10 @@ import type { TrashIssue, TrashItemOutcome } from '../../shared/trash/trash.ts';
 import type { CompaniesService } from '../companies/companies.service.ts';
 import type { GroupsService } from '../groups/groups.service.ts';
 import type { PlacesService } from '../places/places.service.ts';
+import type { ContactsService } from '../contacts/contacts.service.ts';
 import type { ProductsService } from '../products/products.service.ts';
 import type { UsersService } from '../users/users.service.ts';
-import { EMPTY_BATCH_SIZE } from './trash.schemas.ts';
+import { EMPTY_BATCH_SIZE, emptyBatchSizeOf } from './trash.schemas.ts';
 import type { TrashKind } from './trash.schemas.ts';
 
 /** What became of one item of a bulk call. `issue` is present only when it was skipped. */
@@ -54,7 +55,7 @@ export interface TrashService {
    */
   remove(principal: AuthPrincipal, access: GroupAccess, kind: TrashKind, ids: readonly ObjectId[], client: ClientContext): Promise<TrashResults>;
   /**
-   * Deletes the items of a kind in the trash of the group that come after a cursor (at most {@link EMPTY_BATCH_SIZE}, in `_id` order), each as the single-item deletion does, and tells how
+   * Deletes the items of a kind in the trash of the group that come after a cursor (at most {@link EMPTY_BATCH_SIZE}, or 10 for the contacts, in `_id` order), each as the single-item deletion does, and tells how
    * many are left and where to go on: items that cannot be deleted are walked past, never met again by the next call. Records one `trash.emptied` entry. The caller is a PSA (`trash:empty`).
    *
    * @param principal The caller (already checked for `trash:empty` and `<kind>:delete`).
@@ -82,6 +83,7 @@ export interface TrashServiceDeps {
   readonly users: Pick<UsersService, 'restoreFromTrash' | 'deleteFromTrash' | 'trashedIds' | 'countTrashed'>;
   readonly groups: Pick<GroupsService, 'restoreFromTrash'>;
   readonly products: Pick<ProductsService, 'restoreFromTrash' | 'deleteFromTrash' | 'trashedIds' | 'countTrashed'>;
+  readonly contacts: Pick<ContactsService, 'restoreFromTrash' | 'deleteFromTrash' | 'trashedIds' | 'countTrashed'>;
   readonly activityLog: ActivityLog;
 }
 
@@ -109,7 +111,7 @@ function distinct(ids: readonly ObjectId[]): ObjectId[] {
  * @param deps The domain services, the group resolver and the activity log.
  */
 export function createTrashService(deps: TrashServiceDeps): TrashService {
-  const { companies, places, users, groups, products, activityLog } = deps;
+  const { companies, places, users, groups, products, contacts, activityLog } = deps;
   const domains: Readonly<Record<TrashKind, Domain>> = {
     companies: {
       restore: (principal, access, id, client) => companies.restoreFromTrash(principal, access, id, client),
@@ -134,6 +136,12 @@ export function createTrashService(deps: TrashServiceDeps): TrashService {
       remove: (principal, access, id, client) => products.deleteFromTrash(principal, access, id, client),
       ids: (principal, access, limit, after) => products.trashedIds(principal, access, limit, after),
       count: (principal, access) => products.countTrashed(principal, access),
+    },
+    contacts: {
+      restore: (principal, access, id, client) => contacts.restoreFromTrash(principal, access, id, client),
+      remove: (principal, access, id, client) => contacts.deleteFromTrash(principal, access, id, client),
+      ids: (principal, access, limit, after) => contacts.trashedIds(principal, access, limit, after),
+      count: (principal, access) => contacts.countTrashed(principal, access),
     },
   };
 
@@ -200,10 +208,11 @@ export function createTrashService(deps: TrashServiceDeps): TrashService {
     empty: async (principal, access, kind, after, client) => {
       let asked = 0;
       return recorded(principal, access, client, 'trash.emptied', kind, () => asked, async (results) => {
-        const ids = await domains[kind].ids(principal, access, EMPTY_BATCH_SIZE, after);
+        const size = emptyBatchSizeOf(kind);
+        const ids = await domains[kind].ids(principal, access, size, after);
         asked = ids.length;
         await process(ids, 'deleted', (id) => domains[kind].remove(principal, access, id, client), results);
-        return { results, remaining: await domains[kind].count(principal, access), next: ids.length === EMPTY_BATCH_SIZE ? ids[ids.length - 1]!.toHexString() : null };
+        return { results, remaining: await domains[kind].count(principal, access), next: ids.length === size ? ids[ids.length - 1]!.toHexString() : null };
       });
     },
 

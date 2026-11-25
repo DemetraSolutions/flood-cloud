@@ -12,16 +12,24 @@ export const MAX_TRASH_IDS = 100;
 /** Most items one call of the emptying deletes: the backoffice repeats the call while items remain. */
 export const EMPTY_BATCH_SIZE = 200;
 
+/** Most contacts one call of the emptying deletes: the deletion of a contact searches collections of the legacy that have no index (`doc/Technical-Guide.md` section 11.34). */
+export const CONTACTS_EMPTY_BATCH_SIZE = 10;
+
+/** How many items one call of the emptying deletes, by kind: {@link EMPTY_BATCH_SIZE} unless the kind says less. */
+export function emptyBatchSizeOf(kind: string): number {
+  return kind === 'contacts' ? CONTACTS_EMPTY_BATCH_SIZE : EMPTY_BATCH_SIZE;
+}
+
 /** The kinds of the trash of a group, in the order of the tabs. The groups have their own route: they are platform-wide and are never deleted. */
-export const TRASH_KINDS = Object.freeze(['companies', 'places', 'users', 'products'] as const);
+export const TRASH_KINDS = Object.freeze(['companies', 'places', 'users', 'products', 'contacts'] as const);
 
 /** A kind of item that can be in the trash of a group. */
 export type TrashKind = (typeof TRASH_KINDS)[number];
 
 /** The permission each operation needs on each kind: restoring is `<kind>:trash`, deleting is `<kind>:delete`, the ones of the single-item routes. */
 export const KIND_PERMISSIONS: Readonly<Record<'restore' | 'delete', Readonly<Record<TrashKind, Permission>>>> = Object.freeze({
-  restore: Object.freeze({ companies: 'companies:trash', places: 'places:trash', users: 'users:trash', products: 'products:update' }),
-  delete: Object.freeze({ companies: 'companies:delete', places: 'places:delete', users: 'users:delete', products: 'products:update' }),
+  restore: Object.freeze({ companies: 'companies:trash', places: 'places:trash', users: 'users:trash', products: 'products:update', contacts: 'contacts:write' }),
+  delete: Object.freeze({ companies: 'companies:delete', places: 'places:delete', users: 'users:delete', products: 'products:update', contacts: 'contacts:write' }),
 });
 
 /** Path parameters of the routes of a group's trash: an unknown kind is a `422`. */
@@ -43,6 +51,12 @@ export const idsBody = object({ ids: array(objectId(), { min: 1, max: MAX_TRASH_
 
 /** Validated body of a bulk restore or deletion. */
 export type IdsBody = Infer<typeof idsBody>;
+
+/** Most contacts a bulk deletion from the trash may name (`422` over it): see {@link CONTACTS_EMPTY_BATCH_SIZE}. */
+export const MAX_CONTACT_DELETE_IDS = 10;
+
+/** Body of the bulk deletion of contacts: 1 to {@link MAX_CONTACT_DELETE_IDS} ids, nothing else. */
+export const contactsDeleteBody = object({ ids: array(objectId(), { min: 1, max: MAX_CONTACT_DELETE_IDS }) });
 
 /** The body of the emptying: none, an empty object, or the cursor `after` of the previous call. */
 export const emptyBody = object({ after: optional(objectId()) });

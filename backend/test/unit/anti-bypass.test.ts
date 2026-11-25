@@ -102,6 +102,20 @@ describe('database access cannot be bypassed outside src/db', () => {
     assert.ok(own.includes('issueGroupAccess(') && !own.includes('export function issueGroupAccess') && !own.includes('export function resolveGroupAccess'));
   });
 
+  it('imports groupAccessFor only in the port of the places integrations, and the check detects an import elsewhere', async () => {
+    const importers: string[] = [];
+    for (const file of await filesUnder(SRC)) {
+      const path = relative(SRC, file).split('\\').join('/');
+      if (path !== 'shared/security/scope/group-access.ts' && reaches(await readFile(file, 'utf8'), 'group-access', 'groupAccessFor')) {
+        importers.push(path);
+      }
+    }
+    assert.deepEqual(importers, ['modules/places/place-integrations.port.ts']);
+    assert.ok(reaches("import { groupAccessFor } from '../../shared/security/scope/group-access.ts';", 'group-access', 'groupAccessFor'));
+    assert.ok(reaches("export * from './group-access.ts';", 'group-access', 'groupAccessFor'));
+    assert.ok(!reaches("import { requireGroupAccess } from './group-access.ts';", 'group-access', 'groupAccessFor'));
+  });
+
   it('uses the bulk group access only on the routes of the trash', async () => {
     for (const file of await filesUnder(SRC)) {
       const path = relative(SRC, file).split('\\').join('/');
@@ -272,10 +286,13 @@ describe('database access cannot be bypassed outside src/db', () => {
       return found;
     };
 
-    it('lets only the services of the catalog workbook and of the tobacco synchronization open a transaction on a group database and bind the repositories to its session', async () => {
+    it('lets only the services of the catalog workbook, of the advanced loyalty cards, of the workbooks of the contacts and of the cards and of the tobacco synchronization open a transaction on a group database and bind the repositories to its session', async () => {
       const SESSION = 'db/session-databases.ts';
-      assert.deepEqual(await importersOf('sessionDatabases', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts', 'modules/tobacco-sync/tobacco-sync.service.ts']);
-      assert.deepEqual(await importersOf('inGroupTransaction', SESSION), ['modules/catalog-xlsx/catalog-xlsx.service.ts', 'modules/tobacco-sync/tobacco-sync.service.ts']);
+      // The service of the advanced loyalty cards (step F1) is the third, by decision of the user of 2026-11-25: a card with its movements and its contacts, and an adjustment with its movements, are all-or-nothing.
+      // The workbooks of the contacts and of the loyalty cards (step K3) are the fourth, by the same decision as the catalog's ("limiti e rapporto degli errori come l'import del catalogo", doc/Tasks.md §9-novies.2, 7): they share one engine, the one that opens the transaction.
+      const allowed = ['modules/catalog-xlsx/catalog-xlsx.service.ts', 'modules/fidelity-cards/fidelity-cards.service.ts', 'modules/records-xlsx/records-xlsx.service.ts', 'modules/tobacco-sync/tobacco-sync.service.ts'];
+      assert.deepEqual(await importersOf('sessionDatabases', SESSION), allowed);
+      assert.deepEqual(await importersOf('inGroupTransaction', SESSION), allowed);
     });
 
     it('imports the cross-group list of the copies only in the scope layer, which builds the groups from the verified scope and never from the client', async () => {
@@ -386,7 +403,14 @@ describe('database access cannot be bypassed outside src/db', () => {
           openers.push(posix(file));
         }
       }
-      assert.deepEqual(openers.sort(), ['modules/catalog-xlsx/catalog-xlsx.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts', 'modules/tobacco-sync/tobacco-sync.repository.ts']);
+      assert.deepEqual(openers.sort(), ['modules/catalog-xlsx/catalog-xlsx.repository.ts', 'modules/contacts/contacts.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts', 'modules/tobacco-sync/tobacco-sync.repository.ts']);
+    });
+
+    it('lets the contacts repository read the products (the services and the supplier price lists it checks) and never write them', async () => {
+      const text = await readFile(join(SRC, 'modules/contacts/contacts.repository.ts'), 'utf8');
+      assert.ok(/\.collection\(\s*'products'/.test(text));
+      const methods = [...text.matchAll(/\.collection\(\s*'products'\s*\)\s*\.(\w+)\(/g)].map((match) => match[1]);
+      assert.ok(methods.length > 0 && methods.every((method) => method === 'find'));
     });
 
     it('prepares the administrator of a new group only from the onboarding service', async () => {
@@ -454,7 +478,7 @@ describe('database access cannot be bypassed outside src/db', () => {
       for (const file of await filesUnder(SRC)) {
         const path = posix(file);
         const text = await readFile(file, 'utf8');
-        if (!path.startsWith('integrations/gcs/')) {
+        if (!path.startsWith('infrastructure/gcs/')) {
           assert.ok(!/storage\.googleapis\.com|oauth2\.googleapis\.com|metadata\.google\.internal/.test(text), `${path} names a storage endpoint`);
           assert.ok(!/@google-cloud|googleapis'/.test(text), `${path} imports a Google SDK`);
         }
@@ -570,5 +594,17 @@ describe('database access cannot be bypassed outside src/db', () => {
     assert.equal(mayCreateDatabases(join(SRC, 'tools', 'x', 'main.ts')), true);
     assert.equal(mayCreateDatabases(join(SRC, 'tools', 'x', 'other.ts')), false);
     assert.equal(mayCreateDatabases(join(SRC, 'app.ts')), false);
+  });
+});
+
+describe('the service of the cards joins a transaction only for the workbook of the cards', () => {
+  it('sets nested: true only in the service of the workbook, which builds it over the session of its own transaction', async () => {
+    const found: string[] = [];
+    for (const file of await filesUnder(SRC)) {
+      if (/\bnested:\s*true\b/.test(await readFile(file, 'utf8'))) {
+        found.push(relative(SRC, file).split('\\').join('/'));
+      }
+    }
+    assert.deepEqual(found, ['modules/fidelity-cards-xlsx/fidelity-cards-xlsx.service.ts']);
   });
 });

@@ -84,11 +84,32 @@ describe('visibleMenu', () => {
       'places',
       'fidelity',
       'products',
+      'contacts',
       'promotions',
       'tools',
       'trash',
       'activity-log',
     ]);
+  });
+
+  it('puts the contacts after the catalog, with the contacts and their groups, open with contacts:read', () => {
+    const menu = visibleMenu(MENU, allowAll, allowAll);
+    expect(ids(menu).indexOf('contacts')).toBe(ids(menu).indexOf('products') + 1);
+    expect(ids([...(menu.find((i) => i.id === 'contacts')?.children ?? [])])).toEqual([
+      'contacts-list',
+      'contact-groups',
+    ]);
+    expect(MENU.find((i) => i.id === 'contacts')).toMatchObject({
+      labelKey: 'MENU.CONTACTS',
+      requiresGroup: true,
+    });
+    expect(MENU.find((i) => i.id === 'contacts')?.children).toMatchObject([
+      { labelKey: 'MENU.CONTACTS_LIST', groupPath: 'contacts', permission: 'contacts:read' },
+      { labelKey: 'MENU.CONTACT_GROUPS', groupPath: 'contact-groups', permission: 'contacts:read' },
+    ]);
+    const only = (permission: string) => ids(visibleMenu(MENU, (p) => p === permission, allowAll));
+    expect(only('contacts:read')).toContain('contacts');
+    expect(only('products:read')).not.toContain('contacts');
   });
 
   it('puts the security alerts counter on the activity log entry only', () => {
@@ -100,7 +121,12 @@ describe('visibleMenu', () => {
   it('groups fidelity pages under one entry and the favorites under products', () => {
     const menu = visibleMenu(MENU, allowAll, allowAll);
     const children = (id: string) => ids([...(menu.find((i) => i.id === id)?.children ?? [])]);
-    expect(children('fidelity')).toEqual(['card-types', 'points-collections', 'prize-catalogues']);
+    expect(children('fidelity')).toEqual([
+      'fidelity-cards',
+      'card-types',
+      'points-collections',
+      'prize-catalogues',
+    ]);
     expect(children('products')).toEqual([
       'product-favorites',
       'products-list',
@@ -229,8 +255,9 @@ describe('visibleMenu', () => {
     });
   });
 
-  it('shows the trash with the read permission of any of companies, places and users', () => {
+  it('shows the trash with the read permission of any of companies, places, users and contacts', () => {
     const only = (permission: string) => ids(visibleMenu(MENU, (p) => p === permission, allowAll));
+    expect(only('contacts:read')).toContain('trash');
     expect(only('companies:read')).toContain('trash');
     expect(only('places:read')).toContain('trash');
     expect(only('users:read')).toContain('trash');
@@ -249,6 +276,24 @@ describe('visibleMenu', () => {
       groupPath: 'places',
       labelKey: 'MENU.PLACES',
     });
+  });
+
+  it('opens fidelity on the cards, the first entry, which needs fidelity:read', () => {
+    expect(MENU.find((item) => item.id === 'fidelity')).toMatchObject({
+      groupPath: 'fidelity/cards',
+    });
+    expect(MENU.find((item) => item.id === 'fidelity')?.children?.[0]).toMatchObject({
+      id: 'fidelity-cards',
+      labelKey: 'MENU.FIDELITY_CARDS',
+      groupPath: 'fidelity/cards',
+      permission: 'fidelity:read',
+    });
+    const only = (permission: string) => ids(visibleMenu(MENU, (p) => p === permission, allowAll));
+    const menu = visibleMenu(MENU, (p) => p === 'fidelity:read', allowAll);
+    expect(ids([...(menu.find((i) => i.id === 'fidelity')?.children ?? [])])[0]).toBe(
+      'fidelity-cards',
+    );
+    expect(only('products:read')).not.toContain('fidelity');
   });
 
   it('shows fidelity with fidelity:read, and favorites and promotions with products:read', () => {
@@ -271,18 +316,27 @@ describe('visibleMenu', () => {
     expect(children(allowAll)).toEqual([
       'diagnostics',
       'catalog-import-export',
+      'contacts-import-export',
+      'cards-import-export',
       'tobacco-sync',
       'email-templates',
     ]);
     expect(children((feature) => feature !== 'email')).toEqual([
       'diagnostics',
       'catalog-import-export',
+      'contacts-import-export',
+      'cards-import-export',
       'tobacco-sync',
     ]);
     expect(
       children(
         allowAll,
-        (p) => p !== 'places:read' && p !== 'products:read' && p !== 'tobaccos:sync',
+        (p) =>
+          p !== 'places:read' &&
+          p !== 'products:read' &&
+          p !== 'contacts:export' &&
+          p !== 'fidelityCards:export' &&
+          p !== 'tobaccos:sync',
       ),
     ).toBeUndefined();
     expect(
@@ -311,6 +365,26 @@ describe('visibleMenu', () => {
       permission: 'products:read',
       requiresGroup: true,
     });
+  });
+
+  it.each([
+    ['contacts-import-export', 'contacts:export', 'tools/contacts-import-export'],
+    ['cards-import-export', 'fidelityCards:export', 'tools/fidelity-cards-import-export'],
+  ])('shows "Strumenti › %s" only with a working group and %s', (id, permission, groupPath) => {
+    const children = (can: (p: string) => boolean, hasGroup: boolean, role: Role = 'SA') =>
+      visibleMenu(MENU, can, allowAll, role, hasGroup)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children((p) => p === permission, true)).toEqual([id]);
+    expect(children((p) => p === permission, false, 'PSA')).toBeUndefined();
+    expect(children((p) => p === 'places:read', true)).not.toContain(id);
+    expect(MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === id)).toMatchObject({
+      route: '/groups',
+      groupPath,
+      permission,
+      requiresGroup: true,
+    });
+    expect(chooserTarget(`/groups?to=${groupPath}`)).toBe(groupPath);
   });
 
   it('shows "Strumenti › Sincronizza tabacchi" only with a working group, tobaccos:sync and the tobaccos function', () => {
@@ -525,11 +599,11 @@ describe('visibleMenu', () => {
   });
 
   describe('entries that need a working group', () => {
-    const GROUP_ONLY = ['fidelity', 'products', 'promotions'];
+    const GROUP_ONLY = ['fidelity', 'products', 'contacts', 'promotions'];
     const idsFor = (role: Role, hasGroup: boolean) =>
       ids(visibleMenu(MENU, allowAll, allowAll, role, hasGroup));
 
-    it('flags exactly Fidelity, Catalogo and Promozioni', () => {
+    it('flags exactly Fidelity, Catalogo, Contatti and Promozioni', () => {
       expect(MENU.filter((i) => i.requiresGroup).map((i) => i.id)).toEqual(GROUP_ONLY);
     });
 
@@ -667,9 +741,12 @@ describe('visibleMenu', () => {
       ['users', 'users'],
       ['trash', 'trash'],
       ['promotions', 'promotions'],
+      ['fidelity/cards', 'fidelity-cards'],
       ['fidelity/points-collections', 'points-collections'],
       ['email-templates', 'email-templates'],
       ['tools/catalog-import-export', 'catalog-import-export'],
+      ['tools/contacts-import-export', 'contacts-import-export'],
+      ['tools/fidelity-cards-import-export', 'cards-import-export'],
       ['tools/tobacco-sync', 'tobacco-sync'],
     ])('with a group, /groups/:id/%s highlights only %s', (path, id) => {
       expect(activeFor('PSA', true, `/groups/${GROUP}/${path}`)).toEqual([id]);

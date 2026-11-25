@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 import type { Document, Filter } from 'mongodb';
-import { StorageError } from '../../integrations/gcs/index.ts';
-import type { MediaStorage } from '../../integrations/gcs/index.ts';
+import { StorageError } from '../../infrastructure/gcs/index.ts';
+import type { MediaStorage } from '../../infrastructure/gcs/index.ts';
 import type { PageInfo } from '../../shared/http/envelope.ts';
 import { AppError } from '../../shared/http/errors.ts';
 import { listParamsOf } from '../../shared/http/list.ts';

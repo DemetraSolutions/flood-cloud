@@ -4,7 +4,7 @@ import { ECOMMERCE_FLAGS, E_INVOICING_KEYS, MEDIA_IMAGE_KEYS } from './company-p
 import { InvalidWriteInputError } from './errors.ts';
 import { WEEK_DAYS } from './place-paths.ts';
 import { LIST_PATHS } from './place-lists.ts';
-import { SETTING_FIELDS, DEPRECATED_ROOMS_PATHS } from './place-settings.ts';
+import { SETTING_FIELDS, DEPRECATED_ROOMS_PATHS, SERVER_WRITTEN_PATHS, UNSETTABLE_PATHS } from './place-settings.ts';
 
 /** Largest `settings.global.lastInvoiceNumber` (the largest Int32): the legacy writes it as an Int32. */
 export const MAX_INVOICE_NUMBER = 2_147_483_647;
@@ -191,6 +191,8 @@ export const PLACE_FIELD_KINDS: Readonly<Record<string, FieldKind>> = Object.fre
   // The lists of items (step 7F): the fragments of the items, which the write lays over the stored ones inside the transaction.
   ...Object.fromEntries(LIST_PATHS.map((path) => [path, 'itemList' as const])),
   ...Object.fromEntries(DEPRECATED_ROOMS_PATHS.map((path) => [path, 'setting' as const])),
+  // The copy of the categories of the provider: written by the synchronization only (no field of a request leads to it).
+  ...Object.fromEntries(SERVER_WRITTEN_PATHS.map((path) => [path, 'setting' as const])),
 });
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -362,6 +364,25 @@ export function checkChanges(kinds: Readonly<Record<string, FieldKind>>, input: 
     throw new InvalidWriteInputError('An update must change at least one field');
   }
   return checked;
+}
+
+/**
+ * Checks the paths of an update that are removed (`$unset`): each must be one of {@link UNSETTABLE_PATHS}, listed once, and none may also be set by the same update.
+ *
+ * @param unset The stored paths to remove.
+ * @param set The fields the same update sets (already checked).
+ * @returns The paths, as a new array.
+ * @throws {InvalidWriteInputError} Naming the first path that is not removable, repeated or set too.
+ */
+export function checkUnset(unset: readonly string[], set: Document): string[] {
+  const seen = new Set<string>();
+  for (const path of unset) {
+    if (!UNSETTABLE_PATHS.includes(path) || seen.has(path) || Object.hasOwn(set, path)) {
+      throw new InvalidWriteInputError('A path that cannot be removed', path);
+    }
+    seen.add(path);
+  }
+  return [...seen];
 }
 
 /**

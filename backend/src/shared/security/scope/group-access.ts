@@ -11,7 +11,7 @@ import type { PermissionDecisionHook } from '../rbac/require-permission.ts';
 import type { GroupsRepository } from './groups.repository.ts';
 import type { AuthPrincipal, ScopeHolder } from './principal.ts';
 
-/** A group the caller was verified to reach. Only {@link requireGroupAccess}, {@link requireGroupAccesses}, {@link requireStoreGroupAccess} and {@link requireApiKeyGroupAccess} create one. */
+/** A group the caller was verified to reach. Only {@link requireGroupAccess}, {@link requireGroupAccesses}, {@link requireStoreGroupAccess}, {@link requireApiKeyGroupAccess} and {@link groupAccessFor} (for the integrations port alone) create one. */
 export interface GroupAccess {
   readonly groupId: ObjectId;
   /** Cluster that holds the group's operational database, resolved from `groups.dataCluster`. */
@@ -24,7 +24,7 @@ export interface GroupAccess {
 
 const GROUP_ID_PATTERN = /^[0-9a-f]{24}$/;
 
-/** Every access issued by {@link requireGroupAccess}, {@link requireGroupAccesses} and {@link requireStoreGroupAccess}; {@link groupDatabaseFor} accepts nothing else. */
+/** Every access issued by {@link requireGroupAccess}, {@link requireGroupAccesses}, {@link requireStoreGroupAccess}, {@link requireApiKeyGroupAccess} and {@link groupAccessFor}; {@link groupDatabaseFor} accepts nothing else. */
 const issued = new WeakSet<GroupAccess>();
 
 /** The outcome of the perimeter check: who may reach which group, before the cluster is known. */
@@ -94,7 +94,7 @@ export interface GroupAccessDeps {
 
 /**
  * Verifies a raw group id against the principal's scope and against `common.groups`, and issues the access to it: the one step both {@link requireGroupAccess} (the group of the
- * path) and {@link requireGroupAccesses} (the groups of a body) go through, so a group is never reached by a rule of its own. Not exported: an access is issued only by those two middleware and by {@link requireStoreGroupAccess} and {@link requireApiKeyGroupAccess} (for the routes only a store or a public key may call).
+ * path) and {@link requireGroupAccesses} (the groups of a body) go through, so a group is never reached by a rule of its own. Not exported: an access is issued only by those two middleware, by {@link requireStoreGroupAccess} and {@link requireApiKeyGroupAccess} (for the routes only a store or a public key may call) and by {@link groupAccessFor} (for the integrations port, which receives a group id the route already verified).
  *
  * @param groups Group lookup.
  * @param principal The caller.
@@ -143,6 +143,21 @@ export function requireGroupAccess(
     res.locals.groupAccess = access;
     next();
   };
+}
+
+/**
+ * The same verification as {@link requireGroupAccess}, for a caller that is not a route: a port of the core that receives the group id as data (the integrations module gives the id of the path and the
+ * principal it authenticated) and must redo the perimeter itself. Same rules: a malformed id, one outside the perimeter, a missing group, and a suspended or trashed one for a caller that is not a PSA are all `null`.
+ * The access it issues is a real one ({@link groupDatabaseFor} accepts it). It does not report the access of a PSA or a dealer to the audit: the route that called the port has already done it.
+ *
+ * @param groups Group lookup.
+ * @param principal The authenticated caller.
+ * @param rawGroupId The id as the client sent it (any string).
+ * @returns The access, or `null` when the group is not reachable.
+ * @throws {UnknownClusterError} If the cluster declared by the group is not configured.
+ */
+export function groupAccessFor(groups: Pick<GroupsRepository, 'findAccess' | 'resolveCluster'>, principal: ScopeHolder, rawGroupId: string): Promise<GroupAccess | null> {
+  return resolveGroupAccess(groups, principal, rawGroupId);
 }
 
 /**

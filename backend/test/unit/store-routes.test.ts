@@ -6,6 +6,7 @@ import { createApp } from '../../src/app.ts';
 import { AppError } from '../../src/shared/http/errors.ts';
 import { defineRoute, mountRoutes } from '../../src/shared/http/routes.ts';
 import type { RouteDefinition } from '../../src/shared/http/routes.ts';
+import { string } from '../../src/shared/validation/schema.ts';
 import { STORE_PROFILE } from '../../src/shared/security/rbac/policy.ts';
 import type { StorePrincipal } from '../../src/shared/security/scope/principal.ts';
 import { memoryActivityLog, memoryRateLimitMount, memoryRateLimiter, testIpLimit } from '../helpers/activity.ts';
@@ -243,6 +244,17 @@ describe('mountRoutes: the ids and the operator of a store route', () => {
 
   it('mounts the ids of the catalog on a path that has exactly them, and the operator on a write', () => {
     mountRoutes(express.Router(), [route({ params: ['productId'] }, '/store/products/:productId'), route({ params: ['categoryId'], operator }, '/store/categories/:categoryId', 'PATCH'), route({ operator }, '/store/products', 'POST')], dependencies);
+  });
+
+  it('validates a text parameter the route declares, with the ids and before the body, and refuses one that is not declared', () => {
+    const text = { code: string({ min: 1, max: 4 }) };
+    const path = '/store/contacts/:contactId/cards/:code/points';
+    mountRoutes(express.Router(), [route({ params: ['contactId'], text, operator }, path, 'POST')], dependencies);
+    assert.match(problem([route({ params: ['contactId'], operator }, path, 'POST')]), /no path parameter other than the ids it declares in params and the text it declares in text/);
+    assert.match(problem([route({ params: ['contactId'], text: { code: string({ min: 1, max: 4 }), name: string({ min: 1, max: 4 }) }, operator }, path, 'POST')]), /text is a list of schemas/);
+    for (const bad of [{}, { code: 'x' }, 'code', null]) {
+      assert.match(problem([route({ params: ['contactId'], text: bad, operator }, path, 'POST')]), /text is a list of schemas|no path parameter/);
+    }
   });
 
   it('refuses a parameter that is not a declared id of the catalog: the group, the place and any other name never come from a path', () => {

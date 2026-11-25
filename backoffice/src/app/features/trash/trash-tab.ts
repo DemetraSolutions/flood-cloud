@@ -9,7 +9,6 @@ import { DEFAULT_LANGUAGE } from '../../core/i18n/language';
 import { TPipe } from '../../core/i18n/t-pipe';
 import { ReferenceStore } from '../../core/reference/reference-store';
 import { SessionService } from '../../core/session/session.service';
-import { failureMessage } from '../../shared/forms/form-errors';
 import { Button } from '../../shared/ui/button/button';
 import { Checkbox } from '../../shared/ui/checkbox/checkbox';
 import { ConfirmDialog } from '../../shared/ui/confirm-dialog/confirm-dialog';
@@ -29,14 +28,17 @@ import { FAMILIES } from '../products/product.types';
 import { UsersApi } from '../users/users-api';
 import { GroupCell, groupCell } from '../groups/group-cell';
 import { TrashApi } from './trash-api';
+import { trashFailureMessage } from './trash-errors';
 import { TrashEmptyDialog } from './trash-empty-dialog';
 import { TrashSummaryDialog } from './trash-summary-dialog';
 import {
   DELETE_PERMISSION,
   EMPTY_PERMISSION,
   GroupTrashKind,
+  MAX_DELETE_IDS,
   RESTORE_PERMISSION,
   summarize,
+  TrashedContact,
   TrashedGroup,
   TrashedPlace,
   TrashedProduct,
@@ -62,6 +64,7 @@ const SORT: Readonly<Record<TrashKind, string>> = {
   places: 'name',
   users: 'username',
   products: 'name',
+  contacts: 'displayName',
   groups: 'name',
 };
 /** Column that names the row, links to its detail and is its row header. */
@@ -70,6 +73,7 @@ const NAME_COLUMN: Readonly<Record<TrashKind, string>> = {
   places: 'name',
   users: 'username',
   products: 'name',
+  contacts: 'displayName',
   groups: 'name',
 };
 
@@ -278,7 +282,32 @@ export class TrashTab {
             key: 'family',
             header: text('FAMILY'),
             hideNarrow: true,
-            cell: (row) => this.i18n.t(`PRODUCTS.FAMILY.${FAMILIES[(row as TrashedProduct).family].text}.TITLE`),
+            cell: (row) =>
+              this.i18n.t(`PRODUCTS.FAMILY.${FAMILIES[(row as TrashedProduct).family].text}.TITLE`),
+          },
+          since,
+        ];
+      case 'contacts':
+        return [
+          select,
+          { key: 'displayName', header: text('DISPLAY_NAME') },
+          {
+            key: 'company',
+            header: text('COMPANY_NAME'),
+            hideNarrow: true,
+            cell: (row) => (row as TrashedContact).company.name,
+          },
+          {
+            key: 'email',
+            header: text('EMAIL'),
+            hideNarrow: true,
+            cell: (row) => (row as TrashedContact).email ?? '',
+          },
+          {
+            key: 'phone',
+            header: text('PHONE'),
+            hideNarrow: true,
+            cell: (row) => (row as TrashedContact).phone ?? '',
           },
           since,
         ];
@@ -353,6 +382,19 @@ export class TrashTab {
 
   protected readonly deleteMessage = computed(() =>
     this.i18n.t('TRASH.DELETE.MESSAGE', { count: this.selectedRows().length }),
+  );
+  /** Most items a deletion for good takes at once for this kind (`null` for the usual limit of a page). */
+  protected readonly maxDelete = computed(() => MAX_DELETE_IDS[this.groupKind()] ?? null);
+  /** The selection is too long for one deletion for good: the action waits until it is shorter. */
+  protected readonly tooManyToDelete = computed(() => {
+    const max = this.maxDelete();
+    return max !== null && this.selectedRows().length > max;
+  });
+  protected readonly deleteLimitMessage = computed(() =>
+    this.i18n.t('TRASH.DELETE.LIMIT', {
+      max: this.maxDelete()!,
+      count: this.selectedRows().length,
+    }),
   );
 
   protected detailRoute(row: TrashRow): string[] {
@@ -517,7 +559,7 @@ export class TrashTab {
         }
       }
       if (failed.length === batches.size + platformUsers.length) {
-        this.toast.error(failureMessage(this.i18n, firstError));
+        this.toast.error(trashFailureMessage(this.i18n, this.kind(), firstError));
       } else {
         this.names.set(new Map(rows.map((row) => [row.id, this.label(row)])));
         this.report({ ...summarize(results), failedGroups: this.all() ? failed : [] });

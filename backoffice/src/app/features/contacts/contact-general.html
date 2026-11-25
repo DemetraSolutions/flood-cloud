@@ -1,0 +1,47 @@
+<fieldset aria-describedby="contact-kind-hint">
+  <legend>{{ 'CONTACTS.GENERAL.KIND' | t }}</legend>
+  <p id="contact-kind-hint" class="hint">{{ 'CONTACTS.GENERAL.KIND_HINT' | t }}</p>
+  <div class="grid">
+    <fc-checkbox [formField]="form().customer" [label]="'CONTACTS.GENERAL.CUSTOMER' | t" />
+    <fc-checkbox [formField]="form().supplier" [label]="'CONTACTS.GENERAL.SUPPLIER' | t" />
+  </div>
+</fieldset>
+
+<div class="grid">
+  <fc-select
+    [formField]="form().contactGroupId"
+    [label]="'CONTACTS.GENERAL.GROUP' | t"
+    [placeholder]="'CONTACTS.NONE' | t"
+    [options]="groups()"
+    [error]="error(form().contactGroupId)"
+    (blurred)="form().contactGroupId().markAsTouched()"
+  />
+  <fc-select
+    [formField]="form().priceListId"
+    [label]="'CONTACTS.GENERAL.PRICE_LIST' | t"
+    [placeholder]="'CONTACTS.NONE' | t"
+    [hint]="'CONTACTS.GENERAL.PRICE_LIST_HINT' | t"
+    [options]="priceLists()"
+    [error]="error(form().priceListId)"
+    (blurred)="form().priceListId().markAsTouched()"
+  />
+  <div>
+    <fc-text-field
+      [formField]="form().code"
+      autocomplete="off"
+      [label]="'CONTACTS.GENERAL.CODE' | t"
+      [hint]="codeWarning() ? ('CONTACTS.WARNING.FIELD_HINT' | t) : null"
+      [error]="error(form().code)"
+      (blurred)="form().code().markAsTouched()"
+    />
+    <fc-contact-warning-note [groupId]="groupId()" [warning]="codeWarning()" />
+  </div>
+</div>
+
+<fc-textarea
+  [formField]="form().notes"
+  [rows]="4"
+  [label]="'CONTACTS.GENERAL.NOTES' | t"
+  [error]="error(form().notes)"
+  (blurred)="form().notes().markAsTouched()"
+/>

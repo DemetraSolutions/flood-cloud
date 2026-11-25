@@ -52,8 +52,10 @@ import {
   dirtySections,
   patchBody,
   PlaceModel,
+  TshCategoryRow,
   toModel,
   WEEK_DAYS,
+  withIntegrationValue,
   withSections,
 } from './place-model';
 import {
@@ -171,6 +173,9 @@ export class PlaceState {
     source: () => (this.resource.hasValue() ? this.resource.value() : undefined),
     computation: (loaded) => toModel(loaded?.data ?? null),
   });
+
+  /** The version (`ETag`) of the place the form is editing; `null` when there is none. */
+  readonly etag = computed(() => this.saved()?.etag ?? null);
 
   /** The model of the saved place, to tell what changed. */
   readonly baseline = computed(() => toModel(this.place()));
@@ -669,6 +674,79 @@ export class PlaceState {
    */
   edit<S extends PlaceSection>(section: S, change: (value: PlaceModel[S]) => PlaceModel[S]): void {
     this.model.update((model) => ({ ...model, [section]: change(model[section]) }));
+  }
+
+  /**
+   * The place changed on the server meanwhile (a `412` of an action of the integrations): shows the
+   * same invitation to read it again that a refused save shows.
+   */
+  markStale(): void {
+    this.stale.set(true);
+    this.failure.set(this.i18n.t('PLACES.CONFLICT'));
+  }
+
+  /**
+   * The Satispay activation set the key of the shop: the place has it now, at the version the
+   * server answered. Without a version (the place changed meanwhile) the place is read again.
+   *
+   * @param etag The new version of the place, `null` when it must be read again.
+   */
+  adoptSatispayKey(etag: string | null): void {
+    if (etag === null) {
+      this.reread('INTEGRATIONS.SATISPAY.REREAD');
+      return;
+    }
+    const current = this.saved() as VersionedPlace;
+    this.saved.set({ place: withIntegrationValue(current.place, 'satispay.keyIdSet', true), etag });
+    this.model.update((model) => ({
+      ...model,
+      integrations: {
+        ...model.integrations,
+        secrets: {
+          ...model.integrations.secrets,
+          'satispay.keyId': { ...model.integrations.secrets['satispay.keyId'], set: true },
+        },
+      },
+    }));
+    this.toast.success(this.i18n.t('INTEGRATIONS.SATISPAY.DONE'));
+  }
+
+  /**
+   * The synchronization with TS Hospitality kept a new copy of its categories: the place and the
+   * form have it now, at the version the server answered; the mapping the user edits refers to
+   * it. Without a version the place is read again.
+   *
+   * @param categories The copy the server kept.
+   * @param etag The new version of the place, `null` when it must be read again.
+   */
+  adoptTshCategories(categories: readonly TshCategoryRow[], etag: string | null): void {
+    if (etag === null) {
+      this.reread('INTEGRATIONS.TSH.REREAD');
+      return;
+    }
+    const current = this.saved() as VersionedPlace;
+    this.saved.set({ place: withIntegrationValue(current.place, 'tsh.categories', categories), etag });
+    this.model.update((model) => ({
+      ...model,
+      integrations: { ...model.integrations, tshCategories: categories.map((c) => ({ ...c })) },
+    }));
+  }
+
+  /**
+   * Puts the coordinates the geocoding found in the delivery area of the form; the user saves them.
+   *
+   * @param coordinates Latitude and longitude.
+   */
+  setDeliveryCoordinates(coordinates: { readonly lat: number; readonly lng: number }): void {
+    this.edit('delivery', (block) => ({
+      ...block,
+      f: { ...block.f, lat: String(coordinates.lat), lng: String(coordinates.lng) },
+    }));
+  }
+
+  private reread(messageKey: string): void {
+    this.toast.info(this.i18n.t(messageKey));
+    this.reload();
   }
 
   /** Reads the place again and drops every draft (after a `412`, or on request). */

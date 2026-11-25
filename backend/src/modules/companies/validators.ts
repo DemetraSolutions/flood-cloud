@@ -3,6 +3,7 @@
  * ISO 13616 checksum, BIC, ABI and CAB, the recipient code and the tax regime of the Italian e-invoice. They give a yes or a no and never an
  * explanation that repeats the value.
  */
+import { isValidItalianVatDigits } from '../../shared/legacy-write/vat.ts';
 
 /** Tax regimes of the Italian e-invoice (`RegimeFiscale`): `RF03` was abolished. */
 export const TAX_REGIMES = Object.freeze([
@@ -25,31 +26,6 @@ export const TAX_REGIMES = Object.freeze([
   'RF18',
   'RF19',
 ] as const);
-
-/**
- * Whether eleven digits are an Italian VAT number: the last digit is the check digit of the first ten (the digits in even positions are
- * doubled, and 9 is taken off those that become larger than 9; the total, check digit included, is a multiple of ten).
- *
- * @param digits Exactly eleven digits.
- * @returns `true` when the check digit is right.
- */
-export function isValidItalianVatDigits(digits: string): boolean {
-  if (!/^\d{11}$/.test(digits)) {
-    return false;
-  }
-  let total = 0;
-  for (let index = 0; index < 11; index += 1) {
-    let digit = Number(digits[index]);
-    if (index % 2 === 1) {
-      digit *= 2;
-      if (digit > 9) {
-        digit -= 9;
-      }
-    }
-    total += digit;
-  }
-  return total % 10 === 0;
-}
 
 /**
  * Whether a text is an Italian VAT number: eleven digits with the check digit, with or without the `IT` prefix (kept as given by the caller).

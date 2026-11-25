@@ -32,8 +32,8 @@ import {
 } from '../../features/places/place-nav';
 import { TEMPLATE_MODELS } from '../../features/email-templates/template-models';
 import { importProblems } from '../../features/tobaccos/tobaccos.types';
-import { RULE_KEYS } from '../../features/catalog-xlsx/catalog-xlsx-page';
-import { ROW_ERROR_CODES, rowErrorKey } from '../../features/catalog-xlsx/catalog-xlsx.types';
+import { ALL_ROW_ERROR_CODES, rowErrorKey } from '../../features/catalog-xlsx/catalog-xlsx.types';
+import { XLSX_TOOL_KEYS, XLSX_TOOLS } from '../../features/catalog-xlsx/xlsx-tools';
 import { COUNT_KEYS } from '../../features/tobacco-sync/tobacco-sync-counts';
 import { CONFLICT_REASONS } from '../../features/tobacco-sync/tobacco-sync-errors';
 import { reasonKey, UNAVAILABLE_REASONS } from '../../features/tobacco-sync/tobacco-sync.types';
@@ -45,6 +45,8 @@ import {
   STATEMENT_SECTIONS,
 } from '../../features/activations/activations.types';
 import { SERVICE_LABEL_KEYS } from '../../features/price-list/price-list.types';
+import { ADDRESS_FIELDS } from '../../features/integrations';
+import { RECEIPT_TYPES, SALE_BADGE_KEYS } from '../../features/sales/sale.types';
 import { flattenDictionary } from './dictionary';
 import { SUPPORTED_LANGUAGES } from './language';
 
@@ -155,6 +157,26 @@ describe('dictionaries', () => {
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });
 
+  it('defines the texts of the sales, whose keys are built at run time: badges, kinds and payments', () => {
+    const keys = dictionary('it');
+    const expected = [
+      ...SALE_BADGE_KEYS.map((key) => `SALES.BADGE.${key}`),
+      'SALES.BADGE.REFUNDED_NUMBERS',
+      ...[...RECEIPT_TYPES, 'unknown'].map((type) => `SALES.TYPE.${type.toUpperCase()}`),
+      ...['CASH', 'ELECTRONIC', 'CHEQUE', 'TICKETS', 'FIDELITYCREDIT', 'UNPAID'].map(
+        (payment) => `SALES.PAYMENT.${payment}`,
+      ),
+      ...['SOLD', 'COUNT', 'AVERAGE', 'REFUNDED'].map((tile) => `SALES.TILE.${tile}`),
+      ...['NUMBER', 'DATE', 'TIME', 'TOTAL', 'COMPANY', 'PLACE', 'CASH_DESK', 'OPERATOR', 'TABLE'].map(
+        (column) => `SALES.COLUMN.${column}`,
+      ),
+      ...['CODE', 'NAME', 'QUANTITY', 'UNIT_PRICE', 'DISCOUNT'].map((column) => `SALES.PRODUCT.${column}`),
+      ...['NUMBER', 'DATE', 'AMOUNT'].map((column) => `SALES.REFUND.${column}`),
+      'CONTACTS.SECTION.PURCHASES',
+    ];
+    expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
   it('defines the texts of the public API keys, whose keys are built at run time', () => {
     const keys = dictionary('it');
     const expected: string[] = [];
@@ -203,19 +225,43 @@ describe('dictionaries', () => {
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
   });
 
-  it('defines the text of every problem code of the catalog import and nothing else under ROW_ERROR, and the rules of the file', () => {
+  it('defines the text of every problem code of the XLSX imports and nothing else under ROW_ERROR', () => {
     const keys = dictionary('it');
-    expect(ROW_ERROR_CODES.map(rowErrorKey).filter((key) => !keys.has(key))).toEqual([]);
+    expect(ALL_ROW_ERROR_CODES.map(rowErrorKey).filter((key) => !keys.has(key))).toEqual([]);
     const defined = [...keys.keys()].filter((key) => key.startsWith('CATALOG_XLSX.ROW_ERROR.'));
-    expect(defined.sort()).toEqual(ROW_ERROR_CODES.map(rowErrorKey).sort());
-    expect(RULE_KEYS.map((rule) => `CATALOG_XLSX.RULES.${rule}`).filter((key) => !keys.has(key))).toEqual([]);
-    for (const sheet of ['PRODUCTS', 'VARIANTS', 'CATEGORIES']) {
-      expect(keys.has(`CATALOG_XLSX.SHEET.${sheet}`)).toBe(true);
-    }
+    expect(defined.sort()).toEqual(ALL_ROW_ERROR_CODES.map(rowErrorKey).sort());
     for (const field of ['INSERTED', 'UPDATED', 'REMOVED', 'UNCHANGED']) {
       expect(keys.has(`CATALOG_XLSX.COUNTS.${field}`)).toBe(true);
     }
   });
+
+  it.each([...XLSX_TOOL_KEYS])(
+    'defines the texts of the XLSX tool %s that the page builds at run time',
+    (key) => {
+      const keys = dictionary('it');
+      const tool = XLSX_TOOLS[key];
+      const expected = [
+        'TITLE',
+        'HINT',
+        'TEMPLATE.TEXT',
+        ...(tool.placesNote ? ['TEMPLATE.PLACES_NOTE'] : []),
+        'EXPORT.TEXT',
+        'EXPORT.REFERENCES',
+        'EXPORT.IDS_HELP',
+        'EXPORT.NAMES_HELP',
+        'EXPORT.ACTION',
+        'IMPORT.TEXT',
+        'IMPORT.NOTE',
+        'IMPORT.CONFIRM',
+        'IMPORT.ERROR.TOO_MANY',
+        'IMPORT.ERROR.BUSY',
+        'DOWNLOAD_ERROR.TOO_LARGE',
+        ...tool.sheets.map((sheet) => `SHEET.${sheet.toUpperCase()}`),
+        ...tool.rules.map((rule) => `RULES.${rule}`),
+      ].map((suffix) => `${tool.prefix}.${suffix}`);
+      expect(expected.filter((text) => !keys.has(text))).toEqual([]);
+    },
+  );
 
   it('defines the names of the e-mail template models, whose keys are built at run time', () => {
     const keys = dictionary('it');
@@ -337,6 +383,15 @@ describe('dictionaries', () => {
       expected.push(`CATALOG.CARD_TYPES.PREPAID.${value}`);
     }
     expect(expected.filter((key) => !keys.has(key))).toEqual([]);
+  });
+
+  it('defines the names of the fields of the address of the coordinates, whose keys are built at run time', () => {
+    const keys = dictionary('it');
+    expect(
+      ADDRESS_FIELDS.map((field) => `INTEGRATIONS.COORDINATES.FIELD.${field.toUpperCase()}`).filter(
+        (key) => !keys.has(key),
+      ),
+    ).toEqual([]);
   });
 
   it('defines the role names, whose keys are built at run time', () => {

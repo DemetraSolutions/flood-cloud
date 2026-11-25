@@ -26,6 +26,26 @@ describe('effectivePermissions (D-06)', () => {
     assert.equal(result.canManagePermissions, true);
   });
 
+  it('maps the contacts module to contacts:read and contacts:write inside the ceiling of the role (step K1)', () => {
+    const grant = (role: 'SA' | 'CA' | 'PA' | 'E', matrix: object): Permission[] => sorted(effectivePermissions(role, matrix).permissions).filter((permission) => permission.startsWith('contacts:'));
+    // The workbook of the contacts (step K3) rides on the same flags, inside the ceiling of PSA, D and SA only.
+    assert.deepEqual(grant('SA', { contacts: { r: true, w: false } }), ['contacts:export', 'contacts:read']);
+    assert.deepEqual(grant('SA', { contacts: { r: false, w: true } }), ['contacts:import', 'contacts:write']);
+    assert.deepEqual(grant('SA', { contacts: { r: true, w: true } }), ['contacts:export', 'contacts:import', 'contacts:read', 'contacts:write']);
+    for (const role of ['CA', 'PA'] as const) {
+      assert.deepEqual(grant(role, { contacts: { r: true, w: true } }), ['contacts:read', 'contacts:write'], role);
+    }
+    for (const role of ['SA', 'CA', 'PA'] as const) {
+      assert.deepEqual(grant(role, { contacts: { r: false, w: false } }), [], role);
+    }
+    // The employee has an empty ceiling: his matrix grants nothing.
+    assert.deepEqual(grant('E', { contacts: { r: true, w: true } }), []);
+    for (const role of ['PSA', 'D'] as const) {
+      assert.ok(effectivePermissions(role, {}).permissions.has('contacts:read') && effectivePermissions(role, {}).permissions.has('contacts:write'));
+    }
+    assert.deepEqual([PERMISSIONS.CONTACTS_READ, PERMISSIONS.CONTACTS_WRITE], ['contacts:read', 'contacts:write']);
+  });
+
   it('gives the PSA and the dealers the whole ceiling of their role whatever their matrix (D-10), and the management of permissions', () => {
     for (const role of ['PSA', 'D'] as const) {
       for (const matrix of [undefined, {}, { groups: { r: false, w: false }, users: { r: true, w: false } }]) {
@@ -45,8 +65,20 @@ describe('effectivePermissions (D-06)', () => {
   });
 
   it('keeps the modules as data it does not turn into permissions', () => {
-    const result = effectivePermissions('SA', { stats: { r: true, w: true }, documents: { r: true } });
+    const result = effectivePermissions('SA', { stats: { r: true, w: true }, calendar: { r: true, w: true }, documents: { w: true } });
     assert.deepEqual(sorted(result.permissions), SESSIONS);
+  });
+
+  it('turns the read flag of the documents module into the read of the sales, within the ceiling of the role', () => {
+    for (const role of ['SA', 'CA', 'PA'] as const) {
+      assert.deepEqual(sorted(effectivePermissions(role, { documents: { r: true } }).permissions), ['sales:read', ...SESSIONS].sort(), role);
+      assert.deepEqual(sorted(effectivePermissions(role, { documents: { r: false, w: true } }).permissions), SESSIONS, role);
+    }
+    // An employee has an empty ceiling: no flag gives him anything. The PSA and the dealers hold the whole ceiling whatever their matrix says.
+    assert.equal(effectivePermissions('E', { documents: { r: true, w: true } }).permissions.has('sales:read'), false);
+    for (const role of ['PSA', 'D'] as const) {
+      assert.equal(effectivePermissions(role, {}).permissions.has('sales:read'), true, role);
+    }
   });
 
   it('never exceeds the ceiling of the role', () => {

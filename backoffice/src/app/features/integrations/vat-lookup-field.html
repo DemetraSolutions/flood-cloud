@@ -1,0 +1,19 @@
+<div class="vat">
+  <ng-content />
+  @if (visible()) {
+    <button
+      fc-button
+      variant="secondary"
+      [disabled]="!enabled()"
+      [loading]="busy()"
+      (click)="lookup()"
+    >
+      {{ 'INTEGRATIONS.VAT.BUTTON' | t }}
+    </button>
+  }
+</div>
+<div class="lookup-notice" [attr.role]="notice()?.kind === 'error' ? 'alert' : 'status'">
+  @if (notice(); as shown) {
+    <p [class.error]="shown.kind === 'error'">{{ shown.text }}</p>
+  }
+</div>

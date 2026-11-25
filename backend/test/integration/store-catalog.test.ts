@@ -673,7 +673,7 @@ describe('the catalog of the store: who may call it and when', () => {
     }
   });
 
-  it('opens to a store key these routes and no other (the list is asserted in full)', () => {
+  it('opens to a store key these routes and no other (the list is asserted in full, the contacts and the cards included)', () => {
     const modules = createBackofficeModules({ config: testConfig(), databases: ctx.databases, activityLog: memoryActivityLog(), logger: memoryLogger().logger, rateLimiter: memoryRateLimiter() });
     const open = modules.routes.filter((route) => route.auth.kind === 'store' || (route.auth.kind === 'user' && route.auth.store === true)).map((route) => `${route.method} ${route.path}`).sort();
     assert.deepEqual(open, [
@@ -691,19 +691,32 @@ describe('the catalog of the store: who may call it and when', () => {
       'GET /store-context/catalog/products',
       'GET /store-context/catalog/products/:productId',
       'GET /store-context/company',
+      'GET /store-context/contact-groups',
+      'GET /store-context/contacts',
+      'GET /store-context/contacts/:contactId',
       'GET /store-context/countries',
+      'GET /store-context/fidelity-cards',
+      'GET /store-context/fidelity-cards/:cardId',
+      'GET /store-context/fidelity-cards/:cardId/movements',
       'GET /store-context/group',
       'GET /store-context/place',
       'GET /store-context/users',
       'PATCH /store-context/catalog/brands/:brandId',
       'PATCH /store-context/catalog/categories/:categoryId',
       'PATCH /store-context/catalog/products/:productId',
+      'PATCH /store-context/contacts/:contactId',
+      'PATCH /store-context/fidelity-cards/:cardId',
       'POST /store-context/catalog/brands',
       'POST /store-context/catalog/categories',
       'POST /store-context/catalog/products',
       'POST /store-context/catalog/products/:productId/duplicate',
       'POST /store-context/catalog/products/:productId/restore',
       'POST /store-context/catalog/products/:productId/trash',
+      'POST /store-context/contacts',
+      'POST /store-context/contacts/:contactId/fidelity-cards/:code/points-adjustments',
+      'POST /store-context/contacts/:contactId/trash',
+      'POST /store-context/fidelity-cards',
+      'POST /store-context/fidelity-cards/:cardId/adjustments',
     ]);
     for (const route of modules.routes.filter((candidate) => candidate.auth.kind === 'store' && candidate.method !== 'GET')) {
       assert.equal(typeof (route.auth as { operator?: unknown }).operator, 'function', `${route.method} ${route.path} verifies the operator`);

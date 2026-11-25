@@ -10,6 +10,14 @@
     (remove)="remove($event)"
   />
   <fc-place-fields block="delivery" [only]="area" />
+  @if (state.canWrite()) {
+    <fc-coordinates-lookup
+      [groupId]="state.groupId()"
+      [placeId]="state.placeId()"
+      [address]="address()"
+      (located)="state.setDeliveryCoordinates($event)"
+    />
+  }
   <fc-keyed-values
     section="delivery"
     prop="minAmount"

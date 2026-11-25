@@ -78,6 +78,14 @@ export async function applySettingsRules(c: SettingsRules): Promise<void> {
       issue(field.domain, 'pattern');
     }
   }
+  // The map of the categories of TS Hospitality: a value that changes is the id of a category the provider listed, which is the copy the place keeps (the maps of the categories of the place are free).
+  const listed = new Set(asList(valueAt(current, 'integrations.tsh.categories')).map((category) => category['id']));
+  const mapped = asRecord(valueAt(current, 'integrations.tsh.categoriesMap'));
+  for (const [category, target] of Object.entries(asRecord(valueAt(request, 'integrations.tsh.categoriesMap')))) {
+    if (mapped[category] !== target && !listed.has(target)) {
+      issue(`integrations.tsh.categoriesMap.${category}`, 'incorrect');
+    }
+  }
   const knownBlocks = new Set(asList(valueAt(current, 'reservations.timeBlocks')).map((block) => JSON.stringify(block)));
   asList(valueAt(request, 'reservations.timeBlocks')).forEach((block, index) => {
     if (!knownBlocks.has(JSON.stringify(block))) {

@@ -128,6 +128,15 @@ describe('ApiKeyEditor: creation', () => {
     expect(root.textContent).toContain('PUBLIC_API.PERMISSION.COMPANIES_READ.HINT');
     expect(root.textContent).toContain('PUBLIC_API.PERMISSION.CATALOG_READ.HINT');
     expect(root.textContent).toContain('PUBLIC_API.PERMISSION.CATALOG_WRITE.HINT');
+    for (const key of [
+      'CONTACTS_READ',
+      'CONTACTS_WRITE',
+      'FIDELITYCARDS_READ',
+      'FIDELITYCARDS_WRITE',
+    ]) {
+      expect(root.textContent).toContain(`PUBLIC_API.PERMISSION.${key}.LABEL`);
+      expect(root.textContent).toContain(`PUBLIC_API.PERMISSION.${key}.HINT`);
+    }
   });
 
   it('warns only when the catalog write is ticked on a key without restrictions', async () => {

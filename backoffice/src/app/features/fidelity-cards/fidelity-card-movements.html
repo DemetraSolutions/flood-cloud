@@ -1,0 +1,27 @@
+@if (entries.error()) {
+  <fc-error-state
+    [title]="'FIDELITY_CARDS.MOVEMENT.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'FIDELITY_CARDS.SECTION.MOVEMENTS' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    [loading]="entries.isLoading()"
+    [emptyTitle]="'FIDELITY_CARDS.MOVEMENT.EMPTY' | t"
+    [emptyMessage]="'FIDELITY_CARDS.MOVEMENT.EMPTY_MESSAGE' | t"
+  />
+  <fc-cursor-paginator
+    [limit]="limit()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="entries.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}

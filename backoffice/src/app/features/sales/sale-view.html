@@ -1,0 +1,135 @@
+@let current = sale();
+<fc-page-header [heading]="heading()">
+  @for (badge of badges(); track badge.key) {
+    <fc-status-badge [tone]="badge.tone">{{ badgeLabel(badge) }}</fc-status-badge>
+  }
+  <ng-container fcPageActions>
+    <button fc-button variant="secondary" type="button" (click)="back.emit()">{{ 'SALES.BACK' | t }}</button>
+  </ng-container>
+</fc-page-header>
+<fc-record-group [groupId]="groupId()" />
+
+<section [attr.aria-label]="'SALES.SECTION.DETAILS' | t">
+  <dl class="facts">
+    <div>
+      <dt>{{ 'SALES.FACT.TYPE' | t }}</dt>
+      <dd>{{ type() }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'SALES.FACT.DATE' | t }}</dt>
+      <dd>{{ dateText() }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'SALES.FACT.COMPANY' | t }}</dt>
+      <dd>{{ company() }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'SALES.FACT.PLACE' | t }}</dt>
+      <dd>{{ place() }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'SALES.FACT.CASH_DESK' | t }}</dt>
+      <dd>{{ current.cashDesk ?? '' }}</dd>
+    </div>
+    <div>
+      <dt>{{ 'SALES.FACT.OPERATOR' | t }}</dt>
+      <dd>{{ current.operator?.name ?? '' }}</dd>
+    </div>
+    @if (hasRooms()) {
+      <div>
+        <dt>{{ 'SALES.FACT.TABLE' | t }}</dt>
+        <dd>{{ current.table ?? '' }}</dd>
+      </div>
+    }
+    <div>
+      <dt>{{ 'SALES.FACT.CUSTOMER' | t }}</dt>
+      <dd>
+        @if (customerRoute(); as route) {
+          <a [routerLink]="route">{{ current.customer?.displayName }}</a>
+        } @else {
+          {{ current.customer?.displayName ?? '' }}
+        }
+      </dd>
+    </div>
+    @if (current.fidelityCardCode !== null || current.fidelityCardUsed) {
+      <div>
+        <dt>{{ 'SALES.FACT.CARD' | t }}</dt>
+        <dd>{{ current.fidelityCardCode ?? ('SALES.FACT.CARD_USED' | t) }}</dd>
+      </div>
+    }
+    @if (current.fiscalReceiptInfo !== null) {
+      <div>
+        <dt>{{ 'SALES.FACT.RECEIPT' | t }}</dt>
+        <dd>{{ receiptNumber() }}{{ receiptDate() === '' ? '' : ' · ' + receiptDate() }}</dd>
+      </div>
+    }
+  </dl>
+  @if (current.note !== null) {
+    <p class="note"><strong>{{ 'SALES.FACT.NOTE' | t }}</strong> {{ current.note }}</p>
+  }
+</section>
+
+<section aria-labelledby="sale-products">
+  <h2 id="sale-products">{{ 'SALES.SECTION.PRODUCTS' | t }}</h2>
+  <fc-data-table
+    [caption]="'SALES.SECTION.PRODUCTS' | t"
+    [columns]="productColumns()"
+    [rows]="lines()"
+    [rowKey]="rowKey"
+    rowHeader="name"
+    [emptyTitle]="'SALES.PRODUCT.EMPTY' | t"
+    [emptyMessage]="'SALES.PRODUCT.EMPTY_MESSAGE' | t"
+  >
+    <ng-template fcCell="name" let-row>
+      <span class="product">
+        {{ row.name ?? '' }}
+        @if (row.variants) {
+          <small>{{ row.variants }}</small>
+        }
+      </span>
+    </ng-template>
+  </fc-data-table>
+  @if (truncated()) {
+    <p class="note" role="note">
+      {{ 'SALES.PRODUCT.TRUNCATED' | t: { shown: current.products.length, count: current.productsCount } }}
+    </p>
+  }
+</section>
+
+<section class="sums" aria-labelledby="sale-totals">
+  <h2 id="sale-totals">{{ 'SALES.SECTION.TOTALS' | t }}</h2>
+  <dl class="facts">
+    @for (row of totals(); track row.key) {
+      <div>
+        <dt>{{ row.label }}</dt>
+        <dd>{{ row.value }}</dd>
+      </div>
+    }
+  </dl>
+</section>
+
+@if (paid().length > 0) {
+  <section class="sums" aria-labelledby="sale-payments">
+    <h2 id="sale-payments">{{ 'SALES.SECTION.PAYMENTS' | t }}</h2>
+    <dl class="facts">
+      @for (row of paid(); track row.key) {
+        <div>
+          <dt>{{ row.label }}</dt>
+          <dd>{{ row.value }}</dd>
+        </div>
+      }
+    </dl>
+  </section>
+}
+
+@if (refunds().length > 0) {
+  <section aria-labelledby="sale-refunds">
+    <h2 id="sale-refunds">{{ 'SALES.SECTION.REFUNDS' | t }}</h2>
+    <fc-data-table
+      [caption]="'SALES.SECTION.REFUNDS' | t"
+      [columns]="refundColumns()"
+      [rows]="refunds()"
+      [rowKey]="rowKey"
+    />
+  </section>
+}

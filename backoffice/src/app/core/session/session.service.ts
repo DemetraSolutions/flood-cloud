@@ -12,6 +12,7 @@ import { ToastService } from '../../shared/ui/toast/toast.service';
 import { DpopKeys } from './dpop-key-store';
 import { Profile, SessionStatus, TokenPair } from './session.types';
 import { forgetWorkingGroup } from '../groups/working-group-storage';
+import { NonFiscalMode } from '../sales/non-fiscal-mode';
 import { clearStoredSession, readStoredSession, writeStoredSession } from './session-storage';
 
 /** Validates a login or refresh response and keeps only the fields the client uses. */
@@ -64,6 +65,7 @@ export class SessionService {
   private readonly i18n = inject(I18nService);
   private readonly theme = inject(ThemeService);
   private readonly keys = inject(DpopKeys);
+  private readonly nonFiscal = inject(NonFiscalMode);
 
   private readonly accessToken = signal<string | null>(null);
   private refreshToken: string | null = null;
@@ -432,5 +434,6 @@ export class SessionService {
     this.statusState.set('anonymous');
     clearStoredSession();
     forgetWorkingGroup();
+    this.nonFiscal.reset();
   }
 }

@@ -245,6 +245,11 @@ export function createOnboardingService(deps: OnboardingServiceDeps): Onboarding
         return { companyId, placeId };
       });
 
+      // The database of the group exists now: it gets the unique index on the code of the loyalty cards the legacy gives every group.
+      await repository.createCardIndex(principal, access);
+      // The collection of the sales gets the index of the purchases of a customer too (step V1), so the first read for a customer finds it.
+      await repository.createSalesIndex(principal, access);
+
       const context = { actor: actorOf(principal), groupId, requestId: client.requestId, ...(client.ip === null ? {} : { ip: client.ip }) };
       await recordDataChange(activityLog, {
         ...context,

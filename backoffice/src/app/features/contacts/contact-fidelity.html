@@ -1,0 +1,122 @@
+<fieldset [attr.aria-describedby]="error() ? errorId : null">
+  <legend>{{ 'CONTACTS.FIDELITY.TITLE' | t }}</legend>
+  <p class="hint">{{ 'CONTACTS.FIDELITY.HINT' | t }}</p>
+  <ul class="rows">
+    @for (entry of entries(); track $index) {
+      <li>
+        @if (entry.advanced; as card) {
+          <div class="card">
+            <strong>{{ entry.code }}</strong>
+            <span>{{ 'CONTACTS.FIDELITY.ADVANCED' | t }}</span>
+            @if (card.cardId !== null) {
+              @if (card.cardType; as type) {
+                <span>{{ type.name }}</span>
+              } @else {
+                <span>{{ 'FIDELITY_CARDS.TYPE_GONE' | t }}</span>
+              }
+              @if (card.enabled) {
+                <fc-status-badge tone="success">{{
+                  'FIDELITY_CARDS.STATE.ENABLED' | t
+                }}</fc-status-badge>
+              } @else {
+                <fc-status-badge>{{ 'FIDELITY_CARDS.STATE.DISABLED' | t }}</fc-status-badge>
+              }
+              @if (entry.credit !== '') {
+                <span>{{ 'FIDELITY_CARDS.BALANCES.CREDIT' | t: { amount: entry.credit } }}</span>
+              }
+              <span class="points">{{
+                'CONTACTS.FIDELITY.TOTAL_POINTS' | t: { points: entry.totalPoints }
+              }}</span>
+            }
+            @if (entry.route; as route) {
+              <a [routerLink]="route">{{ 'CONTACTS.FIDELITY.CARD_DETAIL' | t }}</a>
+            }
+          </div>
+        } @else if (entry.points !== null) {
+          <p class="card">
+            <strong>{{ entry.code }}</strong>
+            <span class="points">{{
+              'CONTACTS.FIDELITY.POINTS' | t: { points: format(entry.points) }
+            }}</span>
+          </p>
+        } @else {
+          <fc-text-field
+            autocomplete="off"
+            [label]="entry.label"
+            [value]="entry.code"
+            [disabled]="disabled()"
+            [error]="entry.error"
+            (valueChange)="change(entry.index, $event)"
+          />
+        }
+        @if (!disabled()) {
+          @if (canAdjust() && entry.points !== null) {
+            <button
+              fc-button
+              variant="secondary"
+              type="button"
+              [attr.aria-label]="'CONTACTS.FIDELITY.ADJUST_LABEL' | t: { name: entry.code }"
+              (click)="adjust(entry)"
+            >
+              {{ 'CONTACTS.FIDELITY.ADJUST' | t }}
+            </button>
+          }
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="
+              'CONTACTS.LIST.REMOVE_LABEL'
+                | t: { name: entry.code === '' ? entry.label : entry.code }
+            "
+            (click)="remove(entry)"
+          >
+            {{ 'CONTACTS.LIST.REMOVE' | t }}
+          </button>
+        }
+      </li>
+    } @empty {
+      <li class="note">{{ 'CONTACTS.FIDELITY.EMPTY' | t }}</li>
+    }
+  </ul>
+  @if (!disabled()) {
+    <div class="actions">
+      <button
+        fc-button
+        variant="secondary"
+        type="button"
+        [disabled]="value().length >= limit"
+        (click)="add()"
+      >
+        {{ 'CONTACTS.FIDELITY.ADD' | t }}
+      </button>
+    </div>
+  }
+  @if (error()) {
+    <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+  }
+</fieldset>
+
+<fc-confirm-dialog
+  [heading]="removeTitle()"
+  [message]="removeMessage()"
+  [confirmLabel]="'CONTACTS.LIST.REMOVE' | t"
+  [danger]="true"
+  [open]="removeOpen()"
+  (openChange)="removeOpen.set($event)"
+  (confirmed)="confirmRemove()"
+/>
+@if (contactId(); as contact) {
+  @if (adjusting(); as card) {
+    <fc-contact-points-dialog
+      [groupId]="groupId()"
+      [contactId]="contact"
+      [code]="card.code"
+      [points]="card.points!"
+      [open]="adjustOpen()"
+      (openChange)="adjustOpen.set($event)"
+      (adjusted)="adjusted.emit($event)"
+      (uncertain)="uncertain.emit()"
+    />
+  }
+}

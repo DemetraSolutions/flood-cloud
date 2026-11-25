@@ -4,8 +4,8 @@ import { CervedError } from '../../src/integrations/cerved/index.ts';
 import type { CervedClient, CervedCompany } from '../../src/integrations/cerved/index.ts';
 import type { ActivityEntry } from '../../src/shared/activity-log/activity-log.ts';
 import { AppError } from '../../src/shared/http/errors.ts';
-import { toVatLookupResult } from '../../src/modules/vat-lookups/vat-lookups.mapper.ts';
-import { createVatLookupsService } from '../../src/modules/vat-lookups/vat-lookups.service.ts';
+import { toVatLookupResult } from '../../src/integrations/cerved/vat-lookups.mapper.ts';
+import { createVatLookupsService } from '../../src/integrations/cerved/vat-lookups.service.ts';
 import { principalOf } from '../helpers/principal.ts';
 
 const VAT = '12345678903';

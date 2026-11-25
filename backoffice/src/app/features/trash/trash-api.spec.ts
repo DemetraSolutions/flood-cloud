@@ -39,6 +39,32 @@ describe('TrashApi', () => {
     expect(invalidate).toHaveBeenCalledWith(GROUP, 'places');
   });
 
+  it('restores, deletes and empties contacts and tells the store about customers and suppliers', async () => {
+    const { api, invalidate } = setup();
+    const restored = api.restore(GROUP, 'contacts', ['a']);
+    backend()
+      .expectOne(`${BASE}/contacts/restore`)
+      .flush({ data: { results: [result('a', 'restored')] } });
+    await restored;
+    expect(invalidate.mock.calls).toEqual([
+      [GROUP, 'customers'],
+      [GROUP, 'suppliers'],
+    ]);
+    invalidate.mockClear();
+    const removed = api.remove(GROUP, 'contacts', ['a']);
+    backend()
+      .expectOne(`${BASE}/contacts/delete`)
+      .flush({ data: { results: [result('a', 'deleted')] } });
+    await removed;
+    const emptied = api.empty(GROUP, 'contacts');
+    backend()
+      .expectOne(`${BASE}/contacts/empty`)
+      .flush({ data: { results: [], remaining: 0, next: null } });
+    await emptied;
+    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).not.toHaveBeenCalledWith(GROUP, 'companies');
+  });
+
   it('does not touch the store for the users', async () => {
     const { api, invalidate } = setup();
     const done = api.restore(GROUP, 'users', ['a']);

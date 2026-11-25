@@ -46,9 +46,10 @@ export interface RateLimiter {
    * @param key The subject (username, IP, user id); hashed before it reaches the database.
    * @param limit Requests allowed per window.
    * @param windowSeconds Length of the fixed window in seconds, {@link RATE_LIMIT_WINDOW_SECONDS} by default.
+   * @param amount How much the request counts for, 1 by default (a positive whole number): a counter of sums, such as the cents of the credit a store key added in a day, adds the amount in the same atomic update. `firstExcess` is then `true` for the request that takes the counter over the limit.
    * @returns The decision. A database failure rejects (callers fail closed).
    */
-  consume(bucket: string, key: string, limit: number, windowSeconds?: number): Promise<RateLimitDecision>;
+  consume(bucket: string, key: string, limit: number, windowSeconds?: number, amount?: number): Promise<RateLimitDecision>;
   /**
    * Reads the counter of the current window without changing it.
    *
@@ -86,11 +87,11 @@ export function createRateLimiter(databases: Databases, now: () => number = Date
     };
   };
   return {
-    consume: async (bucket, key, limit, windowSeconds = RATE_LIMIT_WINDOW_SECONDS) => {
+    consume: async (bucket, key, limit, windowSeconds = RATE_LIMIT_WINDOW_SECONDS, amount = 1) => {
       const { id, windowEnd, resetSeconds } = window(bucket, key, windowSeconds);
       const filter = { _id: id };
       const update = {
-        $inc: { count: 1 },
+        $inc: { count: amount },
         $setOnInsert: { expiresAt: new Date((windowEnd + RETENTION_AFTER_WINDOW_SECONDS) * 1000) },
       };
       const options = { upsert: true, returnDocument: 'after', maxTimeMS: RATE_LIMIT_MAX_TIME_MS } as const;
@@ -112,7 +113,7 @@ export function createRateLimiter(databases: Databases, now: () => number = Date
         limit,
         remaining: Math.max(0, limit - counter.count),
         resetSeconds,
-        firstExcess: counter.count === limit + 1,
+        firstExcess: counter.count > limit && counter.count - amount <= limit,
       };
     },
     peek: async (bucket, key, limit, windowSeconds = RATE_LIMIT_WINDOW_SECONDS) => {

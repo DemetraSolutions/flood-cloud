@@ -10,11 +10,11 @@ import {
   isValidIban,
   isValidItalianFiscalCode,
   isValidItalianFiscalCodeOfPerson,
-  isValidItalianVatDigits,
   isValidItalianVatNumber,
   isValidRecipientCode,
   normalizeIban,
 } from '../../src/modules/companies/validators.ts';
+import { isValidItalianVatDigits } from '../../src/shared/legacy-write/vat.ts';
 
 describe('Italian VAT number', () => {
   // Published numbers of large Italian companies (not personal data) and the invalid neighbours of each.

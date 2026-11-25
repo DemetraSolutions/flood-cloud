@@ -2,7 +2,7 @@ import { hasWholeCeiling, isAlwaysGranted } from './effective-permissions.ts';
 import type { ReadOnlySet } from '../frozen.ts';
 import type { ObjectId } from 'mongodb';
 import type { AuthPrincipal, UserScopeView } from '../scope/principal.ts';
-import { CORE_MODULES, EMPTY_MATRIX, defaultMatrix, flagsOf, matricesEqual } from './permission-matrix.ts';
+import { CORE_MODULES, EMPTY_MATRIX, READ_ONLY_MODULE, defaultMatrix, flagsOf, matricesEqual } from './permission-matrix.ts';
 import type { PermissionMatrix } from './permission-matrix.ts';
 import type { Permission } from './permissions.ts';
 import { ceilingOf, hasPermission, manageableRoles } from './policy.ts';
@@ -91,7 +91,7 @@ export function holdsEverythingOf(actor: AuthPrincipal, target: UserChangeView):
 /**
  * Whether the actor holds a flag of a module. PSA and D: every flag (D-10). Core modules: the corresponding effective
  * permissions the actor's role can have (`r` the read ones, `w` the write ones; at least one).
- * Other modules: the actor's own raw flag.
+ * Other modules, and a flag of a core module that grants no permission: the actor's own raw flag.
  */
 function actorHolds(actor: AuthPrincipal, module: string, flag: 'r' | 'w'): boolean {
   // D-10: the PSA and the dealers hold every flag of the legacy matrix, the operational modules included.
@@ -102,6 +102,10 @@ function actorHolds(actor: AuthPrincipal, module: string, flag: 'r' | 'w'): bool
     return flagsOf(actor.matrix, module)[flag];
   }
   const core = CORE_MODULES[module]!;
+  // A flag that grants no permission (the write flag of `documents`) is data like a non-core module: the actor's own raw flag. The `logs` module has no write flag at all: nobody hands it out.
+  if ((flag === 'r' ? core.read : core.write).length === 0 && module !== READ_ONLY_MODULE) {
+    return flagsOf(actor.matrix, module)[flag];
+  }
   // Only what the actor's role can have counts: the `dealers:*` permissions ride on `groups` but belong to the PSA alone.
   const needed = (flag === 'r' ? core.read : core.write).filter((permission) => ceilingOf(actor.role).has(permission));
   return needed.length > 0 && needed.every((permission) => hasPermission(actor, permission));

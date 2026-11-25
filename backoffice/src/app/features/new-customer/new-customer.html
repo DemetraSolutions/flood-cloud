@@ -87,7 +87,14 @@
         [error]="error(f.companyName)"
         (blurred)="f.companyName().markAsTouched()"
       />
-      <div class="vat">
+      <fc-vat-lookup
+        #vatLookup
+        [vatNumber]="model().vatNumber"
+        [enabled]="canLookup()"
+        [busy]="lookupBusy()"
+        (busyChange)="lookupBusy.set($event)"
+        (found)="applyLookup($event, vatLookup)"
+      >
         <fc-text-field
           [formField]="f.vatNumber"
           [label]="'NEW_CUSTOMER.FIELD.VAT_NUMBER' | t"
@@ -95,24 +102,7 @@
           [error]="error(f.vatNumber)"
           (blurred)="f.vatNumber().markAsTouched()"
         />
-        <button
-          fc-button
-          variant="secondary"
-          [disabled]="!canLookup()"
-          [loading]="lookupBusy()"
-          (click)="lookupVat()"
-        >
-          {{ 'NEW_CUSTOMER.LOOKUP.BUTTON' | t }}
-        </button>
-      </div>
-      <div
-        class="lookup-notice"
-        [attr.role]="lookupNotice()?.kind === 'error' ? 'alert' : 'status'"
-      >
-        @if (lookupNotice(); as notice) {
-          <p [class.error]="notice.kind === 'error'">{{ notice.text }}</p>
-        }
-      </div>
+      </fc-vat-lookup>
       <fc-text-field
         [formField]="f.fiscalCode"
         [label]="'NEW_CUSTOMER.FIELD.FISCAL_CODE' | t"

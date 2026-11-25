@@ -2,6 +2,7 @@ import { MongoBulkWriteError } from 'mongodb';
 import type { Collection, Document, ObjectId } from 'mongodb';
 import { API_USAGE_RETENTION_DAYS } from '../../db/api-keys-schema.ts';
 import type { Databases } from '../../db/databases.ts';
+import { bounded } from '../../shared/security/scope/bounded.ts';
 import type { PageInfo } from '../../shared/http/envelope.ts';
 import { LIST_MAX_TIME_MS, listPipeline, pageOf } from '../../shared/http/list.ts';
 import type { ListParams } from '../../shared/http/list.ts';
@@ -160,6 +161,19 @@ const PURGE_BATCH = 100;
  * @param databases Database accessor.
  * @param defaults The platform defaults of the limits, for a group that has none of its own.
  */
+/**
+ * The names of some public API keys of a group, by hexadecimal id, revoked and expired keys included (the history of a loyalty card names the key that moved a credit long after it was revoked). Only the name is read, never the hash.
+ *
+ * @param databases Database accessor.
+ * @param groupId The group of the verified access: a key of another group is never named.
+ * @param ids The keys to name (at most as many as the movements of one page).
+ * @throws {AppError} `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+ */
+export async function apiKeyNames(databases: Databases, groupId: ObjectId, ids: readonly ObjectId[]): Promise<Map<string, string | null>> {
+  const found = await bounded(() => databases.common().collection('apiKeys').find({ _id: { $in: [...ids] }, groupId }, { projection: { name: 1 }, limit: ids.length, maxTimeMS: LIST_MAX_TIME_MS }).toArray());
+  return new Map(found.map((key) => [(key['_id'] as ObjectId).toHexString(), typeof key['name'] === 'string' ? key['name'] : null]));
+}
+
 export function createApiKeysRepository(databases: Databases, defaults: PublicApiLimits = BUILT_IN_PUBLIC_API_LIMITS): ApiKeysRepository {
   const keys = (): Collection<Document> => databases.common().collection('apiKeys');
   const usage = (): Collection<Document> => databases.common().collection('apiUsage');

@@ -1,0 +1,46 @@
+<fieldset [class.highlight]="highlighted()" [attr.aria-describedby]="error() ? errorId : null">
+  <legend>{{ (highlighted() ? 'CONTACTS.COMPANY.LISTS_SUPPLIER' : 'CONTACTS.COMPANY.LISTS') | t }}</legend>
+  <p class="hint">{{ 'CONTACTS.COMPANY.LISTS_HINT' | t }}</p>
+  <ul class="rows">
+    @for (entry of rows(); track $index) {
+      <li>
+        <fc-text-field
+          autocomplete="off"
+          [label]="entry.label"
+          [value]="entry.row.name"
+          [disabled]="disabled()"
+          [error]="entry.error"
+          (valueChange)="rename(entry.index, $event)"
+        />
+        <fc-checkbox
+          [label]="'CONTACTS.COMPANY.LIST_FAVORITE' | t: { number: entry.index + 1 }"
+          [hint]="'CONTACTS.COMPANY.LIST_FAVORITE_HINT' | t"
+          [checked]="entry.row.favorite"
+          [disabled]="disabled()"
+          (checkedChange)="setFavorite(entry.index, $event)"
+        />
+        @if (!disabled()) {
+          <button
+            fc-button
+            variant="ghost"
+            type="button"
+            [attr.aria-label]="'CONTACTS.LIST.REMOVE_LABEL' | t: { name: entry.label }"
+            (click)="remove(entry.index)"
+          >
+            {{ 'CONTACTS.LIST.REMOVE' | t }}
+          </button>
+        }
+      </li>
+    }
+  </ul>
+  @if (!disabled()) {
+    <div class="actions">
+      <button fc-button variant="secondary" type="button" [disabled]="value().length >= limit" (click)="add()">
+        {{ 'CONTACTS.COMPANY.ADD_LIST' | t }}
+      </button>
+    </div>
+  }
+  @if (error()) {
+    <p class="problem" [id]="errorId" role="alert">{{ error() }}</p>
+  }
+</fieldset>

@@ -1,0 +1,19 @@
+<p class="hint">{{ 'CONTACTS.ACCOUNT.HINT' | t }}</p>
+<div class="grid">
+  <fc-text-field
+    [formField]="form().email"
+    type="email"
+    autocomplete="off"
+    [label]="'CONTACTS.ACCOUNT.EMAIL' | t"
+    [error]="error(form().email)"
+    (blurred)="form().email().markAsTouched()"
+  />
+  <fc-text-field
+    [formField]="form().phone"
+    type="tel"
+    autocomplete="off"
+    [label]="'CONTACTS.ACCOUNT.PHONE' | t"
+    [error]="error(form().phone)"
+    (blurred)="form().phone().markAsTouched()"
+  />
+</div>

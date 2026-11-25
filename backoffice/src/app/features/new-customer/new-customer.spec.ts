@@ -10,6 +10,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { Role } from '../../core/session/session.types';
 import { ToastService } from '../../shared/ui/toast/toast.service';
 import { UsersApi } from '../users/users-api';
+import { IntegrationsApi } from '../integrations';
 import { NewCustomer } from './new-customer';
 import { IDEMPOTENCY_HEADER, NewCustomerApi } from './new-customer-api';
 
@@ -78,11 +79,14 @@ interface Options {
   role?: Role;
   permissions?: string[];
   dealers?: unknown[];
+  /** Whether the platform has the VAT lookup configured. */
+  cerved?: boolean;
 }
 
 async function render({
   role = 'PSA',
   dealers = [DEALER_A, DEALER_OFF, DEALER_NO_USER],
+  cerved = true,
 }: Options = {}) {
   TestBed.configureTestingModule({
     providers: [
@@ -108,6 +112,9 @@ async function render({
   };
   await view();
   backend().expectOne(`${API}/v1/countries`).flush(COUNTRIES);
+  backend()
+    .expectOne(`${API}/v1/integrations`)
+    .flush({ data: { cerved, dojo: false, satispay: false, tsh: false, geocoding: false } });
   if (role === 'PSA') {
     const request = backend().expectOne((r) => r.url === `${API}/v1/dealers`);
     expect(request.request.params.get('limit')).toBe('200');
@@ -895,7 +902,7 @@ describe('NewCustomer: VAT lookup', () => {
   };
   const lookupButton = (root: HTMLElement) =>
     [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-      (b) => b.textContent?.trim() === 'NEW_CUSTOMER.LOOKUP.BUTTON',
+      (b) => b.textContent?.trim() === 'INTEGRATIONS.VAT.BUTTON',
     )!;
   const dialogButton = (root: HTMLElement, text: string) =>
     [...root.querySelectorAll<HTMLButtonElement>('dialog[open] button')].find(
@@ -942,7 +949,7 @@ describe('NewCustomer: VAT lookup', () => {
     expect(ctx.control(L.pec).value).toBe('azienda@pec.example.it');
     expect(ctx.control(L.sdi).value).toBe('ABC1234');
     expect(notice(ctx.root).getAttribute('role')).toBe('status');
-    expect(notice(ctx.root).textContent).toContain('NEW_CUSTOMER.LOOKUP.DONE');
+    expect(notice(ctx.root).textContent).toContain('INTEGRATIONS.VAT.DONE');
     expect(ctx.root.querySelector('dialog[open]')).toBeNull();
   });
 
@@ -1020,7 +1027,7 @@ describe('NewCustomer: VAT lookup', () => {
       expect(ctx.control(L.company).value).toBe('Azienda Trovata Spa');
       expect(ctx.control(L.city).value).toBe('Torino');
       expect(ctx.control(L.street).value).toBe('Via Dante 2');
-      expect(notice(ctx.root).textContent).toContain('NEW_CUSTOMER.LOOKUP.DONE');
+      expect(notice(ctx.root).textContent).toContain('INTEGRATIONS.VAT.DONE');
     });
 
     it('fills only the empty fields on cancel', async () => {
@@ -1056,11 +1063,12 @@ describe('NewCustomer: VAT lookup', () => {
     const ctx = await render();
     await search(ctx);
     ctx.page.model.update((m) => ({ ...m, vatNumber: '00000000000' }));
+    await ctx.view();
     backend().expectOne(LOOKUP).flush({ data: FOUND });
     await ctx.view();
     expect(ctx.control(L.company).value).toBe('');
     expect(notice(ctx.root).getAttribute('role')).toBe('status');
-    expect(notice(ctx.root).textContent).toContain('NEW_CUSTOMER.LOOKUP.STALE');
+    expect(notice(ctx.root).textContent).toContain('INTEGRATIONS.VAT.STALE');
   });
 
   describe('errors', () => {
@@ -1085,10 +1093,10 @@ describe('NewCustomer: VAT lookup', () => {
     }
 
     it.each([
-      ['NOT_FOUND', 'NEW_CUSTOMER.LOOKUP.NOT_FOUND'],
-      ['VALIDATION_ERROR', 'NEW_CUSTOMER.LOOKUP.INVALID'],
-      ['SERVICE_UNAVAILABLE', 'NEW_CUSTOMER.LOOKUP.UNAVAILABLE'],
-      ['RATE_LIMITED', 'NEW_CUSTOMER.LOOKUP.RATE_LIMITED'],
+      ['NOT_FOUND', 'INTEGRATIONS.VAT.NOT_FOUND'],
+      ['VALIDATION_ERROR', 'INTEGRATIONS.VAT.INVALID'],
+      ['SERVICE_UNAVAILABLE', 'INTEGRATIONS.VAT.UNAVAILABLE'],
+      ['RATE_LIMITED', 'INTEGRATIONS.VAT.RATE_LIMITED'],
       ['INTERNAL_ERROR', 'ERRORS.API.INTERNAL_ERROR'],
     ])('shows the message of %s as an alert and leaves the form alone', async (code, text) => {
       const ctx = await fail(code);
@@ -1101,13 +1109,13 @@ describe('NewCustomer: VAT lookup', () => {
     it('tells how many seconds to wait after a 429 with Retry-After', async () => {
       const ctx = await fail('RATE_LIMITED', { 'Retry-After': '42' });
       expect(notice(ctx.root).textContent).toContain(
-        'NEW_CUSTOMER.LOOKUP.RATE_LIMITED_WAIT {"seconds":42}',
+        'INTEGRATIONS.VAT.RATE_LIMITED_WAIT {"seconds":42}',
       );
     });
 
     it('shows the generic message for an unexpected failure', async () => {
       const ctx = await render();
-      vi.spyOn(NewCustomerApi.prototype, 'lookupVat').mockRejectedValue(new Error('boom'));
+      vi.spyOn(IntegrationsApi.prototype, 'lookupVat').mockRejectedValue(new Error('boom'));
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
       await search(ctx);
       expect(notice(ctx.root).textContent).toContain('ERRORS.GENERIC.MESSAGE');

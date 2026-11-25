@@ -32,6 +32,12 @@ describe('downloadFailureMessage', () => {
       'CATALOG_XLSX.DOWNLOAD_ERROR.GENERIC',
     );
   });
+
+  it('takes the text of the limits of the file from the tool', () => {
+    expect(downloadFailureMessage(i18n, failed(413), 'CONTACTS_XLSX')).toBe(
+      'CONTACTS_XLSX.DOWNLOAD_ERROR.TOO_LARGE',
+    );
+  });
 });
 
 describe('importFailure', () => {
@@ -87,6 +93,18 @@ describe('importFailure', () => {
     expect(about('other').message).toBe('CATALOG_XLSX.IMPORT.ERROR.INVALID');
     expect(importFailure(i18n, failed(422)).message).toBe('CATALOG_XLSX.IMPORT.ERROR.INVALID');
     expect(about('incorrect')).toMatchObject({ rows: [], errorCount: null, moreErrors: false, refused: true });
+  });
+
+  it('takes the text of the limits and of the lock from the tool', () => {
+    expect(importFailure(i18n, failed(409), 'CARDS_XLSX').message).toBe('CARDS_XLSX.IMPORT.ERROR.BUSY');
+    expect(
+      importFailure(i18n, failed(422, { details: [{ field: 'file', issue: 'tooMany' }] }), 'CARDS_XLSX')
+        .message,
+    ).toBe('CARDS_XLSX.IMPORT.ERROR.TOO_MANY');
+    expect(
+      importFailure(i18n, failed(409, { details: [{ field: 'Idempotency-Key', issue: 'reused' }] }), 'CARDS_XLSX')
+        .message,
+    ).toBe('CATALOG_XLSX.IMPORT.ERROR.KEY_REUSED');
   });
 
   it('uses the central mapping for anything else', () => {

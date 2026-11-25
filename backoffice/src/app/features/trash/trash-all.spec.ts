@@ -148,7 +148,12 @@ describe('Trash across groups', () => {
       request('companies').flush(trashPage([IN_G1]));
       await view();
       const tabs = [...root.querySelectorAll('[role=tab]')].map((tab) => tab.textContent?.trim());
-      expect(tabs).toEqual(['TRASH.KIND.COMPANIES', 'TRASH.KIND.PLACES', 'TRASH.KIND.USERS', 'TRASH.KIND.GROUPS']);
+      expect(tabs).toEqual([
+        'TRASH.KIND.COMPANIES',
+        'TRASH.KIND.PLACES',
+        'TRASH.KIND.USERS',
+        'TRASH.KIND.GROUPS',
+      ]);
     });
 
     it('falls back to the first tab when the URL asks for them', async () => {

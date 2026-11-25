@@ -137,7 +137,7 @@ describe('computeChanges', () => {
   it('hides secrets inside values stored whole, keeping the rest', () => {
     const cases: Array<[string, unknown, unknown]> = [
       ['settings', null, { email: { smtpPassword: 'p' } }],
-      ['integrations', null, { fiskaly: { apiSecret: 's' } }],
+      ['integrations', null, { provider: { apiSecret: 's' } }],
       ['integrations', 'a', 'b'],
       ['fattura_elettronica', 'a', 'b'],
     ];
@@ -149,7 +149,7 @@ describe('computeChanges', () => {
     assert.deepEqual(computeChanges({ settings: null }, { settings: { email: { smtpPassword: 'p' }, theme: 'dark' } }), [
       { field: 'settings', before: null, after: { email: '[REDACTED]', theme: 'dark' } },
     ]);
-    assert.deepEqual(computeChanges({ integrations: null }, { integrations: { fiskaly: { apiSecret: 's' } } }), [{ field: 'integrations', redacted: true }]);
+    assert.deepEqual(computeChanges({ integrations: null }, { integrations: { provider: { apiSecret: 's' } } }), [{ field: 'integrations', redacted: true }]);
     assert.deepEqual(computeChanges({ sessions: [] }, { sessions: [{ token: 't', pin: '1', device: 'phone' }] }), [
       { field: 'sessions', before: [], after: [{ token: '[REDACTED]', pin: '[REDACTED]', device: 'phone' }] },
     ]);

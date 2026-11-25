@@ -1,0 +1,177 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'CONTACTS.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ 'CONTACTS.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  <fc-page-header [heading]="isNew() ? ('CONTACTS.FORM.NEW_TITLE' | t) : name()">
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{ 'CONTACTS.FORM.BACK' | t }}</a>
+      @if (canWrite()) {
+        <button fc-button type="submit" form="contact-form" [loading]="submitting()" [disabled]="!unsaved()">
+          {{ isNew() ? ('CONTACTS.FORM.CREATE' | t) : ('COMMON.SAVE' | t) }}
+        </button>
+      }
+      @if (canTrash()) {
+        <button
+          fc-button
+          variant="secondary"
+          type="button"
+          [disabled]="busy() || unsaved()"
+          [attr.aria-describedby]="unsaved() ? 'contact-trash-hint' : null"
+          (click)="trashOpen.set(true)"
+        >
+          {{ 'CONTACTS.TRASH.ACTION' | t }}
+        </button>
+      }
+      @if (canRestoreOrDelete()) {
+        <button fc-button variant="secondary" type="button" [disabled]="busy()" (click)="restore()">
+          {{ 'CONTACTS.RESTORE.ACTION' | t }}
+        </button>
+        <button fc-button variant="danger" type="button" [disabled]="busy()" (click)="deleteOpen.set(true)">
+          {{ 'CONTACTS.DELETE.ACTION' | t }}
+        </button>
+      }
+    </ng-container>
+  </fc-page-header>
+  <fc-record-group [groupId]="groupId()" />
+
+  @if (item(); as current) {
+    <p class="meta">{{ 'CONTACTS.FORM.UPDATED' | t: { date: date(current.updatedAt) } }}</p>
+  }
+  @if (canTrash() && unsaved()) {
+    <p id="contact-trash-hint" class="note">{{ 'CONTACTS.TRASH.UNSAVED_HINT' | t }}</p>
+  }
+  @if (trashed()) {
+    <p class="note" role="note">{{ 'CONTACTS.TRASHED_NOTE' | t }}</p>
+  } @else if (!canWrite()) {
+    <p class="note" role="note">{{ 'CONTACTS.READ_ONLY_NOTE' | t }}</p>
+  }
+  @if (blocked(); as kinds) {
+    <fc-contact-reference-block
+      [heading]="'CONTACTS.DELETE.BLOCKED_TITLE' | t"
+      [message]="'CONTACTS.DELETE.BLOCKED_MESSAGE' | t"
+      [kinds]="kinds"
+      (closed)="blocked.set(null)"
+    />
+  }
+
+  <form id="contact-form" novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (stale()) {
+        <button fc-button variant="secondary" type="button" (click)="reload()">
+          {{ 'CONTACTS.FORM.RELOAD' | t }}
+        </button>
+      }
+    }
+
+    <fc-tab-list
+      [label]="'CONTACTS.SECTIONS' | t"
+      idPrefix="contact"
+      [tabs]="tabs()"
+      [active]="section()"
+      (activeChange)="select($event)"
+    />
+
+    <section id="contact-panel-general" role="tabpanel" aria-labelledby="contact-tab-general" [hidden]="section() !== 'general'">
+      <fc-contact-general
+        [form]="contactForm"
+        [groupId]="groupId()"
+        [groups]="groupOptions()"
+        [priceLists]="priceListOptions()"
+        [warnings]="warnings()"
+      />
+    </section>
+
+    <section id="contact-panel-person" role="tabpanel" aria-labelledby="contact-tab-person" [hidden]="section() !== 'person'">
+      <fc-contact-person [form]="contactForm.person" [groupId]="groupId()" [warnings]="warnings()" />
+    </section>
+
+    <section id="contact-panel-company" role="tabpanel" aria-labelledby="contact-tab-company" [hidden]="section() !== 'company'">
+      <fc-contact-company
+        [form]="contactForm.company"
+        [invoicing]="contactForm.eInvoicing"
+        [groupId]="groupId()"
+        [supplier]="model().supplier"
+        [warnings]="warnings()"
+      />
+    </section>
+
+    <section id="contact-panel-fidelity" role="tabpanel" aria-labelledby="contact-tab-fidelity" [hidden]="section() !== 'fidelity'">
+      <fc-contact-fidelity
+        [formField]="contactForm.cards"
+        [groupId]="groupId()"
+        [contactId]="contactId()"
+        [points]="balances()"
+        [advanced]="advancedCards()"
+        [canReadCards]="canReadCards()"
+        [currency]="currency()"
+        [canAdjust]="canTrash()"
+        [error]="error(contactForm.cards)"
+        (adjusted)="onAdjusted($event)"
+        (uncertain)="onUncertain()"
+      />
+    </section>
+
+    @if (hasServices()) {
+      <section id="contact-panel-services" role="tabpanel" aria-labelledby="contact-tab-services" [hidden]="section() !== 'services'">
+        <fc-contact-services
+          [formField]="contactForm.services"
+          [groupId]="groupId()"
+          [error]="error(contactForm.services)"
+        />
+      </section>
+    }
+
+    <section id="contact-panel-account" role="tabpanel" aria-labelledby="contact-tab-account" [hidden]="section() !== 'account'">
+      <fc-contact-account [form]="contactForm.account" />
+    </section>
+  </form>
+
+  @if (shown().purchases && contactId(); as purchasesOf) {
+    <section id="contact-panel-purchases" role="tabpanel" aria-labelledby="contact-tab-purchases" [hidden]="section() !== 'purchases'">
+      @if (section() === 'purchases') {
+        <fc-contact-purchases [groupId]="groupId()" [contactId]="purchasesOf" [currency]="currency()" />
+      }
+    </section>
+  }
+}
+
+<fc-confirm-dialog
+  [heading]="'CONTACTS.LEAVE.TITLE' | t"
+  [message]="'CONTACTS.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'CONTACTS.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>
+<fc-confirm-dialog
+  [heading]="'CONTACTS.TRASH.TITLE' | t"
+  [message]="trashMessage()"
+  [confirmLabel]="'CONTACTS.TRASH.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="trashOpen()"
+  (openChange)="trashOpen.set($event)"
+  (confirmed)="trash()"
+/>
+<fc-confirm-dialog
+  [heading]="'CONTACTS.DELETE.TITLE' | t"
+  [message]="deleteMessage()"
+  [confirmLabel]="'CONTACTS.DELETE.ACTION' | t"
+  [danger]="true"
+  [alert]="true"
+  [busy]="busy()"
+  [open]="deleteOpen()"
+  (openChange)="deleteOpen.set($event)"
+  (confirmed)="remove()"
+/>

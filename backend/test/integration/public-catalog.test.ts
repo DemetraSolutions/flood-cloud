@@ -992,7 +992,7 @@ describe('the catalog of the public API: more refusals', () => {
 
   it('has exactly these routes on /public/v1, each with its permission', () => {
     const modules = createBackofficeModules({ config: testConfig(), databases: ctx.databases, activityLog: memoryActivityLog(), logger: memoryLogger().logger, rateLimiter: memoryRateLimiter() });
-    const publicApi = createPublicApiModules({ config: testConfig(), databases: ctx.databases, activityLog: memoryActivityLog(), logger: memoryLogger().logger, rateLimiter: memoryRateLimiter(), catalog: modules.catalog });
+    const publicApi = createPublicApiModules({ config: testConfig(), databases: ctx.databases, activityLog: memoryActivityLog(), logger: memoryLogger().logger, rateLimiter: memoryRateLimiter(), catalog: modules.catalog, crm: modules.crm });
     const listed = publicApi.routes.map((route) => `${route.method} ${route.path} ${route.auth.kind === 'apiKey' ? String(route.auth.permission) : route.auth.kind}${route.rateLimit === undefined ? '' : ' +writeLimit'}`).sort();
     assert.deepEqual(listed, [
       'DELETE /categories/:categoryId catalog:write +writeLimit',
@@ -1005,9 +1005,16 @@ describe('the catalog of the public API: more refusals', () => {
       'GET /categories/tree catalog:read',
       'GET /companies companies:read',
       'GET /companies/:companyId companies:read',
+      'GET /contact-groups contacts:read',
+      'GET /contact-groups/:contactGroupId contacts:read',
+      'GET /contacts contacts:read',
+      'GET /contacts/:contactId contacts:read',
       'GET /currencies catalog:read',
       'GET /departments catalog:read',
       'GET /departments/:departmentId catalog:read',
+      'GET /fidelity-cards fidelityCards:read',
+      'GET /fidelity-cards/:cardId fidelityCards:read',
+      'GET /fidelity-cards/:cardId/movements fidelityCards:read',
       'GET /me null',
       'GET /measure-units catalog:read',
       'GET /places places:read',
@@ -1019,8 +1026,15 @@ describe('the catalog of the public API: more refusals', () => {
       'GET /stock catalog:read',
       'GET /taxes catalog:read',
       'PATCH /categories/:categoryId catalog:write +writeLimit',
+      'PATCH /contacts/:contactId contacts:write +writeLimit',
+      'PATCH /fidelity-cards/:cardId fidelityCards:write +writeLimit',
       'PATCH /products/:productId catalog:write +writeLimit',
       'POST /categories catalog:write +writeLimit',
+      'POST /contacts contacts:write +writeLimit',
+      'POST /contacts/:contactId/restore contacts:write +writeLimit',
+      'POST /contacts/:contactId/trash contacts:write +writeLimit',
+      'POST /fidelity-cards fidelityCards:write +writeLimit',
+      'POST /fidelity-cards/:cardId/adjustments fidelityCards:write +writeLimit',
       'POST /products catalog:write +writeLimit',
       'POST /products/:productId/restore catalog:write +writeLimit',
       'POST /products/:productId/trash catalog:write +writeLimit',

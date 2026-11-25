@@ -1,0 +1,33 @@
+@if (visible()) {
+  <section class="action" [attr.aria-label]="'INTEGRATIONS.SATISPAY.TITLE' | t">
+    <p class="note">{{ 'INTEGRATIONS.SATISPAY.HINT' | t }}</p>
+    <div class="row">
+      <fc-text-field
+        [formField]="codeForm.activationCode"
+        [label]="'INTEGRATIONS.SATISPAY.CODE' | t"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        [format]="withoutSpaces"
+        [error]="codeError()"
+        (blurred)="codeForm.activationCode().markAsTouched()"
+        (keydown.enter)="$event.preventDefault(); activate()"
+      />
+      <button
+        fc-button
+        variant="secondary"
+        [loading]="submitting()"
+        [disabled]="blockedBy() !== null"
+        (click)="activate()"
+      >
+        {{ 'INTEGRATIONS.SATISPAY.ACTIVATE' | t }}
+      </button>
+    </div>
+    @if (blockedBy(); as reason) {
+      <p class="note">{{ reason }}</p>
+    }
+    @if (failure(); as message) {
+      <p class="problem" role="alert">{{ message }}</p>
+    }
+  </section>
+}

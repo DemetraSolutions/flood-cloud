@@ -62,7 +62,9 @@
     "RELEASES": "Release",
     "EMAIL_TEMPLATES": "Template e-mail",
     "TOBACCOS": "Listino Tabacchi",
-    "CATALOG_IMPORT_EXPORT": "Import / Export",
+    "CATALOG_IMPORT_EXPORT": "Import / Export catalogo",
+    "CONTACTS_IMPORT_EXPORT": "Import / Export contatti",
+    "CARDS_IMPORT_EXPORT": "Import / Export carte",
     "TOBACCO_SYNC": "Sincronizza tabacchi",
     "COUNTRIES": "Gestione stati",
     "SECURITY": "Sicurezza",
@@ -75,7 +77,11 @@
     "PRODUCTS_LIST": "Prodotti",
     "SERVICES_LIST": "Servizi",
     "MODIFIERS_LIST": "Varianti",
-    "TOBACCO_PRODUCTS_LIST": "Tabacchi"
+    "TOBACCO_PRODUCTS_LIST": "Tabacchi",
+    "CONTACTS": "Contatti",
+    "CONTACTS_LIST": "Contatti",
+    "CONTACT_GROUPS": "Gruppi contatti",
+    "FIDELITY_CARDS": "Carte"
   },
   "THEME": {
     "SYSTEM": "Automatico (segue il sistema)",
@@ -136,7 +142,8 @@
       "UNKNOWN_ERROR": "Si è verificato un errore imprevisto.",
       "FEATURE_DISABLED": "Questa funzione non è attiva per il gruppo.",
       "BROWSER_REQUIRED": "Questa operazione è consentita solo da un browser: le chiamate fatte da altri programmi con le credenziali di un utente sono bloccate. Accedi dal backoffice.",
-      "RATE_LIMITED_WAIT": "Troppe richieste: riprova tra {wait}."
+      "RATE_LIMITED_WAIT": "Troppe richieste: riprova tra {wait}.",
+      "PROVIDER_ERROR": "Il servizio esterno non è raggiungibile in questo momento. Riprova più tardi."
     },
     "WAIT": {
       "SECOND": "{count} secondo",
@@ -270,7 +277,9 @@
       "LAST": "Non si può eliminare l’ultimo elemento.",
       "REFERENCED": "Elemento usato da altri elementi.",
       "IN_USE": "Elemento in uso: non si può eliminare.",
-      "SEMICOLON": "Non può contenere il punto e virgola (;)."
+      "SEMICOLON": "Non può contenere il punto e virgola (;).",
+      "PIPE": "Il codice non può contenere il carattere |.",
+      "NAME_OR_COMPANY": "Indica il nome o la ragione sociale (basta uno dei due)."
     }
   },
   "GROUP_SELECTOR": {
@@ -758,6 +767,10 @@
       "CODE_FOR_ACTIVE": "Il punto vendita aveva già una chiave attiva, che inizia per «{hint}».",
       "KEY_REPLACED": "Sostituita la chiave che inizia per «{hint}».",
       "KEY_REVOKED": "Revocata la chiave che inizia per «{hint}».",
+      "CREDIT_OPERATION": "Credito di {amount} aggiunto in una sola operazione, oltre la soglia di {threshold}.",
+      "CREDIT_DAILY": "Con {amount} i crediti aggiunti oggi dalla chiave superano la soglia giornaliera di {threshold}.",
+      "CARD_RELINKED": "Un codice di carta avanzata già di altri contatti ({count}) è stato collegato a un altro contatto.",
+      "CONTACTS_READ": "Contatti scaricati dal negozio nelle ore precedenti: {count}.",
       "BROWSER_REQUIRED": "Credenziali valide, ma la richiesta non veniva da un browser.",
       "NON_BROWSER": "{source} da un programma che non è un browser ({reason}).",
       "PROGRAM": "Programma: «{agent}».",
@@ -886,6 +899,9 @@
       "STORE_ACTIVATION_CODE_FOR_ACTIVE_PLACE": "Codice di attivazione generato su un negozio attivo",
       "STORE_ACTIVE_KEY_REPLACED": "Chiave di negozio sostituita",
       "STORE_ACTIVE_KEY_REVOKED": "Chiave di negozio revocata",
+      "STORE_CREDIT_ALERT": "Credito prepagato oltre la soglia (negozio)",
+      "STORE_ADVANCED_CARD_RELINKED": "Carta avanzata già di altri contatti, collegata di nuovo (negozio)",
+      "STORE_CONTACTS_READ": "Contatti scaricati dal negozio",
       "AUTH_REFRESH_FAILED": "Rinnovo della sessione rifiutato",
       "REQUEST_NON_BROWSER": "Accesso non da browser",
       "SETTINGS_SECURITY_POLICY_UPDATED": "Impostazioni di sicurezza modificate",
@@ -929,6 +945,22 @@
       "CATALOG_WRITE": {
         "LABEL": "Scrittura del catalogo",
         "HINT": "Crea e modifica prodotti (prezzi compresi), cestina e ripristina prodotti, crea, modifica ed elimina categorie. Marche, attributi, reparti e giacenze restano in sola lettura. Per una chiave limitata ad alcuni punti vendita valgono le regole di un amministratore di quei punti vendita."
+      },
+      "CONTACTS_READ": {
+        "LABEL": "Lettura dei contatti",
+        "HINT": "Legge contatti e gruppi di contatti, cestino compreso. Attenzione: dà accesso a dati personali dei clienti."
+      },
+      "CONTACTS_WRITE": {
+        "LABEL": "Scrittura dei contatti",
+        "HINT": "Crea, modifica, cestina e ripristina contatti. Serve anche per associare clienti alla creazione di una carta."
+      },
+      "FIDELITYCARDS_READ": {
+        "LABEL": "Lettura delle carte",
+        "HINT": "Legge le carte fedeltà avanzate, con saldi e movimenti. Per vedere i clienti associati serve anche la lettura dei contatti."
+      },
+      "FIDELITYCARDS_WRITE": {
+        "LABEL": "Scrittura delle carte",
+        "HINT": "Crea e modifica carte, registra movimenti e rettifiche. Attenzione: permette di muovere credito prepagato e punti."
       }
     },
     "STATUS": {
@@ -991,7 +1023,7 @@
       "PERMISSIONS_HINT": "Cosa può leggere o modificare la chiave. Almeno un permesso.",
       "WRITE_UNRESTRICTED_WARNING": "Senza restrizioni a punti vendita o aziende la chiave potrà modificare l'intero catalogo del gruppo. Si consiglia di limitarla ai punti vendita necessari.",
       "RESTRICTIONS": "Restrizioni",
-      "RESTRICTIONS_HINT": "Facoltative: senza una scelta la chiave vede tutto il gruppo. Con aziende e punti vendita insieme vale l’intersezione.",
+      "RESTRICTIONS_HINT": "Facoltative: senza una scelta la chiave vede tutto il gruppo. Con aziende e punti vendita insieme vale l’intersezione. Le restrizioni non limitano contatti e carte: valgono per tutto il gruppo.",
       "COMPANIES": "Aziende",
       "PLACES": "Punti vendita",
       "EXPIRES": "Scade il",
@@ -1372,7 +1404,9 @@
     "REFERENCED": {
       "CARDTYPES": "tipi di carta fedeltà ({count})",
       "POINTSCOLLECTIONS": "raccolte punti ({count})",
-      "OTHER": "altri elementi del gruppo ({count})"
+      "OTHER": "altri elementi del gruppo ({count})",
+      "FIDELITYCARDS": "carte avanzate ({count})",
+      "MANY": "{count} o più"
     },
     "PRICE_LISTS": {
       "TITLE": "Listini",
@@ -2716,7 +2750,6 @@
         },
         "SATISPAY": {
           "STATUS": "Attiva",
-          "ACTIVATION_CODE": "Activation Code",
           "TYPE": "Tipo",
           "KEY_ID": "KeyId"
         },
@@ -3508,7 +3541,7 @@
     "ACTIVITY_LINK": "Apri il registro attività"
   },
   "CATALOG_XLSX": {
-    "TITLE": "Import / Export del catalogo",
+    "TITLE": "Import / Export catalogo",
     "LINK": "Import / Export",
     "HINT": "Un solo file Excel (.xlsx) con tre fogli, Prodotti, Varianti e Categorie, per modificare il catalogo del gruppo in blocco: scarica il modello, esporta il catalogo, compila il file e importalo.",
     "DOWNLOADING": "Download del file in corso…",
@@ -3633,7 +3666,10 @@
       "UNKNOWN_STATION": "La postazione di stampa non esiste nel punto vendita.",
       "INVALID": "Il valore è rifiutato.",
       "FORBIDDEN": "Il tuo utente non può fare questa modifica.",
-      "CONFLICT": "La modifica è in conflitto con lo stato del catalogo.",
+      "CONFLICT": "La modifica è in conflitto con lo stato dei dati.",
+      "DUPLICATE_CODE": "Il codice compare più volte nel foglio.",
+      "BALANCE_CHANGE": "Il credito di una carta esistente non si cambia dal file: usa le rettifiche.",
+      "POINTS_CHANGE": "I punti di una carta esistente non si cambiano dal file: usa le rettifiche.",
       "TOO_SLOW": "L'importazione richiede troppo tempo: dividi il file."
     },
     "RULES": {
@@ -3644,6 +3680,82 @@
       "ABSENT_COLUMN": "Una colonna assente non modifica nulla (per le voci nuove vale il predefinito); una colonna presente aggiorna il dato, anche con la cella vuota dove indicato. In una colonna con la X (disponibile, preferito e simili) una cella vuota significa «no», sia per le voci nuove sia per quelle esistenti. Le righe che non cambiano nulla non scrivono: esportare e reimportare lascia il catalogo identico.",
       "PLACES": "Le colonne dei punti vendita (DISPO, POSTAZIONI SALA e POSTAZIONI BANCO) hanno una colonna per ogni punto vendita del tuo perimetro: una X rende la voce disponibile in quel punto vendita, e senza X la voce non lo è più. Una colonna che non nomina un tuo punto vendita è un errore.",
       "NOT_IN_FILE": "Il file non rappresenta tutto e ciò che non rappresenta resta invariato: i testi in altre lingue oltre l'italiano, i prezzi con fasce e periodi (sconti, orari), i barcode oltre il primo e le loro quantità, e i tabacchi, giochi e monopoli, che hanno la loro sincronizzazione."
+    }
+  },
+  "CONTACTS_XLSX": {
+    "TITLE": "Import / Export contatti",
+    "HINT": "Un solo file Excel (.xlsx) con il foglio Contatti, con le stesse colonne del modello CSV storico, per modificare i contatti del gruppo in blocco: scarica il modello, esporta i contatti, compila il file e importalo. Sono dati personali: usa il file solo per il lavoro da fare.",
+    "DOWNLOAD_ERROR": {
+      "TOO_LARGE": "I contatti superano il limite del file (20.000): non si possono esportare in un solo file."
+    },
+    "SHEET": {
+      "CONTACTS": "Contatti"
+    },
+    "TEMPLATE": {
+      "TEXT": "Il file vuoto con il foglio Contatti e le sole intestazioni delle 35 colonne, pronto da compilare."
+    },
+    "EXPORT": {
+      "TEXT": "I contatti del gruppo non nel cestino, ordinati per nome, nello stesso formato del modello: un solo telefono, una sola e-mail e un solo fax per colonna e, in FIDELITY, i soli codici delle carte (mai i punti). La colonna CANCELLAZIONE resta vuota.",
+      "REFERENCES": "Come scrivere il listino",
+      "IDS_HELP": "Gli id non sono mai ambigui: due listini con lo stesso nome non si confondono. È la scelta consigliata.",
+      "NAMES_HELP": "I nomi sono più comodi da compilare a mano, ma se due listini hanno lo stesso nome l'importazione dà errore.",
+      "ACTION": "Esporta i contatti"
+    },
+    "IMPORT": {
+      "TEXT": "Scegli un file .xlsx (al massimo {megabytes} MB e 1.000 righe). Prima il file viene verificato senza scrivere nulla; solo se la verifica riesce puoi importarlo. L'importazione è tutto o niente: con un solo errore non cambia nulla. Ogni ora puoi fare 20 verifiche e 6 importazioni.",
+      "NOTE": "Se il file ha solo le colonne dell'azienda (CF, INDIRIZZO, TELEFONO…), includi anche la colonna NOME AZIENDA: le intestazioni ripetute si attribuiscono all'azienda solo se stanno a destra di NOME AZIENDA. Una X in CANCELLAZIONE manda il contatto nel cestino. Il registro attività non contiene mai i dati del file.",
+      "CONFIRM": "Importare il file «{name}»? Verranno inseriti {inserted} contatti, aggiornati {updated} e mandati nel cestino {removed}. L'importazione si applica per intero.",
+      "ERROR": {
+        "TOO_MANY": "Il file ha troppe righe o troppe colonne: al massimo 1.000 righe e 40 colonne.",
+        "BUSY": "È in corso un'altra importazione dei contatti su questo gruppo: riprova tra poco."
+      }
+    },
+    "RULES": {
+      "SHEET": "Il file ha un solo foglio, Contatti, con le 35 colonne del modello CSV storico. Le colonne si riconoscono dall'intestazione, non dalla posizione: un'intestazione sconosciuta o ripetuta è un errore.",
+      "ID": "La colonna ID vuota crea un nuovo contatto; con un ID (24 caratteri esadecimali) l'importazione aggiorna il contatto esistente. Un ID inesistente, nel cestino o di un altro gruppo è un errore.",
+      "DELETE": "Una X nella colonna CANCELLAZIONE (con l'ID) manda il contatto nel cestino, da cui si può ripristinare: l'importazione non elimina mai un contatto.",
+      "ABSENT_COLUMN": "Una colonna assente non modifica nulla; una colonna presente aggiorna il dato, anche con la cella vuota (lo toglie). In CLIENTE e FORNITORE una X vale «sì» e una cella vuota «no». Con la cella vuota, TRASMISSIONE e IDENTIFICATIVO della fatturazione elettronica non cambiano nulla.",
+      "COMPANY_BLOCK": "Nel file storico nove intestazioni compaiono due volte, una per la persona e una per l'azienda (CF, INDIRIZZO, CAP, CITTA, PROVINCIA, NAZIONE, TELEFONO, EMAIL, SCONTO %): quella a sinistra di NOME AZIENDA è della persona, quella a destra è dell'azienda. Un file con le sole colonne dell'azienda deve quindi includere anche la colonna NOME AZIENDA, altrimenti la seconda intestazione ripetuta è un errore.",
+      "LISTS": "TELEFONO, EMAIL e FAX hanno un valore per colonna: in aggiornamento sostituisce il primo della lista e conserva gli altri. LISTINO accetta l'id o il nome del listino. NASCITA è AAAA/MM/GG (anche AAAA-MM-GG).",
+      "FIDELITY": "FIDELITY è l'insieme dei codici delle carte del contatto, separati da | (va bene anche il formato storico codice:punti, di cui i punti si ignorano). Aggiungere un codice collega la carta, toglierlo la scollega; i punti non si toccano mai.",
+      "NOT_IN_FILE": "Il file non rappresenta tutto e ciò che non rappresenta resta invariato: il gruppo di contatti, le note, gli account, i servizi, i listini fornitore e i telefoni, le e-mail e i fax oltre il primo."
+    }
+  },
+  "CARDS_XLSX": {
+    "TITLE": "Import / Export carte",
+    "HINT": "Un solo file Excel (.xlsx) con il foglio Carte per creare le carte fedeltà avanzate in blocco e cambiarne tipo e stato: scarica il modello, esporta le carte, compila il file e importalo.",
+    "DOWNLOAD_ERROR": {
+      "TOO_LARGE": "Le carte superano il limite del file (20.000): non si possono esportare in un solo file."
+    },
+    "SHEET": {
+      "CARDS": "Carte"
+    },
+    "TEMPLATE": {
+      "TEXT": "Il file vuoto con il foglio Carte e le sole intestazioni (CODICE, TIPO, SALDO, PUNTI, STATO), pronto da compilare."
+    },
+    "EXPORT": {
+      "TEXT": "Tutte le carte del gruppo, attive e disattivate, ordinate per codice, con il saldo, i punti delle raccolte (solo quelli diversi da zero) e lo stato.",
+      "REFERENCES": "Come scrivere il tipo e le raccolte di punti",
+      "IDS_HELP": "Gli id non sono mai ambigui: due elementi con lo stesso nome non si confondono. È la scelta consigliata.",
+      "NAMES_HELP": "I nomi sono più comodi da compilare a mano, ma se due elementi hanno lo stesso nome l'importazione dà errore; un nome che contiene : o | resta scritto come id, per poterlo rileggere.",
+      "ACTION": "Esporta le carte"
+    },
+    "IMPORT": {
+      "TEXT": "Scegli un file .xlsx (al massimo {megabytes} MB e 1.000 righe). Prima il file viene verificato senza scrivere nulla; solo se la verifica riesce puoi importarlo. L'importazione è tutto o niente: con un solo errore non cambia nulla. Ogni ora puoi fare 20 verifiche e 6 importazioni.",
+      "NOTE": "Il codice è la chiave: un codice nuovo crea la carta, un codice esistente ne cambia solo tipo e stato. L'importazione non collega le carte ai contatti.",
+      "CONFIRM": "Importare il file «{name}»? Verranno create {inserted} carte e aggiornate {updated}. L'importazione si applica per intero.",
+      "ERROR": {
+        "TOO_MANY": "Il file ha troppe righe o troppe colonne: al massimo 1.000 righe.",
+        "BUSY": "È in corso un'altra importazione delle carte su questo gruppo: riprova tra poco."
+      }
+    },
+    "RULES": {
+      "SHEET": "Il file ha un solo foglio, Carte, con le colonne CODICE, TIPO, SALDO, PUNTI e STATO, riconosciute dall'intestazione, non dalla posizione. Un foglio senza la colonna CODICE è un errore.",
+      "KEY": "Il codice è la chiave della carta: è obbligatorio e non può comparire due volte nel file.",
+      "NEW": "Un codice nuovo crea la carta: il tipo è obbligatorio (id o nome). SALDO (solo per i tipi prepagati) e PUNTI (solo raccolte del tipo, nel formato raccolta : valore | raccolta : valore) sono i valori iniziali, registrati come movimenti di tipo «import».",
+      "EXISTING": "Un codice esistente cambia solo tipo e stato. SALDO e PUNTI devono essere vuoti o uguali ai valori attuali, altrimenti la riga è un errore: per cambiarli usa le rettifiche. Cambiare il tipo di una carta con credito verso un tipo non prepagato non è possibile.",
+      "STATUS": "STATO: una X significa attiva, una cella vuota disattivata. Con la colonna assente le carte nuove sono attive e quelle esistenti non cambiano.",
+      "NOT_IN_FILE": "Le carte non si eliminano dal file e non si collegano ai contatti (il legame si fa dal file dei contatti o dalla scheda del contatto)."
     }
   },
   "TOBACCOS": {
@@ -3833,6 +3945,80 @@
     "DOWNLOAD": "Scarica la versione {version}",
     "NEW_TAB": "(si apre in una nuova scheda)"
   },
+  "INTEGRATIONS": {
+    "STALE": "Il punto vendita è stato modificato nel frattempo: ricarica i dati e riprova.",
+    "PROVIDER_ERROR": "Il servizio esterno non è raggiungibile in questo momento. Riprova più tardi.",
+    "UNAVAILABLE": "Questa integrazione non è disponibile.",
+    "INVALID": "Controlla i dati inseriti e riprova.",
+    "DISABLED": "L'integrazione non è attiva per questo punto vendita: attivala e salva, poi riprova.",
+    "CREDENTIAL_MISSING": "Manca una credenziale: impostala e salva il punto vendita, poi riprova.",
+    "CREDENTIAL_REFUSED": "Il servizio ha rifiutato la credenziale salvata: controllala, salva e riprova.",
+    "CODE_REFUSED": "Il servizio non ha accettato il codice: controlla che sia corretto e non già usato.",
+    "UNSAVED": "Salva prima le modifiche di questa scheda: la chiamata usa i dati già salvati.",
+    "DOJO": {
+      "TITLE": "Terminali Dojo",
+      "LOAD": "Elenco terminali",
+      "HINT": "Copia l'id del terminale che usa questa cassa e incollalo nel campo «Terminale Dojo» del dispositivo: non viene scritto nulla da qui.",
+      "CAPTION": "Terminali Dojo del punto vendita",
+      "ID": "Id",
+      "TID": "Tid",
+      "STATUS": "Stato",
+      "EMPTY": "Nessun terminale",
+      "EMPTY_MESSAGE": "L'account Dojo non ha terminali.",
+      "COPY": "Copia id",
+      "COPY_LABEL": "Copia l’id del terminale {tid}",
+      "COPIED": "Id del terminale {tid} copiato.",
+      "COPY_FAILED": "Copia non riuscita: seleziona l'id nella tabella e copialo a mano."
+    },
+    "SATISPAY": {
+      "TITLE": "Attivazione Satispay",
+      "HINT": "Inserisci il codice di attivazione generato nell'app Satispay del negozio: serve una sola volta e non viene salvato.",
+      "CODE": "Codice di attivazione",
+      "ACTIVATE": "Attiva Satispay",
+      "DONE": "Satispay attivato: la chiave del negozio è stata impostata.",
+      "REREAD": "Satispay attivato. Il punto vendita è stato riletto: le modifiche non salvate sono state scartate."
+    },
+    "TSH": {
+      "TITLE": "Categorie di addebito TSH",
+      "SYNC": "Scarica categorie TSH",
+      "DONE": "Scaricate {count} categorie.",
+      "REREAD": "Categorie scaricate. Il punto vendita è stato riletto: le modifiche non salvate sono state scartate."
+    },
+    "TSH_MAP": {
+      "LEGEND": "Categorie di addebito TSH",
+      "HINT": "Associa ogni categoria di prodotto a una categoria di addebito TSH. Scarica prima le categorie.",
+      "NO_CATEGORIES": "Nessuna categoria di addebito scaricata.",
+      "NO_PRODUCT_CATEGORIES": "Il gruppo non ha categorie di prodotto.",
+      "NONE": "Nessuna",
+      "UNKNOWN": "{name} (non più presente)"
+    },
+    "COORDINATES": {
+      "TITLE": "Calcolo delle coordinate",
+      "CALCULATE": "Calcola coordinate",
+      "MISSING": "Per calcolare le coordinate compila l'indirizzo del punto vendita. Mancano: {fields}.",
+      "NOT_FOUND": "Nessuna coordinata trovata per questo indirizzo: controllalo.",
+      "DONE": "Coordinate calcolate: salva il punto vendita per conservarle.",
+      "FIELD": {
+        "STREET": "Indirizzo",
+        "POSTCODE": "CAP",
+        "CITY": "Città",
+        "PROVINCE": "Provincia",
+        "COUNTRY": "Nazione"
+      }
+    },
+    "VAT": {
+      "BUTTON": "Cerca P.IVA",
+      "DONE": "Dati dell'azienda compilati dal registro delle imprese.",
+      "NOT_FOUND": "Nessuna azienda trovata con questa P.IVA",
+      "INVALID": "P.IVA non valida",
+      "RATE_LIMITED": "Troppe ricerche: riprova tra poco.",
+      "RATE_LIMITED_WAIT": "Troppe ricerche: riprova tra {seconds} secondi.",
+      "RATE_LIMITED_WAIT_MINUTES": "Troppe ricerche: riprova tra circa {minutes} minuti.",
+      "RATE_LIMITED_WAIT_HOURS": "Limite di ricerche raggiunto: riprova tra circa {hours} ore.",
+      "STALE": "La P.IVA è cambiata durante la ricerca: il risultato è stato scartato, cerca di nuovo.",
+      "UNAVAILABLE": "Servizio di ricerca delle imprese non disponibile, compila a mano"
+    }
+  },
   "NEW_CUSTOMER": {
     "TITLE": "Nuovo cliente",
     "CREATE": "Crea configurazione",
@@ -3909,16 +4095,6 @@
       "ANOTHER": "Crea un altro cliente"
     },
     "LOOKUP": {
-      "BUTTON": "Cerca P.IVA",
-      "DONE": "Dati dell'azienda compilati dal registro delle imprese.",
-      "NOT_FOUND": "Nessuna azienda trovata con questa P.IVA",
-      "INVALID": "P.IVA non valida",
-      "RATE_LIMITED": "Troppe ricerche: riprova tra poco.",
-      "RATE_LIMITED_WAIT": "Troppe ricerche: riprova tra {seconds} secondi.",
-      "RATE_LIMITED_WAIT_MINUTES": "Troppe ricerche: riprova tra circa {minutes} minuti.",
-      "RATE_LIMITED_WAIT_HOURS": "Limite di ricerche raggiunto: riprova tra circa {hours} ore.",
-      "STALE": "La P.IVA è cambiata durante la ricerca: il risultato è stato scartato, cerca di nuovo.",
-      "UNAVAILABLE": "Servizio Cerved non disponibile, compila a mano",
       "CONFIRM_TITLE": "Sostituire i dati inseriti?",
       "CONFIRM_MESSAGE": "La ricerca ha trovato valori diversi per: {fields}. Sostituire quelli già compilati?",
       "CONFIRM_ACTION": "Sostituisci"
@@ -3937,7 +4113,8 @@
       "PLACES": "Punti vendita",
       "USERS": "Utenti",
       "GROUPS": "Gruppi",
-      "PRODUCTS": "Prodotti"
+      "PRODUCTS": "Prodotti",
+      "CONTACTS": "Contatti"
     },
     "SEARCH": "Cerca nel cestino",
     "LOAD_ERROR": "Impossibile caricare il cestino",
@@ -3959,7 +4136,10 @@
       "DEALER": "Dealer",
       "TRASHED_AT": "Nel cestino dal",
       "CODE": "Codice",
-      "FAMILY": "Tipo"
+      "FAMILY": "Tipo",
+      "DISPLAY_NAME": "Nome visualizzato",
+      "COMPANY_NAME": "Ragione sociale",
+      "PHONE": "Telefono"
     },
     "SELECT_ALL": "Seleziona tutti gli elementi della pagina",
     "SELECT_ROW": "Seleziona {name}",
@@ -3968,7 +4148,8 @@
     "DELETE": {
       "ACTION": "Elimina definitivamente",
       "TITLE": "Eliminare definitivamente?",
-      "MESSAGE": "Eliminare definitivamente {count} elementi? L'operazione è irreversibile: gli elementi non si potranno più ripristinare."
+      "MESSAGE": "Eliminare definitivamente {count} elementi? L'operazione è irreversibile: gli elementi non si potranno più ripristinare.",
+      "LIMIT": "Si possono eliminare al massimo {max} contatti alla volta: ne hai selezionati {count}."
     },
     "EMPTY": {
       "ACTION": "Svuota cestino",
@@ -4003,7 +4184,9 @@
       "HAS_GROUPS": "Il rivenditore ha ancora gruppi",
       "NOT_TRASHED": "L'elemento non è più nel cestino",
       "NOT_FOUND": "L'elemento non esiste più o non è accessibile",
-      "REFERENCED_PRODUCTS": "Il prodotto è ancora usato da distinte, menu, varianti, servizi di un utente, preferiti o promozioni"
+      "REFERENCED_PRODUCTS": "Il prodotto è ancora usato da distinte, menu, varianti, servizi di un utente, preferiti o promozioni",
+      "REFERENCED_CONTACTS": "Il contatto è ancora usato (fornitore di un prodotto, promozioni, vendite, documenti, appuntamenti o altri contatti)",
+      "TAKEN_CONTACTS": "L'e-mail o il telefono del suo account sono già usati da un altro contatto"
     }
   },
   "PRICE_SERVICE": {
@@ -4936,6 +5119,620 @@
       "HEIGHT": "Altezza (cm)",
       "DEPTH": "Profondità (cm)",
       "WEIGHT": "Peso (kg)"
+    }
+  },
+  "CONTACTS": {
+    "TITLE": "Contatti",
+    "HINT": "Clienti, fornitori e contatti generici del gruppo: li condividono tutti i punti vendita.",
+    "NEW": "Nuovo contatto",
+    "NONE": "Non indicato",
+    "TABS": "Tipi di contatto",
+    "KIND": {
+      "CUSTOMERS": "Clienti",
+      "SUPPLIERS": "Fornitori",
+      "OTHERS": "Generici",
+      "ALL": "Tutti"
+    },
+    "TYPE": {
+      "CUSTOMER": "Cliente",
+      "SUPPLIER": "Fornitore",
+      "OTHER": "Generico"
+    },
+    "SEARCH": "Cerca contatto",
+    "SEARCH_HINT": "Parte del nome, del cognome o della ragione sociale, oppure il valore esatto di codice, codice fiscale, P.IVA, carta o e-mail.",
+    "FILTER": {
+      "GROUP": "Gruppo di contatti",
+      "ALL_GROUPS": "Tutti i gruppi di contatti"
+    },
+    "LOAD_ERROR": "Impossibile caricare i contatti",
+    "EMPTY": "Nessun contatto",
+    "EMPTY_MESSAGE": "Cambia la ricerca o i filtri, oppure crea un contatto.",
+    "COLUMN": {
+      "SELECT": "Seleziona",
+      "DISPLAY_NAME": "Nome visualizzato",
+      "FIRST_NAME": "Nome",
+      "LAST_NAME": "Cognome",
+      "COMPANY_NAME": "Ragione sociale",
+      "VAT_NUMBER": "P.IVA",
+      "EMAIL": "E-mail",
+      "PHONE": "Telefono",
+      "TYPE": "Tipo"
+    },
+    "EDIT": "Apri",
+    "EDIT_LABEL": "Apri {name}",
+    "SELECT_ALL": "Seleziona tutti i contatti della pagina",
+    "SELECT_ROW": "Seleziona {name}",
+    "SELECTED": "{count} selezionati",
+    "LIST": {
+      "REMOVE": "Rimuovi",
+      "REMOVE_LABEL": "Rimuovi {name}",
+      "TOO_SLOW": "Ricerca troppo lenta: restringi il testo da cercare e riprova."
+    },
+    "TRASH": {
+      "ACTION": "Cestina",
+      "LABEL": "Metti {name} nel cestino",
+      "TITLE": "Mettere nel cestino?",
+      "CONFIRM": "Mettere nel cestino {count} contatti? Si possono ripristinare dalla pagina Cestino.",
+      "CONFIRM_ONE": "Mettere nel cestino {name}? Si può ripristinare dalla pagina Cestino.",
+      "SELECTED_ACTION": "Cestina i selezionati",
+      "DONE": "Contatto messo nel cestino.",
+      "REPORT_TITLE": "Esito dell'operazione",
+      "REPORT_TRASHED": "Nel cestino: {count}.",
+      "REPORT_SKIPPED": "Non elaborati: {count}.",
+      "REPORT_ITEM": "{name}: {issue}",
+      "ISSUE": {
+        "NOTFOUND": "il contatto non esiste più o non è accessibile",
+        "ALREADYTRASHED": "è già nel cestino",
+        "CONFLICT": "è cambiato nel frattempo: riprova"
+      },
+      "UNSAVED_HINT": "Salva o annulla le modifiche prima di mettere il contatto nel cestino."
+    },
+    "RESTORE": {
+      "ACTION": "Ripristina",
+      "DONE": "Contatto ripristinato."
+    },
+    "DELETE": {
+      "ACTION": "Elimina definitivamente",
+      "TITLE": "Eliminare definitivamente?",
+      "CONFIRM": "Eliminare definitivamente {name}? Verranno eliminate anche le sue carte fedeltà e i loro punti. L'operazione è irreversibile.",
+      "DONE": "Contatto eliminato.",
+      "BLOCKED_TITLE": "Il contatto non si può eliminare",
+      "BLOCKED_MESSAGE": "Il contatto è ancora usato da:"
+    },
+    "REFERENCE": {
+      "ITEM": "{kind}: {count}",
+      "contactAssociations": "Contatti collegati (persone di questa azienda)",
+      "promotions": "Promozioni",
+      "products": "Prodotti (fornitore)",
+      "warehouseMovements": "Movimenti di magazzino",
+      "appointments": "Appuntamenti",
+      "tableReservations": "Prenotazioni dei tavoli",
+      "documents": "Documenti",
+      "sales": "Vendite",
+      "contacts": "Contatti",
+      "MORE_AFTER": "Dopo aver tolto questi riferimenti potrebbero comparirne altri.",
+      "MANY": "{count} o più"
+    },
+    "ERROR": {
+      "CONCURRENT": "I dati sono cambiati nel frattempo. Ricarica e riprova.",
+      "FORBIDDEN": "Non hai il permesso di fare questa operazione.",
+      "TOO_SLOW": "La verifica dei riferimenti è troppo lenta: riprova più tardi.",
+      "KEY_REUSED": "Questo invio è già stato fatto con valori diversi. Ricarica la pagina, verifica il contatto e riprova.",
+      "LIST_IN_USE": "Il listino è usato da {count} prodotti: toglilo prima dai prodotti."
+    },
+    "TRASHED_NOTE": "Il contatto è nel cestino: si può ripristinare o eliminare definitivamente, non modificare.",
+    "READ_ONLY_NOTE": "Non hai il permesso di modificare i contatti: la pagina è in sola lettura.",
+    "SECTIONS": "Sezioni del contatto",
+    "SECTION": {
+      "GENERAL": "Generale",
+      "PERSON": "Dati personali",
+      "COMPANY": "Dati aziendali",
+      "FIDELITY": "Carte fedeltà",
+      "SERVICES": "Servizi",
+      "ACCOUNT": "Account",
+      "PURCHASES": "Acquisti"
+    },
+    "FORM": {
+      "NEW_TITLE": "Nuovo contatto",
+      "EDIT_TITLE": "Contatto",
+      "BACK": "Torna ai contatti",
+      "CREATE": "Crea contatto",
+      "CREATED": "Contatto creato.",
+      "SAVED": "Contatto salvato.",
+      "STALE": "Il contatto è stato modificato da qualcun altro dopo che l'hai aperto. Ricaricalo per vedere l'ultima versione: le tue modifiche non salvate andranno perse.",
+      "RELOAD": "Ricarica",
+      "UPDATED": "Ultima modifica: {date}"
+    },
+    "LEAVE": {
+      "TITLE": "Uscire senza salvare?",
+      "MESSAGE": "Le modifiche non sono state salvate e andranno perse.",
+      "CONFIRM": "Esci senza salvare"
+    },
+    "WARNING": {
+      "DUPLICATE": "Questo valore è usato anche da:",
+      "OTHERS": "e da altri {count} contatti.",
+      "FIELD_HINT": "Questo valore è usato anche da altri contatti (vedi sotto).",
+      "CONTACT_N": "Contatto {number}"
+    },
+    "GENERAL": {
+      "KIND": "Tipo di contatto",
+      "CUSTOMER": "Cliente",
+      "SUPPLIER": "Fornitore",
+      "KIND_HINT": "Senza nessuno dei due il contatto è generico.",
+      "GROUP": "Gruppo di contatti",
+      "PRICE_LIST": "Listino",
+      "PRICE_LIST_HINT": "Alla cassa vale più del listino del gruppo contatti.",
+      "CODE": "Codice",
+      "NOTES": "Note"
+    },
+    "PERSON": {
+      "FIRST_NAME": "Nome",
+      "LAST_NAME": "Cognome",
+      "TAX_CODE": "Codice fiscale",
+      "BIRTH_DATE": "Data di nascita",
+      "DISCOUNT": "Sconto %",
+      "ADDRESS": "Indirizzo",
+      "PHONES": "Telefoni",
+      "PHONE_N": "Telefono {number}",
+      "ADD_PHONE": "Aggiungi telefono",
+      "EMAILS": "E-mail",
+      "EMAIL_N": "E-mail {number}",
+      "ADD_EMAIL": "Aggiungi e-mail",
+      "COMPANY": "Azienda associata",
+      "COMPANY_HINT": "L'azienda per cui lavora la persona: scegli tra i contatti con una ragione sociale (almeno 3 caratteri).",
+      "COMPANY_SEARCH": "Cerca azienda",
+      "COMPANY_CLEAR": "Togli l'azienda associata"
+    },
+    "COMPANY": {
+      "NAME": "Ragione sociale",
+      "VAT_NUMBER": "Partita IVA",
+      "TAX_CODE": "Codice fiscale",
+      "DISCOUNT": "Sconto %",
+      "ADDRESS": "Sede",
+      "PHONES": "Telefoni",
+      "PHONE_N": "Telefono {number}",
+      "ADD_PHONE": "Aggiungi telefono",
+      "EMAILS": "E-mail",
+      "EMAIL_N": "E-mail {number}",
+      "ADD_EMAIL": "Aggiungi e-mail",
+      "FAXES": "Fax",
+      "FAX_N": "Fax {number}",
+      "ADD_FAX": "Aggiungi fax",
+      "LISTS": "Listini fornitore",
+      "LISTS_HINT": "I listini che il fornitore pratica e che i prodotti citano. La stella indica il preferito (uno solo).",
+      "LIST_N": "Listino {number}",
+      "LIST_FAVORITE": "Preferito (listino {number})",
+      "ADD_LIST": "Aggiungi listino",
+      "LISTS_SUPPLIER": "Listini fornitore (il contatto è un fornitore)",
+      "LIST_FAVORITE_HINT": "Se ne può segnare uno solo come preferito"
+    },
+    "ADDRESS": {
+      "STREET": "Via e numero civico",
+      "POSTCODE": "CAP",
+      "CITY": "Città",
+      "COUNTRY": "Nazione",
+      "PROVINCE": "Provincia"
+    },
+    "E_INVOICING": {
+      "TITLE": "Fatturazione elettronica",
+      "FORMAT": "Formato di trasmissione",
+      "CHANNEL": "Canale",
+      "CHANNEL_CD": "Codice destinatario",
+      "CHANNEL_PEC": "PEC",
+      "RECIPIENT_CODE": "Codice destinatario",
+      "PEC": "PEC",
+      "PAYMENT_TERMS": "Condizioni di pagamento",
+      "PAYMENT_METHOD": "Modalità di pagamento",
+      "TAX_REGIME": "Regime fiscale",
+      "ADMINISTRATION_REFERENCE": "Riferimento amministrazione",
+      "ADMINISTRATION_REFERENCE_HINT": "Fino a {max} caratteri.",
+      "SPLIT_PAYMENT": "Scissione dei pagamenti (split payment)",
+      "PURCHASE_ORDER": "Richiedi i dati dell'ordine d'acquisto",
+      "PAYMENT_TERM_NAME": {
+        "TP01": "Pagamento a rate",
+        "TP02": "Pagamento completo",
+        "TP03": "Anticipo"
+      },
+      "PAYMENT_METHOD_NAME": {
+        "MP01": "Contanti",
+        "MP02": "Assegno",
+        "MP03": "Assegno circolare",
+        "MP04": "Contanti presso Tesoreria",
+        "MP05": "Bonifico",
+        "MP06": "Vaglia cambiario",
+        "MP07": "Bollettino bancario",
+        "MP08": "Carta di pagamento",
+        "MP09": "RID",
+        "MP10": "RID utenze",
+        "MP11": "RID veloce",
+        "MP12": "Ri.Ba. (ricevuta bancaria)",
+        "MP13": "MAV (pagamento mediante avviso)",
+        "MP14": "Quietanza erario dello Stato",
+        "MP15": "Giroconto su conti di contabilità speciale",
+        "MP16": "Domiciliazione bancaria",
+        "MP17": "Domiciliazione postale",
+        "MP18": "Bollettino di conto corrente postale",
+        "MP19": "SEPA Direct Debit",
+        "MP20": "SEPA Direct Debit CORE",
+        "MP21": "SEPA Direct Debit B2B",
+        "MP22": "Trattenuta su somme già riscosse",
+        "MP23": "PagoPA"
+      },
+      "TAX_REGIME_NAME": {
+        "RF01": "Ordinario",
+        "RF02": "Contribuenti minimi",
+        "RF04": "Agricoltura e attività connesse e pesca",
+        "RF05": "Vendita sali e tabacchi",
+        "RF06": "Commercio di fiammiferi",
+        "RF07": "Editoria",
+        "RF08": "Gestione servizi di telefonia pubblica",
+        "RF09": "Rivendita di documenti di trasporto pubblico e di sosta",
+        "RF10": "Intrattenimenti, giochi e altre attività di cui alla tariffa allegata al DPR 640/72",
+        "RF11": "Agenzie di viaggio e turismo",
+        "RF12": "Agriturismo",
+        "RF13": "Vendite a domicilio",
+        "RF14": "Rivendita di beni usati, oggetti d'arte, d'antiquariato o da collezione",
+        "RF15": "Agenzie di vendite all'asta di oggetti d'arte, antiquariato o da collezione",
+        "RF16": "IVA per cassa della pubblica amministrazione",
+        "RF17": "IVA per cassa",
+        "RF18": "Altro",
+        "RF19": "Regime forfettario"
+      },
+      "FORMAT_FPR12": "Privati e aziende (FPR12)",
+      "FORMAT_FPA12": "Pubblica amministrazione (FPA12)",
+      "RECIPIENT_CODE_HINT_FPR12": "7 caratteri. Se il cliente riceve le fatture via PEC o non ha un codice, usa 0000000.",
+      "RECIPIENT_CODE_HINT_FPA12": "6 caratteri: il codice univoco dell'ufficio IPA."
+    },
+    "FIDELITY": {
+      "TITLE": "Carte fedeltà",
+      "HINT": "I punti si leggono soltanto: cambiano con le vendite o con una rettifica esplicita. Salvando si aggiungono o tolgono i codici delle carte.",
+      "CODE_N": "Carta {number}",
+      "POINTS": "{points} punti",
+      "ADD": "Aggiungi carta",
+      "EMPTY": "Nessuna carta.",
+      "ADJUST": "Rettifica punti",
+      "ADJUST_LABEL": "Rettifica i punti della carta {name}",
+      "REMOVE_TITLE": "Rimuovere la carta {code}?",
+      "REMOVE_CONFIRM": "La carta ha un saldo di {points} punti: se la rimuovi e salvi, il saldo andrà perso.",
+      "ADVANCED": "Carta avanzata",
+      "TOTAL_POINTS": "Punti totali: {points}",
+      "CARD_DETAIL": "Dettaglio carta",
+      "REMOVE_ADVANCED": "La carta resta con il suo credito e i suoi punti; il cliente non sarà più associato."
+    },
+    "POINTS": {
+      "TITLE": "Rettifica punti: {code}",
+      "BALANCE": "Saldo attuale: {points} punti.",
+      "REASON": "Motivo (facoltativo)",
+      "REASON_HINT": "Fino a {max} caratteri. Non scrivere dati personali.",
+      "SUBMIT": "Applica",
+      "DONE": "Punti aggiornati. Nuovo saldo: {points}.",
+      "INSUFFICIENT": "Il saldo non può scendere sotto zero.",
+      "DUPLICATE": "Il contatto ha più carte con questo codice: la rettifica è ambigua e non è stata fatta.",
+      "DIRECTION": "Operazione",
+      "ADD": "Aggiungi punti",
+      "REMOVE": "Togli punti",
+      "AMOUNT": "Quantità di punti",
+      "AMOUNT_HINT": "Un numero intero maggiore di zero.",
+      "PREVIEW": "Nuovo saldo: {points} punti.",
+      "IMMEDIATE": "La rettifica si applica subito, senza premere Salva.",
+      "KEY_REUSED": "Una rettifica con valori diversi è già stata inviata da questa finestra: chiudila, verifica il saldo e riprova.",
+      "ADVANCED_CARD": "È una carta avanzata: rettificala dal dettaglio della carta.",
+      "UNCERTAIN": "Esito non noto: la rettifica potrebbe essere stata applicata. Controlla il saldo prima di riprovare."
+    },
+    "SERVICES": {
+      "TITLE": "Servizi con durata personalizzata",
+      "HINT": "La durata (ore:minuti) che questo contatto ha per ogni servizio.",
+      "DURATION": "Durata di {name}",
+      "EMPTY": "Nessun servizio.",
+      "SEARCH": "Aggiungi un servizio",
+      "SEARCH_PLACEHOLDER": "Cerca un servizio",
+      "CLEAR": "Cancella la ricerca",
+      "LIMIT": "Hai raggiunto il massimo di {max} servizi.",
+      "DURATION_HINT": "Ore e minuti, per esempio 01:30"
+    },
+    "ACCOUNT": {
+      "HINT": "L'e-mail e il telefono con cui il cliente è riconosciuto nelle app pubbliche. Ognuno dei due può essere di un solo contatto del gruppo.",
+      "EMAIL": "E-mail di accesso",
+      "PHONE": "Telefono di accesso"
+    }
+  },
+  "CONTACT_GROUPS": {
+    "TITLE": "Gruppi di contatti",
+    "HINT": "I gruppi di contatti raccolgono i contatti che hanno lo stesso listino e lo stesso sconto.",
+    "NEW": "Nuovo gruppo di contatti",
+    "NONE": "Non indicato",
+    "SEARCH": "Cerca per nome",
+    "LOAD_ERROR": "Impossibile caricare i gruppi di contatti",
+    "EMPTY": "Nessun gruppo di contatti",
+    "EMPTY_MESSAGE": "Crea un gruppo di contatti per dare lo stesso listino e lo stesso sconto a più contatti.",
+    "COLUMN": {
+      "NAME": "Nome",
+      "PRICE_LIST": "Listino",
+      "DISCOUNT": "Sconto %"
+    },
+    "FIELD": {
+      "NAME": "Nome",
+      "PRICE_LIST": "Listino",
+      "PRICE_LIST_HINT": "Il listino con cui si vendono ai contatti del gruppo.",
+      "DISCOUNT": "Sconto %",
+      "CONTACTS_COUNT": "Contatti nel gruppo: {count}"
+    },
+    "FORM": {
+      "NEW_TITLE": "Nuovo gruppo di contatti",
+      "EDIT_TITLE": "Gruppo di contatti",
+      "BACK": "Torna ai gruppi di contatti",
+      "CREATE": "Crea gruppo di contatti",
+      "CREATED": "Gruppo di contatti creato.",
+      "SAVED": "Gruppo di contatti salvato.",
+      "STALE": "Il gruppo è stato modificato da qualcun altro dopo che l'hai aperto. Ricaricalo per vedere l'ultima versione: le tue modifiche non salvate andranno perse.",
+      "RELOAD": "Ricarica",
+      "UPDATED": "Ultima modifica: {date}"
+    },
+    "LEAVE": {
+      "TITLE": "Uscire senza salvare?",
+      "MESSAGE": "Le modifiche non sono state salvate e andranno perse.",
+      "CONFIRM": "Esci senza salvare"
+    },
+    "DELETE": {
+      "ACTION": "Elimina",
+      "TITLE": "Eliminare il gruppo di contatti?",
+      "CONFIRM": "Eliminare definitivamente il gruppo di contatti {name}? L'operazione è irreversibile.",
+      "DONE": "Gruppo di contatti eliminato.",
+      "BLOCKED_TITLE": "Il gruppo di contatti non si può eliminare",
+      "BLOCKED_MESSAGE": "Il gruppo di contatti è ancora usato da:",
+      "CONFIRM_WITH_CONTACTS": "Il gruppo di contatti {name} ha {count} contatti: il server rifiuterà l'eliminazione finché non li togli dal gruppo. Procedere comunque?"
+    },
+    "READ_ONLY_NOTE": "Non hai il permesso di modificare i gruppi di contatti: la pagina è in sola lettura."
+  },
+  "FIDELITY_CARDS": {
+    "TITLE": "Carte",
+    "HINT": "Le carte fedeltà avanzate del gruppo, con il loro credito e i loro punti. Il legame con i clienti è il codice della carta nella scheda Carte fedeltà del contatto.",
+    "NEW": "Nuova carta",
+    "SEARCH": "Cerca carta",
+    "SEARCH_HINT": "Il codice esatto, oppure parte del nome di un cliente che ha la carta.",
+    "LOAD_ERROR": "Impossibile caricare le carte",
+    "EMPTY": "Nessuna carta",
+    "EMPTY_MESSAGE": "Cambia la ricerca o i filtri, oppure crea una carta.",
+    "TYPE_GONE": "Tipo non più esistente",
+    "COLLECTION_GONE": "Raccolta non più esistente",
+    "CUSTOMER_UNNAMED": "Cliente senza nome",
+    "FILTER": {
+      "TYPE": "Tipo di carta",
+      "ALL_TYPES": "Tutti i tipi"
+    },
+    "STATE": {
+      "LABEL": "Stato",
+      "ALL": "Tutti",
+      "ENABLED": "Attiva",
+      "DISABLED": "Disattivata"
+    },
+    "LIST": {
+      "NONE": "—",
+      "CUSTOMER": "Cliente",
+      "NO_CUSTOMER": "Non associata",
+      "MORE_CUSTOMERS": "+{count}",
+      "TOO_SLOW": "Ricerca troppo lenta: restringi il testo da cercare e riprova."
+    },
+    "COLUMN": {
+      "CODE": "Numero",
+      "TYPE": "Tipo",
+      "CUSTOMER": "Cliente",
+      "BALANCE": "Credito",
+      "POINTS": "Punti",
+      "CREATED": "Creata il",
+      "STATE": "Stato"
+    },
+    "SECTIONS": "Sezioni della carta",
+    "SECTION": {
+      "GENERAL": "Generale",
+      "MOVEMENTS": "Movimenti"
+    },
+    "READ_ONLY_NOTE": "Non hai il permesso di modificare le carte: la pagina è in sola lettura.",
+    "FORM": {
+      "NEW_TITLE": "Nuova carta",
+      "EDIT_TITLE": "Carta",
+      "BACK": "Torna alle carte",
+      "CREATE": "Crea carta",
+      "CREATED": "Carta creata.",
+      "SAVED": "Carta salvata.",
+      "UPDATED": "Ultima modifica: {date}",
+      "RELOAD": "Ricarica",
+      "STALE": "La carta è stata modificata da qualcun altro dopo che l'hai aperta. Ricaricala per vedere l'ultima versione: le tue modifiche non salvate andranno perse."
+    },
+    "LEAVE": {
+      "TITLE": "Uscire senza salvare?",
+      "MESSAGE": "Le modifiche non sono state salvate e andranno perse.",
+      "CONFIRM": "Esci senza salvare"
+    },
+    "FIELD": {
+      "ENABLED": "Carta attiva",
+      "CODE": "Codice",
+      "CODE_READ_ONLY": "Il codice non si può cambiare.",
+      "TYPE": "Tipo di carta",
+      "TYPE_PLACEHOLDER": "Scegli un tipo",
+      "INITIAL_BALANCE": "Credito iniziale",
+      "INITIAL_BALANCE_HINT": "Facoltativo. Un importo maggiore di zero, con il punto come separatore decimale e al più due decimali.",
+      "INITIAL_POINTS": "Punti iniziali",
+      "POINTS_OF": "Punti iniziali: {name}",
+      "CUSTOMERS": "Clienti da associare",
+      "CUSTOMERS_HINT": "Facoltativo, fino a {max} clienti: la carta viene aggiunta alla loro scheda Carte fedeltà.",
+      "CUSTOMER_SEARCH": "Cerca cliente",
+      "CUSTOMER_PLACEHOLDER": "Almeno 3 caratteri",
+      "CUSTOMER_CLEAR": "Cancella la ricerca",
+      "CUSTOMER_REMOVE": "Togli {name}",
+      "REMOVE": "Togli",
+      "CUSTOMERS_NO_ACCESS": "Non hai il permesso di leggere i contatti: non puoi cercare i clienti da associare."
+    },
+    "BALANCES": {
+      "TITLE": "Saldi",
+      "CREDIT": "Credito: {amount}",
+      "POINTS": "{name}: {points} punti",
+      "INACTIVE": "Raccolta non attiva",
+      "NO_POINTS": "Nessuna raccolta punti.",
+      "NONE": "Il tipo di questa carta non ha credito né punti.",
+      "ADJUST": "Rettifica"
+    },
+    "CUSTOMERS": {
+      "TITLE": "Clienti associati",
+      "EXPLANATION": "Il legame è il codice della carta nella scheda Carte fedeltà del contatto: per associare o togliere un cliente aprilo e aggiungi o rimuovi il codice. Più clienti possono condividere la stessa carta.",
+      "NONE": "Nessun cliente ha questa carta.",
+      "MORE": "+ altri {count}"
+    },
+    "ADJUST": {
+      "TITLE": "Rettifica la carta {code}",
+      "IMMEDIATE": "La rettifica si applica subito, senza premere Salva.",
+      "CREDIT": "Credito",
+      "POINTS_OF": "Punti: {name}",
+      "DIRECTION": "Operazione",
+      "ADD": "Aggiungi",
+      "REMOVE": "Togli",
+      "AMOUNT_HINT": "Lascia vuoto per non cambiare. Un numero intero maggiore di zero.",
+      "PREVIEW": "Nuovo saldo: {value}",
+      "REASON": "Motivo (facoltativo)",
+      "REASON_HINT": "Fino a {max} caratteri. Non scrivere dati personali.",
+      "SUBMIT": "Applica",
+      "DONE": "Rettifica applicata.",
+      "NEW_CREDIT": "Credito: {amount}",
+      "NEW_POINTS": "{name}: {points} punti",
+      "INSUFFICIENT": "Il saldo non può scendere sotto zero.",
+      "KEY_REUSED": "Una rettifica con valori diversi è già stata inviata da questa finestra: chiudila, verifica i saldi e riprova.",
+      "AMOUNT_MONEY": "Importo",
+      "AMOUNT_POINTS": "Punti",
+      "AMOUNT_HINT_MONEY": "Lascia vuoto per non cambiare. Un importo maggiore di zero, con il punto come separatore decimale.",
+      "UNCERTAIN": "Esito non noto: la rettifica potrebbe essere stata applicata. Controlla i movimenti prima di riprovare."
+    },
+    "MOVEMENT": {
+      "DATE": "Data e ora",
+      "TYPE": "Tipo",
+      "COLLECTION": "Raccolta",
+      "POINTS": "Punti",
+      "BALANCE": "Credito",
+      "OPERATOR": "Operatore",
+      "INTEGRATION": "Integrazione: {name}",
+      "STORE_OPERATOR": "Cassa · {name}",
+      "TYPE_MANUALLY": "Manuale",
+      "TYPE_IMPORT": "Importazione",
+      "TYPE_SALE": "Vendita",
+      "TYPE_CANCELED_SALE": "Annullo vendita",
+      "TYPE_OTHER": "Altro",
+      "LOAD_ERROR": "Impossibile caricare i movimenti",
+      "EMPTY": "Nessun movimento",
+      "EMPTY_MESSAGE": "I movimenti compaiono quando la carta viene rettificata o usata."
+    },
+    "DELETE": {
+      "ACTION": "Elimina",
+      "TITLE": "Eliminare la carta?",
+      "CONFIRM": "Eliminare definitivamente la carta {code}? Si può eliminare solo una carta senza movimenti e senza clienti. L'operazione è irreversibile.",
+      "DONE": "Carta eliminata."
+    },
+    "ERROR": {
+      "HAS_HISTORY": "La carta ha una storia o clienti associati: non si può eliminare, disattivala.",
+      "TOO_SLOW": "La verifica è troppo lenta: riprova più tardi.",
+      "BALANCE_NOT_EMPTY": "La carta ha ancora credito: scaricalo con una rettifica prima di cambiare tipo.",
+      "KEY_PENDING": "Una richiesta precedente è ancora in verifica: cerca il codice nell'elenco delle carte prima di riprovare."
+    }
+  },
+  "SALES": {
+    "TITLE": "Acquisti",
+    "PAGE_TITLE": "Vendita",
+    "LOAD_ERROR": "Impossibile caricare gli acquisti",
+    "PAGE_LOAD_ERROR": "Impossibile caricare la vendita",
+    "TOO_SLOW": "La lettura delle vendite è troppo lenta: restringi il periodo e riprova.",
+    "EMPTY": "Nessun acquisto",
+    "EMPTY_MESSAGE": "Non ci sono vendite per questo cliente con i filtri scelti.",
+    "NO_NUMBER": "Senza numero",
+    "BACK": "Indietro",
+    "TILES": "Riepilogo degli acquisti",
+    "TILE": {
+      "SOLD": "Venduto",
+      "COUNT": "Numero vendite",
+      "AVERAGE": "Scontrino medio",
+      "REFUNDED": "Resi"
+    },
+    "COLUMN": {
+      "NUMBER": "Numero",
+      "DATE": "Data",
+      "TIME": "Ora",
+      "TOTAL": "Importo",
+      "COMPANY": "Azienda",
+      "PLACE": "Punto vendita",
+      "CASH_DESK": "Cassa",
+      "OPERATOR": "Operatore",
+      "TABLE": "Tavolo"
+    },
+    "FILTER": {
+      "FROM": "Dal",
+      "TO": "Al",
+      "PLACE": "Punto vendita",
+      "ALL_PLACES": "Tutti i punti vendita",
+      "RANGE_ERROR": "La data finale è precedente a quella iniziale."
+    },
+    "BADGE": {
+      "INVOICE": "Fattura",
+      "CHARGE": "Addebito",
+      "NON_FISCAL": "Preventivo",
+      "UNPAID": "Non pagato",
+      "INVOICED": "Fatturato",
+      "CANCELED": "Annullato",
+      "REFUNDED": "Reso",
+      "REFUNDED_NUMBERS": "Reso {numbers}"
+    },
+    "TYPE": {
+      "RECEIPT": "Scontrino",
+      "INVOICE": "Fattura",
+      "CHARGE": "Addebito",
+      "UNKNOWN": "Non indicato"
+    },
+    "SECTION": {
+      "DETAILS": "Dati della vendita",
+      "PRODUCTS": "Prodotti",
+      "TOTALS": "Totali",
+      "PAYMENTS": "Pagamenti",
+      "REFUNDS": "Resi"
+    },
+    "FACT": {
+      "TYPE": "Tipo",
+      "DATE": "Data e ora",
+      "COMPANY": "Azienda",
+      "PLACE": "Punto vendita",
+      "CASH_DESK": "Cassa",
+      "OPERATOR": "Operatore",
+      "TABLE": "Tavolo",
+      "CUSTOMER": "Cliente",
+      "CARD": "Carta fedeltà",
+      "RECEIPT": "Scontrino fiscale",
+      "NOTE": "Nota",
+      "CARD_USED": "Carta fedeltà usata"
+    },
+    "PRODUCT": {
+      "CODE": "Codice",
+      "NAME": "Prodotto",
+      "QUANTITY": "Quantità",
+      "UNIT_PRICE": "Prezzo",
+      "DISCOUNT": "Sconto",
+      "EMPTY": "Nessun prodotto",
+      "EMPTY_MESSAGE": "La vendita non ha righe di prodotti.",
+      "TRUNCATED": "Sono mostrate {shown} righe di {count}."
+    },
+    "TOTALS": {
+      "TOTAL": "Totale",
+      "TAXABLE": "Imponibile",
+      "TAX": "IVA",
+      "DISCOUNT": "Sconto sul totale",
+      "SURCHARGE": "Maggiorazione sul totale"
+    },
+    "PAYMENT": {
+      "CASH": "Contanti",
+      "ELECTRONIC": "Elettronico",
+      "CHEQUE": "Assegno",
+      "TICKETS": "Buoni",
+      "FIDELITYCREDIT": "Credito fedeltà",
+      "UNPAID": "Non pagato"
+    },
+    "REFUND": {
+      "NUMBER": "Numero",
+      "DATE": "Data e ora",
+      "AMOUNT": "Importo reso"
     }
   }
 }

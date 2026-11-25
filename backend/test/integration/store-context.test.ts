@@ -165,10 +165,19 @@ describe('GET /v1/store-context/place', () => {
       );
     const junk = await world.asStore(store.key, 'GET', '/store-context/place');
     assert.equal(junk.status, 200);
-    assert.deepEqual([junk.body.data.integrations.dojo.apiKey, junk.body.data.integrations.satispay.keyId, junk.body.data.integrations.satispay.activationCode], [null, null, null]);
+    assert.deepEqual([junk.body.data.integrations.dojo.apiKey, junk.body.data.integrations.satispay.keyId], [null, null]);
+    assert.equal('activationCode' in junk.body.data.integrations.satispay, false);
     assert.equal(junk.body.data.devices.items[0].automaticCashPassword, null);
     assert.equal(junk.body.data.devices.items[0].automaticCashUsername, null);
     assert.equal(junk.body.data.devices.items.length, 1);
+  });
+
+  it('never gives the activation code of Satispay a place may still hold from the old backoffice, in clear or as a flag', async () => {
+    await groupDb().collection('places').updateOne({ _id: own() }, { $set: { 'integrations.satispay.activationCode': 'OLDCODE12345', 'integrations.satispay.keyId': 'fake-satispay-key-id' } });
+    const reply = await world.asStore(store.key, 'GET', '/store-context/place');
+    assert.equal(reply.status, 200);
+    assert.equal(reply.body.data.integrations.satispay.keyId, 'fake-satispay-key-id');
+    assert.ok(!JSON.stringify(reply.body).includes('OLDCODE12345') && !JSON.stringify(reply.body).includes('activationCode'));
   });
 
   it('is the place of the key and no other, whatever the other stores have', async () => {

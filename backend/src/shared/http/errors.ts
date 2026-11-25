@@ -23,6 +23,8 @@ export const ERROR_STATUS = {
   RATE_LIMITED: 429,
   QUOTA_EXCEEDED: 429,
   INTERNAL_ERROR: 500,
+  /** An external provider failed (unreachable, timed out, rate limited us or answered in an unexpected form); the response says nothing of why. */
+  PROVIDER_ERROR: 502,
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
@@ -54,6 +56,7 @@ export const DEFAULT_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   RATE_LIMITED: 'Too many requests',
   QUOTA_EXCEEDED: 'Quota exceeded',
   INTERNAL_ERROR: 'Internal server error',
+  PROVIDER_ERROR: 'The provider could not complete the request',
   SERVICE_UNAVAILABLE: 'Service unavailable',
 };
 

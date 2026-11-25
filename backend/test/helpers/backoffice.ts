@@ -2,8 +2,9 @@ import { randomBytes } from 'node:crypto';
 import type { Document, ObjectId } from 'mongodb';
 import { createBackofficeModules, createPublicApiModules } from '../../src/composition.ts';
 import type { UsageMeter } from '../../src/modules/api-keys/usage-meter.ts';
+import type { IntegrationsDeps } from '../../src/integrations/index.ts';
 import type { CervedHttpOptions } from '../../src/integrations/cerved/index.ts';
-import type { MediaStorage } from '../../src/integrations/gcs/index.ts';
+import type { MediaStorage } from '../../src/infrastructure/gcs/index.ts';
 import { ensureIndexes } from '../../src/db/indexes.ts';
 import { legacyPasswordHash } from '../../src/shared/security/legacy-password.ts';
 import { Secret } from '../../src/shared/security/secret.ts';
@@ -108,6 +109,8 @@ export interface BackofficeOptions {
   readonly mediaStorage?: MediaStorage | null;
   /** The `fetch`, timeout and size limit of the calls to Cerved (its base URL and key are set through `env`). */
   readonly cervedHttp?: CervedHttpOptions;
+  /** The `fetch`, timeout and size limit of the calls to every provider of the integrations module (their base URLs and keys are set through `env`); `cervedHttp` is the same for Cerved alone. */
+  readonly integrationsHttp?: IntegrationsDeps['http'];
 }
 
 /** Thresholds high enough for tests that are not about rate limits. */
@@ -148,8 +151,8 @@ export async function startBackoffice(ctx: TestDatabases, options: BackofficeOpt
   const config = testConfig(env);
   const logs = memoryLogger();
   const rateLimiter = options.rateLimiter ?? memoryRateLimiter();
-  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, rateLimiter, mediaStorage: options.mediaStorage ?? null, ...(options.cervedHttp === undefined ? {} : { cervedHttp: options.cervedHttp }) });
-  const publicApi = createPublicApiModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, rateLimiter, catalog: modules.catalog, now: clock.now });
+  const modules = createBackofficeModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, now: clock.now, rateLimiter, mediaStorage: options.mediaStorage ?? null, ...(options.cervedHttp === undefined && options.integrationsHttp === undefined ? {} : { integrationsHttp: { ...(options.cervedHttp === undefined ? {} : { cerved: options.cervedHttp }), ...options.integrationsHttp } }) });
+  const publicApi = createPublicApiModules({ config, databases: ctx.databases, activityLog: activity, logger: logs.logger, rateLimiter, catalog: modules.catalog, crm: modules.crm, now: clock.now });
   const app = await startApp(
     {
       config,

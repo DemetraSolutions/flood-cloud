@@ -69,10 +69,13 @@ const STATUS: Record<string, number> = {
   FORBIDDEN: 403,
   FEATURE_DISABLED: 403,
   CONFLICT: 409,
+  PRECONDITION_FAILED: 412,
   NOT_FOUND: 404,
   VALIDATION_ERROR: 422,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
+  PROVIDER_ERROR: 502,
+  SERVICE_UNAVAILABLE: 503,
 };
 
 /** Fails an expected request with the standard error envelope. */

@@ -27,3 +27,28 @@ export function vatNumberFilter(normalized: string): Filter<Document> {
   const prefix = /^\d{11}$/.test(normalized) ? '(?:I[ \\t]*T)?[ \\t]*' : '';
   return { code: { $regex: `^[ \\t]*${prefix}${body}[ \\t]*$`, $options: 'i' } };
 }
+
+/**
+ * Whether eleven digits are an Italian VAT number: the last digit is the check digit of the first ten (the digits in even positions are
+ * doubled, and 9 is taken off those that become larger than 9; the total, check digit included, is a multiple of ten).
+ *
+ * @param digits Exactly eleven digits.
+ * @returns `true` when the check digit is right.
+ */
+export function isValidItalianVatDigits(digits: string): boolean {
+  if (!/^\d{11}$/.test(digits)) {
+    return false;
+  }
+  let total = 0;
+  for (let index = 0; index < 11; index += 1) {
+    let digit = Number(digits[index]);
+    if (index % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) {
+        digit -= 9;
+      }
+    }
+    total += digit;
+  }
+  return total % 10 === 0;
+}

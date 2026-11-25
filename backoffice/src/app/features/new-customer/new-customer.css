@@ -88,26 +88,3 @@ output {
     gap: var(--space-1);
   }
 }
-
-.vat {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--space-3);
-}
-
-.vat fc-text-field {
-  flex: 1 1 14rem;
-}
-
-.vat button {
-  margin-block-start: 1.75rem;
-}
-
-.lookup-notice p {
-  margin: 0;
-}
-
-.lookup-notice .error {
-  color: var(--color-danger);
-}

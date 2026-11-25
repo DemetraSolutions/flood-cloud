@@ -221,8 +221,8 @@ const RESERVED_SETTINGS: readonly string[] = SETTING_FIELDS.filter((field) => fi
 /** The keys of the integrations that receive payments: a PSA or a dealer sets, changes or clears them (any other role is `notAllowed`, even for a clear). */
 const PAYMENT_SETTINGS: readonly string[] = SETTING_FIELDS.filter((field) => field.payment === true).map((field) => field.domain);
 
-/** Whether the caller is a PSA or a dealer. */
-const isPrivileged = (caller: AuthPrincipal): boolean => caller.role === 'PSA' || caller.role === 'D';
+/** Whether the caller is a PSA or a dealer: the roles that change the dealers' switches and the payment keys. */
+export const isPrivileged = (caller: AuthPrincipal): boolean => caller.role === 'PSA' || caller.role === 'D';
 
 /** The place as the caller may see it: the dealer settings are for a PSA or a dealer only. */
 function shownTo(caller: AuthPrincipal, place: Place): Place {

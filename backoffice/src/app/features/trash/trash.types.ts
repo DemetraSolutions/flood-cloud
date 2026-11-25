@@ -2,11 +2,19 @@ import { ApiError } from '../../core/api/api-error';
 import { CompanyListItem } from '../companies/company.types';
 import { GroupListItem } from '../groups/group.types';
 import { PlaceListItem, placeRoute } from '../places/place.types';
+import { ContactRow, contactLabel, contactRoute } from '../contacts/contact.types';
 import { ProductRow, productRoute } from '../products/product.types';
 import { userRoute, UserRecord } from '../users/user.types';
 
 /** The tabs of the trash page, in order. */
-export const TRASH_KINDS = ['companies', 'places', 'users', 'products', 'groups'] as const;
+export const TRASH_KINDS = [
+  'companies',
+  'places',
+  'users',
+  'products',
+  'contacts',
+  'groups',
+] as const;
 
 /** A kind of item the trash holds. */
 export type TrashKind = (typeof TRASH_KINDS)[number];
@@ -20,6 +28,7 @@ export const READ_PERMISSION: Readonly<Record<TrashKind, string>> = {
   places: 'places:read',
   users: 'users:read',
   products: 'products:read',
+  contacts: 'contacts:read',
   groups: 'groups:trash',
 };
 
@@ -29,6 +38,7 @@ export const RESTORE_PERMISSION: Readonly<Record<TrashKind, string>> = {
   places: 'places:trash',
   users: 'users:trash',
   products: 'products:update',
+  contacts: 'contacts:write',
   groups: 'groups:trash',
 };
 
@@ -38,6 +48,7 @@ export const DELETE_PERMISSION: Readonly<Record<GroupTrashKind, string>> = {
   places: 'places:delete',
   users: 'users:delete',
   products: 'products:update',
+  contacts: 'contacts:write',
 };
 
 /** Permission to empty the trash of a kind (platform administrators only). */
@@ -45,6 +56,13 @@ export const EMPTY_PERMISSION = 'trash:empty';
 
 /** Most ids one bulk call takes (the pages of the lists never exceed it). */
 export const MAX_BULK_IDS = 100;
+
+/**
+ * Most items of a kind a deletion for good takes in one call, when it is fewer than
+ * {@link MAX_BULK_IDS}: the server checks what still refers to a contact one at a time, so it takes
+ * at most ten.
+ */
+export const MAX_DELETE_IDS: Readonly<Partial<Record<GroupTrashKind, number>>> = { contacts: 10 };
 
 /** What happened to an item of a bulk call. */
 export type TrashOutcome = 'restored' | 'deleted' | 'skipped';
@@ -94,9 +112,12 @@ export type TrashedUser = UserRecord & Trashed;
 export type TrashedGroup = GroupListItem & Trashed;
 /** A trashed product (of any family) as the list returns it with `trashed=true`. */
 export type TrashedProduct = ProductRow;
+/** A trashed contact (of any kind) as the list returns it with `trashed=true`. */
+export type TrashedContact = ContactRow;
 
 /** A row of any tab. */
-export type TrashRow = TrashedCompany | TrashedPlace | TrashedUser | TrashedProduct | TrashedGroup;
+export type TrashRow =
+  TrashedCompany | TrashedPlace | TrashedUser | TrashedProduct | TrashedContact | TrashedGroup;
 
 /** The totals a bulk operation reports to the user. */
 export interface TrashSummary {
@@ -149,6 +170,8 @@ export function trashRowRoute(kind: TrashKind, groupId: string, row: TrashRow): 
       return userRoute(row as TrashedUser);
     case 'products':
       return productRoute(groupId, (row as TrashedProduct).family, row.id);
+    case 'contacts':
+      return contactRoute(groupId, row.id);
     case 'groups':
       return ['/groups', row.id, 'settings'];
   }
@@ -159,6 +182,9 @@ export function trashRowLabel(kind: TrashKind, row: TrashRow): string {
   if (kind === 'products') {
     const product = row as TrashedProduct;
     return product.name ?? product.code ?? product.id;
+  }
+  if (kind === 'contacts') {
+    return contactLabel(row as TrashedContact);
   }
   return kind === 'users' ? (row as TrashedUser).username : (row as { name: string }).name;
 }

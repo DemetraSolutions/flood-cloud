@@ -4,12 +4,12 @@
 > Regole di redazione (`GEMINI.md` §3): nessun riferimento a superfici interne, dettagli implementativi, database o informazioni utili a un attaccante; esempi completi di richiesta e risposta; mantenuto a ogni passo che tocca `/public/v1`.
 
 ## Introduzione
-Le API pubbliche di Flood Cloud permettono ai sistemi di un'attività (per esempio un e-commerce o un gestionale) di leggere i propri dati in modo sicuro. La versione attuale offre: il profilo della propria chiave, i punti vendita, le aziende, i listini e le aliquote (sola lettura) e il **catalogo**: prodotti, categorie, marche, gruppi di attributi, reparti e giacenze in lettura; prodotti e categorie anche in scrittura. Altri dati (vendite, ordini, prenotazioni, clienti) arriveranno in versioni successive di questo documento.
+Le API pubbliche di Flood Cloud permettono ai sistemi di un'attività (per esempio un e-commerce o un gestionale) di leggere i propri dati in modo sicuro. La versione attuale offre: il profilo della propria chiave, i punti vendita, le aziende, i listini e le aliquote (sola lettura) e il **catalogo**: prodotti, categorie, marche, gruppi di attributi, reparti e giacenze in lettura; prodotti e categorie anche in scrittura; i **contatti** (clienti e fornitori) con i loro gruppi, e le **carte fedeltà** avanzate con credito e punti. Altri dati (vendite, ordini, prenotazioni) arriveranno in versioni successive di questo documento.
 
 - **URL di base:** `https://<host>/public/v1` *(host da definire)*
 - **Formato:** JSON (`Content-Type: application/json; charset=utf-8`), date ISO 8601 in UTC, importi in centesimi interi.
 - **Solo da server a server:** le chiavi non vanno mai inserite in pagine web, app distribuite o repository di codice. Le API non rispondono con alcuna intestazione CORS: una pagina web non può chiamarle.
-- **Lettura e scrittura:** gli endpoint sono `GET`, tranne quelli di scrittura del catalogo (`POST`, `PATCH`, `DELETE`), che richiedono il permesso `catalog:write` (vedi "Catalogo").
+- **Lettura e scrittura:** gli endpoint sono `GET`, tranne quelli di scrittura del catalogo (`POST`, `PATCH`, `DELETE`), che richiedono il permesso `catalog:write` (vedi "Catalogo"), `contacts:write` (vedi "Contatti") o `fidelityCards:write` (vedi "Carte fedeltà").
 
 ## Autenticazione
 Ogni richiesta include la propria API key nell'header `X-Api-Key`:
@@ -42,10 +42,14 @@ Ogni chiave ha uno o più permessi; una richiesta a un endpoint il cui permesso 
 | `companies:read` | `GET /companies`, `GET /companies/{companyId}` |
 | `catalog:read` | `GET /price-lists`, `GET /taxes`, `GET /currencies`, `GET /measure-units` (listini, aliquote, valute e unità di misura) e **tutte le letture del catalogo**: prodotti, categorie, marche, gruppi di attributi, reparti e giacenze |
 | `catalog:write` | **le scritture del catalogo**: creare, modificare, cestinare e ripristinare i prodotti; creare, modificare ed eliminare le categorie |
+| `contacts:read` | **dati personali**: `GET /contacts`, `GET /contacts/{contactId}`, `GET /contact-groups`, `GET /contact-groups/{contactGroupId}` |
+| `contacts:write` | creare, modificare, cestinare e ripristinare i contatti |
+| `fidelityCards:read` | `GET /fidelity-cards`, `GET /fidelity-cards/{cardId}`, `GET /fidelity-cards/{cardId}/movements` (credito e punti delle carte) |
+| `fidelityCards:write` | **muove credito prepagato**: creare carte (anche con credito e punti iniziali), cambiarne tipo e stato, rettificare credito e punti |
 
-`catalog:write` si concede solo alle chiavi che devono scrivere e **non include** `catalog:read`: una chiave di sola scrittura riceve la voce che ha scritto, ma non legge il catalogo. Per scrivere e rileggere servono entrambi.
+`catalog:write` si concede solo alle chiavi che devono scrivere e **non include** `catalog:read`: una chiave di sola scrittura riceve la voce che ha scritto, ma non legge il catalogo. Per scrivere e rileggere servono entrambi. Lo stesso vale per `contacts:write` e `fidelityCards:write`, che **non includono** `contacts:read` e `fidelityCards:read`. Concedi `contacts:read` e `fidelityCards:write` solo a sistemi fidati: il primo dà accesso a dati personali, il secondo permette di spendere o accreditare credito.
 
-Una chiave può essere **ristretta** a determinate aziende e/o a determinati punti vendita: vede solo quelli (se sono indicati entrambi, solo i punti vendita che soddisfano entrambe le restrizioni). Per le aziende e i punti vendita fuori dalle restrizioni, o di altre attività, la risposta è `404`, come se non esistessero. Listini e aliquote sono dell'attività intera e non sono ristretti. Le restrizioni valgono anche per il catalogo e **definiscono che cosa la chiave può scrivere** (vedi "Catalogo: il perimetro della chiave").
+Una chiave può essere **ristretta** a determinate aziende e/o a determinati punti vendita: vede solo quelli (se sono indicati entrambi, solo i punti vendita che soddisfano entrambe le restrizioni). Per le aziende e i punti vendita fuori dalle restrizioni, o di altre attività, la risposta è `404`, come se non esistessero. Listini e aliquote sono dell'attività intera e non sono ristretti. **Contatti, gruppi di contatti e carte fedeltà non sono ristretti**: sono dell'attività intera, e una chiave ristretta li vede e li modifica tutti. Le restrizioni valgono invece per il catalogo e **definiscono che cosa la chiave può scrivere** (vedi "Catalogo: il perimetro della chiave").
 
 ## Limiti di utilizzo
 Ogni chiave ha due limiti, scelti alla creazione (in mancanza, valgono quelli dell'attività: **60 richieste al minuto** e **10 000 richieste al giorno**). In più l'attività ha un **tetto per tutte le sue chiavi insieme** (in mancanza, **120 richieste al minuto** e **20 000 al giorno**): più chiavi non aggirano i limiti dell'attività. I quattro conteggi si applicano nell'ordine: minuto della chiave, minuto dell'attività, giorno della chiave, giorno dell'attività; il primo superato rifiuta la richiesta.
@@ -70,7 +74,7 @@ Ogni chiave ha due limiti, scelti alla creazione (in mancanza, valgono quelli de
    ```
    Una richiesta rifiutata da un limite al minuto non consuma alcuna quota giornaliera; una chiave che ha già esaurito la propria quota giornaliera è rifiutata subito e non consuma nulla dell'attività (non riduce la capacità delle altre chiavi); una richiesta rifiutata dalla quota giornaliera dell'attività ha già contato nella quota della propria chiave. `GET /me` mostra i tuoi limiti, il tetto dell'attività e quante richieste hai già fatto oggi.
 
-Le **scritture del catalogo** hanno un limite in più: **60 scritture al minuto per chiave** (in mancanza di un valore diverso concordato). Oltre il limite la risposta è `429` con `Retry-After`, prima ancora che il corpo della richiesta sia letto. Ogni richiesta, scritture comprese, conta nei limiti al minuto, nella quota giornaliera e nel conteggio d'uso della chiave.
+Le **scritture** (catalogo, contatti e carte fedeltà) hanno un limite in più: **60 scritture al minuto per chiave, in totale** (in mancanza di un valore diverso concordato). Oltre il limite la risposta è `429` con `Retry-After`, prima ancora che il corpo della richiesta sia letto. Ogni richiesta, scritture comprese, conta nei limiti al minuto, nella quota giornaliera e nel conteggio d'uso della chiave.
 
 Buone pratiche: rispetta `Retry-After`, non ripetere subito una richiesta respinta, e usa la paginazione con pagine ampie (fino a 100 elementi) invece di molte richieste piccole.
 
@@ -87,7 +91,7 @@ Buone pratiche: rispetta `Retry-After`, non ripetere subito una richiesta respin
 | `405` | `METHOD_NOT_ALLOWED` | metodo non previsto per la risorsa (metodi ammessi nell'header `Allow`) |
 | `409` | `CONFLICT` | scrittura in conflitto con lo stato della risorsa (per esempio un prodotto nel cestino, una categoria ancora in uso, un `Idempotency-Key` già usato con un corpo diverso) |
 | `412` | `PRECONDITION_FAILED` | la risorsa è cambiata dopo l'ultima lettura (`If-Match` non più valido) |
-| `413` | `PAYLOAD_TOO_LARGE` | corpo oltre il limite (256 KB per un prodotto, 128 KB per una categoria) |
+| `413` | `PAYLOAD_TOO_LARGE` | corpo oltre il limite (256 KB per un prodotto, 128 KB per una categoria, 64 KB per un contatto, 16 KB per una carta) |
 | `415` | `UNSUPPORTED_MEDIA_TYPE` | corpo non JSON |
 | `422` | `VALIDATION_ERROR` | parametri o corpo non validi o non previsti (dettagli in `details`) |
 | `429` | `RATE_LIMITED` / `QUOTA_EXCEEDED` | limite al minuto o quota giornaliera superati (della chiave o dell'attività) |
@@ -665,6 +669,255 @@ I reparti di cassa. **Permesso:** `catalog:read`. Parametri come le marche. Solo
 }
 ```
 
+## Contatti
+
+I contatti dell'attività (clienti, fornitori e altri) e i loro gruppi. Si leggono con `contacts:read` e si scrivono con `contacts:write`. I gruppi di contatti sono **solo in lettura**. I contatti sono dell'attività intera: anche una chiave ristretta ad aziende o punti vendita li vede e li modifica tutti.
+
+### Che cosa contiene un contatto
+
+```json
+{
+  "id": "665f1c2e9b1d4a0012ab5001",
+  "code": "K-0042",
+  "customer": true,
+  "supplier": false,
+  "displayName": "Mario Rossi",
+  "contactGroupId": "665f1c2e9b1d4a0012ab5101",
+  "person": {
+    "firstName": "Mario",
+    "lastName": "Rossi",
+    "taxCode": "RSSMRA80A01F205X",
+    "birthDate": "1980-01-01",
+    "address": { "street": "Via Roma 1", "postcode": "20100", "city": "Milano", "countryCode": "IT", "areaCode": "MI" },
+    "phones": ["+39 02 123456"],
+    "emails": ["mario@example.com"],
+    "discountPercent": 10,
+    "associatedCompanyId": null
+  },
+  "company": {
+    "name": "",
+    "vatNumber": "",
+    "taxCode": "",
+    "address": { "street": "", "postcode": "", "city": "", "countryCode": null, "areaCode": null },
+    "phones": [],
+    "emails": [],
+    "faxes": [],
+    "discountPercent": null
+  },
+  "fidelityCards": [
+    { "code": "CARD-1", "advanced": false, "points": 120 },
+    { "code": "GOLD-9", "advanced": true, "card": { "cardId": "665f1c2e9b1d4a0012ab6001", "cardType": { "id": "Zk3vQ0aT9bX2mN7pLw4HcB", "name": "Prepagata" }, "enabled": true, "balance": 12.5, "totalPoints": 40 } }
+  ],
+  "trashed": false,
+  "createdAt": "2024-03-01T09:00:00.000Z",
+  "updatedAt": "2026-11-20T09:00:00.000Z"
+}
+```
+- `displayName` è la ragione sociale, oppure nome e cognome. Un contatto ha un nome o una ragione sociale.
+- **Carte.** Una carta semplice ha il saldo dei punti (`points`). Una carta **avanzata** (con credito e raccolte punti: vedi "Carte fedeltà") è indicata da `advanced: true`; il suo dettaglio (`card`) c'è **solo se la chiave ha anche `fidelityCards:read`**.
+- **Che cosa non c'è mai:** il listino del contatto, i dati di fatturazione elettronica, le note, i listini del fornitore, i servizi, i dati dell'account del cliente e gli avvisi sui duplicati. In scrittura questi campi sono rifiutati (`422`, `unknown`) e **restano come sono**.
+- Una scrittura cambia solo ciò che invii: gli oggetti `person` e `company` e gli indirizzi si fondono campo per campo; `phones`, `emails`, `faxes` e `fidelityCards` sostituiscono **l'intera lista**.
+- **Versioni (`ETag` e `If-Match`)** e **creazioni idempotenti (`Idempotency-Key`, valida 24 ore e legata alla tua chiave API)** funzionano come nel catalogo.
+
+### GET /contacts
+Elenca i contatti, **interi**. **Permesso:** `contacts:read`. Parametri (nessun altro è ammesso):
+
+| Parametro | Significato |
+|---|---|
+| `limit` | 1–50, default 25 |
+| `cursor` | il valore `page.next` ricevuto, senza modificarlo |
+| `sort` | `displayName` (default), `lastName`, `companyName`, `updatedAt`; con `-` davanti l'ordine è inverso |
+| `q` | ricerca: testo contenuto in nome, cognome o ragione sociale, oppure codice, codice fiscale, partita IVA, codice carta o e-mail uguali |
+| `kind` | `customers`, `suppliers`, `others` o `all` (default) |
+| `contactGroupId` | solo i contatti di quel gruppo |
+| `trashed` | `true`: solo i contatti nel cestino; `false`: solo gli altri |
+| `updatedSince` | istante ISO 8601 (o solo la data): aggiornamento incrementale |
+
+Senza `updatedSince` e senza `trashed` si leggono i contatti **non nel cestino**. Con `updatedSince` si leggono **tutti i contatti modificati da quell'istante in poi (compreso)**, **anche quelli nel cestino** (`trashed: true`: toglili dalla tua copia), in ordine di modifica dal meno recente, salvo `sort`. Procedura come per il catalogo: scarica tutto a pagine, conserva il più grande `updatedAt`, ripeti con `updatedSince=<quel valore>`; riconosci per `id` il contatto con lo stesso `updatedAt`. **Un contatto eliminato per sempre dall'attività non compare**: fai una rilettura completa periodica.
+
+**Richiesta**
+```sh
+curl -H "X-Api-Key: $FLOOD_API_KEY" "https://<host>/public/v1/contacts?kind=customers&updatedSince=2026-11-24T09:30:00.000Z&limit=25"
+```
+**Risposta** `200`
+```json
+{
+  "data": [ { "id": "665f1c2e9b1d4a0012ab5001", "code": "K-0042", "customer": true, "supplier": false, "displayName": "Mario Rossi", "contactGroupId": null, "person": { "...": "come sopra" }, "company": { "...": "come sopra" }, "fidelityCards": [], "trashed": false, "createdAt": "2024-03-01T09:00:00.000Z", "updatedAt": "2026-11-25T08:00:00.000Z" } ],
+  "page": { "limit": 25, "next": null }
+}
+```
+
+### GET /contacts/{contactId}
+Un contatto, con l'header `ETag`. **Permesso:** `contacts:read`. `404` se non esiste o è di un'altra attività; un contatto nel cestino si legge, con `trashed: true`.
+
+### POST /contacts
+Crea un contatto. **Permesso:** `contacts:write`. Richiede `Idempotency-Key`. Tutti i campi sono facoltativi, ma serve un nome (`person.firstName`) o una ragione sociale (`company.name`). Campi ammessi: `code`, `customer`, `supplier`, `contactGroupId`, `person` (`firstName`, `lastName`, `taxCode`, `birthDate`, `address`, `phones`, `emails`, `discountPercent`, `associatedCompanyId`), `company` (`name`, `vatNumber`, `taxCode`, `address`, `phones`, `emails`, `faxes`, `discountPercent`), `fidelityCards` (`[{ "code": "…" }]`: i codici delle carte, da 1 a 64 caratteri, senza `|`). **Aggiungere o togliere il codice di una carta avanzata** (vedi "Carte fedeltà") richiede **anche `fidelityCards:write`**: senza, la richiesta è `403` e non scrive nulla; i codici delle carte semplici richiedono il solo `contacts:write`. Ogni altro campo è rifiutato con `422` (`unknown`). Un codice, un codice fiscale o una partita IVA già usati da altri contatti **non** sono un errore e non vengono segnalati.
+
+**Richiesta**
+```sh
+curl -X POST https://<host>/public/v1/contacts \
+  -H "X-Api-Key: $FLOOD_API_KEY" \
+  -H "Idempotency-Key: <UUID generato dal tuo sistema>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "K-0042",
+    "customer": true,
+    "person": { "firstName": "Mario", "lastName": "Rossi", "emails": ["mario@example.com"], "address": { "street": "Via Roma 1", "city": "Milano", "postcode": "20100", "countryCode": "IT", "areaCode": "MI" } },
+    "fidelityCards": [{ "code": "CARD-1" }]
+  }'
+```
+**Risposta** `201` con l'header `Location: /public/v1/contacts/665f1c2e9b1d4a0012ab5001`, l'`ETag` e il contatto completo (come in `GET /contacts/{contactId}`).
+
+Errori: `422` (campi non validi o non previsti, gruppo di contatti, azienda associata, paese o provincia inesistenti), `409` (`Idempotency-Key` già usato con un corpo diverso), `403`, `413`, `415`, `429`.
+
+### PATCH /contacts/{contactId}
+Modifica un contatto. **Permesso:** `contacts:write`. Richiede `If-Match`. Corpo: uno o più campi di quelli della creazione (almeno uno). Una modifica che non cambia nulla non scrive nulla e risponde con la stessa versione.
+
+**Richiesta**
+```sh
+curl -X PATCH https://<host>/public/v1/contacts/665f1c2e9b1d4a0012ab5001 \
+  -H "X-Api-Key: $FLOOD_API_KEY" \
+  -H 'If-Match: "ofQyXEWYuR1LURZT2EB4zAb4gmcNZ2kptw2o6mGKnOE"' \
+  -H "Content-Type: application/json" \
+  -d '{ "person": { "address": { "city": "Torino" }, "phones": ["+39 011 123456"] } }'
+```
+**Risposta** `200` con il contatto aggiornato e il nuovo `ETag`. Errori: `404`, `409` (il contatto è nel cestino o è cambiato mentre si scriveva), `412`, `422`, `403`, `429`.
+
+### POST /contacts/{contactId}/trash e POST /contacts/{contactId}/restore
+Sposta un contatto nel cestino, o lo toglie dal cestino. **Permesso:** `contacts:write`. Richiedono `If-Match`; nessun corpo. Rispondono `200` con il contatto (`trashed: true`, oppure di nuovo `false`) e il nuovo `ETag`. `409` se il contatto è già nel cestino (o non lo è), `412`, `404`. Un contatto nel cestino non si modifica. **Non esiste** l'eliminazione definitiva.
+
+### GET /contact-groups e GET /contact-groups/{contactGroupId}
+I gruppi di contatti. **Permesso:** `contacts:read`. Solo lettura. Parametri della lista: `limit` (1–100, default 50), `cursor`, `sort` (`name`, default, o `updatedAt`, anche con `-`), `q` (testo nel nome). Ogni risposta con un gruppo ha l'`ETag`.
+
+**Richiesta**
+```sh
+curl -H "X-Api-Key: $FLOOD_API_KEY" "https://<host>/public/v1/contact-groups?limit=50"
+```
+**Risposta** `200`
+```json
+{
+  "data": [ { "id": "665f1c2e9b1d4a0012ab5101", "name": "Clienti vip", "discountPercent": 5 } ],
+  "page": { "limit": 50, "next": null }
+}
+```
+`discountPercent` è `null` se il gruppo non ha sconto. Il listino del gruppo non è mai mostrato.
+
+## Carte fedeltà
+
+Le carte fedeltà **avanzate**: carte con un tipo, uno stato, un credito prepagato e punti su una o più raccolte. Si leggono con `fidelityCards:read` e si scrivono con `fidelityCards:write`. Sono dell'attività intera, senza restrizioni di azienda o punto vendita. **Non esiste l'eliminazione di una carta.** I punti delle carte semplici di un contatto si leggono nel contatto (vedi "Contatti") e non si modificano da qui.
+
+- **Importi.** Il credito (`balance`) è in unità di valuta con due decimali (per esempio `25.5`), come nelle risposte; è presente solo nelle carte di un tipo prepagato. I punti sono interi per raccolta; `totalPoints` somma quelli delle raccolte attive in questo momento.
+- **Una scrittura risponde con la carta scritta, saldi compresi**, anche se la chiave non ha `fidelityCards:read`: chi può creare o rettificare vede il risultato della propria operazione.
+- **Creare una carta con un codice già presente su dei contatti la collega a quei contatti** (un contatto "ha" una carta per il suo codice): con `contactIds` li si aggiungono ad altri.
+- **I contatti di una carta** (`contacts`, `contact`) compaiono **solo se la chiave ha anche `contacts:read`**, e solo con `id` e `displayName`; altrimenti c'è soltanto `contactsCount`.
+- **Versioni.** Le risposte con una carta hanno l'`ETag`, da usare come `If-Match` per cambiarne il tipo o lo stato. Credito e punti si muovono con le rettifiche e **non** cambiano la versione.
+
+```json
+{
+  "id": "665f1c2e9b1d4a0012ab6001",
+  "code": "GOLD-9",
+  "cardType": { "id": "Zk3vQ0aT9bX2mN7pLw4HcB", "name": "Prepagata", "enabled": true, "prepaid": true, "pointsCollect": true },
+  "enabled": true,
+  "balance": 12.5,
+  "points": [ { "collectionId": "n1P8xQwR2cV5tYb7KdLm0g", "name": "Raccolta punti", "points": 40, "active": true } ],
+  "totalPoints": 40,
+  "contactsCount": 1,
+  "contacts": [ { "id": "665f1c2e9b1d4a0012ab5001", "displayName": "Mario Rossi" } ],
+  "createdAt": "2026-01-10T09:00:00.000Z",
+  "updatedAt": "2026-01-10T09:00:00.000Z"
+}
+```
+
+### GET /fidelity-cards
+Elenca le carte. **Permesso:** `fidelityCards:read`. Parametri: `limit` (1–100, default 50), `cursor`, `sort` (`code`, default, `createdAt`, `updatedAt`; anche con `-`), `q` (il codice della carta; con `contacts:read` anche un testo nel nome di un contatto che la possiede), `cardTypeId`, `enabled` (`true`/`false`).
+
+**Richiesta**
+```sh
+curl -H "X-Api-Key: $FLOOD_API_KEY" "https://<host>/public/v1/fidelity-cards?q=GOLD&limit=50"
+```
+**Risposta** `200`
+```json
+{
+  "data": [
+    {
+      "id": "665f1c2e9b1d4a0012ab6001",
+      "code": "GOLD-9",
+      "cardType": { "id": "Zk3vQ0aT9bX2mN7pLw4HcB", "name": "Prepagata" },
+      "enabled": true,
+      "balance": 12.5,
+      "totalPoints": 40,
+      "contactsCount": 1,
+      "contact": { "id": "665f1c2e9b1d4a0012ab5001", "displayName": "Mario Rossi" },
+      "createdAt": "2026-01-10T09:00:00.000Z"
+    }
+  ],
+  "page": { "limit": 50, "next": null }
+}
+```
+`contact` (il primo contatto della carta) c'è solo con `contacts:read`.
+
+### GET /fidelity-cards/{cardId}
+Una carta, con l'`ETag`. **Permesso:** `fidelityCards:read`. `404` se non esiste o è di un'altra attività.
+
+### GET /fidelity-cards/{cardId}/movements
+La storia della carta, dal movimento più recente. **Permesso:** `fidelityCards:read`. Parametri: `limit` (1–100, default 50), `cursor`.
+```json
+{
+  "data": [
+    { "id": "665f1c2e9b1d4a0012ab7001", "date": "2026-11-25T10:00:00.000Z", "type": "manually", "balance": 3, "points": 0, "collection": null, "operator": { "kind": "apiKey", "name": "Webshop" } },
+    { "id": "665f1c2e9b1d4a0012ab7002", "date": "2026-01-10T09:00:00.000Z", "type": "manually", "balance": 20, "points": 0, "collection": null, "operator": { "kind": "user", "name": "Anna Bianchi" } }
+  ],
+  "page": { "limit": 50, "next": null }
+}
+```
+`balance` e `points` hanno il segno del movimento (un movimento di solo credito ha `points: 0`, uno di soli punti ha `balance: 0` e la `collection`). `operator` è chi ha eseguito il movimento, solo per nome: `{ "kind": "user", "name": … }` per un utente, `{ "kind": "apiKey", "name": … }` per una chiave API (il nome dato alla chiave, anche se poi revocata); un movimento di una vendita non ha operatore (`null`).
+
+### POST /fidelity-cards
+Crea una carta. **Permesso:** `fidelityCards:write`. Richiede `Idempotency-Key`: poiché l'operazione muove credito, una richiesta di cui non si conosce l'esito **non si ripete** con la stessa chiave prima che siano passate 24 ore (la risposta è `409` con `Idempotency-Key`/`pending`): verifica prima lo stato della carta. Corpo:
+
+| Campo | Significato |
+|---|---|
+| `code` | obbligatorio, da 1 a 64 caratteri, senza `|`; univoco nell'attività (`409` se già usato) |
+| `cardTypeId` | obbligatorio, un tipo di carta dell'attività |
+| `enabled` | facoltativo, default `true` |
+| `initialBalance` | facoltativo, credito iniziale (da 0,01 a 1 000 000, due decimali), solo per un tipo prepagato |
+| `initialPoints` | facoltativo, `[{ "collectionId", "points" }]` (punti interi da 1), solo su raccolte del tipo |
+| `contactIds` | facoltativo, fino a 20 contatti a cui dare la carta: **richiede anche `contacts:write`** (altrimenti `403`, anche con la lista vuota) |
+
+**Richiesta**
+```sh
+curl -X POST https://<host>/public/v1/fidelity-cards \
+  -H "X-Api-Key: $FLOOD_API_KEY" \
+  -H "Idempotency-Key: <UUID generato dal tuo sistema>" \
+  -H "Content-Type: application/json" \
+  -d '{ "code": "GOLD-9", "cardTypeId": "Zk3vQ0aT9bX2mN7pLw4HcB", "initialBalance": 25.5, "initialPoints": [{ "collectionId": "n1P8xQwR2cV5tYb7KdLm0g", "points": 10 }] }'
+```
+**Risposta** `201` con l'header `Location: /public/v1/fidelity-cards/665f1c2e9b1d4a0012ab6001`, l'`ETag` e la carta completa. Il credito e i punti iniziali sono registrati come movimenti della carta.
+
+Errori: `403` (`contactIds` senza `contacts:write`), `409` (codice già usato; `Idempotency-Key` con un corpo diverso o in attesa), `422` (tipo inesistente, credito su un tipo non prepagato, raccolta non del tipo, contatto inesistente, campi non previsti), `413`, `415`, `429`.
+
+### PATCH /fidelity-cards/{cardId}
+Cambia il tipo (`cardTypeId`) e/o lo stato (`enabled`) di una carta. **Permesso:** `fidelityCards:write`. Richiede `If-Match`; almeno un campo. Il codice non si cambia (`422`). Non si può passare a un tipo non prepagato finché la carta ha credito (`409`, `balance`/`notEmpty`).
+```sh
+curl -X PATCH https://<host>/public/v1/fidelity-cards/665f1c2e9b1d4a0012ab6001 \
+  -H "X-Api-Key: $FLOOD_API_KEY" \
+  -H 'If-Match: "ofQyXEWYuR1LURZT2EB4zAb4gmcNZ2kptw2o6mGKnOE"' \
+  -H "Content-Type: application/json" \
+  -d '{ "enabled": false }'
+```
+**Risposta** `200` con la carta e il nuovo `ETag`. Errori: `404`, `409`, `412`, `422`, `403`, `429`.
+
+### POST /fidelity-cards/{cardId}/adjustments
+Aggiunge o toglie credito e punti. **Permesso:** `fidelityCards:write`. Richiede `Idempotency-Key` (stesse regole di `POST /fidelity-cards`: nessuna ripetizione prima di 24 ore se l'esito è ignoto). Corpo: almeno uno tra `balanceDelta` (variazione del credito, con segno, due decimali, da -1 000 000 a 1 000 000, non zero; solo tipo prepagato) e `pointsDeltas` (`[{ "collectionId", "delta" }]`, interi non zero, solo raccolte del tipo, nessuna raccolta due volte), più un `reason` facoltativo (fino a 200 caratteri). Il credito e i punti **non scendono mai sotto zero**.
+```sh
+curl -X POST https://<host>/public/v1/fidelity-cards/665f1c2e9b1d4a0012ab6001/adjustments \
+  -H "X-Api-Key: $FLOOD_API_KEY" \
+  -H "Idempotency-Key: <UUID generato dal tuo sistema>" \
+  -H "Content-Type: application/json" \
+  -d '{ "balanceDelta": -4.5, "pointsDeltas": [{ "collectionId": "n1P8xQwR2cV5tYb7KdLm0g", "delta": 7 }], "reason": "rimborso ordine 1234" }'
+```
+**Risposta** `200` con la carta aggiornata (credito e punti nuovi; l'`ETag` non cambia). Errori: `404`, `409` (credito o punti insufficienti: `details` indica `balance` o `points.<raccolta>` con `insufficient`; `Idempotency-Key` con corpo diverso o in attesa), `422` (credito su un tipo non prepagato, raccolta non del tipo, nessuna variazione), `403`, `429`.
+
 ## Buone pratiche di integrazione
 - Conserva la chiave in un gestore di segreti e **non** inserirla in repository, log o richieste di assistenza; se sospetti che sia esposta, chiedi subito la revoca.
 - Usa una chiave per ogni sistema, con i soli permessi e le sole restrizioni che servono.
@@ -672,4 +925,6 @@ I reparti di cassa. **Permesso:** `catalog:read`. Parametri come le marche. Solo
 - Metti in cache le letture che cambiano di rado (listini, aliquote, anagrafiche) invece di richiederle a ogni operazione.
 - Per tenere allineato il catalogo usa l'aggiornamento incrementale (`updatedSince`) più una rilettura completa periodica; per le scritture genera un `Idempotency-Key` per ogni creazione e conserva l'`ETag` di ogni voce letta.
 - Dai a una chiave di scrittura solo le restrizioni che servono: una chiave senza restrizioni può modificare ogni prodotto dell'attività.
+- Per i contatti e le carte, genera un `Idempotency-Key` per ogni creazione e per ogni rettifica, e non ripeterle con una chiave nuova se non sai se la prima è andata a buon fine: leggi prima la carta.
+- Dai `contacts:read` e `fidelityCards:write` solo a chi ne ha davvero bisogno: i contatti sono dati personali e le rettifiche muovono credito.
 - Registra l'header `X-Request-Id` delle risposte con errore.

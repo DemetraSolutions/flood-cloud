@@ -1,0 +1,15 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 48rem;
+}
+
+.meta {
+  color: var(--color-text-muted);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

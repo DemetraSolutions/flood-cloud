@@ -1,0 +1,21 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'SALES.PAGE_LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <button fc-button variant="secondary" type="button" (click)="back()">{{ 'SALES.BACK' | t }}</button>
+  </p>
+} @else if (sale(); as current) {
+  <fc-sale-view
+    [groupId]="groupId()"
+    [sale]="current"
+    [currency]="currency()"
+    [names]="names()"
+    (back)="back()"
+  />
+} @else {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+}

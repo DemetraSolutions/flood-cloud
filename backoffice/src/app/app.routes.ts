@@ -16,6 +16,9 @@ import {
 import { Shell } from './core/layout/shell';
 import { leaveCompany } from './features/companies/company-leave';
 import { leaveEmailTemplate } from './features/email-templates/email-template-leave';
+import { leaveFidelityCard } from './features/fidelity-cards/fidelity-card-leave';
+import { leaveContactGroup } from './features/contact-groups/contact-group-leave';
+import { leaveContact } from './features/contacts/contact-leave';
 import { leaveCatalogItem } from './features/product-catalog/catalog-item-leave';
 import { leavePlace } from './features/places/place-leave';
 import { leaveCategory } from './features/product-categories/category-leave';
@@ -120,6 +123,29 @@ const catalogRoutes: Routes = [
  * as an input.
  */
 const groupCatalogRoutes: Routes = [
+  {
+    path: 'groups/:groupId/fidelity/cards',
+    canMatch: [permission('fidelity:read')],
+    title: 'FIDELITY_CARDS.TITLE',
+    loadComponent: () =>
+      import('./features/fidelity-cards/fidelity-card-list').then((m) => m.FidelityCardList),
+  },
+  {
+    path: 'groups/:groupId/fidelity/cards/new',
+    canMatch: [permission('fidelity:update')],
+    canDeactivate: [leaveFidelityCard],
+    title: 'FIDELITY_CARDS.FORM.NEW_TITLE',
+    loadComponent: () =>
+      import('./features/fidelity-cards/fidelity-card-page').then((m) => m.FidelityCardPage),
+  },
+  {
+    path: 'groups/:groupId/fidelity/cards/:cardId',
+    canMatch: [permission('fidelity:read')],
+    canDeactivate: [leaveFidelityCard],
+    title: 'FIDELITY_CARDS.FORM.EDIT_TITLE',
+    loadComponent: () =>
+      import('./features/fidelity-cards/fidelity-card-page').then((m) => m.FidelityCardPage),
+  },
   {
     path: 'groups/:groupId/fidelity/card-types',
     canMatch: [permission('fidelity:read')],
@@ -335,6 +361,23 @@ const productCatalogRoutes: Routes = [
       import('./features/catalog-xlsx/catalog-xlsx-page').then((m) => m.CatalogXlsxPage),
   },
   {
+    // The same page as the catalog: the `tool` data (bound to its input) says which workbook (K3).
+    path: 'groups/:groupId/tools/contacts-import-export',
+    canMatch: [permission('contacts:export')],
+    title: 'CONTACTS_XLSX.TITLE',
+    data: { tool: 'contacts' },
+    loadComponent: () =>
+      import('./features/catalog-xlsx/catalog-xlsx-page').then((m) => m.CatalogXlsxPage),
+  },
+  {
+    path: 'groups/:groupId/tools/fidelity-cards-import-export',
+    canMatch: [permission('fidelityCards:export')],
+    title: 'CARDS_XLSX.TITLE',
+    data: { tool: 'cards' },
+    loadComponent: () =>
+      import('./features/catalog-xlsx/catalog-xlsx-page').then((m) => m.CatalogXlsxPage),
+  },
+  {
     path: 'groups/:groupId/product-categories',
     canMatch: [permission('products:read')],
     title: 'PRODUCT_CATEGORIES.TITLE',
@@ -411,6 +454,72 @@ function productFamilyRoutes(family: ProductFamily): Routes {
 const productRoutes: Routes = FAMILY_ORDER.flatMap((family) => productFamilyRoutes(family));
 
 /**
+ * The contacts of a group and their groups of contacts (`doc/Tasks.md` step K2): the list with its
+ * tabs, the page of a new contact and the page of a contact, and the same three for the groups of
+ * contacts. Reading needs `contacts:read`, creating `contacts:write`; the other writes are checked
+ * by the pages and the server. Leaving a page with unsaved changes asks for confirmation.
+ */
+const contactRoutes: Routes = [
+  {
+    path: 'groups/:groupId/contacts',
+    canMatch: [permission('contacts:read')],
+    title: 'CONTACTS.TITLE',
+    loadComponent: () => import('./features/contacts/contact-list').then((m) => m.ContactList),
+  },
+  {
+    path: 'groups/:groupId/contacts/new',
+    canMatch: [permission('contacts:write')],
+    canDeactivate: [leaveContact],
+    title: 'CONTACTS.FORM.NEW_TITLE',
+    loadComponent: () => import('./features/contacts/contact-page').then((m) => m.ContactPage),
+  },
+  {
+    path: 'groups/:groupId/contacts/:contactId',
+    canMatch: [permission('contacts:read')],
+    canDeactivate: [leaveContact],
+    title: 'CONTACTS.FORM.EDIT_TITLE',
+    loadComponent: () => import('./features/contacts/contact-page').then((m) => m.ContactPage),
+  },
+  {
+    path: 'groups/:groupId/contact-groups',
+    canMatch: [permission('contacts:read')],
+    title: 'CONTACT_GROUPS.TITLE',
+    loadComponent: () =>
+      import('./features/contact-groups/contact-group-list').then((m) => m.ContactGroupList),
+  },
+  {
+    path: 'groups/:groupId/contact-groups/new',
+    canMatch: [permission('contacts:write')],
+    canDeactivate: [leaveContactGroup],
+    title: 'CONTACT_GROUPS.FORM.NEW_TITLE',
+    loadComponent: () =>
+      import('./features/contact-groups/contact-group-page').then((m) => m.ContactGroupPage),
+  },
+  {
+    path: 'groups/:groupId/contact-groups/:contactGroupId',
+    canMatch: [permission('contacts:read')],
+    canDeactivate: [leaveContactGroup],
+    title: 'CONTACT_GROUPS.FORM.EDIT_TITLE',
+    loadComponent: () =>
+      import('./features/contact-groups/contact-group-page').then((m) => m.ContactGroupPage),
+  },
+];
+
+/**
+ * The sales of a group, read only (`doc/Tasks.md` step V1): the page of one sale, opened from the
+ * purchases tab of a contact. It needs `sales:read`; the server checks the group and the
+ * perimeter (a sale out of it is a `404`).
+ */
+const saleRoutes: Routes = [
+  {
+    path: 'groups/:groupId/sales/:saleId',
+    canMatch: [permission('sales:read')],
+    title: 'SALES.PAGE_TITLE',
+    loadComponent: () => import('./features/sales/sale-page').then((m) => m.SalePage),
+  },
+];
+
+/**
  * Trash of a group (`groups/:groupId/trash`): one page with a tab per kind of item. It needs the
  * read permission of at least one of companies, places and users; the page shows only the tabs the
  * user may read, and the server checks the group against the perimeter of the user.
@@ -430,7 +539,9 @@ const trashRoutes: Routes = [
   },
   {
     path: 'groups/:groupId/trash',
-    canMatch: [anyPermission('companies:read', 'places:read', 'users:read', 'products:read')],
+    canMatch: [
+      anyPermission('companies:read', 'places:read', 'users:read', 'products:read', 'contacts:read'),
+    ],
     title: 'TRASH.TITLE',
     loadComponent: () => import('./features/trash/trash-page').then((m) => m.TrashPage),
   },
@@ -713,6 +824,8 @@ export const routes: Routes = [
           ...groupCatalogRoutes,
           ...productCatalogRoutes,
           ...productRoutes,
+          ...contactRoutes,
+          ...saleRoutes,
           ...companyRoutes,
           ...placeRoutes,
           ...trashRoutes,

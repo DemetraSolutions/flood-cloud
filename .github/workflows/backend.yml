@@ -152,7 +152,7 @@ jobs:
       - name: Sync the Secret from Secret Manager
         env:
           REQUIRED_SECRETS: MONGODB_URI LEGACY_PASSWORD_PEPPER VERSION_HMAC_KEY
-          OPTIONAL_SECRETS: MONGODB_ANALYTICS_URI CERVED_API_KEY
+          OPTIONAL_SECRETS: MONGODB_ANALYTICS_URI CERVED_API_KEY GOOGLE_MAPS_API_KEY SATISPAY_PUBLIC_KEY
         run: |
           set -euo pipefail
           prefix="flood-cloud-backend-"

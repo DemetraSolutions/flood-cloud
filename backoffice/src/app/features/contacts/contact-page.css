@@ -1,0 +1,17 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 64rem;
+}
+
+.meta,
+.note {
+  color: var(--color-text-muted);
+}
+
+form,
+section[role='tabpanel']:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

@@ -15,7 +15,7 @@
       (click)="toggleMenu()"
     ></button>
   }
-  <span class="brand">{{ 'APP.NAME' | t }}</span>
+  <span class="brand" (click)="onBrandClick()">{{ 'APP.NAME' | t }}</span>
   <div class="tools">
     @if (showNav() && groups.canChoose()) {
       <fc-group-selector />

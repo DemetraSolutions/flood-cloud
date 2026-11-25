@@ -1,0 +1,52 @@
+<header class="page-header">
+  <h1>{{ 'CONTACT_GROUPS.TITLE' | t }}</h1>
+  <a *fcCan="'contacts:write'" [routerLink]="newRoute()">{{ 'CONTACT_GROUPS.NEW' | t }}</a>
+</header>
+<p class="hint">{{ 'CONTACT_GROUPS.HINT' | t }}</p>
+
+<form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+  <fc-text-field
+    type="search"
+    autocomplete="off"
+    [label]="'CONTACT_GROUPS.SEARCH' | t"
+    [value]="searchText()"
+    (valueChange)="onSearch($event)"
+  />
+</form>
+
+@if (entries.error()) {
+  <fc-error-state
+    [title]="'CONTACT_GROUPS.LOAD_ERROR' | t"
+    [message]="errorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+} @else {
+  <fc-data-table
+    [caption]="'CONTACT_GROUPS.TITLE' | t"
+    [columns]="columns()"
+    [rows]="rows()"
+    [rowKey]="rowKey"
+    rowHeader="name"
+    [loading]="entries.isLoading()"
+    [sort]="tableSort()"
+    [emptyTitle]="'CONTACT_GROUPS.EMPTY' | t"
+    [emptyMessage]="'CONTACT_GROUPS.EMPTY_MESSAGE' | t"
+    (sortChange)="onSort($event)"
+  >
+    <a *fcCan="'contacts:write'" fcEmptyAction [routerLink]="newRoute()">{{ 'CONTACT_GROUPS.NEW' | t }}</a>
+    <ng-template fcCell="name" let-row>
+      <a [routerLink]="detailRoute(row)">{{ row.name }}</a>
+    </ng-template>
+  </fc-data-table>
+
+  <fc-cursor-paginator
+    [limit]="pageSize()"
+    [nextCursor]="nextCursor()"
+    [hasPrevious]="cursorStack().length > 0"
+    [loading]="entries.isLoading()"
+    (previousPage)="onPrevious()"
+    (nextPage)="onNext($event)"
+    (limitChange)="onLimit($event)"
+  />
+}

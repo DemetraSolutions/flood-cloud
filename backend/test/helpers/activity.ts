@@ -50,12 +50,12 @@ export function memoryRateLimiter(): MemoryRateLimiter {
       return Promise.resolve({ allowed: count < limit, limit, remaining: Math.max(0, limit - count), resetSeconds: 30, firstExcess: false });
     },
     peeks,
-    consume: (bucket, key, limit) => {
+    consume: (bucket, key, limit, _windowSeconds, amount = 1) => {
       calls.push({ bucket, key, limit });
       const id = `${bucket}:${key}`;
-      const count = (counters.get(id) ?? 0) + 1;
+      const count = (counters.get(id) ?? 0) + amount;
       counters.set(id, count);
-      const decision: RateLimitDecision = { allowed: count <= limit, limit, remaining: Math.max(0, limit - count), resetSeconds: 30, firstExcess: count === limit + 1 };
+      const decision: RateLimitDecision = { allowed: count <= limit, limit, remaining: Math.max(0, limit - count), resetSeconds: 30, firstExcess: count > limit && count - amount <= limit };
       return Promise.resolve(decision);
     },
   };

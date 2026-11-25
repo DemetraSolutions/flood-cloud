@@ -27,6 +27,7 @@ export const API_ERROR_CODES = [
   'QUOTA_EXCEEDED',
   'INTERNAL_ERROR',
   'SERVICE_UNAVAILABLE',
+  'PROVIDER_ERROR',
 ] as const;
 
 /** Union of the error codes returned by the backend. */

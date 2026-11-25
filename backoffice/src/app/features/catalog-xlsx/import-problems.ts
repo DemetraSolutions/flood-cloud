@@ -44,6 +44,8 @@ export class ImportProblems {
   readonly errorCount = input<number | null>(null);
   /** Whether there are problems that are not in `rows`. */
   readonly moreErrors = input(false);
+  /** Name of the text file the list is saved as. */
+  readonly fileName = input('catalog-import-problems.txt');
 
   /** The sheet the list is limited to, `''` for all. */
   protected readonly sheet = signal('');
@@ -120,6 +122,6 @@ export class ImportProblems {
   }
 
   protected save(): void {
-    saveFile(new Blob([this.asText()], { type: 'text/plain;charset=utf-8' }), 'catalog-import-problems.txt');
+    saveFile(new Blob([this.asText()], { type: 'text/plain;charset=utf-8' }), this.fileName());
   }
 }

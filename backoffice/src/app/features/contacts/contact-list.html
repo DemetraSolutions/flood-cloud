@@ -1,0 +1,159 @@
+<header class="page-header">
+  <h1>{{ 'CONTACTS.TITLE' | t }}</h1>
+  <a *fcCan="'contacts:export'" class="import-export" [routerLink]="importExportRoute()">{{ 'CATALOG_XLSX.LINK' | t }}</a>
+  <a *fcCan="'contacts:write'" [routerLink]="newRoute()" [queryParams]="{ kind: kindValue() }">{{ 'CONTACTS.NEW' | t }}</a>
+</header>
+<p class="hint">{{ 'CONTACTS.HINT' | t }}</p>
+
+@if (report(); as result) {
+  <section class="report" role="status" aria-labelledby="trash-report-heading">
+    <h2 id="trash-report-heading">{{ 'CONTACTS.TRASH.REPORT_TITLE' | t }}</h2>
+    <p>{{ 'CONTACTS.TRASH.REPORT_TRASHED' | t: { count: result.trashed } }}</p>
+    @if (result.skipped.length > 0) {
+      <p>{{ 'CONTACTS.TRASH.REPORT_SKIPPED' | t: { count: result.skipped.length } }}</p>
+      <ul>
+        @for (item of result.skipped; track item.id) {
+          <li>{{ 'CONTACTS.TRASH.REPORT_ITEM' | t: { name: item.name, issue: issueText(item.issue) } }}</li>
+        }
+      </ul>
+    }
+    <button fc-button variant="secondary" type="button" (click)="report.set(null)">
+      {{ 'COMMON.CLOSE' | t }}
+    </button>
+  </section>
+}
+
+<fc-tab-list
+  idPrefix="contacts"
+  [label]="'CONTACTS.TABS' | t"
+  [tabs]="tabs()"
+  [active]="kindValue()"
+  (activeChange)="onKind($event)"
+/>
+
+<div role="tabpanel" tabindex="0" [id]="'contacts-panel-' + kindValue()" [attr.aria-labelledby]="'contacts-tab-' + kindValue()">
+  <form class="filters" role="search" novalidate (submit)="$event.preventDefault()">
+    <fc-text-field
+      type="search"
+      autocomplete="off"
+      [label]="'CONTACTS.SEARCH' | t"
+      [hint]="'CONTACTS.SEARCH_HINT' | t"
+      [value]="searchText()"
+      (valueChange)="onSearch($event)"
+    />
+    <fc-select
+      [label]="'CONTACTS.FILTER.GROUP' | t"
+      [options]="groupOptions()"
+      [value]="groupValue()"
+      (valueChange)="onGroup($event)"
+    />
+  </form>
+
+  @if (entries.error()) {
+    <fc-error-state
+      [title]="'CONTACTS.LOAD_ERROR' | t"
+      [message]="errorMessage()"
+      [requestId]="loadError()?.requestId ?? null"
+      (retry)="reload()"
+    />
+  } @else {
+    <div *fcCan="'contacts:write'" class="bulk">
+      @if (rows().length > 0) {
+        <fc-checkbox [label]="'CONTACTS.SELECT_ALL' | t" [checked]="allSelected()" (checkedChange)="toggleAll($event)" />
+      }
+      @if (selectedRows().length > 0) {
+        <span role="status">{{ 'CONTACTS.SELECTED' | t: { count: selectedRows().length } }}</span>
+        <button fc-button variant="danger" type="button" [disabled]="busy()" (click)="trashOpen.set(true)">
+          {{ 'CONTACTS.TRASH.SELECTED_ACTION' | t }}
+        </button>
+      }
+    </div>
+
+    <fc-data-table
+      [caption]="('CONTACTS.KIND.' + kindValue().toUpperCase()) | t"
+      [columns]="columns()"
+      [rows]="rows()"
+      [rowKey]="rowKey"
+      [rowHeader]="nameColumn()"
+      [loading]="entries.isLoading()"
+      [sort]="tableSort()"
+      [emptyTitle]="'CONTACTS.EMPTY' | t"
+      [emptyMessage]="'CONTACTS.EMPTY_MESSAGE' | t"
+      (sortChange)="onSort($event)"
+    >
+      <a *fcCan="'contacts:write'" fcEmptyAction [routerLink]="newRoute()" [queryParams]="{ kind: kindValue() }">{{ 'CONTACTS.NEW' | t }}</a>
+      <ng-template fcCell="select" let-row>
+        <input
+          type="checkbox"
+          [checked]="isSelected(row)"
+          [attr.aria-label]="selectLabel(row)"
+          (change)="toggleRow(row, $any($event.target).checked)"
+        />
+      </ng-template>
+      <ng-template fcCell="displayName" let-row>
+        <a [routerLink]="detailRoute(row)">{{ nameOf(row) }}</a>
+      </ng-template>
+      <ng-template fcCell="companyName" let-row>
+        @if (nameColumn() === 'companyName') {
+          <a [routerLink]="detailRoute(row)">{{ row.company.name || nameOf(row) }}</a>
+        } @else {
+          {{ row.company.name }}
+        }
+      </ng-template>
+      <ng-template fcCell="type" let-row>
+        <span class="types">
+          @for (type of typesOf(row); track type) {
+            <fc-status-badge>{{ ('CONTACTS.TYPE.' + type) | t }}</fc-status-badge>
+          }
+        </span>
+      </ng-template>
+      <ng-template fcRowActions let-row>
+        <a [routerLink]="detailRoute(row)" [attr.aria-label]="'CONTACTS.EDIT_LABEL' | t: { name: nameOf(row) }">
+          {{ 'CONTACTS.EDIT' | t }}
+        </a>
+        <button
+          *fcCan="'contacts:write'"
+          fc-button
+          variant="ghost"
+          type="button"
+          [disabled]="busy()"
+          [attr.aria-label]="'CONTACTS.TRASH.LABEL' | t: { name: nameOf(row) }"
+          (click)="askTrash(row)"
+        >
+          {{ 'CONTACTS.TRASH.ACTION' | t }}
+        </button>
+      </ng-template>
+    </fc-data-table>
+
+    <fc-cursor-paginator
+      [limit]="pageSize()"
+      [nextCursor]="nextCursor()"
+      [hasPrevious]="cursorStack().length > 0"
+      [loading]="entries.isLoading()"
+      (previousPage)="onPrevious()"
+      (nextPage)="onNext($event)"
+      (limitChange)="onLimit($event)"
+    />
+  }
+</div>
+
+<fc-confirm-dialog
+  [heading]="'CONTACTS.TRASH.TITLE' | t"
+  [message]="trashMessage()"
+  [confirmLabel]="'CONTACTS.TRASH.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="trashOpen()"
+  (openChange)="trashOpen.set($event)"
+  (confirmed)="trashSelected()"
+/>
+<fc-confirm-dialog
+  [heading]="'CONTACTS.TRASH.TITLE' | t"
+  [message]="targetMessage()"
+  [confirmLabel]="'CONTACTS.TRASH.ACTION' | t"
+  [danger]="true"
+  [busy]="busy()"
+  [open]="targetOpen()"
+  (openChange)="targetOpen.set($event)"
+  (confirmed)="trashTarget()"
+/>

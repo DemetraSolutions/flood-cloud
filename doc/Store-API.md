@@ -2,7 +2,7 @@
 
 Documento per chi sviluppa il **server di punto vendita**: descrive solo le chiamate che il server di negozio può fare al cloud con la propria **chiave di negozio**. Si aggiorna a ogni passo che apre una nuova chiamata al negozio (registro in fondo).
 
-- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita, catalogo del punto vendita (lettura di prodotti, categorie, reparti, marche e gruppi di attributi; scrittura di prodotti, categorie e marche).
+- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita, catalogo del punto vendita (lettura di prodotti, categorie, reparti, marche e gruppi di attributi; scrittura di prodotti, categorie e marche), contatti, gruppi di contatti e carte fedeltà avanzate (§4.10: lettura e scrittura, senza eliminazioni).
 - **Non è qui:** le API del backoffice (`doc/API.md`) e le API pubbliche per gli integratori (`doc/Public-API.md`).
 
 ## 1. Convenzioni
@@ -11,7 +11,7 @@ Documento per chi sviluppa il **server di punto vendita**: descrive solo le chia
 - **Formato:** JSON UTF-8 (`Content-Type: application/json`), body non compresso.
 - **Risposte:** `{ "data": … }`; le liste aggiungono `page`.
 - **Errori:** `{ "error": { "code": "…", "message": "…", "details": [ … ] } }`. Si decide in base a `code` e allo stato HTTP, mai al testo di `message`.
-- **Date:** ISO 8601 in UTC. **Importi:** interi in centesimi, **tranne i prezzi del catalogo (§4.9), che sono in unità di valuta decimali** (per esempio `12.2` euro, non `1220`). **Identificativi:** stringhe, da trattare come opache.
+- **Date:** ISO 8601 in UTC. **Importi:** interi in centesimi, **tranne i prezzi del catalogo (§4.9) e i saldi delle carte fedeltà (§4.10), che sono in unità di valuta decimali** (per esempio `12.2` euro, non `1220`). **Identificativi:** stringhe, da trattare come opache.
 - **`X-Request-Id`:** ogni risposta lo porta; va scritto nei log del server di negozio e indicato nelle segnalazioni.
 - **Cache:** ogni risposta è `Cache-Control: no-store`.
 
@@ -241,6 +241,7 @@ Tutta la configurazione del proprio punto vendita, **con le credenziali di integ
   }
   ```
   I valori assenti o non validi arrivano come `null`, `false` o `[]`.
+- **Integrazioni Satispay e TS Hospitality:** `integrations.satispay` contiene `status`, `keyId` (la chiave del punto vendita, `null` se non attivato) e `type`; **non c'è più `activationCode`** (dal passo IN il codice di attivazione monouso non si salva: il backoffice lo scambia con Satispay e il server salva solo `keyId`). `integrations.tsh` porta le credenziali in chiaro, `testMode`, `propertyId`, `categoriesMap` (categoria del prodotto → id della categoria di addebito) e `categories` (la copia dell'elenco di TS Hospitality, `{ id, name }`, scritta dal server con la sincronizzazione del backoffice).
 - **Errori:** quelli del §5.
 
 ### 4.6 Paesi e province — `GET /v1/store-context/countries`
@@ -459,18 +460,100 @@ Ogni scrittura porta l'header **`X-Operator-Id`**: l'id (24 caratteri esadecimal
 
 - l'utente deve essere uno di quelli che il negozio riceve da `GET /store-context/users` (§4.7): dipendente o amministratore del punto vendita, amministratore dell'azienda del punto vendita, amministratore del gruppo; non un amministratore di piattaforma o un rivenditore, non un utente nel cestino né di altri punti vendita o gruppi;
 - deve essere **attivo**;
-- deve avere, nella propria matrice dei permessi, il permesso di **scrittura sui prodotti** (`permissions.products.w`, il modulo "Prodotti" della scheda utente).
+- deve avere, nella propria matrice dei permessi, il permesso di **scrittura del modulo della chiamata**: i **prodotti** (`permissions.products.w`, il modulo "Prodotti" della scheda utente) per il catalogo di questo paragrafo, i **contatti** (`permissions.contacts.w`) per i contatti e le carte fedeltà (§4.10).
 
 Se anche una sola condizione manca (header assente o malformato, utente sconosciuto, di un altro punto vendita, disattivato, senza permesso) la risposta è **sempre la stessa**: `403`, `{ "error": { "code": "OPERATOR_NOT_ALLOWED", "message": "Operator not allowed" } }`, senza dire quale. Il server di negozio non deve interpretarla come "utente inesistente": mostra "operatore non autorizzato".
 
 L'operatore è **dichiarato dal negozio, non autenticato dal cloud**: il cloud non ha un segreto dell'utente (il PIN lo controlla il negozio). Non concede nulla che la chiave di negozio non possa già fare; nel registro delle attività l'attore resta il negozio (con l'id della chiave) e l'operatore compare a parte (`operatorId`). Il server di negozio resta responsabile di verificare il PIN dell'operatore prima di mandare la scrittura. Chi possiede la chiave di negozio può indicare **qualunque operatore attivo del punto vendita che abbia il permesso**: `operatorId` nel registro è quindi un'indicazione, **non una prova** di chi ha agito, e la chiave va protetta di conseguenza (§2).
 
-**Limite delle scritture.** Oltre al limite generale della chiave (§5), le scritture del catalogo hanno un limite proprio di **120 al minuto per chiave**: `429 RATE_LIMITED` con `Retry-After`. Contano anche le scritture con operatore rifiutato; le letture no.
+**Limite delle scritture.** Oltre al limite generale della chiave (§5), le scritture del catalogo (e quelle di contatti e carte, §4.10: lo stesso limite) hanno un limite proprio di **120 al minuto per chiave**: `429 RATE_LIMITED` con `Retry-After`. Contano anche le scritture con operatore rifiutato; le letture no.
 
 #### Voci che escono dall'aggiornamento incrementale
 
 L'aggiornamento con `updatedSince` **non** segnala: una voce che esce dal perimetro del punto vendita (per esempio il suo punto vendita è tolto dalla disponibilità) e una **categoria eliminata**. Non compaiono più né in elenco né come cestinate. Per toglierle dalla propria copia serve la **rilettura completa periodica** (ricostruire l'elenco e scartare gli id non più presenti).
 
+
+### 4.10 Contatti, gruppi di contatti e carte fedeltà avanzate — `/v1/store-context/contacts`, `…/contact-groups`, `…/fidelity-cards`
+
+Le anagrafiche dei clienti e le carte fedeltà che il server di negozio scarica per la cassa e, per i contatti e le carte, modifica. Tutte le chiamate usano la **chiave di negozio**; il gruppo è sempre quello della chiave e **nessun parametro lo sceglie** (un parametro che non è nelle tabelle qui sotto dà `422`).
+
+- **Di tutto il gruppo.** Contatti, gruppi di contatti e carte **non sono per punto vendita**: il negozio vede e scrive quelli di tutto il gruppo (come un amministratore di azienda o di punto vendita nel backoffice). Un contatto o una carta di un altro gruppo non esiste per il negozio (`404`).
+- **Stessa rappresentazione del backoffice** (`doc/API.md`, "Contatti e gruppi di contatti" e "Carte fedeltà avanzate"). Un contatto ha l'anagrafica di persona e azienda, listino, fatturazione elettronica, note, servizi, account (`email` e `phone`; **mai** `password` né `tokens`) e `fidelityCards` con il dettaglio delle carte avanzate. Un elemento di un elenco di contatti è il dettaglio **senza** `warnings`.
+- **Saldi** delle carte (`balance`) in **unità di valuta decimali** (`12.5` per 12,50 euro), come i prezzi del catalogo.
+- **Le liste non portano la versione.** Per scrivere con `If-Match` serve l'`ETag` del dettaglio: `GET …/contacts/{contactId}` o `GET …/fidelity-cards/{cardId}`, letto subito prima della scrittura. L'`ETag` di un contatto non cambia con i punti di una carta semplice, quello di una carta non cambia con credito e punti.
+
+#### Contatti
+
+| Chiamata | Header richiesti | Corpo o query | Risposta |
+|---|---|---|---|
+| `GET /v1/store-context/contacts` | — | `limit` 1–**50** (default 25), `cursor`, `sort` (`displayName` predefinito, `lastName`, `companyName`, `updatedAt`, anche con `-`), `q`, `kind` (`customers`, `suppliers`, `others`, `all`), `contactGroupId`, `trashed` (`true`/`false`), `updatedSince` | `200`, pagina di contatti **interi** |
+| `GET /v1/store-context/contacts/{contactId}` | — | — | `200`, `ETag`, con `warnings` (codice, codici fiscali e P.IVA usati anche da altri contatti) |
+| `POST /v1/store-context/contacts` | `X-Operator-Id`, `Idempotency-Key` | il contatto (stesso corpo della creazione del backoffice: serve almeno `person.firstName` o `company.name`) | `201`, `Location`, `ETag` |
+| `PATCH /v1/store-context/contacts/{contactId}` | `X-Operator-Id`, `If-Match` | i campi da cambiare (gli oggetti si fondono campo per campo, le liste si mandano intere) | `200`, `ETag` |
+| `POST /v1/store-context/contacts/{contactId}/trash` | `X-Operator-Id`, `If-Match` | nessuno | `200` con il contatto cestinato (`trashed: true`) |
+| `POST /v1/store-context/contacts/{contactId}/fidelity-cards/{code}/points-adjustments` | `X-Operator-Id`, `Idempotency-Key` | `{ "delta": intero ≠ 0 (|delta| ≤ 1.000.000), "reason": "testo fino a 200, facoltativo" }` | `200` `{ "data": { "code": "…", "points": n } }` con il saldo dopo |
+
+- **Ricerca.** `q` (fino a 100 caratteri, testo letterale) cerca **dentro** nome, cognome e ragione sociale (con due parole, nome e cognome in qualunque ordine) e **uguale** a codice contatto, codice fiscale, P.IVA, codice di una carta o e-mail. Il `code` della carta nel percorso della rettifica è quello mostrato in `fidelityCards[].code`.
+- **Collegare e scollegare il codice di una carta.** Si modifica il contatto mandando `fidelityCards` con **l'elenco completo dei codici** che deve avere (`[ { "code": "…" } ]`, al più 20): i codici nuovi si aggiungono con zero punti, quelli che mancano si tolgono, gli altri restano com'erano (punti compresi). Il codice può essere quello di una carta semplice o di una **carta avanzata** esistente: più contatti possono avere lo stesso codice (una famiglia). I punti di una carta semplice non si scrivono mai così: si usa la rettifica.
+- **Rettifica dei punti.** Solo per le carte **semplici** del contatto (codice e punti nel contatto): per il codice di una carta avanzata la risposta è `409` (`details`: `code` / `advancedCard`) e si usano le rettifiche della carta. Mai sotto zero: `409` (`points` / `insufficient`). La stessa `Idempotency-Key` con lo stesso corpo non applica la rettifica due volte.
+- **Cestino.** Il negozio può **mettere un contatto nel cestino** (`409` se lo è già), **non** può ripristinarlo né eliminarlo per sempre. Un contatto nel cestino non si modifica (`409`). **Nessun'altra unicità** dei codici carta tra contatti; `account.email` e `account.phone` sono unici nel gruppo (`409`, `details` `taken`).
+- **Primo scarico e aggiornamento.** Primo scarico: `GET …/contacts?limit=50` e poi `page.next` come `cursor` finché è `null` (senza `updatedSince`: i contatti **non** nel cestino). Si salva l'istante **di inizio** dello scarico. Aggiornamento: `GET …/contacts?updatedSince=<quell'istante>` a pagine, dal meno recente al più recente per `updatedAt`: ci sono i contatti nuovi, modificati e **cestinati** (`trashed: true`, da togliere dalla copia locale). Un contatto **eliminato per sempre** dal backoffice non compare: serve la rilettura completa periodica.
+
+#### Gruppi di contatti
+
+Sola lettura. Nessuna route per crearli, modificarli o eliminarli.
+
+| Chiamata | Query ammessa | Risposta |
+|---|---|---|
+| `GET /v1/store-context/contact-groups` | `limit` 1–100 (default 50), `cursor`, `sort` (`name` predefinito, `updatedAt`, anche con `-`), `q` (testo nel nome), `updatedSince` | `200`, pagina di `{ id, name, priceListId, discountPercent, createdAt, updatedAt }` |
+
+Con `updatedSince` i gruppi cambiati da quell'istante, dal meno recente. Un gruppo eliminato non compare né come cestinato: il primo scarico e la rilettura completa periodica (l'elenco è breve) sono il modo di toglierlo dalla copia locale.
+
+#### Carte fedeltà avanzate
+
+Le carte **avanzate** hanno un tipo, uno stato, un credito prepagato e i punti per raccolta; il legame con i clienti è il **codice** nel contatto. Il negozio le legge e le scrive per intero **tranne l'eliminazione**, che non esiste.
+
+| Chiamata | Header richiesti | Corpo o query | Risposta |
+|---|---|---|---|
+| `GET /v1/store-context/fidelity-cards` | — | `limit` 1–100 (default 50), `cursor`, `sort` (`code` predefinito, `createdAt`, `updatedAt`, anche con `-`), `code`, `cardTypeId`, `enabled`, `updatedSince` | `200`, pagina di carte **intere** |
+| `GET /v1/store-context/fidelity-cards/{cardId}` | — | — | `200`, `ETag` |
+| `GET …/fidelity-cards/{cardId}/movements` | — | `limit` 1–100 (50), `cursor` | `200`, movimenti dal più recente |
+| `POST /v1/store-context/fidelity-cards` | `X-Operator-Id`, `Idempotency-Key` | `code` (1–64), `cardTypeId`, `enabled` (vero se manca), `initialBalance` (> 0, 2 decimali, solo con un tipo prepagato), `initialPoints` `[ { collectionId, points } ]` (solo raccolte del tipo), `contactIds` (al più 20: contatti a cui dare il codice) | `201`, `Location`, `ETag` |
+| `PATCH …/fidelity-cards/{cardId}` | `X-Operator-Id`, `If-Match` | `cardTypeId` e/o `enabled`; il codice non cambia mai (`422`) | `200`, `ETag` |
+| `POST …/fidelity-cards/{cardId}/adjustments` | `X-Operator-Id`, `Idempotency-Key` | `balanceDelta` (≠ 0, 2 decimali), `pointsDeltas` `[ { collectionId, delta } ]` (interi ≠ 0, una sola volta per raccolta), `reason` (fino a 200); almeno uno tra credito e punti | `200` con la carta aggiornata |
+
+- **La carta.** `id`, `code`, `cardTypeId`, `cardType` (`{ id, name, enabled, prepaid, pointsCollect }`), `enabled`, `balance` (`null` se non è un numero), `points` (`[ { collectionId, name, points, active } ]`: i punti **per raccolta**), `totalPoints` (somma delle raccolte attive), `contacts` (`[ { id, displayName } ]`, i primi 20 contatti non cestinati che hanno il codice) e `contactsCount` (quanti in tutto), `createdAt`, `updatedAt`.
+- **Ricerca per codice.** `?code=<codice>` dà le carte che hanno **esattamente** quel codice (testo letterale, **maiuscole e minuscole contano**, gli spazi ai lati di un codice memorizzato dal legacy sono ignorati: `?code=ABC` trova anche `" ABC "`). Non c'è una ricerca per testo libero: la cassa legge il codice dal lettore.
+- **Movimenti.** Ogni creazione con valori iniziali, ogni rettifica e ogni vendita scrive movimenti (`type` `manually`, `import`, `sale`, `canceled_sale`) con `balance` e `points` con segno e `operator` (`{ kind: "user", id, name }`). I movimenti scritti dal negozio hanno come utente **l'operatore** dichiarato in `X-Operator-Id` e `operator.store: true` (il campo manca nei movimenti scritti dal backoffice: il backoffice li mostra come fatti dalla cassa).
+- **Creazione.** Il codice deve essere nuovo nel gruppo (`409`, `details` `code` / `taken`) e non contenere `|`. Credito e punti iniziali sono movimenti `manually`. I `contactIds` ricevono il codice (un contatto che non esiste o è nel cestino dà `422` `contactIds.<i>`). Una creazione con la stessa `Idempotency-Key` e lo stesso corpo risponde come la prima volta e non scrive due volte; **la chiave di una richiesta di esito ignoto resta tenuta per 24 ore** (creazione e rettifica muovono denaro: non si riprova con una chiave nuova, ma con la stessa).
+- **Modifica.** `cardTypeId` (un tipo del gruppo) ed `enabled`: attivare e disattivare una carta. Verso un tipo non prepagato una carta con credito > 0 è `409` (`balance` / `notEmpty`): prima si azzera il credito con una rettifica.
+- **Rettifiche.** Il credito solo con un tipo prepagato, i punti solo su raccolte del tipo (`422` `notAllowed`). È un'operazione atomica: credito e punti non scendono mai sotto zero (`409`, `details` `balance` / `insufficient` o `points.<collectionId>` / `insufficient`) e con la stessa `Idempotency-Key` e lo stesso corpo non si applica due volte. La risposta ha i saldi dopo la rettifica.
+
+**Scarico delle carte per la cache della cassa — regola per il server di negozio (decisione dell'utente del 2026-11-25).** `updatedSince` filtra per la data di modifica della **carta**, che cambia alla creazione e alla modifica di tipo e stato, **non** quando cambiano credito e punti (vendite, ricariche e rettifiche). Quindi l'aggiornamento incrementale porta le carte **nuove, attivate/disattivate o con un altro tipo**, ma **non** dice che un saldo è cambiato. Per ora il modo corretto è:
+
+1. **primo scarico** `GET …/fidelity-cards?limit=100` a pagine; poi `GET …/fidelity-cards?updatedSince=<istante di inizio dello scarico precedente>` per le carte nuove o cambiate di tipo o stato;
+2. **mai fidarsi del saldo della copia locale per un pagamento con il credito o un riscatto**: alla cassa si rilegge la carta con `GET …/fidelity-cards?code=<codice letto>` (una chiamata) e si usa quel saldo; dopo ogni scrittura la risposta ha già il saldo aggiornato;
+3. **rilettura completa periodica** dell'elenco per riallineare i saldi della copia locale (per i soli fini di visualizzazione).
+
+#### Operatore e limiti delle scritture
+
+Valgono le regole del §4.9 ("L'operatore delle scritture"): `X-Operator-Id` su **ogni scrittura** (contatti, carte, rettifiche), verificato prima di leggere il corpo; le **letture non lo chiedono**. Per queste chiamate l'operatore deve avere il permesso di **scrittura sui contatti** (`permissions.contacts.w`, il modulo "Contatti" della scheda utente: non quello dei prodotti). Se manca, o per qualunque altro motivo, la risposta è sempre `403 OPERATOR_NOT_ALLOWED`. Le scritture di contatti e carte contano nello **stesso limite di 120 scritture al minuto per chiave** delle scritture del catalogo (§4.9): `429 RATE_LIMITED` con `Retry-After`.
+
+**Segnalazioni del cloud (nessun rifiuto).** Il negozio non vede mai un errore per questi motivi, ma gli amministratori del gruppo trovano un avviso nel registro delle attività: un **credito** aggiunto a una carta (creazione con `initialBalance` o `balanceDelta` positivo) **sopra una soglia** per singola operazione o per somma giornaliera della chiave; un codice di **carta avanzata già di altri contatti** collegato a un contatto. Le **letture dei contatti** sono tracciate con il solo numero di contatti letti. Un uso normale (per esempio il primo scarico, o la ricarica di una carta prepagata di importo comune) non ne risente; un credito oltre le soglie si completa comunque. Le chiavi si revocano subito dal backoffice se sono state rubate.
+
+**Esempio — rettifica del credito di una carta:**
+```
+POST /v1/store-context/fidelity-cards/665f…/adjustments
+Authorization: Bearer fc_sk_…
+X-Operator-Id: 665f…
+Idempotency-Key: <UUID generato dal server di negozio>
+Content-Type: application/json
+
+{ "balanceDelta": -4.5, "pointsDeltas": [{ "collectionId": "1a2b…", "delta": 5 }], "reason": "cassa" }
+```
+→ `200` con `{ "data": { "id": "665f…", "code": "ABC-1", "balance": 5.5, "totalPoints": 55, … } }`.
+
+**Non esistono** per il negozio: l'eliminazione definitiva di un contatto o di una carta, il ripristino di un contatto dal cestino, il cestino multiplo, la scrittura dei gruppi di contatti, l'importazione e l'esportazione dei file.
 
 ## 5. Stati ed errori di ogni chiamata autenticata
 
@@ -479,13 +562,13 @@ L'aggiornamento con `updatedSince` **non** segnala: una voce che esce dal perime
 | `401` | `UNAUTHENTICATED` | Chiave assente, malformata, sconosciuta o **revocata**. Succede anche se il punto vendita è stato messo nel cestino o eliminato, o se è stata fatta una nuova attivazione. | La chiave è persa: chiede una nuova attivazione. |
 | `403` | `STORE_DISABLED` | La chiave è valida ma il punto vendita non è operativo: gruppo sospeso o nel cestino, punto vendita disattivato, licenza scaduta, azienda nel cestino. | **Tiene la chiave**, avvisa l'operatore e riprova più tardi: riprende da solo dopo riattivazione, ripristino o rinnovo. |
 | `403` | `FORBIDDEN` | La chiamata non è aperta al server di negozio; oppure, nel catalogo, un campo di una voce condivisa con altri punti vendita (`details` nomina il campo). | Errore di integrazione, o per i campi condivisi: si possono cambiare solo i dati del proprio punto vendita. |
-| `403` | `OPERATOR_NOT_ALLOWED` | Scrittura del catalogo senza un operatore valido (§4.9): la stessa risposta per ogni motivo. | Mostra "operatore non autorizzato"; non riprova. |
+| `403` | `OPERATOR_NOT_ALLOWED` | Scrittura del catalogo o di contatti e carte senza un operatore valido (§4.9, §4.10): la stessa risposta per ogni motivo. | Mostra "operatore non autorizzato"; non riprova. |
 | `403` | `FEATURE_DISABLED` | Reparti di un gruppo senza la funzione `cash`. | Non scarica i reparti. |
-| `404` | `NOT_FOUND` | Risorsa inesistente o non del proprio punto vendita (nel catalogo: un prodotto, una categoria di un altro punto vendita o di un altro gruppo). | Toglie la voce dalla propria copia; una voce che non esiste non si scrive. |
-| `409` | `CONFLICT` | Catalogo: la voce è nel cestino o è cambiata mentre si scriveva, la categoria è usata o c'è un ciclo, `Idempotency-Key` riusata con un corpo diverso. | Rilegge la voce e riprova se ha senso. |
-| `412` | `PRECONDITION_FAILED` | Catalogo: la voce non è più alla versione dell'`If-Match`. | Rilegge la voce (nuovo `ETag`) e riapplica la modifica. |
+| `404` | `NOT_FOUND` | Risorsa inesistente o non del proprio punto vendita (nel catalogo: un prodotto, una categoria di un altro punto vendita o di un altro gruppo; contatti e carte: di un altro gruppo). | Toglie la voce dalla propria copia; una voce che non esiste non si scrive. |
+| `409` | `CONFLICT` | Catalogo: la voce è nel cestino o è cambiata mentre si scriveva, la categoria è usata o c'è un ciclo, `Idempotency-Key` riusata con un corpo diverso. Contatti e carte (§4.10): contatto già nel cestino o cambiato mentre si scriveva, `account.email` o `account.phone` già usati, codice carta già esistente, saldo o punti che andrebbero sotto zero, rettifica dei punti di una carta avanzata dal contatto. | Rilegge la voce e riprova se ha senso. |
+| `412` | `PRECONDITION_FAILED` | Catalogo, contatti, carte: la voce non è più alla versione dell'`If-Match`. | Rilegge la voce (nuovo `ETag`) e riapplica la modifica. |
 | `413` / `415` | `PAYLOAD_TOO_LARGE` / `UNSUPPORTED_MEDIA_TYPE` | Corpo oltre il limite (§4.9) o non JSON. | Errore di integrazione. |
-| `429` | `RATE_LIMITED` | Anche: oltre 120 scritture del catalogo al minuto per chiave. | Aspetta `Retry-After`. |
+| `429` | `RATE_LIMITED` | Anche: oltre 120 scritture al minuto per chiave (catalogo, contatti e carte insieme). | Aspetta `Retry-After`. |
 | `422` | `VALIDATION_ERROR` | Parametro, identificativo o corpo non validi (anche `simpleCost`, `suppliers`, `image`, `gallery` nei prodotti, `image`, `icon` nelle categorie e `image` nelle marche); `details` nomina i campi. Mancano `If-Match` o `Idempotency-Key`. | Errore di integrazione, o dato da correggere. |
 | `429` | `RATE_LIMITED` | Oltre **600 richieste al minuto** per chiave. Contano tutte le richieste, anche quelle rifiutate. | Aspetta i secondi di `Retry-After`. |
 | `5xx` | — | Errore del cloud. | Riprova con attesa crescente; segnala `X-Request-Id`. |
@@ -496,7 +579,7 @@ Un punto vendita ripristinato dal cestino **non riottiene** la vecchia chiave: s
 
 Chiamate non ancora aperte al server di negozio, previste con i prossimi passi (oggi rispondono `403 FORBIDDEN`):
 
-- anagrafiche dei clienti (contatti).
+- (nessuna chiamata prevista per ora).
 
 ### Non disponibile al server di negozio
 
@@ -504,7 +587,9 @@ Queste operazioni **non** sono e non saranno aperte alla chiave di negozio: risp
 
 - la sincronizzazione dei tabacchi del catalogo (la lancia solo il backoffice);
 - l'eliminazione definitiva di un prodotto e lo svuotamento del cestino;
-- le scritture su reparti e gruppi di attributi.
+- l'eliminazione definitiva di contatti e carte fedeltà, il ripristino di un contatto dal cestino, il cestino multiplo e la scrittura dei gruppi di contatti;
+- le scritture su reparti e gruppi di attributi;
+- le chiamate ai provider fatte dal backoffice per configurare il punto vendita (`GET /v1/integrations`, elenco dei terminali Dojo, attivazione Satispay, sincronizzazione delle categorie TS Hospitality, coordinate) e la ricerca per P.IVA.
 
 ## 7. Registro delle modifiche
 
@@ -517,3 +602,6 @@ Queste operazioni **non** sono e non saranno aperte alla chiave di negozio: risp
 | 2026-11-23 | Utenti del punto vendita con PIN in chiaro (§4.7). |
 | 2026-11-23 | Catalogo del punto vendita (§4.9): campi non scrivibili, limite di 120 scritture al minuto, rilettura completa periodica; letture di prodotti, categorie, albero e reparti con `updatedSince`; scritture di prodotti e categorie con l'operatore dichiarato (`X-Operator-Id`, `403 OPERATOR_NOT_ALLOWED`); voci "per tutti" di un gruppo con un solo punto vendita. I prezzi del catalogo sono in unità di valuta decimali. |
 | 2026-11-24 | Catalogo: marche in lettura e scrittura (senza immagine) e gruppi di attributi in sola lettura, con `updatedSince`. La sincronizzazione dei tabacchi non è disponibile al server di negozio (nuovo elenco in §6); "marche e attributi" non sono più "in arrivo". |
+| 2026-11-25 | Configurazione del punto vendita (§4.5): `integrations.satispay.activationCode` non è più presente (si salva solo `keyId`); descritte `integrations.tsh.categoriesMap` e `categories`. Le nuove route del modulo delle integrazioni non sono aperte al negozio (§6). |
+| 2026-11-25 | Contatti, gruppi di contatti e carte fedeltà avanzate (§4.10): scarico incrementale dei contatti e delle carte, ricerca, dettaglio, scritture con l'operatore (permesso `contacts`), rettifiche e movimenti delle carte, rettifica dei punti delle carte semplici; nessuna eliminazione. Limite noto dello scarico incrementale delle carte (saldi). |
+| 2026-11-25 | Contatti e carte (§4.10): i movimenti scritti dal negozio portano `operator.store: true`; segnalazioni agli amministratori per i crediti oltre soglia e per i codici di carte avanzate già di altri contatti, traccia delle letture dei contatti (nessun rifiuto); regola dello scarico dei saldi. |

@@ -2,7 +2,7 @@
 trigger: glob
 globs: "**/backend/src/integrations/**"
 name: integrations_expert
-description: "Usa proattivamente per le integrazioni con provider esterni: fatturazione elettronica (Aruba), registratore telematico (Fiskaly), pagamenti (Satispay, Dojo), anagrafiche (Cerved), storage di file, email; client HTTP con fetch nativo, timeout, retry, rate limit dei provider, code di invio, webhook in ingresso. Dominio: backend/src/integrations/**."
+description: "Usa proattivamente per le integrazioni con provider esterni: fatturazione elettronica (Aruba), pagamenti (Satispay, Dojo), anagrafiche (Cerved), storage di file, email; client HTTP con fetch nativo, timeout, retry, rate limit dei provider, code di invio, webhook in ingresso. Dominio: backend/src/integrations/**."
 ---
 # Integrations Expert - Regole e Competenze
 

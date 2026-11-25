@@ -7,6 +7,7 @@ describe('issueMessageKey', () => {
     ['sameAsUsername', 'FORM.ISSUE.SAME_AS_USERNAME'],
     ['forbiddenKey', 'FORM.ISSUE.FORBIDDEN_KEY'],
     ['invalidCharacters', 'FORM.ISSUE.INVALID_CHARACTERS'],
+    ['nameOrCompany', 'FORM.ISSUE.NAME_OR_COMPANY'],
   ])('maps %s to %s', (issue, key) => {
     expect(issueMessageKey(issue)).toBe(key);
   });

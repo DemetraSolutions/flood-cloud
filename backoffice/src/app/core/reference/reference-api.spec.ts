@@ -259,6 +259,14 @@ describe('ReferenceApi', () => {
       expect(await result).toEqual({ p1: 'Place p1', p2: 'Place p2' });
     });
 
+    it('resolves the names of companies with the ids filter', async () => {
+      const result = api.companyNames('g1', ['c1', 'c1']);
+      const request = backend().expectOne((r) => r.url === `${API}/v1/groups/g1/companies`);
+      expect(request.request.params.get('ids')).toBe('c1');
+      request.flush({ data: [{ id: 'c1', name: 'Company c1' }], page: { limit: 100, next: null } });
+      expect(await result).toEqual({ c1: 'Company c1' });
+    });
+
     it('lists every store of the perimeter', async () => {
       const result = api.placeIds('g1');
       backend()

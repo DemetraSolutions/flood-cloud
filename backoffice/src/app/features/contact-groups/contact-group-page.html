@@ -1,0 +1,104 @@
+@if (failed()) {
+  <fc-error-state
+    [title]="'CONTACT_GROUPS.LOAD_ERROR' | t"
+    [message]="loadErrorMessage()"
+    [requestId]="loadError()?.requestId ?? null"
+    (retry)="reload()"
+  />
+  <p>
+    <a [routerLink]="listRoute()">{{ 'CONTACT_GROUPS.FORM.BACK' | t }}</a>
+  </p>
+} @else if (loading()) {
+  <p role="status">{{ 'COMMON.LOADING' | t }}</p>
+} @else {
+  <fc-page-header [heading]="(isNew() ? 'CONTACT_GROUPS.FORM.NEW_TITLE' : 'CONTACT_GROUPS.FORM.EDIT_TITLE') | t">
+    <ng-container fcPageActions>
+      <a [routerLink]="listRoute()">{{ 'CONTACT_GROUPS.FORM.BACK' | t }}</a>
+      @if (canWrite()) {
+        <button fc-button type="submit" form="contact-group-form" [loading]="submitting()" [disabled]="!unsaved()">
+          {{ isNew() ? ('CONTACT_GROUPS.FORM.CREATE' | t) : ('COMMON.SAVE' | t) }}
+        </button>
+      }
+      @if (canWrite() && !isNew()) {
+        <button fc-button variant="danger" type="button" [disabled]="busy()" (click)="deleteOpen.set(true)">
+          {{ 'CONTACT_GROUPS.DELETE.ACTION' | t }}
+        </button>
+      }
+    </ng-container>
+  </fc-page-header>
+  <fc-record-group [groupId]="groupId()" />
+
+  @if (item(); as current) {
+    <p class="meta">{{ 'CONTACT_GROUPS.FORM.UPDATED' | t: { date: date(current.updatedAt) } }}</p>
+    @if (current.contactsCount !== undefined) {
+      <p class="meta">{{ 'CONTACT_GROUPS.FIELD.CONTACTS_COUNT' | t: { count: current.contactsCount } }}</p>
+    }
+  }
+  @if (!canWrite()) {
+    <p class="meta" role="note">{{ 'CONTACT_GROUPS.READ_ONLY_NOTE' | t }}</p>
+  }
+  @if (blocked(); as kinds) {
+    <fc-contact-reference-block
+      [heading]="'CONTACT_GROUPS.DELETE.BLOCKED_TITLE' | t"
+      [message]="'CONTACT_GROUPS.DELETE.BLOCKED_MESSAGE' | t"
+      [kinds]="kinds"
+      (closed)="blocked.set(null)"
+    />
+  }
+
+  <form id="contact-group-form" novalidate (submit)="onSubmit($event)">
+    @if (failure(); as message) {
+      <fc-form-error [message]="message" />
+      @if (stale()) {
+        <button fc-button variant="secondary" type="button" (click)="reload()">
+          {{ 'CONTACT_GROUPS.FORM.RELOAD' | t }}
+        </button>
+      }
+    }
+    <fc-text-field
+      [formField]="groupForm.name"
+      autocomplete="off"
+      [label]="'CONTACT_GROUPS.FIELD.NAME' | t"
+      [error]="error(groupForm.name)"
+      (blurred)="groupForm.name().markAsTouched()"
+    />
+    <fc-select
+      [formField]="groupForm.priceListId"
+      [label]="'CONTACT_GROUPS.FIELD.PRICE_LIST' | t"
+      [placeholder]="'CONTACT_GROUPS.NONE' | t"
+      [hint]="'CONTACT_GROUPS.FIELD.PRICE_LIST_HINT' | t"
+      [options]="priceListOptions()"
+      [error]="error(groupForm.priceListId)"
+      (blurred)="groupForm.priceListId().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="groupForm.discountPercent"
+      inputmode="decimal"
+      autocomplete="off"
+      [label]="'CONTACT_GROUPS.FIELD.DISCOUNT' | t"
+      [error]="error(groupForm.discountPercent)"
+      (blurred)="groupForm.discountPercent().markAsTouched()"
+    />
+  </form>
+}
+
+<fc-confirm-dialog
+  [heading]="'CONTACT_GROUPS.LEAVE.TITLE' | t"
+  [message]="'CONTACT_GROUPS.LEAVE.MESSAGE' | t"
+  [confirmLabel]="'CONTACT_GROUPS.LEAVE.CONFIRM' | t"
+  [danger]="true"
+  [open]="leaveOpen()"
+  (openChange)="onLeaveClosed()"
+  (confirmed)="onLeave()"
+/>
+<fc-confirm-dialog
+  [heading]="'CONTACT_GROUPS.DELETE.TITLE' | t"
+  [message]="deleteMessage()"
+  [confirmLabel]="'CONTACT_GROUPS.DELETE.ACTION' | t"
+  [danger]="true"
+  [alert]="true"
+  [busy]="busy()"
+  [open]="deleteOpen()"
+  (openChange)="deleteOpen.set($event)"
+  (confirmed)="remove()"
+/>

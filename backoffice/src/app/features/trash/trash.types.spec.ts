@@ -1,7 +1,25 @@
+import {
+  CONTACT_ID_1,
+  TRASHED_BARE_CONTACT,
+  TRASHED_CONTACT,
+  trashedContact,
+} from '../../../testing/contacts-trash';
 import { ApiError } from '../../core/api/api-error';
-import { PRODUCT_ID_1, productRow, TRASHED_NAMELESS, TRASHED_PRODUCT, TRASHED_SERVICE } from '../../../testing/product-list-rows';
+import {
+  PRODUCT_ID_1,
+  productRow,
+  TRASHED_NAMELESS,
+  TRASHED_PRODUCT,
+  TRASHED_SERVICE,
+} from '../../../testing/product-list-rows';
 import { COMPANY_ROW, GROUP_ROW, PLACE_ROW, result, USER_ROW, GROUP } from '../../../testing/trash';
-import { READ_PERMISSION, RESTORE_PERMISSION, DELETE_PERMISSION, TRASH_KINDS } from './trash.types';
+import {
+  MAX_DELETE_IDS,
+  READ_PERMISSION,
+  RESTORE_PERMISSION,
+  DELETE_PERMISSION,
+  TRASH_KINDS,
+} from './trash.types';
 import { summarize, platformIssue, trashRowLabel, trashRowRoute } from './trash.types';
 
 describe('summarize', () => {
@@ -66,9 +84,20 @@ describe('trashRowRoute', () => {
       'users',
       USER_ROW.id,
     ]);
-    expect(trashRowRoute('products', GROUP, TRASHED_PRODUCT)).toEqual(['/groups', GROUP, 'products', PRODUCT_ID_1]);
+    expect(trashRowRoute('products', GROUP, TRASHED_PRODUCT)).toEqual([
+      '/groups',
+      GROUP,
+      'products',
+      PRODUCT_ID_1,
+    ]);
     expect(trashRowRoute('products', GROUP, TRASHED_SERVICE)[2]).toBe('services');
     expect(trashRowRoute('products', GROUP, TRASHED_NAMELESS)[2]).toBe('tobacco-products');
+    expect(trashRowRoute('contacts', GROUP, TRASHED_CONTACT)).toEqual([
+      '/groups',
+      GROUP,
+      'contacts',
+      CONTACT_ID_1,
+    ]);
     expect(trashRowRoute('groups', GROUP, GROUP_ROW)).toEqual([
       '/groups',
       GROUP_ROW.id,
@@ -87,7 +116,25 @@ describe('trashRowLabel', () => {
   it('names a product by name, then by code, then by id', () => {
     expect(trashRowLabel('products', TRASHED_PRODUCT)).toBe('Acqua');
     expect(trashRowLabel('products', TRASHED_NAMELESS)).toBe('C-003');
-    expect(trashRowLabel('products', productRow(PRODUCT_ID_1, { name: null, code: null }))).toBe(PRODUCT_ID_1);
+    expect(trashRowLabel('products', productRow(PRODUCT_ID_1, { name: null, code: null }))).toBe(
+      PRODUCT_ID_1,
+    );
+  });
+});
+
+describe('trashRowLabel: contacts', () => {
+  it('names a contact by display name, then by code, then by a short id', () => {
+    expect(trashRowLabel('contacts', TRASHED_CONTACT)).toBe('Mario Bianchi');
+    expect(trashRowLabel('contacts', TRASHED_BARE_CONTACT)).toBe('K-002');
+    expect(
+      trashRowLabel('contacts', trashedContact(CONTACT_ID_1, { displayName: null, code: '' })),
+    ).toBe('…ab3c01');
+  });
+});
+
+describe('MAX_DELETE_IDS', () => {
+  it('limits only the contacts, to ten', () => {
+    expect(MAX_DELETE_IDS).toEqual({ contacts: 10 });
   });
 });
 
@@ -110,10 +157,13 @@ describe('platformIssue', () => {
 });
 
 describe('trash kinds', () => {
-  it('has the products between the users and the groups, managed with products:read and products:update', () => {
-    expect(TRASH_KINDS).toEqual(['companies', 'places', 'users', 'products', 'groups']);
+  it('has the products and then the contacts between the users and the groups, managed with products:read and products:update', () => {
+    expect(TRASH_KINDS).toEqual(['companies', 'places', 'users', 'products', 'contacts', 'groups']);
     expect(READ_PERMISSION.products).toBe('products:read');
     expect(RESTORE_PERMISSION.products).toBe('products:update');
     expect(DELETE_PERMISSION.products).toBe('products:update');
+    expect(READ_PERMISSION.contacts).toBe('contacts:read');
+    expect(RESTORE_PERMISSION.contacts).toBe('contacts:write');
+    expect(DELETE_PERMISSION.contacts).toBe('contacts:write');
   });
 });

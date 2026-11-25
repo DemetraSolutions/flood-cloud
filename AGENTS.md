@@ -79,7 +79,7 @@ Esperto del progetto `../cloud-commerce-platform-server` (sola lettura).
 - Mai segreti del legacy in output.
 
 ### 7. Integrations Expert (`integrations_expert`)
-Provider esterni (Aruba, Fiskaly, Satispay, Dojo, Cerved, storage, email).
+Provider esterni (Aruba, Satispay, Dojo, TSH, Cerved, geocoding, storage, email). Fiskaly è escluso dal nuovo backend (decisione dell'utente del 2026-11-25).
 - Adattatori isolati, `fetch` con timeout e retry, rate limit dei provider, code persistenti, webhook verificati.
 
 ### 8. DevOps Expert (`devops_expert`)

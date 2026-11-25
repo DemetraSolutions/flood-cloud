@@ -1,0 +1,76 @@
+<fieldset>
+  <legend>{{ 'CONTACTS.E_INVOICING.TITLE' | t }}</legend>
+  <div class="grid">
+    <fc-select
+      [formField]="form().transmissionFormat"
+      [label]="'CONTACTS.E_INVOICING.FORMAT' | t"
+      [options]="formats()"
+      [error]="error(form().transmissionFormat)"
+      (blurred)="form().transmissionFormat().markAsTouched()"
+    />
+    <fc-select
+      [formField]="form().channel"
+      [label]="'CONTACTS.E_INVOICING.CHANNEL' | t"
+      [options]="channels()"
+      [error]="error(form().channel)"
+      (blurred)="form().channel().markAsTouched()"
+    />
+    @if (channel() === 'CD') {
+      <fc-text-field
+        [formField]="form().recipientCode"
+        autocomplete="off"
+        autocapitalize="characters"
+        [label]="'CONTACTS.E_INVOICING.RECIPIENT_CODE' | t"
+        [hint]="recipientHint()"
+        [error]="error(form().recipientCode)"
+        (blurred)="form().recipientCode().markAsTouched()"
+      />
+    } @else {
+      <fc-text-field
+        [formField]="form().pec"
+        type="email"
+        autocomplete="off"
+        [label]="'CONTACTS.E_INVOICING.PEC' | t"
+        [error]="error(form().pec)"
+        (blurred)="form().pec().markAsTouched()"
+      />
+    }
+    <fc-select
+      [formField]="form().paymentTerms"
+      [label]="'CONTACTS.E_INVOICING.PAYMENT_TERMS' | t"
+      [placeholder]="'CONTACTS.NONE' | t"
+      [options]="terms()"
+      [error]="error(form().paymentTerms)"
+      (blurred)="form().paymentTerms().markAsTouched()"
+    />
+    <fc-select
+      [formField]="form().paymentMethod"
+      [label]="'CONTACTS.E_INVOICING.PAYMENT_METHOD' | t"
+      [placeholder]="'CONTACTS.NONE' | t"
+      [options]="methods()"
+      [error]="error(form().paymentMethod)"
+      (blurred)="form().paymentMethod().markAsTouched()"
+    />
+    <fc-select
+      [formField]="form().taxRegime"
+      [label]="'CONTACTS.E_INVOICING.TAX_REGIME' | t"
+      [placeholder]="'CONTACTS.NONE' | t"
+      [options]="regimes()"
+      [error]="error(form().taxRegime)"
+      (blurred)="form().taxRegime().markAsTouched()"
+    />
+    <fc-text-field
+      [formField]="form().administrationReference"
+      autocomplete="off"
+      [label]="'CONTACTS.E_INVOICING.ADMINISTRATION_REFERENCE' | t"
+      [hint]="'CONTACTS.E_INVOICING.ADMINISTRATION_REFERENCE_HINT' | t: { max: referenceLimit }"
+      [error]="error(form().administrationReference)"
+      (blurred)="form().administrationReference().markAsTouched()"
+    />
+  </div>
+  <fc-checkbox [formField]="form().splitPayment" [label]="'CONTACTS.E_INVOICING.SPLIT_PAYMENT' | t" />
+  <fc-checkbox
+    [formField]="form().requirePurchaseOrderData"
+    [label]="'CONTACTS.E_INVOICING.PURCHASE_ORDER' | t"
+  />
+</fieldset>

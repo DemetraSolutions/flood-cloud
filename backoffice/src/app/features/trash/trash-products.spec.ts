@@ -8,7 +8,14 @@ import {
   TRASHED_PRODUCT,
   TRASHED_SERVICE,
 } from '../../../testing/product-list-rows';
-import { finishTrash, GROUP, renderTrash, result, TRASH_ALL, trashPage } from '../../../testing/trash';
+import {
+  finishTrash,
+  GROUP,
+  renderTrash,
+  result,
+  TRASH_ALL,
+  trashPage,
+} from '../../../testing/trash';
 
 const BULK = `${API}/v1/groups/${GROUP}/trash/products`;
 const URL = `/groups/${GROUP}/trash?tab=products`;
@@ -53,9 +60,21 @@ describe('TrashTab: products', () => {
       'TRASH.COLUMN.FAMILY',
       'TRASH.COLUMN.TRASHED_AT',
     ]);
-    expect(cells(0)).toEqual(['', 'Acqua', 'C-001', 'PRODUCTS.FAMILY.PRODUCTS.TITLE', '10 nov 2026']);
+    expect(cells(0)).toEqual([
+      '',
+      'Acqua',
+      'C-001',
+      'PRODUCTS.FAMILY.PRODUCTS.TITLE',
+      '10 nov 2026',
+    ]);
     expect(cells(1)).toEqual(['', 'Taglio', '', 'PRODUCTS.FAMILY.SERVICES.TITLE', '—']);
-    expect(cells(2)).toEqual(['', 'C-003', 'C-003', 'PRODUCTS.FAMILY.TOBACCOS.TITLE', '10 nov 2026']);
+    expect(cells(2)).toEqual([
+      '',
+      'C-003',
+      'C-003',
+      'PRODUCTS.FAMILY.TOBACCOS.TITLE',
+      '10 nov 2026',
+    ]);
     expect(cells(3)[1]).toBe('665f1c2e9b1d4a0012ab3a04');
     expect(
       [...root.querySelectorAll<HTMLAnchorElement>('tbody a')].map((a) => a.getAttribute('href')),
@@ -142,12 +161,17 @@ describe('TrashTab: products', () => {
 
   describe('empty the trash', () => {
     it('is for platform administrators: confirms, calls the empty route and ends in the summary', async () => {
-      const { flush, button, dialogButton, openDialogs, view, request } = await renderTrash(URL, PSA);
+      const { flush, button, dialogButton, openDialogs, view, request } = await renderTrash(
+        URL,
+        PSA,
+      );
       await flush('products', [TRASHED_PRODUCT]);
       button('TRASH.EMPTY.ACTION')!.click();
       await view();
       const [dialog] = openDialogs();
-      expect(dialog.textContent).toContain('TRASH.EMPTY.MESSAGE_COUNT {"count":1,"kind":"TRASH.KIND.PRODUCTS"}');
+      expect(dialog.textContent).toContain(
+        'TRASH.EMPTY.MESSAGE_COUNT {"count":1,"kind":"TRASH.KIND.PRODUCTS"}',
+      );
       const box = dialog.querySelector<HTMLInputElement>('input[type=checkbox]')!;
       box.checked = true;
       box.dispatchEvent(new Event('change'));
@@ -193,9 +217,9 @@ describe('TrashTab: products', () => {
         permissions: ['products:read'],
       });
       await flush('products', [TRASHED_PRODUCT]);
-      expect([...root.querySelectorAll('[role=tab]')].map((tab) => tab.textContent?.trim())).toEqual([
-        'TRASH.KIND.PRODUCTS',
-      ]);
+      expect(
+        [...root.querySelectorAll('[role=tab]')].map((tab) => tab.textContent?.trim()),
+      ).toEqual(['TRASH.KIND.PRODUCTS']);
       await tick(checkboxes()[0]);
       expect(button('TRASH.RESTORE')).toBeUndefined();
       expect(button('TRASH.DELETE.ACTION')).toBeUndefined();

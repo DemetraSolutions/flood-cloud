@@ -12,8 +12,8 @@ const USERS_DELETE = [P.USERS_DELETE] as const;
 /** The dealer registry (`doc/Tasks.md` D-09): only the PSA reaches it. */
 const DEALERS = [P.DEALERS_READ, P.DEALERS_CREATE, P.DEALERS_UPDATE] as const;
 const COMPANIES = [P.COMPANIES_READ, P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH, P.COMPANIES_DELETE] as const;
-/** Loyalty data and the product data kept in the group document (favorites, promotions): every role that works in a group; the user's own matrix narrows it. */
-const GROUP_DATA = [P.FIDELITY_READ, P.FIDELITY_UPDATE, P.PRODUCTS_READ, P.PRODUCTS_UPDATE] as const;
+/** Loyalty data, the product data kept in the group document (favorites, promotions), the contacts of the group (`doc/Tasks.md` step K1: shared by every place of the group) and the read of its sales (step V1, `sales:read`, which the server limits to the perimeter of the role): every role that works in a group; the user's own matrix narrows it. */
+const GROUP_DATA = [P.FIDELITY_READ, P.FIDELITY_UPDATE, P.PRODUCTS_READ, P.PRODUCTS_UPDATE, P.CONTACTS_READ, P.CONTACTS_WRITE, P.SALES_READ] as const;
 /** The places a group administrator manages: read, update, trash and delete (a trashed place is deleted for good with its own permission, like `users:delete`); he does not create them. A CA and a PA read and update (a CA the places of his companies, a PA his own). */
 const PLACES = [P.PLACES_READ, P.PLACES_UPDATE, P.PLACES_TRASH, P.PLACES_DELETE] as const;
 
@@ -28,6 +28,9 @@ const TOBACCOS = [P.TOBACCOS_READ, P.TOBACCOS_IMPORT] as const;
 
 /** The synchronization of the national tobacco price list into the products of a group (`doc/Tasks.md` step C7): only the PSA, the dealers and the group administrators, with `products.w`. */
 const TOBACCO_SYNC = [P.TOBACCOS_SYNC] as const;
+
+/** The XLSX workbooks of the contacts and of the advanced loyalty cards (`doc/Tasks.md` step K3): model, export and import, only the PSA, the dealers and the group administrators; never a company or place administrator, whatever the matrix says. */
+const WORKBOOKS = [P.CONTACTS_EXPORT, P.CONTACTS_IMPORT, P.FIDELITY_CARDS_EXPORT, P.FIDELITY_CARDS_IMPORT] as const;
 
 /** The countries and provinces of the platform (`doc/Tasks.md` 9-ter): create, rename and delete them, only the PSA. Reading them is `profile:read`, for every user. */
 const COUNTRIES = [P.COUNTRIES_MANAGE] as const;
@@ -57,9 +60,9 @@ export const STORE_PROFILE: ReadOnlySet<Permission> = frozenSet<Permission>([P.P
  * immutable.
  */
 export const ROLE_CEILING: Readonly<Record<Role, ReadOnlySet<Permission>>> = Object.freeze({
-  PSA: frozenSet<Permission>([...TOBACCO_SYNC, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...ACTIVATIONS_MANAGE, ...SECURITY_POLICY, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
-  D: frozenSet<Permission>([...TOBACCO_SYNC, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
-  SA: frozenSet<Permission>([...TOBACCO_SYNC, P.GROUPS_READ, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  PSA: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...ACTIVATIONS_MANAGE, ...SECURITY_POLICY, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  D: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  SA: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   CA: frozenSet<Permission>([P.COMPANIES_READ, P.COMPANIES_UPDATE, P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   PA: frozenSet<Permission>([P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   E: frozenSet<Permission>(),

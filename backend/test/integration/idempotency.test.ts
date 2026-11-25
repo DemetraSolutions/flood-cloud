@@ -184,4 +184,54 @@ describe('the record of the idempotency keys', () => {
     assert.deepEqual(await run(() => assert.fail('not run again'), ok), [{ data: 1 }]);
     await assert.rejects(() => run(() => { throw new AppError('NOT_FOUND'); }, randomUUID()), (error: unknown) => error instanceof AppError);
   });
+
+  it('holds the key of a pinned request (one that moves money) for the whole day when it never finishes, and answers 409 with Idempotency-Key/pending', async () => {
+    let clock = Date.now();
+    const store = createIdempotencyStore(ctx.databases, BODY_KEY, () => clock);
+    const pinned = entry({ pinned: true });
+    assert.equal((await store.begin(pinned)).kind, 'new');
+    assert.equal((await keys().findOne({ key: pinned.key }))!['pinned'], true);
+    clock += IDEMPOTENCY_IN_PROGRESS_MS + 1;
+    assert.deepEqual(await store.begin(pinned), { kind: 'busy', pinned: true });
+    clock += IDEMPOTENCY_TTL_MS - IDEMPOTENCY_IN_PROGRESS_MS - 2;
+    assert.deepEqual(await store.begin(pinned), { kind: 'busy', pinned: true });
+    clock += 3;
+    assert.equal((await store.begin(pinned)).kind, 'new');
+    // The other keys are as they were: freed after the five minutes.
+    const plain = entry();
+    await store.begin(plain);
+    clock += IDEMPOTENCY_IN_PROGRESS_MS + 1;
+    assert.equal((await store.begin(plain)).kind, 'new');
+  });
+
+  it('frees a pinned key only for a refusal that wrote nothing, and answers a pinned request that is still running with the pending detail', async () => {
+    const store = createIdempotencyStore(ctx.databases, BODY_KEY);
+    const run = async (handler: () => void, key: string, pinned: boolean) => {
+      const res = {
+        locals: { auth: { userId: fixtureId('user', 1) } },
+        statusCode: 200,
+        headers: {} as Record<string, string>,
+        status(code: number) { this.statusCode = code; return this; },
+        setHeader(name: string, value: string) { this.headers[name] = value; },
+        getHeader(name: string) { return this.headers[name]; },
+        json() { return this; },
+      };
+      const req = { get: (name: string) => (name === 'idempotency-key' ? key : undefined), method: 'POST', baseUrl: '/v1', path: '/money', body: { a: 1 } } as unknown as Request;
+      await idempotent(store, handler, pinned ? { inProgressNeverExpires: true } : {})(req, res as unknown as Response, () => undefined);
+    };
+    const refused = randomUUID();
+    await assert.rejects(run(() => { throw new AppError('CONFLICT'); }, refused, true), (error: unknown) => error instanceof AppError && error.status === 409);
+    assert.equal(await keys().countDocuments({ key: refused }), 0);
+    const unknown = randomUUID();
+    await assert.rejects(run(() => { throw new Error('connection lost'); }, unknown, true), /connection lost/);
+    assert.equal(await keys().countDocuments({ key: unknown }), 1);
+    const failed = randomUUID();
+    await assert.rejects(run(() => { throw new AppError('INTERNAL_ERROR'); }, failed, true), (error: unknown) => error instanceof AppError && error.status === 500);
+    assert.equal(await keys().countDocuments({ key: failed }), 1);
+    // The same key, sent again, is refused with the pending detail; a key that is not pinned is freed by any failure.
+    await assert.rejects(run(() => undefined, unknown, true), (error: unknown) => error instanceof AppError && error.status === 409 && JSON.stringify(error.details) === JSON.stringify([{ field: 'Idempotency-Key', issue: 'pending' }]));
+    const free = randomUUID();
+    await assert.rejects(run(() => { throw new Error('boom'); }, free, false), /boom/);
+    assert.equal(await keys().countDocuments({ key: free }), 0);
+  });
 });

@@ -104,7 +104,7 @@ export interface CatalogsService {
    * Deletes an element and records `group.<catalog>.deleted`.
    *
    * @throws {AppError} `NOT_FOUND`; `FORBIDDEN` when a company or place administrator deletes an element that applies to places outside his scope (or to every place);
-   * `CONFLICT` for a protected element, one still referenced (a tax rate a department was given, listed as `productDepartments.<id>`, or a price of a product that is not in the trash has, listed as `products.<id>`), or a document that changed meanwhile.
+   * `CONFLICT` for a protected element, one still referenced (a tax rate a department was given, listed as `productDepartments.<id>`, or a price of a product that is not in the trash has, listed as `products.<id>`; a card type some advanced card has, or a points collection some card has points on, listed as `fidelityCards.<id>`), or a document that changed meanwhile.
    */
   remove(principal: AuthPrincipal, access: GroupAccess, catalog: Catalog, id: string, client: ClientContext): Promise<void>;
 }
@@ -125,6 +125,16 @@ export interface CatalogsServiceDeps {
    * and as the realignment only touches the copies that differ, repeating the modification (which is then a request that changes nothing) completes what an interruption left undone.
    */
   readonly taxDepartments?: TaxDepartments;
+  /** The advanced loyalty cards of the group: a card type a card has, and a points collection a card has points on, are never deleted. */
+  readonly fidelityCards?: CardUsage;
+}
+
+/** What the loyalty cards of a group say about the card types and the points collections in use (`fidelity_cards`, read only). */
+export interface CardUsage {
+  /** The ids (hexadecimal, at most 20) of the cards of a card type. */
+  cardTypeUsers(principal: AuthPrincipal, access: GroupAccess, typeId: string): Promise<string[]>;
+  /** The ids (hexadecimal, at most 20) of the cards that have points on a points collection. */
+  collectionUsers(principal: AuthPrincipal, access: GroupAccess, collectionId: string): Promise<string[]>;
 }
 
 /**
@@ -134,7 +144,7 @@ export interface CatalogsServiceDeps {
  * @param deps Repositories, activity log, logger, id generator and clock.
  */
 export function createCatalogsService(deps: CatalogsServiceDeps): CatalogsService {
-  const { catalogs, references, activityLog, logger, taxDepartments } = deps;
+  const { catalogs, references, activityLog, logger, taxDepartments, fidelityCards } = deps;
 
   const load = async (catalog: Catalog, access: GroupAccess): Promise<{ updateDate: unknown; size: number; state: CatalogState }> => {
     const stored = await catalogs.read(access.groupId, catalog.paths);
@@ -297,6 +307,13 @@ export function createCatalogsService(deps: CatalogsServiceDeps): CatalogsServic
         const priced = await taxDepartments.productsUsing(principal, access, id);
         if (priced.length > 0) {
           throw referenced(priced.map((product) => `products.${product}`));
+        }
+      }
+      // A card type some card has, or a points collection some card has points on, cannot go: the card would lose its type, or the points their collection.
+      if (fidelityCards !== undefined && (catalog.name === 'cardType' || catalog.name === 'pointsCollection')) {
+        const cards = await (catalog.name === 'cardType' ? fidelityCards.cardTypeUsers(principal, access, id) : fidelityCards.collectionUsers(principal, access, id));
+        if (cards.length > 0) {
+          throw referenced(cards.map((card) => `fidelityCards.${card}`));
         }
       }
       await commit(principal, access, catalog, loaded, outcome, client, 'deleted');

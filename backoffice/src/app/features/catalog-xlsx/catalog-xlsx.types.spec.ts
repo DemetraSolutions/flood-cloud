@@ -1,8 +1,10 @@
 import { I18nService } from '../../core/i18n/i18n.service';
 import {
+  ALL_ROW_ERROR_CODES,
   catalogXlsxRoute,
   ImportOutcome,
   problemText,
+  RECORD_ROW_ERROR_CODES,
   ROW_ERROR_CODES,
   rowErrorKey,
   sheetCounts,
@@ -60,6 +62,38 @@ describe('catalog-xlsx types', () => {
     expect([...ROW_ERROR_CODES]).toEqual(BACKEND_CODES);
   });
 
+  it('knows the codes the workbooks of the contacts and of the cards add, copied from records-xlsx.errors.ts', () => {
+    expect([...RECORD_ROW_ERROR_CODES]).toEqual(['duplicateCode', 'balanceChange', 'pointsChange']);
+    expect(ALL_ROW_ERROR_CODES).toEqual([...BACKEND_CODES, 'duplicateCode', 'balanceChange', 'pointsChange']);
+  });
+
+  /** The codes of `RECORD_ERROR_MESSAGES` (`backend/src/modules/records-xlsx/records-xlsx.errors.ts`), copied: every one has a text, so none of them reaches the user as the English message of the server. */
+  it('translates every code of the workbooks of the contacts and of the cards', () => {
+    const RECORD_BACKEND_CODES = [
+      'unknownColumn',
+      'duplicateColumn',
+      'invalidId',
+      'duplicateId',
+      'notFound',
+      'trashed',
+      'deleteWithoutId',
+      'required',
+      'invalidValue',
+      'notFoundReference',
+      'ambiguousName',
+      'duplicateCode',
+      'balanceChange',
+      'pointsChange',
+      'invalid',
+      'forbidden',
+      'conflict',
+    ];
+    for (const code of RECORD_BACKEND_CODES) {
+      expect(problemText(i18n, problem(code)), code).toBe(rowErrorKey(code as never));
+    }
+    expect(rowErrorKey('balanceChange')).toBe('CATALOG_XLSX.ROW_ERROR.BALANCE_CHANGE');
+  });
+
   it('makes the key of a code in upper snake case', () => {
     expect(rowErrorKey('notFoundReference')).toBe('CATALOG_XLSX.ROW_ERROR.NOT_FOUND_REFERENCE');
     expect(rowErrorKey('required')).toBe('CATALOG_XLSX.ROW_ERROR.REQUIRED');
@@ -97,6 +131,17 @@ describe('catalog-xlsx types', () => {
       'categories',
     ]);
     expect(totalCounts(OUTCOME)).toEqual({ inserted: 111, updated: 222, removed: 333, unchanged: 444 });
+  });
+
+  it('lists the sheets the tool says, and adds up only the sheets of the answer', () => {
+    const contacts: ImportOutcome = {
+      dryRun: false,
+      sheets: { contacts: { inserted: 2, updated: 1, removed: 0, unchanged: 4 } },
+    };
+    expect(sheetCounts(contacts, ['contacts'])).toEqual([
+      { key: 'contacts', counts: { inserted: 2, updated: 1, removed: 0, unchanged: 4 } },
+    ]);
+    expect(totalCounts(contacts)).toEqual({ inserted: 2, updated: 1, removed: 0, unchanged: 4 });
   });
 
   it('makes the link of the page of a group', () => {

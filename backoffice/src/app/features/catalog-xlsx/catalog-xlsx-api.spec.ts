@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { API, backend, provideApiTesting } from '../../../testing/api';
 import { CatalogXlsxApi } from './catalog-xlsx-api';
+import { XLSX_TOOLS } from './xlsx-tools';
 
 const BASE = `${API}/v1/groups/g%201`;
 const OUTCOME = {
@@ -47,6 +48,25 @@ describe('CatalogXlsxApi', () => {
     expect((body.get('file') as File).name).toBe('catalog.xlsx');
     request.flush({ data: OUTCOME });
     expect(await checking).toEqual(OUTCOME);
+  });
+
+  it.each([
+    ['contacts', 'contacts-export', 'contacts-import'],
+    ['cards', 'fidelity-cards-export', 'fidelity-cards-import'],
+  ] as const)('reaches the routes of the %s workbook', async (tool, exportPath, importPath) => {
+    const api = TestBed.inject(CatalogXlsxApi);
+    const spec = XLSX_TOOLS[tool];
+    const model = api.template('g 1', spec);
+    backend().expectOne(`${BASE}/${exportPath}/template`).flush(new Blob(['x']));
+    await model;
+    const exported = api.export('g 1', 'names', spec);
+    const exportRequest = backend().expectOne((r) => r.url === `${BASE}/${exportPath}`);
+    expect(exportRequest.request.params.get('references')).toBe('names');
+    exportRequest.flush(new Blob(['x']));
+    await exported;
+    const importing = api.import('g 1', new File(['b'], 'c.xlsx'), 'key-3', true, spec);
+    backend().expectOne((r) => r.url === `${BASE}/${importPath}`).flush({ data: OUTCOME });
+    expect((await importing).dryRun).toBe(true);
   });
 
   it('sends no dryRun to apply the file', async () => {

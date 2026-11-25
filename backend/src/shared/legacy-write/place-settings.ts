@@ -277,6 +277,9 @@ const PRINTABLE = /^[\x21-\x7E]+$/;
 const secretOf = (max = 512, pattern: RegExp = PRINTABLE): SettingKind => ({ t: 'secret', max, pattern });
 const PUBLIC_TEXT: SettingKind = { t: 'text', max: 255 };
 
+/** The form of the id of the property of TS Hospitality (`tsh.propertyId`): it is put in the path of the calls to the provider, so it is an allowlist of characters (checked where the value changes, and again before every call). */
+export const TSH_PROPERTY_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 /** The integrations the old tab edits, in the order of the tab. The switch of each (`status`) is the dealers'. */
 const INTEGRATION_ENTRIES: ReadonlyArray<readonly [string, SettingKind]> = [
   ['floodPay.status', FLAG],
@@ -320,7 +323,6 @@ const INTEGRATION_ENTRIES: ReadonlyArray<readonly [string, SettingKind]> = [
   ['dojo.status', FLAG],
   ['dojo.apiKey', secretOf()],
   ['satispay.status', FLAG],
-  ['satispay.activationCode', secretOf(32, /^[A-Za-z0-9]+$/)],
   ['satispay.keyId', secretOf()],
   ['satispay.type', enumOf('checkin qrcode', 'checkin')],
   ['multisafepay.status', FLAG],
@@ -339,7 +341,7 @@ const INTEGRATION_ENTRIES: ReadonlyArray<readonly [string, SettingKind]> = [
   ['tsh.testMode', FLAG],
   ['tsh.id', secretOf()],
   ['tsh.secret', secretOf()],
-  ['tsh.propertyId', PUBLIC_TEXT],
+  ['tsh.propertyId', { t: 'text', max: 64, pattern: TSH_PROPERTY_ID }],
   ['tsh.serviceName', PUBLIC_TEXT],
   ['tsh.categoriesMap', whole('tshCategoriesMap')],
   ['phlex.status', FLAG],
@@ -348,16 +350,26 @@ const INTEGRATION_ENTRIES: ReadonlyArray<readonly [string, SettingKind]> = [
   ['phlex.structureId', PUBLIC_TEXT],
 ];
 
+/** The keys of the integrations that receive payments: whoever holds them is paid, so they are the dealers'. The activation code of Satispay is not one of them: it is never stored (it travels in the activation call only). */
+const PAYMENT_KEYS: ReadonlySet<string> = new Set(['floodPay.stripe.publicKey', 'floodPay.stripe.privateKey', 'floodPay.stripe.webhookPrivateKey', 'dojo.apiKey', 'satispay.keyId', 'qodeup.apiKey', 'multisafepay.terminalGroupApiKey', 'multisafepay.websiteApiKey']);
+
+/** Keys of the integrations, besides the `status` switches, that only a PSA or a dealer changes (the QR switch of MultiSafepay, as the QR and tap-to-pay switches of Flood Pay, and the test mode of TS Hospitality, which points the calls to the provider's test environment). */
+const RESERVED_KEYS: ReadonlySet<string> = new Set(['multisafepay.qrStatus', 'tsh.testMode']);
+
+/**
+ * The stored paths the backend writes but a request never sets: the copy of the TS Hospitality categories (`tsh.tshCategories`, the representation's read-only `integrations.tsh.categories`), which only the
+ * synchronization with the provider writes (through the place integrations port). They are owned like every other key (so they are part of the version), and allowed in a write of the writer, but no field of
+ * a request leads to them.
+ */
+export const SERVER_WRITTEN_PATHS: readonly string[] = Object.freeze(['integrations.tsh.tshCategories']);
+
+/** The stored paths a write of the writer may remove (`$unset`): the activation code of Satispay a place may still hold from the old backoffice, removed when the key id is saved. It is no longer a key of the place. */
+export const UNSETTABLE_PATHS: readonly string[] = Object.freeze(['integrations.satispay.activationCode']);
+
 /**
  * The keys of `integrations`: a credential is two keys, the write-only value (`privateKey`) and the read-only flag `privateKeySet` at the same stored path. The list the TS Hospitality
- * categories come from (`tsh.tshCategories`) is read only: it is data of the provider, which this backend does not fetch.
+ * categories come from (`tsh.tshCategories`) is read only in a request: it is the copy of what the provider listed, written by the synchronization ({@link SERVER_WRITTEN_PATHS}).
  */
-/** The keys of the integrations that receive payments: whoever holds them is paid, so they are the dealers'. */
-const PAYMENT_KEYS: ReadonlySet<string> = new Set(['floodPay.stripe.publicKey', 'floodPay.stripe.privateKey', 'floodPay.stripe.webhookPrivateKey', 'dojo.apiKey', 'satispay.activationCode', 'satispay.keyId', 'qodeup.apiKey', 'multisafepay.terminalGroupApiKey', 'multisafepay.websiteApiKey']);
-
-/** Keys of the integrations, besides the `status` switches, that only a PSA or a dealer changes (the QR switch of MultiSafepay, as the QR and tap-to-pay switches of Flood Pay). */
-const RESERVED_KEYS: ReadonlySet<string> = new Set(['multisafepay.qrStatus']);
-
 const INTEGRATIONS: SettingField[] = [
   ...INTEGRATION_ENTRIES.flatMap(([key, kind]): SettingField[] => {
     const domain = `integrations.${key}`;
@@ -396,8 +408,8 @@ export const SETTING_BLOCKS: Readonly<Record<string, readonly SettingField[]>> =
 /** Every settings key of every block. */
 export const SETTING_FIELDS: readonly SettingField[] = Object.freeze(Object.values(SETTING_BLOCKS).flat());
 
-/** The stored paths of every settings key that is written (a credential once, its flag and the read-only keys never), plus the deprecated copies, which are owned too: `PLACES_OWNED_FIELDS` includes them. */
-export const SETTING_LEGACY_PATHS: readonly string[] = Object.freeze([...new Set([...SETTING_FIELDS.filter((field) => field.readOnly !== true).map((field) => field.legacy), ...DEPRECATED_ROOMS_PATHS])]);
+/** The stored paths of every settings key that is written (a credential once, its flag and the read-only keys never), plus the deprecated copies and the paths only the server writes ({@link SERVER_WRITTEN_PATHS}), which are owned too: `PLACES_OWNED_FIELDS` includes them. */
+export const SETTING_LEGACY_PATHS: readonly string[] = Object.freeze([...new Set([...SETTING_FIELDS.filter((field) => field.readOnly !== true).map((field) => field.legacy), ...DEPRECATED_ROOMS_PATHS, ...SERVER_WRITTEN_PATHS])]);
 
 /** The containers of the stored document that hold settings keys (completed with defaults when missing or empty), outermost first. */
 export const SETTING_CONTAINERS: readonly string[] = Object.freeze(

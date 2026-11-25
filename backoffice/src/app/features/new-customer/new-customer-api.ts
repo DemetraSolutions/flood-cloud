@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiData } from '../../core/api/api.types';
-import { NewCustomerBody, NewCustomerResult, VatLookup } from './new-customer.types';
+import { NewCustomerBody, NewCustomerResult } from './new-customer.types';
 
 /** Name of the header that makes the creation idempotent. */
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
@@ -27,21 +27,6 @@ export class NewCustomerApi {
       this.http.post<ApiData<NewCustomerResult>>('/v1/groups', body, {
         headers: { [IDEMPOTENCY_HEADER]: key },
       }),
-    );
-    return response.data;
-  }
-
-  /**
-   * Looks a company up by its Italian VAT number (`GET /v1/vat-lookups/{vatNumber}`).
-   *
-   * @param vatNumber The 11 digits of the VAT number.
-   * @returns The subject with exactly that VAT number.
-   * @throws ApiError `404` when no subject has it, `422` when it is not valid, `429` when the
-   *   limit is reached, `503` when the service is not available.
-   */
-  async lookupVat(vatNumber: string): Promise<VatLookup> {
-    const response = await firstValueFrom(
-      this.http.get<ApiData<VatLookup>>(`/v1/vat-lookups/${encodeURIComponent(vatNumber)}`),
     );
     return response.data;
   }

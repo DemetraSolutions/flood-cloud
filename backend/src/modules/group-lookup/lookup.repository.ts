@@ -34,7 +34,7 @@ export interface ProductsNarrowing {
 }
 
 /** The legacy encrypted format of a personal text (`<ciphertext hex>$<iv hex>`): never shown, since the key is not ours. */
-const ENCRYPTED = '^([0-9a-f]{32})+\\$[0-9a-f]{32}$';
+export const ENCRYPTED = '^([0-9a-f]{32})+\\$[0-9a-f]{32}$';
 
 /** A text field of a contact as a trimmed non-empty string, or `null` when it is missing, not a text, empty or in the legacy encrypted format. */
 function clearText(field: string): Document {

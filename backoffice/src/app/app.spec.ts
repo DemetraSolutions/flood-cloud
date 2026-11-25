@@ -444,6 +444,37 @@ describe('routes', () => {
     });
   });
 
+  describe('contacts and cards import and export (K3)', () => {
+    const GROUP = '665f1c2e9b1d4a0012ab34a1';
+
+    async function open(path: string, permissions: string[]) {
+      setup();
+      sessionStorage.clear();
+      signIn({ role: 'SA', permissions: [...permissions, 'profile:read'] });
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/groups/${GROUP}/tools/${path}`);
+      return harness;
+    }
+
+    afterEach(() => sessionStorage.clear());
+
+    it.each([
+      ['contacts-import-export', 'contacts:export', 'CONTACTS_XLSX.TITLE'],
+      ['fidelity-cards-import-export', 'fidelityCards:export', 'CARDS_XLSX.TITLE'],
+    ])('lazy-loads %s for whoever has %s, with the texts of its own workbook', async (path, permission, title) => {
+      const harness = await open(path, [permission]);
+      const root = harness.routeNativeElement as HTMLElement;
+      expect(root.querySelector('main h1')?.textContent).toBe(`⟦${title}⟧`);
+      expect(root.querySelector('fc-catalog-xlsx-page')).not.toBeNull();
+    });
+
+    it.each(['contacts-import-export', 'fidelity-cards-import-export'])('protects %s', async (path) => {
+      await open(path, ['products:read']);
+      expect(location()).toBe('/forbidden');
+    });
+  });
+
   describe('tobacco synchronization', () => {
     const GROUP = '665f1c2e9b1d4a0012ab34a1';
     const ON = fakeFeatureFlags(false, { tobaccosGamesMonopoly: true });

@@ -30,19 +30,4 @@ describe('NewCustomerApi', () => {
     failRequest(backend(), '/v1/groups', 'FORBIDDEN');
     await expect(result).rejects.toBeInstanceOf(ApiError);
   });
-
-  it('reads the lookup of a VAT number', async () => {
-    const found = { vatNumber: '00743110157', name: 'X' };
-    const result = api.lookupVat('00743110157');
-    const request = backend().expectOne(`${API}/v1/vat-lookups/00743110157`);
-    expect(request.request.method).toBe('GET');
-    request.flush({ data: found });
-    expect(await result).toEqual(found);
-  });
-
-  it('encodes the VAT number in the path and rejects with the API error', async () => {
-    const result = api.lookupVat('1/2&3');
-    failRequest(backend(), '/v1/vat-lookups/1%2F2%263', 'NOT_FOUND');
-    await expect(result).rejects.toBeInstanceOf(ApiError);
-  });
 });

@@ -1,0 +1,22 @@
+@if (visible()) {
+  <section class="action" [attr.aria-label]="'INTEGRATIONS.TSH.TITLE' | t">
+    <button
+      fc-button
+      variant="secondary"
+      [loading]="busy()"
+      [disabled]="blockedBy() !== null"
+      (click)="sync()"
+    >
+      {{ 'INTEGRATIONS.TSH.SYNC' | t }}
+    </button>
+    @if (blockedBy(); as reason) {
+      <p class="note">{{ reason }}</p>
+    }
+    @if (failure(); as message) {
+      <p class="problem" role="alert">{{ message }}</p>
+    }
+    <p class="note" role="status">
+      {{ done() }}
+    </p>
+  </section>
+}

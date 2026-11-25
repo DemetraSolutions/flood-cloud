@@ -82,6 +82,9 @@ function wholeSchema(name: WholeName): Schema<unknown> {
   }
 }
 
+/** The schema of the copy of the categories of TS Hospitality the place keeps (`integrations.tsh.tshCategories`): also what the synchronization checks the provider's answer against. */
+export const tshCategoriesSchema: Schema<unknown> = wholeSchema('tshCategories');
+
 /** The schema of the value of a key (`field.legacy` tells the media names apart). */
 function kindSchema(field: SettingField): Schema<unknown> {
   const kind: SettingKind = field.kind;

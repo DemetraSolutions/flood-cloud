@@ -91,7 +91,7 @@ export interface StoreCatalogServiceDeps {
  * @param store The verified store principal.
  * @param operator The verified operator of a write, `null` for a read.
  */
-function callerOf(store: StorePrincipal, operator: StoreOperator | null): StoreCaller {
+export function storeCallerOf(store: StorePrincipal, operator: StoreOperator | null): StoreCaller {
   return Object.freeze({ kind: 'store' as const, keyId: store.keyId, scope: store.scope, operator });
 }
 
@@ -103,31 +103,31 @@ function callerOf(store: StorePrincipal, operator: StoreOperator | null): StoreC
 export function createStoreCatalogService(deps: StoreCatalogServiceDeps): StoreCatalogService {
   const { products, categories, departments, brands, attributeGroups } = deps;
   return {
-    listProducts: (store, access, query) => products.listChanges(callerOf(store, null), access, { ...query, limit: query.limit ?? STORE_PRODUCTS_DEFAULT_PAGE }),
-    getProduct: async (store, access, id) => toStoreProductResult(await products.get(callerOf(store, null), access, id)),
-    createProduct: async (store, operator, access, body, client) => toStoreProductResult(await products.create(callerOf(store, operator), access, body, client)),
-    updateProduct: async (store, operator, access, id, expected, body, client) => toStoreProductResult(await products.update(callerOf(store, operator), access, id, expected, body, client)),
-    duplicateProduct: async (store, operator, access, id, client) => toStoreProductResult(await products.duplicate(callerOf(store, operator), access, id, client)),
-    trashProduct: async (store, operator, access, id, expected, client) => toStoreProductResult(await products.trash(callerOf(store, operator), access, id, expected, client)),
-    restoreProduct: async (store, operator, access, id, expected, client) => toStoreProductResult(await products.restore(callerOf(store, operator), access, id, expected, client)),
-    listCategories: (store, access, query) => categories.listChanges(callerOf(store, null), access, { ...query, limit: query.limit ?? STORE_CATEGORIES_DEFAULT_PAGE }),
-    categoryTree: (store, access) => categories.tree(callerOf(store, null), access),
-    getCategory: (store, access, id) => categories.get(callerOf(store, null), access, id),
-    createCategory: (store, operator, access, body, client) => categories.create(callerOf(store, operator), access, body, client),
-    updateCategory: (store, operator, access, id, expected, body, client) => categories.update(callerOf(store, operator), access, id, expected, body, client),
-    deleteCategory: (store, operator, access, id, client) => categories.remove(callerOf(store, operator), access, id, client),
-    listBrands: (store, access, query) => brands.listChanges(callerOf(store, null), access, { ...query, limit: query.limit ?? STORE_ENTITIES_DEFAULT_PAGE }),
-    getBrand: (store, access, id) => brands.get(callerOf(store, null), access, id),
-    createBrand: (store, operator, access, body, client) => brands.create(callerOf(store, operator), access, body, client),
-    updateBrand: (store, operator, access, id, expected, body, client) => brands.update(callerOf(store, operator), access, id, expected, body, client),
-    deleteBrand: (store, operator, access, id, client) => brands.remove(callerOf(store, operator), access, id, client),
-    listAttributeGroups: (store, access, query) => attributeGroups.listChanges(callerOf(store, null), access, { ...query, limit: query.limit ?? STORE_ENTITIES_DEFAULT_PAGE }),
-    getAttributeGroup: (store, access, id) => attributeGroups.get(callerOf(store, null), access, id),
+    listProducts: (store, access, query) => products.listChanges(storeCallerOf(store, null), access, { ...query, limit: query.limit ?? STORE_PRODUCTS_DEFAULT_PAGE }),
+    getProduct: async (store, access, id) => toStoreProductResult(await products.get(storeCallerOf(store, null), access, id)),
+    createProduct: async (store, operator, access, body, client) => toStoreProductResult(await products.create(storeCallerOf(store, operator), access, body, client)),
+    updateProduct: async (store, operator, access, id, expected, body, client) => toStoreProductResult(await products.update(storeCallerOf(store, operator), access, id, expected, body, client)),
+    duplicateProduct: async (store, operator, access, id, client) => toStoreProductResult(await products.duplicate(storeCallerOf(store, operator), access, id, client)),
+    trashProduct: async (store, operator, access, id, expected, client) => toStoreProductResult(await products.trash(storeCallerOf(store, operator), access, id, expected, client)),
+    restoreProduct: async (store, operator, access, id, expected, client) => toStoreProductResult(await products.restore(storeCallerOf(store, operator), access, id, expected, client)),
+    listCategories: (store, access, query) => categories.listChanges(storeCallerOf(store, null), access, { ...query, limit: query.limit ?? STORE_CATEGORIES_DEFAULT_PAGE }),
+    categoryTree: (store, access) => categories.tree(storeCallerOf(store, null), access),
+    getCategory: (store, access, id) => categories.get(storeCallerOf(store, null), access, id),
+    createCategory: (store, operator, access, body, client) => categories.create(storeCallerOf(store, operator), access, body, client),
+    updateCategory: (store, operator, access, id, expected, body, client) => categories.update(storeCallerOf(store, operator), access, id, expected, body, client),
+    deleteCategory: (store, operator, access, id, client) => categories.remove(storeCallerOf(store, operator), access, id, client),
+    listBrands: (store, access, query) => brands.listChanges(storeCallerOf(store, null), access, { ...query, limit: query.limit ?? STORE_ENTITIES_DEFAULT_PAGE }),
+    getBrand: (store, access, id) => brands.get(storeCallerOf(store, null), access, id),
+    createBrand: (store, operator, access, body, client) => brands.create(storeCallerOf(store, operator), access, body, client),
+    updateBrand: (store, operator, access, id, expected, body, client) => brands.update(storeCallerOf(store, operator), access, id, expected, body, client),
+    deleteBrand: (store, operator, access, id, client) => brands.remove(storeCallerOf(store, operator), access, id, client),
+    listAttributeGroups: (store, access, query) => attributeGroups.listChanges(storeCallerOf(store, null), access, { ...query, limit: query.limit ?? STORE_ENTITIES_DEFAULT_PAGE }),
+    getAttributeGroup: (store, access, id) => attributeGroups.get(storeCallerOf(store, null), access, id),
     listDepartments: async (store, access, query) => {
       if (!access.features.cash) {
         throw new AppError('FEATURE_DISABLED');
       }
-      return departments.list(callerOf(store, null), access, query);
+      return departments.list(storeCallerOf(store, null), access, query);
     },
   };
 }

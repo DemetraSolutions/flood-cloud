@@ -53,6 +53,38 @@ describe('catalogFailureMessage', () => {
     );
   });
 
+  it('names the loyalty cards that still use an element', () => {
+    const error = fail('CONFLICT', [
+      { field: 'fidelityCards.a', issue: 'referenced' },
+      { field: 'fidelityCards.b', issue: 'referenced' },
+      { field: 'cardTypes.c', issue: 'referenced' },
+    ]);
+    expect(catalogFailureMessage(translator(), error)).toContain(
+      'CATALOG.REFERENCED.FIDELITYCARDS {\\"count\\":2}',
+    );
+    expect([...referencedBy(error)]).toEqual([
+      ['fidelityCards', 2],
+      ['cardTypes', 1],
+    ]);
+  });
+
+  it('shows 20 or more loyalty cards as "many" and a smaller count as a number', () => {
+    const cards = (count: number) =>
+      fail(
+        'CONFLICT',
+        Array.from({ length: count }, (_, index) => ({
+          field: `fidelityCards.${index}`,
+          issue: 'referenced',
+        })),
+      );
+    expect(catalogFailureMessage(translator(), cards(20))).toContain(
+      'CATALOG.REFERENCED.FIDELITYCARDS {\\"count\\":\\"CATALOG.REFERENCED.MANY {\\\\\\"count\\\\\\":20}\\"}',
+    );
+    expect(catalogFailureMessage(translator(), cards(19))).toContain(
+      'CATALOG.REFERENCED.FIDELITYCARDS {\\"count\\":19}',
+    );
+  });
+
   it.each([
     ['default', 'CATALOG.ERROR.DEFAULT'],
     ['last', 'CATALOG.ERROR.LAST'],

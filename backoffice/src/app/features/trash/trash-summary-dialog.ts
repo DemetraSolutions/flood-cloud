@@ -79,8 +79,13 @@ export class TrashSummaryDialog {
   });
 
   private reason(issue: TrashIssue): string {
+    const kind = this.kind().toUpperCase();
     const key =
-      issue === 'referenced' ? `REFERENCED_${this.kind().toUpperCase()}` : ISSUE_KEYS[issue];
+      issue === 'referenced'
+        ? `REFERENCED_${kind}`
+        : issue === 'taken' && this.kind() === 'contacts'
+          ? 'TAKEN_CONTACTS'
+          : ISSUE_KEYS[issue];
     return this.i18n.t(`TRASH.ISSUE.${key}`);
   }
 }

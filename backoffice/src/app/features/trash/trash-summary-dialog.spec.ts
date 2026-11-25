@@ -124,6 +124,36 @@ describe('TrashSummaryDialog', () => {
     expect(text).toContain('TRASH.ISSUE.REFERENCED_PRODUCTS TRASH.SUMMARY.COUNT {"count":1} Acqua');
   });
 
+  it('explains a referenced contact and a contact with a taken card code with their own reasons', async () => {
+    const { root, view } = render(
+      {
+        restored: 0,
+        deleted: 0,
+        skipped: [
+          { id: 'a', issue: 'referenced' },
+          { id: 'b', issue: 'taken' },
+          { id: 'c', issue: 'notFound' },
+        ],
+        failedGroups: [],
+      },
+      [
+        ['a', 'Mario Bianchi'],
+        ['b', 'Anna Verdi'],
+        ['c', 'Luca Neri'],
+      ],
+      'contacts',
+    );
+    await view();
+    const items = [...root.querySelectorAll('li')].map((li) =>
+      li.textContent?.replace(/\s+/g, ' '),
+    );
+    expect(items[0]).toContain('TRASH.ISSUE.REFERENCED_CONTACTS');
+    expect(items[0]).toContain('Mario Bianchi');
+    expect(items[1]).toContain('TRASH.ISSUE.TAKEN_CONTACTS');
+    expect(items[1]).toContain('Anna Verdi');
+    expect(items[2]).not.toContain('CONTACTS');
+  });
+
   it('closes with the button of the dialog', async () => {
     const { fixture, root, view } = render({
       restored: 1,

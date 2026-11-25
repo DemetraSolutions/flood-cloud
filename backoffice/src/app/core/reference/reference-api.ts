@@ -111,6 +111,18 @@ export class ReferenceApi {
   }
 
   /**
+   * Names of the given companies, resolved with the `ids` filter of the companies read (at most
+   * {@link MAX_LOOKUP_IDS} per request, duplicates removed). Ids that do not exist, are trashed
+   * or are outside the perimeter of the user are missing from the result.
+   *
+   * @param groupId Group of the companies.
+   * @param ids Ids to resolve.
+   */
+  companyNames(groupId: string, ids: readonly string[]): Promise<Record<string, string>> {
+    return this.namesByIds((query) => this.companies(groupId, query), ids);
+  }
+
+  /**
    * Ids of every store the user can read in a group (the reference read is already limited to
    * the user's perimeter), reading pages of 100 for at most {@link MAX_PERIMETER_PAGES} pages.
    *

@@ -101,6 +101,10 @@ data:
   RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: ""
   RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE: ""
   STORE_ACTIVATION_CODE_TTL_MINUTES: ""
+  # Alerts (nothing is refused) when a store key adds credit to loyalty cards: above this much in one
+  # operation (default 500) or in a UTC day (default 5000), in currency units
+  STORE_CREDIT_ALERT_PER_OPERATION: ""
+  STORE_CREDIT_ALERT_PER_DAY: ""
   # Public API (/public/v1): default limits of a new key per minute (1-6000, default 60) and per UTC day
   # (default 10000); cap of all the keys of a group per minute (default 120) and per UTC day (default
   # 20000); failed authentications per minute per IP (default 300); seconds between two writes of the
@@ -156,3 +160,28 @@ data:
   # Required with MEDIA_STORAGE=gcs. metadata: token of the GKE metadata server (Workload Identity, see
   # serviceaccount.yaml). No credentials file: GCS_SERVICE_ACCOUNT_FILE is intentionally not set.
   GCS_AUTH: "metadata"
+
+  # Integrations called from the settings of a place (see backend/.env.example). A provider without its
+  # configuration is off (503): the deploy never depends on it. Credentials of the places are in the places.
+  # Optional. Base URL of the Dojo API. Empty: default https://api.dojo.tech
+  DOJO_BASE_URL: "https://api.dojo.tech"
+  # Optional. Version of the Dojo API (a date, YYYY-MM-DD). Empty: default 2024-02-05
+  DOJO_API_VERSION: ""
+  # Dojo is on only with both identifiers (1-64 letters, digits, spaces, dots, dashes, underscores).
+  # TO BE SET once the production values are confirmed: not invented here.
+  # DOJO_RESELLER_ID: ""
+  # DOJO_SOFTWARE_HOUSE_ID: ""
+  # Satispay authentication service, production. Satispay is on only with this and SATISPAY_PUBLIC_KEY
+  # (Secret Manager, optional).
+  SATISPAY_AUTH_BASE_URL: "https://authservices.satispay.com"
+  # TS Hospitality: on only with both production hosts; the test environment hosts are optional (without
+  # them a place in test mode gets 503). Hosts not confirmed: TO BE SET, not invented here.
+  # TSH_AUTH_BASE_URL: ""
+  # TSH_API_BASE_URL: ""
+  # TSH_TEST_AUTH_BASE_URL: ""
+  # TSH_TEST_API_BASE_URL: ""
+  # Optional. Base URL of the Geocoding API. Empty: default https://maps.googleapis.com. The key
+  # (GOOGLE_MAPS_API_KEY) comes from Secret Manager.
+  GEOCODING_BASE_URL: "https://maps.googleapis.com"
+  # Optional. Geocoding calls per day (24 hours) for the whole platform (1-1000000). Empty: default 2000
+  GEOCODING_DAILY_LIMIT: ""

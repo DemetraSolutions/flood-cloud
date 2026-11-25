@@ -27,11 +27,11 @@ import {
   ExportReferences,
   ImportOutcome,
   SheetCounts,
-  SheetKey,
   sheetCounts,
   totalCounts,
 } from './catalog-xlsx.types';
 import { ImportProblems } from './import-problems';
+import { XLSX_TOOLS, XlsxToolKey } from './xlsx-tools';
 
 /** Dictionary keys of the messages about a file that cannot be sent. */
 const FILE_PROBLEM_KEYS: Readonly<Record<FileProblem, string>> = {
@@ -40,21 +40,14 @@ const FILE_PROBLEM_KEYS: Readonly<Record<FileProblem, string>> = {
   empty: 'CATALOG_XLSX.IMPORT.CLIENT_ERROR.EMPTY',
 };
 
-/** What the rules of the file say, one entry per paragraph of the collapsible section. */
-export const RULE_KEYS = [
-  'SHEETS',
-  'ID',
-  'DELETE',
-  'ABSENT_COLUMN',
-  'PLACES',
-  'NOT_IN_FILE',
-] as const;
-
 /** One line of the table of the counts. */
 interface CountLine {
-  readonly key: SheetKey;
+  readonly key: string;
   readonly counts: SheetCounts;
 }
+
+/** The counts of a sheet, in the order of the columns of the table. */
+const COUNT_FIELDS = ['inserted', 'updated', 'removed', 'unchanged'] as const;
 
 /** Today as `YYYY-MM-DD`. */
 function today(): string {
@@ -62,8 +55,9 @@ function today(): string {
 }
 
 /**
- * Import / Export of the catalog of the working group (`/groups/:groupId/tools/catalog-import-export`): the model of the XLSX file, the export (ids or names in the columns that accept both) and the all-or-nothing import, which is first
- * checked (`dryRun`) and applied only after a successful check and an explicit confirmation that repeats the counts. A file with problems is shown as a table of sheet, row, column and problem. The import part needs `products:update`.
+ * Import / Export of the working group (`/groups/:groupId/tools/<route>`): the model of the XLSX file, the export (ids or names in the columns that accept both) and the all-or-nothing import, which is first
+ * checked (`dryRun`) and applied only after a successful check and an explicit confirmation that repeats the counts. A file with problems is shown as a table of sheet, row, column and problem.
+ * One page serves the catalog (C6), the contacts and the advanced loyalty cards (K3): the route says which with its `tool` data (`xlsx-tools.ts`), which also names the permission of the import part.
  */
 @Component({
   selector: 'fc-catalog-xlsx-page',
@@ -79,8 +73,10 @@ export class CatalogXlsxPage {
 
   /** Route parameter (bound by the router). */
   readonly groupId = input.required<string>();
+  /** Which workbook the page is about: the `tool` data of the route (the catalog without it; the router sets an unbound input to `undefined`, so a default value would not hold). */
+  readonly tool = input<XlsxToolKey>();
 
-  protected readonly ruleKeys = RULE_KEYS;
+  protected readonly spec = computed(() => XLSX_TOOLS[this.tool() ?? 'catalog']);
   protected readonly maxMegabytes = MAX_IMPORT_BYTES / (1024 * 1024);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -141,9 +137,9 @@ export class CatalogXlsxPage {
     {
       key: 'sheet',
       header: this.i18n.t('CATALOG_XLSX.COUNTS.SHEET'),
-      cell: (line) => this.i18n.t(`CATALOG_XLSX.SHEET.${line.key.toUpperCase()}`),
+      cell: (line) => this.i18n.t(`${this.spec().prefix}.SHEET.${line.key.toUpperCase()}`),
     },
-    ...(['inserted', 'updated', 'removed', 'unchanged'] as const).map((field) => ({
+    ...COUNT_FIELDS.filter((field) => field !== 'removed' || this.spec().showsRemoved).map((field) => ({
       key: field,
       header: this.i18n.t(`CATALOG_XLSX.COUNTS.${field.toUpperCase()}`),
       align: 'end' as const,
@@ -153,10 +149,10 @@ export class CatalogXlsxPage {
   protected readonly countRowKey = (line: CountLine): string => line.key;
   /** The counts of the check and of the import, as lines of a table; read only while shown. */
   protected readonly verifiedLines = computed<CountLine[]>(() =>
-    sheetCounts(this.verified() as ImportOutcome),
+    sheetCounts(this.verified() as ImportOutcome, this.spec().sheets),
   );
   protected readonly doneLines = computed<CountLine[]>(() =>
-    sheetCounts(this.done() as ImportOutcome),
+    sheetCounts(this.done() as ImportOutcome, this.spec().sheets),
   );
   protected readonly confirmMessage = computed(() => {
     const outcome = this.verified();
@@ -164,7 +160,7 @@ export class CatalogXlsxPage {
       return '';
     }
     const total = totalCounts(outcome);
-    return this.i18n.t('CATALOG_XLSX.IMPORT.CONFIRM', {
+    return this.i18n.t(`${this.spec().prefix}.IMPORT.CONFIRM`, {
       name: (this.file() as File).name,
       inserted: this.number(total.inserted),
       updated: this.number(total.updated),
@@ -185,15 +181,21 @@ export class CatalogXlsxPage {
   }
 
   protected async downloadTemplate(): Promise<void> {
-    await this.download('template', () => this.api.template(this.groupId()), `catalog-model.xlsx`);
+    const tool = this.spec();
+    await this.download(
+      'template',
+      () => this.api.template(this.groupId(), tool),
+      `${tool.fileBase}-model.xlsx`,
+    );
   }
 
   protected async downloadExport(): Promise<void> {
     const references = this.references();
+    const tool = this.spec();
     await this.download(
       'export',
-      () => this.api.export(this.groupId(), references),
-      `catalog_${today()}.xlsx`,
+      () => this.api.export(this.groupId(), references, tool),
+      `${tool.fileBase}_${today()}.xlsx`,
     );
   }
 
@@ -222,10 +224,10 @@ export class CatalogXlsxPage {
     this.done.set(null);
     this.failure.set(null);
     try {
-      this.verified.set(await this.api.import(this.groupId(), file, crypto.randomUUID(), true));
+      this.verified.set(await this.api.import(this.groupId(), file, crypto.randomUUID(), true, this.spec()));
       this.importKey = crypto.randomUUID();
     } catch (error) {
-      this.failure.set(importFailure(this.i18n, error));
+      this.failure.set(importFailure(this.i18n, error, this.spec().prefix));
     } finally {
       this.working.set(null);
       this.focusRequests.update((count) => count + 1);
@@ -243,15 +245,22 @@ export class CatalogXlsxPage {
     this.working.set('import');
     this.failure.set(null);
     try {
-      const outcome = await this.api.import(this.groupId(), file, this.importKey, false);
+      const outcome = await this.api.import(
+        this.groupId(),
+        file,
+        this.importKey,
+        false,
+        this.spec(),
+      );
       this.done.set(outcome);
       this.verified.set(null);
       this.file.set(null);
-      this.store.invalidate(this.groupId(), 'product-categories');
-      this.store.invalidate(this.groupId(), 'products');
+      for (const kind of this.spec().invalidates) {
+        this.store.invalidate(this.groupId(), kind);
+      }
       this.toast.success(this.i18n.t('CATALOG_XLSX.IMPORT.DONE'));
     } catch (error) {
-      const failure = importFailure(this.i18n, error);
+      const failure = importFailure(this.i18n, error, this.spec().prefix);
       this.failure.set(failure);
       if (failure.refused) {
         // The catalog changed since the check, or the file is refused now: it has to be checked again.
@@ -274,7 +283,7 @@ export class CatalogXlsxPage {
     try {
       saveFile(await run(), filename);
     } catch (error) {
-      this.downloadError.set(downloadFailureMessage(this.i18n, error));
+      this.downloadError.set(downloadFailureMessage(this.i18n, error, this.spec().prefix));
     } finally {
       this.downloading.set(null);
     }
