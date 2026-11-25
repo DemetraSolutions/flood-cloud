@@ -247,7 +247,8 @@ describe('XLSX writer', () => {
     assert.equal(read.rows.length, 20_001);
     assert.equal(read.rows[0]!.cells.length, 60);
     assert.equal(read.rows[20_000]!.number, 20_001);
-    assert.equal(read.rows[20_000]!.cells[59], random.toString('base64', (19_999 * 60 + 59) * 6, (19_999 * 60 + 59) * 6 + 6));
+    // A random text may start with `+` (base64): the writer neutralizes it with an apostrophe, which the import removes again.
+    assert.equal(restoreFormula(String(read.rows[20_000]!.cells[59])), random.toString('base64', (19_999 * 60 + 59) * 6, (19_999 * 60 + 59) * 6 + 6));
   });
 
   it('stops cleanly when the consumer returns early: the source of the rows is closed', { timeout: 30_000 }, async () => {
