@@ -179,13 +179,25 @@ describe('POST /v1/groups: the customer', () => {
       assert.deepEqual([department['groupId'], department['status'], department['trash'], department['placesAvailability'], department['medias'], department['description']], [groupId, true, false, [], { images: {} }, { it: '' }]);
       assert.ok(department['insertDate'] instanceof Date && department['updateDate'] instanceof Date);
     }
-    assert.deepEqual((await groupDb(groupId).listCollections().toArray()).map((collection) => collection.name).sort(), ['companies', 'fidelity_cards', 'places', 'products_departments', 'sales']);
+    assert.deepEqual((await groupDb(groupId).listCollections().toArray()).map((collection) => collection.name).sort(), ['companies', 'document_counters', 'documents', 'fidelity_cards', 'places', 'products_departments', 'sales', 'sales_tombstones', 'warehouse']);
     // The sales collection has the index of the purchases of a customer, and nothing else but `_id`.
     const salesIndexes = await groupDb(groupId).collection('sales').indexes();
-    assert.deepEqual(salesIndexes.map((index) => [index.name, index.key]), [['_id_', { _id: 1 }], ['customer._id_1_date_-1', { 'customer._id': 1, date: -1 }]]);
+    assert.deepEqual(salesIndexes.map((index) => [index.name, index.key]), [['_id_', { _id: 1 }], ['customer._id_1_date_-1', { 'customer._id': 1, date: -1 }], ['floodCloud.key_1', { 'floodCloud.key': 1 }], ['timestampId_1', { timestampId: 1 }]]);
+    // The key of the sales is unique and partial (step VS4a): only the sales this backend writes have one.
+    const keyIndex = salesIndexes.find((index) => index.name === 'floodCloud.key_1')!;
+    assert.deepEqual([keyIndex.unique, keyIndex.partialFilterExpression], [true, { 'floodCloud.key': { $type: 'string' } }]);
+    assert.equal((await groupDb(groupId).collection('sales_tombstones').indexes()).find((index) => index.name === 'key_1')!.unique, true);
     // The group gets the unique index on the code of the loyalty cards, the same one the legacy creates.
     const cardIndex = (await groupDb(groupId).collection('fidelity_cards').indexes()).find((index) => index.name === 'code_1')!;
     assert.deepEqual([cardIndex.key, cardIndex.unique], [{ code: 1 }, true]);
+    // And the partial unique index of the origins of the warehouse movements (step VS1).
+    const stockIndex = (await groupDb(groupId).collection('warehouse').indexes()).find((index) => index.name === 'origin.kind_1_origin.id_1_origin.seq_1')!;
+    assert.deepEqual([stockIndex.key, stockIndex.unique, stockIndex.partialFilterExpression], [{ 'origin.kind': 1, 'origin.id': 1, 'origin.seq': 1 }, true, { 'origin.kind': { $exists: true } }]);
+
+    // And the indexes of the numbering of the fiscal documents (step VS3): the unique one of the counters, and the two supporting ones of the documents.
+    const counterIndex = (await groupDb(groupId).collection('document_counters').indexes()).find((index) => index.name === 'companyId_1_series_1_prefixSuffix_1_year_1')!;
+    assert.deepEqual([counterIndex.key, counterIndex.unique], [{ companyId: 1, series: 1, prefixSuffix: 1, year: 1 }, true]);
+    assert.deepEqual((await groupDb(groupId).collection('documents').indexes()).map((index) => index.name).sort(), ['_id_', 'companyId_1_date_-1', 'companyId_1_type_1_prefixSuffix_1_date_-1']);
 
     // The activity log: one entry per entity, no secret.
     const entries = world.office.activity.entries.slice(mark);

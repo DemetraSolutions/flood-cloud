@@ -53,7 +53,7 @@ export interface CollectionSpec {
 export type DatabaseKind = 'common' | 'group';
 
 /**
- * Registry shape: database kind, then collection name. `queue` is the legacy send queue database (read only, never indexed):
+ * Registry shape: database kind, then collection name. `queue` is the legacy send queue database (never indexed):
  * optional, because only the real registry declares it.
  */
 export type CollectionRegistry = Readonly<Record<DatabaseKind, Readonly<Record<string, CollectionSpec>>>> & { readonly queue?: Readonly<Record<string, CollectionSpec>> };
@@ -334,7 +334,7 @@ export const PRODUCTS_OWNED_TREES: readonly string[] = Object.freeze(['printStat
 
 /**
  * The only leaves of the stock of a product (`quantity.__<placeId>.__<storageId>.<leaf>`) the catalog writes: the minimum, the maximum and the location. The quantity itself (`value`) belongs to the
- * warehouse, which moves it with `$inc`, and is never written from here.
+ * warehouse: the repository of the stock service (`modules/stock/stock.repository.ts`, step VS1) is the only code that writes it, always with `$inc` and never with `$set`, and it is never written from the catalog.
  */
 export const PRODUCTS_STOCK_LEAVES: readonly string[] = Object.freeze(['min', 'max', 'location']);
 
@@ -350,7 +350,7 @@ export const PRODUCTS_INSERT_ONLY_FIELDS: readonly string[] = Object.freeze(['qu
  * `$set`/`$unset` of the fields below from the product routes and, for the prices, from the realignment of the tax copy when a tax rate of the group changes (a pipeline update of `prices` and
  * `updateDate`). The containers (`availability`, `variant`, `modularBundle`, `colors.pos`, `shippingInfo`, `roomsSettings`, `integrations`) are owned leaf by leaf, `medias` below
  * `medias.images` (the two containers are listed for a document that has neither), the {@link PRODUCTS_OWNED_TREES} are owned with everything below them, and `quantity` only at the
- * {@link PRODUCTS_STOCK_LEAVES} of a storage of a place: the warehouse owns the quantities and the cost, and no write of the catalog reaches them. The keys of {@link PRODUCTS_INSERT_ONLY_FIELDS} are written in
+ * {@link PRODUCTS_STOCK_LEAVES} of a storage of a place: the warehouse owns the quantities (`quantity.*.*.value`, moved only by the stock service with `$inc`) and the cost, and no write of the catalog reaches them. The keys of {@link PRODUCTS_INSERT_ONLY_FIELDS} are written in
  * a new document only. Every key a document has that is not listed (the unknown ones of the POS and of the integrations) stays untouched. No index.
  */
 export const PRODUCTS_OWNED_FIELDS: readonly string[] = Object.freeze([
@@ -520,8 +520,118 @@ export const CONTACTS_OWNED_FIELDS: readonly string[] = Object.freeze([
  */
 export const FIDELITY_CARDS_OWNED_FIELDS: readonly string[] = Object.freeze(['code', 'cardTypeId', 'status', 'balance', 'pointsCollections', 'insertDate', 'updateDate']);
 
-/** Fields of the legacy `fidelity_cards_movements` documents (the history of a card) this backend writes: whole new documents of type `manually` (`apiKeyId` is the public API key that made it, with `userId` `null`, and `storeKeyId` the store key of a point of sale, with `userId` the operator it declared: the legacy never reads or rewrites them), inserted and never changed (a card is deleted only when it has none). */
-export const FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS: readonly string[] = Object.freeze(['userId', 'apiKeyId', 'storeKeyId', 'cardId', 'cardCode', 'date', 'type', 'balance', 'pointsCollectionId', 'points']);
+/** Fields of the legacy `fidelity_cards_movements` documents (the history of a card) this backend writes: whole new documents of type `manually`, `import` or, for the effects of a sale (step VS2), `sale` and `canceled_sale` with the `saleId` they come from (`apiKeyId` is the public API key that made it, with `userId` `null`, and `storeKeyId` the store key of a point of sale, with `userId` the operator it declared: the legacy never reads or rewrites them), inserted and never changed (a card is deleted only when it has none). */
+export const FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS: readonly string[] = Object.freeze(['userId', 'apiKeyId', 'storeKeyId', 'saleId', 'cardId', 'cardCode', 'date', 'type', 'balance', 'pointsCollectionId', 'points']);
+
+/**
+ * Fields of the legacy `warehouse` documents (the movements of the stock, step VS1) this backend writes: whole new documents in the shape the legacy reads and can reverse (`type` `L` or `D`, the `rule` copied from the group, the
+ * storage of the cash desks, `saleId` or `documentId`, the `records` with the snapshot of each product, the signed `value` of each in load units), plus `origin` (`{ kind, id, seq }`: what asked for the movement and its sequence number, unique), `userId`
+ * (the operator) and `storeKeyId` (the store key of the point of sale), which the legacy neither reads nor rewrites. A document is inserted and never changed or deleted. The products' stock is moved with `$inc` in the same transaction.
+ */
+export const WAREHOUSE_OWNED_FIELDS: readonly string[] = Object.freeze(['type', 'rule', 'date', 'companyId', 'placeId', 'storageId', 'saleId', 'documentId', 'supplierId', 'documentType', 'documentDate', 'documentNumber', 'note', 'records', 'insertDate', 'updateDate', 'origin', 'userId', 'storeKeyId']);
+
+/**
+ * Fields of the legacy `sales` documents (step VS4) this backend writes: the whole sale as the legacy `insertOne` builds it (the names of the legacy: `userId`, `timestampId`, `customer`, `products`, the amounts, the totals, `fiscalReceiptInfo`, `fiscalState`, `sType`, the dates...),
+ * what its amendment, return and cancellation change (`customer`, `fidelityCard`, the payments, `fiscalReceiptInfo`, `lotteryId`, `fiscalState`, `refund`, `returnedGoods`, `returnedGoodsValue`, `updateDate`) and `floodCloud`: the one container of the fields of this backend (key, check of the totals, anomalies, state
+ * of the loyalty, operations, baseline of the legacy), which the legacy neither reads nor rewrites. `status` (a sale gathered in a deferred invoice) is the legacy's and the invoices', never written here. The lines of a sale are never changed after the insert.
+ */
+export const SALES_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'userId',
+  'timestampId',
+  'companyId',
+  'placeId',
+  'customer',
+  'lotteryId',
+  'fidelityCard',
+  'products',
+  'refund',
+  'returnedGoods',
+  'returnedGoodsValue',
+  'receiptType',
+  'paymentTypeId',
+  'specificPayments',
+  'customerType',
+  'cashAmount',
+  'electronicAmount',
+  'ticketsAmount',
+  'tickets',
+  'chequeAmount',
+  'paymentDiscountAmount',
+  'unpaid',
+  'posTerminalId',
+  'adjustmentType',
+  'discountType',
+  'discountPercentage',
+  'discountValue',
+  'date',
+  'checkoutSessionStartedAt',
+  'finalTotalTaxableWithoutDiscount',
+  'finalTotalTaxWithoutDiscount',
+  'finalTotalTaxable',
+  'finalTotalTax',
+  'finalTotalCheckout',
+  'finalTotalCheckoutWithoutDiscount',
+  'device',
+  'table',
+  'appointment',
+  'savedCheckoutsNote',
+  'fiscalReceiptInfo',
+  'fullMeal',
+  'delivery',
+  'reservation',
+  'hotel',
+  'fiscalState',
+  'sType',
+  'status',
+  'insertDate',
+  'updateDate',
+  'floodCloud',
+]);
+
+/**
+ * Fields of the legacy `documents` documents of a group database (step VS5) this backend writes: the invoice a sale of type `invoice` creates, whole and in the shape the legacy `doc3` has (`type`, `number`, `prefixSuffix`, the copies of the company
+ * and of the counterpart, the totals, the `records`, `fattura_elettronica`, `XML`...), plus `insertDate` and, when the company sends through a hub, `groupId`. Only `sendStatus` changes after the insert (`queued` or `notQueued`, then the worker of the
+ * e-invoicing writes it). The legacy neither reads nor rewrites anything this backend adds.
+ */
+export const DOCUMENTS_OWNED_FIELDS: readonly string[] = Object.freeze([
+  'userId',
+  'date',
+  'number',
+  'prefixSuffix',
+  'type',
+  'companyId',
+  'placeId',
+  'storageId',
+  'company',
+  'counterpart',
+  'customerType',
+  'note',
+  'adjustmentType',
+  'discountPercentage',
+  'discountValue',
+  'totalTaxableWithoutDiscount',
+  'totalTaxable',
+  'totalTax',
+  'totalWithoutDiscount',
+  'total',
+  'totalLastPrices',
+  'records',
+  'saleId',
+  'saleTimestampId',
+  'fattura_elettronica',
+  'XML',
+  'metadata',
+  'sendStatus',
+  'groupId',
+  'insertDate',
+  'updateDate',
+]);
+
+/**
+ * Fields of the records of the legacy send queue (`<prefix><env>_queue.documents`, step VS5) this backend writes: the document of the group as it was inserted plus `dealerId` and `sale` (the fields of the sale the consumer reads). A record is only inserted, once and
+ * with the `_id` of its document; the consumer (the e-invoicing worker) adds its own fields (`sent`, `hubId`, `error`, `worker`) and this backend never touches them.
+ */
+export const QUEUE_DOCUMENTS_OWNED_FIELDS: readonly string[] = Object.freeze([...DOCUMENTS_OWNED_FIELDS, 'dealerId', 'sale']);
 
 /** Fields of the legacy `contacts_groups` documents of a group database (the groups of contacts, step K1, which have no trash) this backend writes: the name, the price list and the discount of the group, and the dates. */
 export const CONTACTS_GROUPS_OWNED_FIELDS: readonly string[] = Object.freeze(['name', 'priceListId', 'discountPercentage', 'insertDate', 'updateDate']);
@@ -620,20 +730,26 @@ export const COLLECTIONS = {
     // The contacts of the group and their groups (step K1): created, changed, trashed and deleted by the contact routes; also read by the lookups, the products (the suppliers) and the catalogs (the promotions).
     contacts: { ownership: 'legacy-write', ownedFields: CONTACTS_OWNED_FIELDS },
     contacts_groups: { ownership: 'legacy-write', ownedFields: CONTACTS_GROUPS_OWNED_FIELDS },
-    // The sales, the documents, the appointments, the table reservations and the warehouse movements of the group (the legacy owns them): read only, one id at a time, to refuse the deletion of a contact that they still name (step K1). No index is created, with one exception decided by the user: the sales are also read by the sales module (step V1), which creates at run time the index `{ customer._id, date }` of the purchases of a customer (`modules/sales/sales.indexes.ts`); nothing is ever written to them.
     // The advanced loyalty cards and their history (step F1): created, changed and deleted (only without history) by the card routes; the movements are only inserted. Also read for the cards a contact shows and for the card types and points collections in use.
     fidelity_cards: { ownership: 'legacy-write', ownedFields: FIDELITY_CARDS_OWNED_FIELDS },
     fidelity_cards_movements: { ownership: 'legacy-write', ownedFields: FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS },
-    sales: { ownership: 'legacy-read' },
-    documents: { ownership: 'legacy-read' },
+    // The sales (step V1 reads them, step VS4 writes them): the sales module inserts whole sales in the legacy shape and changes only the owned fields (`SALES_OWNED_FIELDS`, `floodCloud` included), and deletes a sale that is not fiscal; the legacy reads and writes the same documents. The unique partial index on `floodCloud.key` and the index of the purchases of a customer are created at run time (`modules/sales`), never declared here.
+    sales: { ownership: 'legacy-write', ownedFields: SALES_OWNED_FIELDS },
+    // The invoices of the sales (step VS5): the sales module inserts whole documents in the legacy shape (`DOCUMENTS_OWNED_FIELDS`) and sets `sendStatus` afterwards; the numbering service reads them for the highest number. No index is declared here (the numbering creates its two supporting ones at run time).
+    documents: { ownership: 'legacy-write', ownedFields: DOCUMENTS_OWNED_FIELDS },
     calendar: { ownership: 'legacy-read' },
     table_reservation: { ownership: 'legacy-read' },
-    warehouse: { ownership: 'legacy-read' },
+    // The warehouse movements (step VS1): written only by the repository of the stock service, which inserts whole documents in the legacy shape (never changes or deletes one: a reversal is a new movement), read by the contacts repository to refuse the deletion of a contact. The unique index of the origins is created at run time (`modules/stock/stock.indexes.ts`), never declared here.
+    warehouse: { ownership: 'legacy-write', ownedFields: WAREHOUSE_OWNED_FIELDS },
+    // The counters of the numbering of the fiscal documents (step VS3): a collection of this backend (the legacy does not know it), one document per company, series (`invoice`, `credit-note`, `_sendProgressive`), sectional (`prefixSuffix`, `''` for none) and year, with `last`, `insertDate` and `updateDate`, written only by the repository of the numbering service. Its unique index on `{ companyId, series, prefixSuffix, year }` is created at run time (`modules/document-numbering/numbering.indexes.ts`) because group databases declare no indexes here. The same module creates two non-unique indexes on `documents` (the legacy owns it, and the only exception to "no index on it" decided by the user at step VS3): `{ companyId, type, prefixSuffix, number: -1 }` for the highest number of a series and `{ companyId, date: -1 }` for the highest `progressivo_invio` of a year; it only reads the documents.
+    document_counters: { ownership: 'new' },
+    // The tombstones of the sales deleted by the sales module (step VS4a): `{ key, saleId, deletedAt }`, one per `floodCloud.key` (`<placeId>|<timestampId>`), so a deleted quote is never made again by the till's offline queue. A collection of this backend; its unique index on `key` is created at run time with the one of the sales (`modules/sales/sales.key-index.ts`).
+    sales_tombstones: { ownership: 'new' },
   },
-  // The legacy send queue (`<prefix><env>_queue`, step 9-ter/3): written only by the legacy services and by its `CronEngine`; read here, only by the error documents repository, through `Databases.queue()`.
-  // No index: this backend never creates anything in that database.
+  // The legacy send queue (`<prefix><env>_queue`, step 9-ter/3): read by the error documents repository through `Databases.queue()` (reads only) and, from step VS5, written by the sales module through `Databases.queueInbox()`, which only inserts the record of an invoice (once, with
+  // the `_id` of its document). The consumer is the e-invoicing worker (and, until it replaces it, the legacy `CronEngine`). No index: this backend never creates anything in that database.
   queue: {
-    documents: { ownership: 'legacy-read' },
+    documents: { ownership: 'legacy-write', ownedFields: QUEUE_DOCUMENTS_OWNED_FIELDS },
   },
 } as const satisfies CollectionRegistry;
 
@@ -643,7 +759,7 @@ export const COLLECTIONS = {
  * - `legacy-write` needs a non-empty `ownedFields`; the other kinds must not declare it.
  * - Legacy collections cannot have unique or TTL indexes.
  * - Every index has a non-empty explicit name.
- * - The `queue` database (legacy send queue) holds `legacy-read` collections with no index.
+ * - The `queue` database (legacy send queue) holds `legacy-read` collections, or `legacy-write` ones with their `ownedFields`, with no index.
  * - `mirror` collections live in the common database only, take no `ownedFields` and only non-unique,
  *   non-TTL indexes: a copy must always be writable and never expire.
  *
@@ -653,8 +769,9 @@ export const COLLECTIONS = {
 export function validateRegistry(registry: CollectionRegistry = COLLECTIONS): void {
   const problems: string[] = [];
   for (const [name, spec] of Object.entries(registry.queue ?? {})) {
-    if (spec.ownership !== 'legacy-read' || spec.indexes !== undefined) {
-      problems.push(`queue.${name}: the legacy send queue is read only: legacy-read and no index`);
+    const written = spec.ownership === 'legacy-write' && spec.ownedFields !== undefined && spec.ownedFields.length > 0;
+    if ((spec.ownership !== 'legacy-read' && !written) || (spec.ownership === 'legacy-read' && spec.ownedFields !== undefined) || spec.indexes !== undefined) {
+      problems.push(`queue.${name}: the legacy send queue is legacy-read, or legacy-write with the fields it owns, and has no index`);
     }
   }
   for (const kind of ['common', 'group'] as const) {

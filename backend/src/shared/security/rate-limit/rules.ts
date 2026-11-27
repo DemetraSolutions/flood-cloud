@@ -52,6 +52,8 @@ export interface RateLimitRules {
   readonly storeActivationPerIp: RateLimitRule;
   /** Writes of the catalog (products and categories) per store key per minute, declared by the write routes of `/store-context/catalog`. */
   readonly storeCatalogWritePerStore: RateLimitRule;
+  /** Writes of the sales per store key per minute, declared by the write routes of `/store-context/sales`: a budget of its own, apart from the catalog and the contacts, because a till back online sends the sales of days. */
+  readonly storeSalesWritePerStore: RateLimitRule;
   /** Writes per public API key per minute, declared by the write routes of `/public/v1` (the catalog, the contacts and the advanced loyalty cards share this one budget). */
   readonly publicCatalogWritePerKey: RateLimitRule;
   /** Creations and cancellations of activation codes and revocations of store keys per authenticated user. */
@@ -130,6 +132,7 @@ export function createRateLimitRules(config: Config): RateLimitRules {
     apiPerUserDay: Object.freeze({ bucket: 'api-day:user', limit: config.rateLimitApiPerUserDay, windowSeconds: DAY_SECONDS, key: perUser }),
     apiPerStore: Object.freeze({ bucket: 'api:store', limit: config.rateLimitApiPerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     storeCatalogWritePerStore: Object.freeze({ bucket: 'store-catalog-write:store', limit: config.rateLimitStoreCatalogWritePerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
+    storeSalesWritePerStore: Object.freeze({ bucket: 'store-sales-write:store', limit: config.rateLimitStoreSalesWritePerStore, key: (_req: Request, res: Response) => res.locals.store?.keyId.toHexString() ?? null }),
     publicCatalogWritePerKey: Object.freeze({ bucket: 'public-catalog-write:key', limit: config.rateLimitPublicCatalogWritePerKey, key: (_req: Request, res: Response) => res.locals.apiKey?.keyId.toHexString() ?? null }),
     storeActivationPerIp: Object.freeze({ bucket: 'storeActivation:ip', limit: config.rateLimitStoreActivationPerIp, key: ip }),
     storeKeyAdminPerUser: Object.freeze({ bucket: 'storeKeyAdmin:user', limit: config.rateLimitStoreKeyAdminPerUser, key: perUser }),

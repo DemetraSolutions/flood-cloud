@@ -29,6 +29,9 @@ describe('api key types', () => {
     expect(permissionTextKey('fidelityCards:write', 'HINT')).toBe(
       'PUBLIC_API.PERMISSION.FIDELITYCARDS_WRITE.HINT',
     );
+    expect(permissionTextKey('sales:read', 'LABEL')).toBe(
+      'PUBLIC_API.PERMISSION.SALES_READ.LABEL',
+    );
     expect(permissionTextKey('catalog:write', 'LABEL')).toBe(
       'PUBLIC_API.PERMISSION.CATALOG_WRITE.LABEL',
     );

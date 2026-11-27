@@ -1,0 +1,46 @@
+<fc-dialog
+  [heading]="'SALES.ACTION.' + key() + '_TITLE' | t: { reference: text.reference() }"
+  [alert]="true"
+  [locked]="run.busy()"
+  [open]="open()"
+  (openChange)="open.set($event)"
+>
+  @if (run.failure(); as message) {
+    <fc-form-error [message]="message" />
+  }
+  <p class="note">{{ text.summary() }}</p>
+  @if (run.rereading()) {
+    <p class="note" role="status">{{ 'SALES.ACTION.REREADING' | t }}</p>
+  }
+  <p>{{ 'SALES.ACTION.' + key() + '_MESSAGE' | t: { reference: text.reference() } }}</p>
+  <ul>
+    <li>{{ 'SALES.ACTION.' + key() + '_STOCK' | t }}</li>
+    <li>{{ 'SALES.ACTION.' + key() + '_LOYALTY' | t }}</li>
+    <li>{{ 'SALES.ACTION.' + key() + '_LAST' | t }}</li>
+  </ul>
+  @if (fiscalNote()) {
+    <p class="warning">
+      <fc-icon name="alert" />
+      <span>{{ 'SALES.ACTION.CANCEL_FISCAL' | t }}</span>
+    </p>
+  }
+  @if (fidelityMissing()) {
+    <p class="warning" role="status">
+      <fc-icon name="alert" />
+      <span>{{ 'SALES.ACTION.FIDELITY_NOTE' | t }}</span>
+    </p>
+  }
+  <button
+    fcDialogActions
+    fc-button
+    variant="secondary"
+    autofocus
+    [disabled]="run.busy()"
+    (click)="open.set(false)"
+  >
+    {{ 'SALES.ACTION.GO_BACK' | t }}
+  </button>
+  <button fcDialogActions fc-button variant="danger" [loading]="run.blocked()" (click)="confirm()">
+    {{ 'SALES.ACTION.' + key() + '_CONFIRM' | t }}
+  </button>
+</fc-dialog>

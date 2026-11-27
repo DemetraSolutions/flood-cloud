@@ -38,8 +38,8 @@ function mountError(routes: RouteDefinition[], options: Parameters<typeof mountR
 }
 
 describe('the public catalog of permissions', () => {
-  it('lists places, companies, the catalog, the contacts and the advanced cards (read and write), and recognizes only them', () => {
-    assert.deepEqual([...PUBLIC_PERMISSIONS], ['places:read', 'companies:read', 'catalog:read', 'catalog:write', 'contacts:read', 'contacts:write', 'fidelityCards:read', 'fidelityCards:write']);
+  it('lists places, companies, the catalog, the contacts, the advanced cards (read and write) and the sales (read), and recognizes only them', () => {
+    assert.deepEqual([...PUBLIC_PERMISSIONS], ['places:read', 'companies:read', 'catalog:read', 'catalog:write', 'contacts:read', 'contacts:write', 'fidelityCards:read', 'fidelityCards:write', 'sales:read']);
     for (const value of PUBLIC_PERMISSIONS) {
       assert.equal(isPublicPermission(value), true);
     }

@@ -38,6 +38,16 @@ describe('media storage configuration', () => {
   it('reads the thresholds of the store keys: 600 requests a minute a key, 10 exchanges a minute an address, 20 administrations a minute a user, a code valid 24 hours', () => {
     const defaults = loadConfig(validEnv());
     assert.equal(defaults.rateLimitStoreCatalogWritePerStore, 120);
+    assert.equal(defaults.rateLimitStoreSalesWritePerStore, 600, 'a till back online sends the sales of days: a budget of its own');
+    assert.equal(loadConfig(validEnv({ RATE_LIMIT_STORE_SALES_WRITE_PER_STORE: '1000000' })).rateLimitStoreSalesWritePerStore, 1_000_000);
+    // The invoices of a store key (step VS5): a budget and a daily alert of their own.
+    assert.deepEqual([defaults.rateLimitStoreInvoicesPerStore, defaults.storeInvoiceAlertPerDay], [60, 500]);
+    assert.deepEqual([1_000_000, 1].map((value) => loadConfig(validEnv({ RATE_LIMIT_STORE_INVOICES_PER_STORE: String(value), STORE_INVOICE_ALERT_PER_DAY: String(value) })).rateLimitStoreInvoicesPerStore), [1_000_000, 1]);
+    for (const variable of ['RATE_LIMIT_STORE_INVOICES_PER_STORE', 'STORE_INVOICE_ALERT_PER_DAY']) {
+      for (const bad of ['0', '1000001']) {
+        assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/, `${variable}=${bad}`);
+      }
+    }
     assert.equal(defaults.rateLimitPublicCatalogWritePerKey, 60);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY: '9' })).rateLimitPublicCatalogWritePerKey, 9);
     assert.deepEqual([defaults.rateLimitApiPerStore, defaults.rateLimitStoreActivationPerIp, defaults.rateLimitStoreKeyAdminPerUser, defaults.storeActivationCodeTtlMinutes], [600, 10, 20, 1440]);
@@ -52,7 +62,7 @@ describe('media storage configuration', () => {
     assert.equal(defaults.rateLimitTobaccosImportPerUser, 5);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_TOBACCOS_IMPORT_PER_USER: '100000' })).rateLimitTobaccosImportPerUser, 100000);
     assert.equal(loadConfig(validEnv({ RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER: '100000' })).rateLimitDiagnosticsExportPerUser, 100000);
-    for (const [variable, bad] of [['RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE', '0'], ['RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY', '0'], ['RATE_LIMIT_API_PER_STORE', '0'], ['RATE_LIMIT_API_PER_STORE', '1000001'], ['RATE_LIMIT_STORE_ACTIVATION_PER_IP', '100001'], ['RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 'x'], ['RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', '0'], ['STORE_CREDIT_ALERT_PER_OPERATION', '0'], ['STORE_CREDIT_ALERT_PER_DAY', '1000000001'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '4'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '10081']] as const) {
+    for (const [variable, bad] of [['RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE', '0'], ['RATE_LIMIT_STORE_SALES_WRITE_PER_STORE', '0'], ['RATE_LIMIT_STORE_SALES_WRITE_PER_STORE', '1000001'], ['RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY', '0'], ['RATE_LIMIT_API_PER_STORE', '0'], ['RATE_LIMIT_API_PER_STORE', '1000001'], ['RATE_LIMIT_STORE_ACTIVATION_PER_IP', '100001'], ['RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 'x'], ['RATE_LIMIT_DIAGNOSTICS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_ERROR_DOCUMENTS_EXPORT_PER_USER', '0'], ['RATE_LIMIT_TOBACCOS_IMPORT_PER_USER', '0'], ['STORE_CREDIT_ALERT_PER_OPERATION', '0'], ['STORE_CREDIT_ALERT_PER_DAY', '1000000001'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '4'], ['STORE_ACTIVATION_CODE_TTL_MINUTES', '10081']] as const) {
       assert.match(reasonFor(validEnv({ [variable]: bad }), variable) ?? '', /must be a decimal integer between/, `${variable}=${bad}`);
     }
   });

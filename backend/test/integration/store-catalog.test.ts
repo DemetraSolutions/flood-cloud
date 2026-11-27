@@ -679,6 +679,7 @@ describe('the catalog of the store: who may call it and when', () => {
     assert.deepEqual(open, [
       'DELETE /store-context/catalog/brands/:brandId',
       'DELETE /store-context/catalog/categories/:categoryId',
+      'DELETE /store-context/sales/:saleId',
       'GET /store-context',
       'GET /store-context/catalog/attribute-groups',
       'GET /store-context/catalog/attribute-groups/:attributeGroupId',
@@ -700,12 +701,15 @@ describe('the catalog of the store: who may call it and when', () => {
       'GET /store-context/fidelity-cards/:cardId/movements',
       'GET /store-context/group',
       'GET /store-context/place',
+      'GET /store-context/sales',
+      'GET /store-context/sales/:saleId',
       'GET /store-context/users',
       'PATCH /store-context/catalog/brands/:brandId',
       'PATCH /store-context/catalog/categories/:categoryId',
       'PATCH /store-context/catalog/products/:productId',
       'PATCH /store-context/contacts/:contactId',
       'PATCH /store-context/fidelity-cards/:cardId',
+      'PATCH /store-context/sales/:saleId',
       'POST /store-context/catalog/brands',
       'POST /store-context/catalog/categories',
       'POST /store-context/catalog/products',
@@ -717,6 +721,9 @@ describe('the catalog of the store: who may call it and when', () => {
       'POST /store-context/contacts/:contactId/trash',
       'POST /store-context/fidelity-cards',
       'POST /store-context/fidelity-cards/:cardId/adjustments',
+      'POST /store-context/sales',
+      'POST /store-context/sales/:saleId/cancellation',
+      'POST /store-context/sales/:saleId/refunds',
     ]);
     for (const route of modules.routes.filter((candidate) => candidate.auth.kind === 'store' && candidate.method !== 'GET')) {
       assert.equal(typeof (route.auth as { operator?: unknown }).operator, 'function', `${route.method} ${route.path} verifies the operator`);

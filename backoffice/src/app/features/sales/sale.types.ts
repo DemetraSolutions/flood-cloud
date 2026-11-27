@@ -19,6 +19,8 @@ export interface ReceiptNumber {
 export interface SaleRefund extends ReceiptNumber {
   readonly date: string | null;
   readonly amount: number;
+  /** The refund was canceled: it does not count in what was returned. */
+  readonly canceled: boolean;
 }
 
 /** A sale as listed. */
@@ -56,6 +58,10 @@ export interface SaleProduct {
   /** The discount of the line, in percent. */
   readonly discount: number;
   readonly variants: string | null;
+  /** The position of the line in the sale (what a refund names). */
+  readonly index: number;
+  /** How much of the line the refunds that were not canceled returned: what can still be returned is `quantity - returned`. */
+  readonly returned: number;
 }
 
 /** The totals of a sale. */
@@ -80,6 +86,76 @@ export interface SalePayments {
   readonly unpaid: number;
 }
 
+/** A difference of a total between the point of sale and the server (`field`: `total`, `taxable`, `tax`, `payments`, `totalBeforeDiscount`). */
+export interface SaleCheckTotal {
+  readonly field: string;
+  readonly pos: number | null;
+  readonly server: number | null;
+}
+
+/** A difference of a line (`pos` and `server` only when the difference is of a number). */
+export interface SaleCheckLine {
+  readonly index: number;
+  readonly code: string;
+  readonly pos: number | null;
+  readonly server: number | null;
+}
+
+/** The check the server made when the sale was written. */
+export interface SaleServerCheck {
+  readonly checkedAt: string | null;
+  readonly status: 'ok' | 'differences' | null;
+  readonly totals: readonly SaleCheckTotal[];
+  readonly lines: readonly SaleCheckLine[];
+  /** The sale has more differences of lines than the ones listed. */
+  readonly linesTruncated: boolean;
+}
+
+/** An anomaly the server found and went around (never personal data). */
+export interface SaleAnomaly {
+  readonly at: string | null;
+  readonly operation: string | null;
+  readonly source: string | null;
+  readonly code: string | null;
+  readonly productId: string | null;
+  readonly collectionId: string | null;
+  readonly type: string | null;
+  /** The sales a deferred invoice could not gather. */
+  readonly ids: readonly string[];
+  /** The paths of the fields of the invoice that were out of their domain. */
+  readonly fields: readonly string[];
+}
+
+/** The invoice of a sale and where it is in the sending. */
+export interface SaleInvoice {
+  readonly documentId: string | null;
+  readonly number: number | null;
+  readonly prefixSuffix: string | null;
+  readonly year: number | null;
+  /** The state of sending of the document; `null` when it is not sent from here or the document is missing. */
+  readonly sendStatus: string | null;
+  /** The invoice goes through a hub and is not in the send queue yet. */
+  readonly notQueued: boolean;
+  /** `false` when the document does not exist any more (a reference left over). */
+  readonly documentFound: boolean;
+}
+
+/**
+ * The invoice goes through a hub and its sending did not start: the server says it, or the state
+ * of the document does.
+ *
+ * @param invoice The invoice of the sale, `null` for none.
+ */
+export function invoiceNotQueued(invoice: SaleInvoice | null): boolean {
+  return invoice !== null && (invoice.notQueued || invoice.sendStatus === 'notQueued');
+}
+
+/** An operation the backend made on the sale (never who made it). */
+export interface SaleOperation {
+  readonly kind: string | null;
+  readonly at: string | null;
+}
+
 /** A sale as read by its own page. */
 export interface SaleDetail extends SaleRow {
   readonly refunds: readonly SaleRefund[];
@@ -99,6 +175,18 @@ export interface SaleDetail extends SaleRow {
   /** A fidelity card was used in the sale. */
   readonly fidelityCardUsed: boolean;
   readonly note: string | null;
+  /** The sale was canceled. */
+  readonly canceled: boolean;
+  /** What the refunds that were not canceled returned, taxes included. */
+  readonly returnedValue: number;
+  /** The check of the server; `null` for a sale of the legacy or without a check. */
+  readonly serverCheck: SaleServerCheck | null;
+  readonly anomalies: readonly SaleAnomaly[];
+  /** The invoice of the sale; `null` when it has none. */
+  readonly invoice: SaleInvoice | null;
+  readonly operations: readonly SaleOperation[];
+  /** The version of the sale: the `If-Match` of the writes, in quotes. */
+  readonly version: string;
 }
 
 /** The totals of the sales that pass the filters (`GET …/sales/summary`), already net of the refunds. */

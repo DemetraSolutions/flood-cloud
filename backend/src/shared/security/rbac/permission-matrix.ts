@@ -26,10 +26,10 @@ export interface CoreModule {
 
 /** Core modules of the legacy matrix and what they map to. Other modules are kept as data only. */
 export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze({
-  // The dealer registry (`dealers:*`), the tobacco price list (`tobaccos:*`) the management of the countries (`countries:manage`), the emptying of the trash (`trash:empty`), the read of the electronic documents in error (`errorDocuments:read`, the legacy page of the PSA and the dealers, whose default matrix has `groups` and not `documents`) and the activations and the billing of the dealers (`activations:read`, `activations:manage`) ride on the `groups` module: only the PSA's ceiling contains most of those permissions (`errorDocuments:read` and `activations:read` are in the PSA and D ceilings), so for the other roles they never become effective.
+  // The dealer registry (`dealers:*`), the tobacco price list (`tobaccos:*`) the management of the countries (`countries:manage`), the emptying of the trash (`trash:empty`), the read of the electronic documents in error (`errorDocuments:read`, the legacy page of the PSA and the dealers, whose default matrix has `groups` and not `documents`) and the activations and the billing of the dealers (`activations:read`, `activations:manage`), the security policy (`securityPolicy:manage`) and the Aruba accounts of the e-invoicing (`eInvoicingAccounts:manage`) ride on the `groups` module: only the PSA's ceiling contains most of those permissions (`errorDocuments:read` and `activations:read` are in the PSA and D ceilings), so for the other roles they never become effective.
   groups: {
     read: [P.GROUPS_READ, P.DEALERS_READ, P.TOBACCOS_READ, P.ERROR_DOCUMENTS_READ, P.ACTIVATIONS_READ],
-    write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, P.DEALERS_CREATE, P.DEALERS_UPDATE, P.TOBACCOS_IMPORT, P.COUNTRIES_MANAGE, P.TRASH_EMPTY, P.ACTIVATIONS_MANAGE, P.SECURITY_POLICY_MANAGE],
+    write: [P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, P.DEALERS_CREATE, P.DEALERS_UPDATE, P.TOBACCOS_IMPORT, P.COUNTRIES_MANAGE, P.TRASH_EMPTY, P.ACTIVATIONS_MANAGE, P.SECURITY_POLICY_MANAGE, P.E_INVOICING_ACCOUNTS_MANAGE],
   },
   users: { read: [P.USERS_READ], write: [P.USERS_CREATE, P.USERS_UPDATE, P.USERS_TRASH, P.USERS_DELETE] },
   companies: { read: [P.COMPANIES_READ], write: [P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH, P.COMPANIES_DELETE] },
@@ -42,8 +42,8 @@ export const CORE_MODULES: Readonly<Record<string, CoreModule>> = Object.freeze(
   // The contacts of the group and their groups (step K1): the contacts are of the whole group, shared by every place, so the module is not limited to a perimeter.
   // `contacts:export` and `contacts:import` (step K3, the XLSX workbook of the contacts) follow `contacts.r` and `contacts.w`, inside the ceiling of PSA, D and SA only.
   contacts: { read: [P.CONTACTS_READ, P.CONTACTS_EXPORT], write: [P.CONTACTS_WRITE, P.CONTACTS_IMPORT] },
-  // The sales of the group are documents of the legacy matrix (step V1, decision of the user): `documents.r` grants `sales:read`, the module has no write permission yet (a flag with an empty list grants nothing).
-  documents: { read: [P.SALES_READ], write: [] },
+  // The sales of the group are documents of the legacy matrix (step V1, decision of the user): `documents.r` grants `sales:read`, `documents.w` grants `sales:write` (create, amend, refund and cancel, step VS4b) and `sales:delete` (the deletion of a sale that is not fiscal, inside the ceiling of PSA, D and SA only).
+  documents: { read: [P.SALES_READ], write: [P.SALES_WRITE, P.SALES_DELETE] },
   logs: { read: [P.ACTIVITY_LOG_READ], write: [] },
 });
 

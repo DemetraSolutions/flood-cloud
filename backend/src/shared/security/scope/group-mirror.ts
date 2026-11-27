@@ -573,6 +573,118 @@ export async function readPlaceSetups(principal: ScopeHolder, access: GroupAcces
 }
 
 /**
+ * Reads the storages of one place of a group that the stock moves its goods in (step VS1): `storages[].id` and `storages[].cash` (the storage of the cash desks), and nothing else of the place. The place is looked up in the copies of the group, so a place of
+ * another group is simply not found. It is the only read of the copies that looks inside the storages for their flag.
+ *
+ * @param principal The authenticated caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ * @param placeId The place.
+ * @returns The place (`_id`, and `id` and `cash` of each storage), or `null` when the group has no such place.
+ * @throws {Error} If the access was not issued by `requireGroupAccess` for the principal, or the id is not an `ObjectId`.
+ */
+export async function readPlaceCashStorages(principal: ScopeHolder, access: GroupAccess, databases: Databases, placeId: ObjectId): Promise<Document | null> {
+  assertVerifiedGroupAccess(principal, access);
+  if (!(placeId instanceof ObjectId)) {
+    throw new Error('A read of the storages of a place needs its id');
+  }
+  return databases
+    .common()
+    .collection('places')
+    .findOne({ $and: [groupCondition(access.groupId), { _id: placeId }] }, { projection: { _id: 1, 'storages.id': 1, 'storages.cash': 1 }, maxTimeMS: LIST_MAX_TIME_MS });
+}
+
+/**
+ * Reads what the numbering of the fiscal documents (step VS3) needs of a company and of one of its points of sale, and nothing else: of the company the sectionals (`invoicesPS`, `invoicesPSValues`) and the last invoice number issued outside Flood
+ * (`settings.global.lastInvoiceNumber`), of the place the sectional it chose (`invoicePS`), its company and its time zone. Both are looked up in the copies of the group, so a company or a place of another group is simply not found. It is the only read of the
+ * copies that looks at those fields.
+ *
+ * @param principal The authenticated caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ * @param companyId The company.
+ * @param placeId The point of sale.
+ * @returns The company and the place (each `null` when the group has no such document).
+ * @throws {Error} If the access was not issued by `requireGroupAccess` for the principal, or an id is not an `ObjectId`.
+ */
+export async function readNumberingSetup(principal: ScopeHolder, access: GroupAccess, databases: Databases, companyId: ObjectId, placeId: ObjectId): Promise<{ readonly company: Document | null; readonly place: Document | null }> {
+  assertVerifiedGroupAccess(principal, access);
+  if (!(companyId instanceof ObjectId) || !(placeId instanceof ObjectId)) {
+    throw new Error('A read of the numbering setup needs the ids of the company and of the place');
+  }
+  const [company, place] = await Promise.all([
+    databases
+      .common()
+      .collection('companies')
+      .findOne({ $and: [groupCondition(access.groupId), { _id: companyId }] }, { projection: { _id: 1, invoicesPS: 1, invoicesPSValues: 1, 'settings.global.lastInvoiceNumber': 1 }, maxTimeMS: LIST_MAX_TIME_MS }),
+    databases
+      .common()
+      .collection('places')
+      .findOne({ $and: [groupCondition(access.groupId), { _id: placeId }] }, { projection: { _id: 1, companyId: 1, invoicePS: 1, timezone: 1 }, maxTimeMS: LIST_MAX_TIME_MS }),
+  ]);
+  return { company, place };
+}
+
+/**
+ * The fields of a company the invoice of a sale copies (step VS5): what the XML of the electronic invoice and its print read of the supplier, and the hub it sends through. Never the settings of the company other than the discount of the lines, never
+ * the integrations, the keys or the logos.
+ */
+const INVOICE_COMPANY_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
+  _id: 1,
+  name: 1,
+  code: 1,
+  code2: 1,
+  address: 1,
+  postcode: 1,
+  city: 1,
+  countryAreaCode: 1,
+  countryCode: 1,
+  currencyCode: 1,
+  email: 1,
+  telephone: 1,
+  invoicesPS: 1,
+  invoicesPSValues: 1,
+  'fattura_elettronica.hub': 1,
+  'fattura_elettronica.IdTrasmittente_paese': 1,
+  'fattura_elettronica.IdTrasmittente_codice': 1,
+  'fattura_elettronica.rea_ufficio': 1,
+  'fattura_elettronica.rea_numero': 1,
+  'fattura_elettronica.rea_capitale_sociale': 1,
+  'fattura_elettronica.rea_soci': 1,
+  'fattura_elettronica.rea_liquidazione': 1,
+  'fattura_elettronica.regime_fiscale': 1,
+  'settings.global.discountLines': 1,
+  'banks.id': 1,
+  'banks.name': 1,
+  'banks.iban': 1,
+  'banks.abi': 1,
+  'banks.cab': 1,
+  'banks.bic': 1,
+  'banks.default': 1,
+});
+
+/**
+ * Reads the company of an invoice (step VS5) with the fixed projection of the fields the invoice copies, from the copy of the company of the group in the common database, so a company of another group is simply not found.
+ *
+ * @param principal The authenticated caller.
+ * @param access A verified group access.
+ * @param databases Database accessor.
+ * @param companyId The company.
+ * @returns The company as stored, reduced to the projection; `null` when the group has no such company.
+ * @throws {Error} If the access was not issued by `requireGroupAccess` for the principal, or the id is not an `ObjectId`.
+ */
+export async function readInvoiceCompany(principal: ScopeHolder, access: GroupAccess, databases: Databases, companyId: ObjectId): Promise<Document | null> {
+  assertVerifiedGroupAccess(principal, access);
+  if (!(companyId instanceof ObjectId)) {
+    throw new Error('A read of the company of an invoice needs its id');
+  }
+  return databases
+    .common()
+    .collection('companies')
+    .findOne({ $and: [groupCondition(access.groupId), { _id: companyId }] }, { projection: { ...INVOICE_COMPANY_PROJECTION }, maxTimeMS: LIST_MAX_TIME_MS });
+}
+
+/**
  * The points of sale of a group that are not in the trash, with the id and name of their print stations, by name: what the columns of the catalog workbook (step C6) are made of. Read from the copies in
  * the common database, only with that projection. A company or place administrator passes the places of his perimeter.
  *

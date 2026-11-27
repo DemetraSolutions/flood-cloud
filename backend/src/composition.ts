@@ -35,6 +35,10 @@ import { createPublicCatalogService } from './modules/public-catalog/public-cata
 import { createPublicContactsController } from './modules/public-contacts/public-contacts.controller.ts';
 import { createPublicContactsRoutes } from './modules/public-contacts/public-contacts.routes.ts';
 import { createPublicContactsService } from './modules/public-contacts/public-contacts.service.ts';
+import { createPublicSalesController } from './modules/public-sales/public-sales.controller.ts';
+import { createPublicSalesRepository } from './modules/public-sales/public-sales.repository.ts';
+import { createPublicSalesRoutes } from './modules/public-sales/public-sales.routes.ts';
+import { createPublicSalesService } from './modules/public-sales/public-sales.service.ts';
 import { createPublicFidelityCardsController } from './modules/public-fidelity-cards/public-fidelity-cards.controller.ts';
 import { createPublicFidelityCardsRoutes } from './modules/public-fidelity-cards/public-fidelity-cards.routes.ts';
 import { createPublicFidelityCardsService } from './modules/public-fidelity-cards/public-fidelity-cards.service.ts';
@@ -103,6 +107,10 @@ import { createSettingsService } from './modules/settings/settings.service.ts';
 import { createDealersController } from './modules/dealers/dealers.controller.ts';
 import { createDealersRepository } from './modules/dealers/dealers.repository.ts';
 import { createDealersRoutes } from './modules/dealers/dealers.routes.ts';
+import { createEInvoicingAccountsController } from './modules/einvoicing-accounts/einvoicing-accounts.controller.ts';
+import { createEInvoicingAccountsRepository } from './modules/einvoicing-accounts/einvoicing-accounts.repository.ts';
+import { createEInvoicingAccountsRoutes } from './modules/einvoicing-accounts/einvoicing-accounts.routes.ts';
+import { createEInvoicingAccountsService } from './modules/einvoicing-accounts/einvoicing-accounts.service.ts';
 import { createDealersService } from './modules/dealers/dealers.service.ts';
 import { CATALOGS } from './modules/groups/catalogs/registry.ts';
 import { createCatalogsRepository } from './modules/groups/catalogs/catalogs.repository.ts';
@@ -144,8 +152,21 @@ import { createContactGroupsRepository } from './modules/contact-groups/contact-
 import { createContactGroupsRoutes } from './modules/contact-groups/contact-groups.routes.ts';
 import { createContactGroupsService } from './modules/contact-groups/contact-groups.service.ts';
 import type { ContactGroupsService } from './modules/contact-groups/contact-groups.service.ts';
+import { createSalesAdminController } from './modules/sales/sales.admin.controller.ts';
+import { createSalesAdminRoutes } from './modules/sales/sales.admin.routes.ts';
+import { createSalesAdminService } from './modules/sales/sales.admin.service.ts';
 import { createSalesController } from './modules/sales/sales.controller.ts';
 import { createSalesIndexGuard } from './modules/sales/sales.indexes.ts';
+import { createSalesKeyIndexGuard } from './modules/sales/sales.key-index.ts';
+import { createSalesWriteService } from './modules/sales/sales.write.service.ts';
+import { createNumberingIndexGuard } from './modules/document-numbering/numbering.indexes.ts';
+import { createNumberingService } from './modules/document-numbering/numbering.service.ts';
+import { createInvoiceGuard } from './modules/sales/sales.invoice.guard.ts';
+import { createLoyaltyService } from './modules/loyalty/loyalty.service.ts';
+import { createStockIndexGuard } from './modules/stock/stock.indexes.ts';
+import { createStockService } from './modules/stock/stock.service.ts';
+import { createStoreSalesController } from './modules/store-sales/store-sales.controller.ts';
+import { createStoreSalesRoutes } from './modules/store-sales/store-sales.routes.ts';
 import { createSalesRepository } from './modules/sales/sales.repository.ts';
 import { createSalesRoutes } from './modules/sales/sales.routes.ts';
 import { createSalesService } from './modules/sales/sales.service.ts';
@@ -348,6 +369,15 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const usersController = createUsersController(usersService);
   const settingsService = createSettingsService({ repository: settingsRepository, activityLog, versionKey, securityPolicy, sustainedDefault: config.rateLimitApiSustainedMode, forceReport: config.securityPolicyForceReport === 'on', limits: { perMinute: config.rateLimitApiPerUser, perHour: config.rateLimitApiPerUserHour, perDay: config.rateLimitApiPerUserDay }, now });
   const dealersController = createDealersController(createDealersService({ dealers, users, usersService, priceLists: settingsService, versionKey, activityLog, now }));
+  const eInvoicingAccounts = createEInvoicingAccountsController(
+    createEInvoicingAccountsService({
+      repository: createEInvoicingAccountsRepository(databases),
+      activityLog,
+      versionKey,
+      credentialsRecipient: config.credentialsPublicKey === null ? null : { key: config.credentialsPublicKey, id: config.credentialsPublicKeyId! },
+      now,
+    }),
+  );
   const managedGroups = createManagedGroupsRepository(databases, publicApiLimitsOf(config));
   const groupsService = createGroupsService({ groups: managedGroups, users, sessions, activityLog, logger, transaction: (work) => databases.transaction(work), now });
   const groupsController = createGroupsController(groupsService);
@@ -500,8 +530,31 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
   const operatorDeps = { context: storeContextService, audit: createOperatorAudit({ activityLog, rateLimiter, logger }) };
   const requireOperator = createRequireOperator(operatorDeps);
   // The contacts, their groups and the advanced loyalty cards of the server of a point of sale (step K5): the same services, for the group, and the operator who holds the permission `contacts`.
-  const storeContacts = createStoreContactsController(createStoreContactsService({ contacts: contactsService, contactGroups: contactGroupsService, cards: cardsService, logger, audit: createStoreContactsAudit({ activityLog, rateLimiter, logger, now, limits: { perOperation: config.storeCreditAlertPerOperation, perDay: config.storeCreditAlertPerDay } }) }));
+  const storeContactsAudit = createStoreContactsAudit({ activityLog, rateLimiter, logger, now, limits: { perOperation: config.storeCreditAlertPerOperation, perDay: config.storeCreditAlertPerDay } });
+  const storeContacts = createStoreContactsController(createStoreContactsService({ contacts: contactsService, contactGroups: contactGroupsService, cards: cardsService, logger, audit: storeContactsAudit }));
   const requireContactsOperator = createRequireOperator(operatorDeps, 'contacts');
+  // The sales of the server of a point of sale (step VS4a): one transaction of the group for the sale, the warehouse and the loyalty cards (the stock and the loyalty services join it); the operator is in the body, so no check of one runs before it.
+  const stockIndexes = createStockIndexGuard(databases, logger);
+  // The numbering of the invoices of the sales (step VS5): the same guard of the indexes for the service that holds no transaction and for the one that joins the transaction of the sale.
+  const numberingIndexes = createNumberingIndexGuard(databases, logger);
+  const salesWrite = createSalesWriteService({
+    databases,
+    keyIndex: createSalesKeyIndexGuard(databases, logger),
+    stock: createStockService({ databases, indexes: stockIndexes, now }),
+    stockOver: (joined) => createStockService({ databases: joined, nested: true, indexes: stockIndexes, now }),
+    loyaltyOver: (joined) => createLoyaltyService({ databases: joined, nested: true }),
+    invoiceGuard: createInvoiceGuard({ rateLimiter, activityLog, logger, limits: { perMinute: config.rateLimitStoreInvoicesPerStore, perDay: config.storeInvoiceAlertPerDay } }),
+    numbering: createNumberingService({ databases, indexes: numberingIndexes, now }),
+    numberingOver: (joined) => createNumberingService({ databases: joined, nested: true, indexes: numberingIndexes, now }),
+    activityLog,
+    audit: storeContactsAudit,
+    storeUsers: storeContextService,
+    logger,
+    now,
+  });
+  const storeSales = createStoreSalesController(salesWrite);
+  // The writes of the sales from the backoffice (step VS4b): the same service, with the user as the operator and the perimeter of his role.
+  const salesAdmin = createSalesAdminController(createSalesAdminService({ writer: salesWrite, repository: createSalesRepository(databases), directory: createGroupDirectoryRepository(databases) }));
   const productAttributeGroups = createEntityController(attributeGroupsService);
   const countries = createCountriesController(createCountriesService({ repository: createCountriesRepository(databases, logger), activityLog, versionKey, now }));
   const tobaccos = createTobaccosController(createTobaccosService({ repository: createTobaccosRepository(databases), activityLog, now }));
@@ -533,10 +586,12 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createCardsRoutes(createCardsController(cardsService), idempotency),
       // The sales of the group, read only (step V1): the legacy point of sale writes them.
       ...createSalesRoutes(createSalesController(createSalesService({ repository: createSalesRepository(databases), users, indexes: createSalesIndexGuard(databases, logger) }))),
+      ...createSalesAdminRoutes(salesAdmin, idempotency),
       ...createContactGroupsRoutes(createContactGroupsController(contactGroupsService), idempotency),
       ...createProductAttributeGroupsRoutes(productAttributeGroups, idempotency),
       ...createStoreCatalogRoutes(storeCatalog, idempotency, requireOperator, rules.storeCatalogWritePerStore),
       ...createStoreContactsRoutes(storeContacts, idempotency, requireContactsOperator, rules.storeCatalogWritePerStore),
+      ...createStoreSalesRoutes(storeSales, rules.storeSalesWritePerStore),
       ...createTobaccosRoutes(tobaccos, rules, idempotency),
       ...createCatalogXlsxRoutes(catalogXlsx, idempotency),
       ...createWorkbookRoutes({ exportSegment: CONTACTS_EXPORT_SEGMENT, importSegment: CONTACTS_IMPORT_SEGMENT, bucket: 'contacts', read: 'contacts:export', write: 'contacts:import', exportsPerHour: 5 }, contactsXlsx, idempotency),
@@ -544,6 +599,7 @@ export function createBackofficeModules(deps: BackofficeDeps): BackofficeModules
       ...createTobaccoSyncRoutes(tobaccoSync, idempotency),
       ...createCountriesRoutes(countries, rules),
       ...createSettingsRoutes(settings, rules),
+      ...createEInvoicingAccountsRoutes(eInvoicingAccounts, rules),
       ...createActivationsRoutes(activations, rules),
       ...createTrashRoutes(trash, rules, groups, createCrossGroupAuditor({ activityLog, now })),
       ...integrations.routes,
@@ -601,11 +657,12 @@ export function createPublicApiModules(deps: PublicApiDeps): PublicApiModules {
   const catalog = createPublicCatalogController(createPublicCatalogService({ ...deps.catalog, callers: createApiKeyCallers(databases) }));
   const publicContacts = createPublicContactsController(createPublicContactsService({ contacts: deps.crm.contacts, contactGroups: deps.crm.contactGroups }));
   const publicCards = createPublicFidelityCardsController(createPublicFidelityCardsService({ cards: deps.crm.cards }));
+  const publicSales = createPublicSalesController(createPublicSalesService({ repository: createPublicSalesRepository(databases), callers: createApiKeyCallers(databases) }));
   const idempotency = createIdempotencyStore(databases, idempotencyBodyKey(Buffer.from(config.versionHmacKey.reveal(), 'base64')), now);
   const rules = createRateLimitRules(config);
   // One budget of writes per key for the whole public API: the catalog, the contacts and the cards share it.
   const writeLimit = rules.publicCatalogWritePerKey;
-  return { routes: [...createPublicRoutes(controller), ...createPublicCatalogRoutes(catalog, idempotency, writeLimit), ...createPublicContactsRoutes(publicContacts, idempotency, writeLimit), ...createPublicFidelityCardsRoutes(publicCards, idempotency, writeLimit)], authenticate: createAuthenticateApiKey({ repository: keys, rateLimiter, activityLog, logger, meter, now }), meter };
+  return { routes: [...createPublicRoutes(controller), ...createPublicCatalogRoutes(catalog, idempotency, writeLimit), ...createPublicContactsRoutes(publicContacts, idempotency, writeLimit), ...createPublicFidelityCardsRoutes(publicCards, idempotency, writeLimit), ...createPublicSalesRoutes(publicSales)], authenticate: createAuthenticateApiKey({ repository: keys, rateLimiter, activityLog, logger, meter, now }), meter };
 }
 
 /**

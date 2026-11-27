@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
-import { COLLECTIONS, CONTACTS_OWNED_FIELDS, GROUPS_INSERT_ONLY_FIELDS, PRODUCTS_CATEGORIES_OWNED_FIELDS, PRODUCTS_CATEGORIES_OWNED_TREES, GROUPS_OWNED_FIELDS, USERS_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
+import { COLLECTIONS, CONTACTS_OWNED_FIELDS, DOCUMENTS_OWNED_FIELDS, GROUPS_INSERT_ONLY_FIELDS, QUEUE_DOCUMENTS_OWNED_FIELDS, PRODUCTS_CATEGORIES_OWNED_FIELDS, PRODUCTS_CATEGORIES_OWNED_TREES, GROUPS_OWNED_FIELDS, SALES_OWNED_FIELDS, USERS_OWNED_FIELDS, WAREHOUSE_OWNED_FIELDS, registeredCollectionNames, validateRegistry } from '../../src/db/collections.ts';
 import { SESSIONS_INDEXES } from '../../src/db/sessions-schema.ts';
 import { DEALERS_INDEXES } from '../../src/db/dealers-schema.ts';
 import type { CollectionRegistry } from '../../src/db/collections.ts';
@@ -23,14 +23,14 @@ async function sourceFiles(dir: string = SRC): Promise<string[]> {
 describe('collection registry', () => {
   it('registers the shared legacy collections (users writable on owned fields only) and the new ones with their indexes', () => {
     assert.deepEqual(Object.keys(COLLECTIONS.common).sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'companies', 'countries', 'dealers', 'groups', 'idempotencyKeys', 'places', 'rateLimits', 'reserve_with_google', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'tobaccos', 'userCredentials', 'users']);
-    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['calendar', 'companies', 'contacts', 'contacts_groups', 'documents', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'sales', 'table_reservation', 'warehouse']);
+    assert.deepEqual(Object.keys(COLLECTIONS.group).sort(), ['calendar', 'companies', 'contacts', 'contacts_groups', 'document_counters', 'documents', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'sales', 'sales_tombstones', 'table_reservation', 'warehouse']);
     for (const [name, spec] of [...Object.entries(COLLECTIONS.common), ...Object.entries(COLLECTIONS.group)]) {
       const isMirror = ['companies', 'places'].includes(name) && COLLECTIONS.common[name as 'companies' | 'places'] === spec;
       const expected = isMirror
         ? 'mirror'
-        : ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'dealers', 'idempotencyKeys', 'rateLimits', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials'].includes(name)
+        : ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'dealers', 'document_counters', 'idempotencyKeys', 'rateLimits', 'sales_tombstones', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'userCredentials'].includes(name)
           ? 'new'
-          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || name === 'countries' || (['companies', 'contacts', 'contacts_groups', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments'].includes(name) && !isMirror)
+          : name === 'users' || name === 'groups' || name === 'reserve_with_google' || name === 'tobaccos' || name === 'countries' || (['companies', 'contacts', 'contacts_groups', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'sales', 'warehouse', 'documents'].includes(name) && !isMirror)
             ? 'legacy-write'
             : 'legacy-read';
       assert.equal(spec.ownership, expected, name);
@@ -69,10 +69,42 @@ describe('collection registry', () => {
     }
     // The advanced cards (step F1): the code is written only at creation, the credit and the points only move with `$inc`, and the history is only inserted.
     assert.deepEqual([...COLLECTIONS.group.fidelity_cards.ownedFields].sort(), ['balance', 'cardTypeId', 'code', 'insertDate', 'pointsCollections', 'status', 'updateDate']);
-    assert.deepEqual([...COLLECTIONS.group.fidelity_cards_movements.ownedFields].sort(), ['apiKeyId', 'balance', 'cardCode', 'cardId', 'date', 'points', 'pointsCollectionId', 'storeKeyId', 'type', 'userId']);
-    for (const name of ['sales', 'documents', 'calendar', 'table_reservation', 'warehouse'] as const) {
+    assert.deepEqual([...COLLECTIONS.group.fidelity_cards_movements.ownedFields].sort(), ['apiKeyId', 'balance', 'cardCode', 'cardId', 'date', 'points', 'pointsCollectionId', 'saleId', 'storeKeyId', 'type', 'userId']);
+    // The sales (step VS4a): written in the shape of the legacy, on the owned fields, with the container of this backend; `status` (only to mark a sale gathered by a deferred invoice, step VS5) is owned, the unique key index is never declared here.
+    assert.equal(COLLECTIONS.group.sales.ownership, 'legacy-write');
+    assert.equal(COLLECTIONS.group.sales.ownedFields, SALES_OWNED_FIELDS);
+    for (const field of ['userId', 'timestampId', 'customer', 'products', 'refund', 'fiscalState', 'sType', 'fiscalReceiptInfo', 'finalTotalCheckout', 'floodCloud', 'updateDate']) {
+      assert.ok(SALES_OWNED_FIELDS.includes(field), field);
+    }
+    assert.ok(SALES_OWNED_FIELDS.includes('status'));
+    for (const field of ['_id', 'floodCloud.key', 'metadata']) {
+      assert.equal(SALES_OWNED_FIELDS.includes(field), false, field);
+    }
+    assert.equal('indexes' in COLLECTIONS.group.sales, false);
+    for (const name of ['calendar', 'table_reservation'] as const) {
       assert.deepEqual(COLLECTIONS.group[name], { ownership: 'legacy-read' }, name);
     }
+    // The invoices of the sales (step VS5): whole documents in the legacy shape, then only `sendStatus` changes; the queue record is the document plus the dealer and the fields of the sale, and nothing the consumer owns.
+    assert.equal(COLLECTIONS.group.documents.ownership, 'legacy-write');
+    assert.equal(COLLECTIONS.group.documents.ownedFields, DOCUMENTS_OWNED_FIELDS);
+    for (const field of ['number', 'prefixSuffix', 'type', 'company', 'counterpart', 'records', 'saleId', 'saleTimestampId', 'fattura_elettronica', 'XML', 'sendStatus', 'groupId', 'insertDate']) {
+      assert.ok(DOCUMENTS_OWNED_FIELDS.includes(field), field);
+    }
+    for (const field of ['_id', 'sent', 'hubId', 'error', 'worker', 'dealerId', 'sale']) {
+      assert.equal(DOCUMENTS_OWNED_FIELDS.includes(field), false, field);
+    }
+    assert.deepEqual([...QUEUE_DOCUMENTS_OWNED_FIELDS].filter((field) => !DOCUMENTS_OWNED_FIELDS.includes(field)), ['dealerId', 'sale']);
+    for (const field of ['sent', 'hubId', 'error', 'worker']) {
+      assert.equal(QUEUE_DOCUMENTS_OWNED_FIELDS.includes(field), false, field);
+    }
+    assert.equal('indexes' in COLLECTIONS.group.documents, false);
+    // The warehouse movements (step VS1): only inserted, in the legacy shape, with the origin, the operator and the store key; the unique index of the origin is created at run time and never declared.
+    assert.equal(COLLECTIONS.group.warehouse.ownership, 'legacy-write');
+    assert.equal(COLLECTIONS.group.warehouse.ownedFields, WAREHOUSE_OWNED_FIELDS);
+    for (const field of ['type', 'rule', 'records', 'saleId', 'documentId', 'origin', 'userId', 'storeKeyId']) {
+      assert.ok(WAREHOUSE_OWNED_FIELDS.includes(field), field);
+    }
+    assert.equal('indexes' in COLLECTIONS.group.warehouse, false);
     assert.deepEqual([...COLLECTIONS.common.users.ownedFields].sort(), [...USERS_OWNED_FIELDS].sort());
     for (const field of ['name', 'surname', 'email', 'telephone', 'settings.language', 'settings.theme', 'settings.hiddenInStats', 'status', 'trash', 'role', 'groupId', 'dealerId', 'companyId', 'placeId', 'placesId', 'permissions.status', 'permissions.users.r', 'permissions.users.w', 'permissions.logs.r', 'permissions.stats.r', 'permissions.documents.w', 'description', 'avatar', 'pin', 'servicesId', 'shiftTime.status', 'shiftTime.weeksGeneric', 'shiftTime.daySpecial', 'permissions.apps.cash.status', 'permissions.apps.cash.sub.preblling', 'permissions.apps.cash.sub.automaticCash.glory.withdrawal', 'permissions.apps.cash.options.priceLists', 'password', 'tokens', 'userName', 'insertDate', 'updateDate']) {
       assert.ok(COLLECTIONS.common.users.ownedFields.includes(field), field);
@@ -111,25 +143,29 @@ describe('collection registry', () => {
     ]);
     assert.deepEqual(COLLECTIONS.common.storeActivationCodes.indexes.map((index) => [index.name, 'unique' in index, 'expireAfterSeconds' in index ? index.expireAfterSeconds : null]), [['codeHash_1', true, null], ['placeId_1', true, null], ['expiresAt_1', false, 0]]);
     assert.doesNotThrow(() => validateRegistry());
-    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'calendar', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'documents', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sales', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'table_reservation', 'tobaccos', 'userCredentials', 'users', 'warehouse']);
+    assert.deepEqual([...registeredCollectionNames()].sort(), ['activityEvents', 'apiKeys', 'apiUsage', 'billingClosures', 'calendar', 'companies', 'contacts', 'contacts_groups', 'countries', 'dealers', 'document_counters', 'documents', 'email_templates', 'fidelity_cards', 'fidelity_cards_movements', 'files', 'groups', 'idempotencyKeys', 'places', 'products', 'products_attributes', 'products_brands', 'products_categories', 'products_departments', 'rateLimits', 'reserve_with_google', 'sales', 'sales_tombstones', 'sessions', 'settings', 'storeActivationCodes', 'storeKeys', 'syncIssues', 'table_reservation', 'tobaccos', 'userCredentials', 'users', 'warehouse']);
   });
 
-  it('registers the documents of the legacy send queue as read only, with no index, and refuses anything else there', () => {
-    assert.deepEqual(COLLECTIONS.queue, { documents: { ownership: 'legacy-read' } });
+  it('registers the documents of the legacy send queue as written only with the fields this backend owns, with no index, and refuses anything else there', () => {
+    assert.deepEqual(COLLECTIONS.queue, { documents: { ownership: 'legacy-write', ownedFields: QUEUE_DOCUMENTS_OWNED_FIELDS } });
     const bad: CollectionRegistry = {
       common: {},
       group: {},
       queue: {
-        a: { ownership: 'legacy-write', ownedFields: ['x'] },
+        a: { ownership: 'legacy-write' },
         b: { ownership: 'legacy-read', indexes: [{ name: 'x_1', key: { x: 1 } }] },
         c: { ownership: 'legacy-read' },
+        d: { ownership: 'legacy-write', ownedFields: ['x'] },
+        e: { ownership: 'legacy-read', ownedFields: ['x'] },
+        f: { ownership: 'new' },
+        g: { ownership: 'legacy-write', ownedFields: [] },
       },
     };
     assert.throws(() => validateRegistry(bad), (error: Error) => {
-      for (const where of ['queue.a', 'queue.b']) {
+      for (const where of ['queue.a', 'queue.b', 'queue.e', 'queue.f', 'queue.g']) {
         assert.ok(error.message.includes(where), where);
       }
-      assert.ok(!error.message.includes('queue.c'));
+      assert.ok(!error.message.includes('queue.c') && !error.message.includes('queue.d'));
       return true;
     });
     assert.deepEqual([...registeredCollectionNames({ common: { a: { ownership: 'legacy-read' } }, group: {}, queue: { q: { ownership: 'legacy-read' } } })].sort(), ['a', 'q']);
@@ -252,6 +288,20 @@ describe('collection registry', () => {
           // The name of the group database, in the files that may read it.
           if (file.endsWith('modules/contacts/contacts.repository.ts')) {
             assert.ok(uses.length > 0 && uses.every((use) => /\bdb$/.test(use[1]!)), `${file}: "${name}" is read from the group database`);
+          } else if (file.endsWith('modules/sales/sales.repository.ts')) {
+            // The detail of a sale reads the state of sending of its invoice document (step VS6): one `findOne` in the group database.
+            assert.equal(uses.length, 1, file);
+            assert.ok(/groupDatabaseFor\(principal, access, databases\)$/.test(uses[0]![1]!), `${file}: "${name}" is read from the group database`);
+          } else if (file.endsWith('modules/sales/sales.invoice.repository.ts')) {
+            // The invoices of the sales (step VS5) are inserted in the group database (and only their `sendStatus` is moved there).
+            assert.ok(uses.length > 0 && uses.every((use) => /groupDatabaseFor\(caller, access, databases\)$/.test(use[1]!)), `${file}: "${name}" is written in the group database`);
+          } else if (file.endsWith('db/databases.ts')) {
+            // The one way into the queue (step VS5): the inbox that inserts a record, built here and nowhere else.
+            assert.equal(uses.length, 1);
+            assert.ok(uses[0]![1]!.includes('queueDatabaseName(context)'));
+          } else if (file.endsWith('modules/document-numbering/numbering.repository.ts') || file.endsWith('modules/document-numbering/numbering.indexes.ts')) {
+            // The numbering (step VS3) finds the documents of a company in the group database and creates the two supporting indexes there (checked in the test of the numbering below).
+            assert.ok(uses.length > 0, `${file}: "${name}" is read from the group database`);
           } else {
             assert.equal(uses.length, 0, `${file}: "${name}" is not read here`);
           }
@@ -294,6 +344,26 @@ describe('collection registry', () => {
         } else if (name === 'sales' && (file.endsWith('modules/sales/sales.repository.ts') || file.endsWith('modules/sales/sales.indexes.ts'))) {
           // The sales (step V1): the repository only reads them, the index guard only creates the index of the purchases of a customer (the one exception decided by the user).
           assert.equal(any.length, 1, file);
+        } else if (name === 'sales' && file.endsWith('modules/public-sales/public-sales.repository.ts')) {
+          // The sales of the public API (step VS4b): one accessor, only `find` and `findOne`.
+          assert.equal(any.length, 1, file);
+          assert.equal(/\.(?:insert|update|delete|replace|bulkWrite|aggregate|findOneAnd)/.test(text), false, `${file}: reads only`);
+        } else if (name === 'sales' && (file.endsWith('modules/sales/sales.write.repository.ts') || file.endsWith('modules/sales/sales.key-index.ts'))) {
+          // The writes of the sales (step VS4a): the repository of the writes reads, inserts, changes the owned fields and deletes a sale that is not fiscal; the guard of the key creates the unique index of `floodCloud.key` and the one of `timestampId`.
+          assert.ok(any.length > 0, file);
+        } else if (name === 'warehouse' && (file.endsWith('modules/stock/stock.repository.ts') || file.endsWith('modules/stock/stock.indexes.ts'))) {
+          // The warehouse movements (step VS1): the repository of the stock reads them and inserts whole documents, the index guard creates the unique index of the origins.
+          assert.ok(any.length > 0, file);
+        } else if (name === 'documents' && (file.endsWith('modules/document-numbering/numbering.repository.ts') || file.endsWith('modules/document-numbering/numbering.indexes.ts'))) {
+          // The numbering of the fiscal documents (step VS3): the repository only finds the highest number and progressive of a year (checked below), the index guard creates the two supporting indexes.
+          assert.ok(any.length > 0, file);
+        } else if (name === 'documents' && file.endsWith('modules/sales/sales.repository.ts')) {
+          // The detail of a sale (step VS6): a single read of the document of its invoice.
+          assert.equal(any.length, 1, file);
+          assert.equal(found.length, 0, file);
+        } else if (name === 'documents' && (file.endsWith('modules/sales/sales.invoice.repository.ts') || file.endsWith('db/databases.ts'))) {
+          // The invoices of the sales (step VS5): the repository of the invoices inserts them and moves their `sendStatus` (checked below); `databases.ts` builds the inbox of the send queue.
+          assert.ok(any.length > 0, file);
         } else if (!file.endsWith('modules/error-documents/error-documents.repository.ts')) {
           assert.equal(any.length, 0, `${file}: "${name}" is not used here`);
         }
@@ -316,6 +386,52 @@ describe('collection registry', () => {
       }
     }
     assert.deepEqual(users.sort(), ['composition.ts', 'modules/groups/onboarding.repository.ts', 'modules/sales/sales.service.ts']);
+  });
+
+  it('writes the invoice documents only from the repository of the invoices of the sales: an insert and the move of `sendStatus`, nothing else', async () => {
+    const code = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const repository = code(await readFile(join(SRC, 'modules', 'sales', 'sales.invoice.repository.ts'), 'utf8'));
+    assert.deepEqual([...repository.matchAll(/\.(insert\w*|update\w*|replace\w*|delete\w*|bulkWrite|findOneAnd\w+|createIndex\w*|drop\w*)\(/g)].map((match) => match[1]), ['insertOne', 'updateOne']);
+    assert.ok(repository.includes("{ $set: { sendStatus: to } }") && repository.includes('sendStatus: from'));
+    const writers: string[] = [];
+    for (const file of await sourceFiles()) {
+      if (/\.collection\(\s*'documents'\s*\)\s*\.(?:insert|update|replace|delete|bulkWrite|findOneAnd)/.test(code(await readFile(file, 'utf8'))) || /documents\(caller, access\)\s*\.(?:insert|update|replace|delete|bulkWrite|findOneAnd)/.test(code(await readFile(file, 'utf8')))) {
+        writers.push(relative(SRC, file).split('\\').join('/'));
+      }
+    }
+    // `db/databases.ts` is the inbox of the send queue (a database of its own, with the same collection name).
+    assert.deepEqual(writers, ['db/databases.ts', 'modules/sales/sales.invoice.repository.ts']);
+  });
+
+  it('only reads the documents from the numbering, and writes only the counters of its own collection, with one atomic update', async () => {
+    const code = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const repository = code(await readFile(join(SRC, 'modules', 'document-numbering', 'numbering.repository.ts'), 'utf8'));
+    const documents = [...repository.matchAll(/\.collection\(\s*'documents'\s*\)\s*\.(\w+)\(/g)].map((match) => match[1]);
+    assert.deepEqual(documents, ['find', 'find', 'find'], 'the documents are only found');
+    assert.deepEqual([...repository.matchAll(/\.(insert\w*|update\w*|replace\w*|delete\w*|bulkWrite|findOneAnd\w+|createIndex\w*|drop\w*)\(/g)].map((match) => match[1]), ['findOneAndUpdate'], 'the only write is the atomic update of a counter');
+    const counters = [...repository.matchAll(/\.collection\(\s*'document_counters'\s*\)/g)];
+    assert.equal(counters.length, 2, 'the counters are found once and moved once');
+    // Only the numbering module reaches the counters, and the indexes of the documents are created only by its guard.
+    const reach = [];
+    for (const file of await sourceFiles()) {
+      if (/\.collection\(\s*'document_counters'/.test(code(await readFile(file, 'utf8')))) {
+        reach.push(relative(SRC, file).split('\\').join('/'));
+      }
+    }
+    assert.deepEqual(reach.sort(), ['modules/document-numbering/numbering.indexes.ts', 'modules/document-numbering/numbering.repository.ts']);
+  });
+
+  it('moves the stock of the products only from the repository of the stock service, with `$inc`, and only inserts the warehouse movements there', async () => {
+    const code = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    for (const file of await sourceFiles()) {
+      const text = code(await readFile(file, 'utf8'));
+      const quantity = /\.value`\]?/.test(text) && /quantity\.__/.test(text);
+      assert.equal(quantity, file.endsWith('modules/stock/stock.repository.ts'), `${file}: only the stock repository writes the quantity of a storage`);
+    }
+    const repository = code(await readFile(join(SRC, 'modules', 'stock', 'stock.repository.ts'), 'utf8'));
+    assert.ok(repository.includes('$inc: { [`quantity.__'));
+    assert.ok(!/\$set|\$unset|replaceOne|findOneAnd|deleteOne|deleteMany|bulkWrite|\.drop\(/.test(repository), 'the stock repository only increments the stock and inserts the movements');
+    assert.deepEqual([...repository.matchAll(/\.(insert\w*|update\w*)\(/g)].map((match) => match[1]), ['updateOne', 'insertOne']);
   });
 
   it('no module outside src/db/databases.ts selects a database directly', async () => {

@@ -136,7 +136,8 @@ describe('sales: access', () => {
     for (const path of [`${base()}${forA}`, `${base()}/summary${forA}`, `${base()}/${hex(sid(1))}`]) {
       assert.equal((await world.asStore(key.key, 'GET', path)).status, 403, path);
     }
-    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+    // The writes of the backoffice are in `sales-admin.test.ts`; these have no route.
+    for (const method of ['POST', 'PUT']) {
       assert.ok([404, 405].includes((await call(g().sa, method, `${base()}/${hex(sid(1))}`, {})).status), method);
     }
   });
@@ -369,7 +370,10 @@ describe('GET /v1/groups/{groupId}/sales/{saleId}', () => {
   it('shows the sale with its lines, totals, payments and refunds, with a weak ETag, and none of the data of the customer beyond his name', async () => {
     const reply = await call(g().sa, 'GET', `${base()}/${hex(sid(1))}`);
     okay(reply);
-    assert.deepEqual(reply.body.data, {
+    // The version is the strong tag of `If-Match` of the writes (step VS4b).
+    const { version, ...detail } = reply.body.data;
+    assert.match(version, /^[A-Za-z0-9_-]{43}$/);
+    assert.deepEqual(detail, {
       id: hex(sid(1)),
       date: '2026-05-10T10:00:00.000Z',
       receiptType: 'receipt',
@@ -387,8 +391,8 @@ describe('GET /v1/groups/{groupId}/sales/{saleId}', () => {
       table: 'T1',
       customer: { id: hex(contactA), displayName: 'Acme Srl' },
       products: [
-        { productId: hex(fixtureId('country', 1)), code: 'PZ', name: 'Pizza it', quantity: 2, unitPrice: 4, discount: 0, variants: '+ Extra x2, - Cipolla' },
-        { productId: null, code: null, name: 'Libero', quantity: 1, unitPrice: 2, discount: 0, variants: null },
+        { productId: hex(fixtureId('country', 1)), code: 'PZ', name: 'Pizza it', quantity: 2, unitPrice: 4, discount: 0, variants: '+ Extra x2, - Cipolla', index: 0, returned: 0 },
+        { productId: null, code: null, name: 'Libero', quantity: 1, unitPrice: 2, discount: 0, variants: null, index: 1, returned: 0 },
       ],
       productsCount: 2,
       totals: { total: 10, taxable: 8.2, tax: 1.8, discount: { adjustment: 'discount', percentage: 10, value: 0 } },
@@ -397,6 +401,13 @@ describe('GET /v1/groups/{groupId}/sales/{saleId}', () => {
       fidelityCardCode: 'CARD-1',
       fidelityCardUsed: true,
       note: 'Senza glutine',
+      // A sale of the legacy has no check, no anomaly, no invoice and no operation of this backend.
+      canceled: false,
+      returnedValue: 0,
+      serverCheck: null,
+      anomalies: [],
+      invoice: null,
+      operations: [],
     });
     const text = JSON.stringify(reply.body);
     for (const secret of [...SECRETS, 'lotteryId', 'delivery', 'posTerminalId', 'companyData', 'email', 'address']) {
@@ -419,10 +430,83 @@ describe('GET /v1/groups/{groupId}/sales/{saleId}', () => {
       assert.equal((await call(g().sa, 'GET', `${base()}/${hex(sid(1))}${query}`)).status, 422, query);
     }
     const refunded = (await call(g().sa, 'GET', `${base()}/${hex(sid(7))}`)).body.data;
-    assert.deepEqual([refunded.fiscalState, refunded.refunds], ['refunded', [{ report: 3, number: 9, date: '2026-05-05T08:00:00.000Z', amount: 15 }]]);
+    assert.deepEqual([refunded.fiscalState, refunded.refunds], ['refunded', [{ report: 3, number: 9, date: '2026-05-05T08:00:00.000Z', amount: 15, canceled: false }]]);
     // The broken sale reads as what it has.
     const broken = (await call(g().sa, 'GET', `${base()}/${hex(sid(10))}`)).body.data;
     assert.deepEqual([broken.total, broken.refunds.map((refund: { amount: number }) => refund.amount), broken.products, broken.note], [0, [0, 2, 0], [], null]);
+  });
+
+  it('shows the check, the anomalies, the invoice with its state of sending read from the document, and what was already returned', async () => {
+    const [saleId, missingId, legacyId, canceledId] = [sid(30), sid(31), sid(32), sid(33)];
+    const [docQueued, docMissing, docLegacy] = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const date = new Date('2025-06-10T10:00:00.000Z');
+    const line = (qt: number) => ({ name: { it: 'Pizza' }, qt, price: { taxed: 5, cost: 99 } });
+    const hostile = { at: date, operation: 'create', source: 'loyalty', code: 'negativePoints', collectionId: hex(fixtureId('country', 2)), cardCode: 'CARD-SECRET', ids: [hex(saleId), 7], fields: ['recipient.vat'] };
+    const cloud = (extra: Document) => ({ v: 1, key: 'k', createdBy: { kind: 'store', storeKeyId: new ObjectId() }, bodyHash: 'HASH-SECRET', loyalty: { applied: null, full: null, cardCode: 'CARD-SECRET' }, legacy: null, cancellation: null, ...extra });
+    const sales = [
+      sale(30, {
+        _id: saleId, customer: null, date, receiptType: 'invoice', fidelityCard: { code: 'CARD-SECRET' }, updateDate: date,
+        products: [line(3), line(1)],
+        refund: [
+          { returnedGoods: [{ index: 0, returnedQt: 1 }, { index: 5, returnedQt: 9 }, { index: 'x', returnedQt: 1 }], returnedGoodsValue: { priceTaxed: 5 } },
+          { canceled: true, returnedGoods: [{ index: 0, returnedQt: 2 }], returnedGoodsValue: { priceTaxed: 10 } },
+          { returnedGoods: [{ index: 0, returnedQt: 1 }], returnedGoodsValue: { priceTaxed: 5.1 } },
+        ],
+        floodCloud: cloud({
+          serverCheck: { checkedAt: date, status: 'differences', totals: [{ field: 'total', pos: 20, server: 19.5, cost: 7 }, 'junk'], lines: [{ index: 0, code: 'lineTotalMismatch', pos: 5, server: 4.9, cost: 3 }, { index: 1, code: 'taxMissing' }, { code: 'x' }], linesTruncated: true, secret: 'S' },
+          anomalies: [hostile, 'junk'],
+          operations: [{ kind: 'create', at: date, by: { kind: 'user', userId: g().sa } }, { kind: 'refund', at: date, by: { kind: 'store', storeKeyId: new ObjectId() }, ref: 'R' }, 5],
+          invoice: { documentId: docQueued, number: 12, prefixSuffix: 'A/', year: 2025, queuedAt: date },
+        }),
+      }),
+      sale(31, { _id: missingId, customer: null, date, receiptType: 'invoice', floodCloud: cloud({ serverCheck: { status: 'ok', totals: [], lines: [] }, invoice: { documentId: docMissing, number: 13, prefixSuffix: '', year: 2025 } }) }),
+      sale(32, { _id: legacyId, customer: null, date, receiptType: 'invoice' }),
+      sale(33, { _id: canceledId, customer: null, date, fiscalState: 'canceled' }),
+    ];
+    await db().collection('sales').insertMany(sales);
+    await db().collection('documents').insertMany([
+      { _id: docQueued, companyId: c1, date, number: 12, prefixSuffix: 'A/', sendStatus: 'notQueued', XML: 'XML-SECRET', saleId },
+      { _id: docLegacy, companyId: c1, date, number: 4, prefixSuffix: 'F', sendStatus: 'sent', XML: 'XML-SECRET', saleId: legacyId },
+    ]);
+    try {
+      const read = async (actor: ObjectId, id: ObjectId) => (await call(actor, 'GET', `${base()}/${hex(id)}`)).body.data;
+      const withCard = (await addUser(ctx, world.office, { permissions: legacyPermissions({ status: false, modules: { documents: { r: true, w: false }, fidelity: { r: true, w: false } } }) })).id;
+      const withoutCard = (await addUser(ctx, world.office, { permissions: legacyPermissions({ status: false, modules: { documents: { r: true, w: false } } }) })).id;
+      for (const actor of [withoutCard, withCard]) {
+        const detail = await read(actor, saleId);
+        assert.deepEqual(detail.serverCheck, {
+          checkedAt: '2025-06-10T10:00:00.000Z',
+          status: 'differences',
+          totals: [{ field: 'total', pos: 20, server: 19.5 }],
+          lines: [{ index: 0, code: 'lineTotalMismatch', pos: 5, server: 4.9 }, { index: 1, code: 'taxMissing', pos: null, server: null }],
+          linesTruncated: true,
+        });
+        assert.deepEqual(detail.anomalies, [{ at: '2025-06-10T10:00:00.000Z', operation: 'create', source: 'loyalty', code: 'negativePoints', productId: null, collectionId: hex(fixtureId('country', 2)), type: null, ids: [hex(saleId)], fields: ['recipient.vat'] }]);
+        // The invoice: its number from the reference, its state of sending read from the document, which the consumer of the queue moves.
+        assert.deepEqual(detail.invoice, { documentId: hex(docQueued), number: 12, prefixSuffix: 'A/', year: 2025, sendStatus: 'notQueued', notQueued: true, documentFound: true });
+        assert.deepEqual(detail.operations, [{ kind: 'create', at: '2025-06-10T10:00:00.000Z' }, { kind: 'refund', at: '2025-06-10T10:00:00.000Z' }]);
+        // What was returned: the refunds that were not canceled, by line; the value without the canceled refund.
+        assert.deepEqual([detail.products.map((product: { index: number; returned: number }) => [product.index, product.returned]), detail.returnedValue, detail.canceled, detail.refunds.map((refund: { canceled: boolean }) => refund.canceled)], [[[0, 2], [1, 0]], 10.1, false, [false, true, false]]);
+        const text = JSON.stringify(detail);
+        assert.equal(text.includes('cost'), false);
+        assert.equal(text.includes('HASH-SECRET'), false);
+        assert.equal(text.includes('XML-SECRET'), false);
+        assert.equal(text.includes('CARD-SECRET'), actor === withCard);
+      }
+      // The state of sending follows the document: the e-invoicing moves it and the next read shows it.
+      await db().collection('documents').updateOne({ _id: docQueued }, { $set: { sendStatus: 'queued' } });
+      assert.deepEqual([(await read(g().sa, saleId)).invoice.sendStatus, (await read(g().sa, saleId)).invoice.notQueued], ['queued', false]);
+      // A reference whose document is gone: the number is the reference's, the state is unknown.
+      assert.deepEqual((await read(g().sa, missingId)).invoice, { documentId: hex(docMissing), number: 13, prefixSuffix: null, year: 2025, sendStatus: null, notQueued: false, documentFound: false });
+      assert.equal((await read(g().sa, missingId)).serverCheck.status, 'ok');
+      // An invoice of the legacy is found by its company, date and sale.
+      assert.deepEqual((await read(g().sa, legacyId)).invoice, { documentId: hex(docLegacy), number: 4, prefixSuffix: 'F', year: 2025, sendStatus: 'sent', notQueued: false, documentFound: true });
+      const canceled = await read(g().sa, canceledId);
+      assert.deepEqual([canceled.canceled, canceled.invoice, canceled.serverCheck, canceled.anomalies], [true, null, null, []]);
+    } finally {
+      await db().collection('sales').deleteMany({ _id: { $in: [saleId, missingId, legacyId, canceledId] } });
+      await db().collection('documents').deleteMany({ _id: { $in: [docQueued, docLegacy] } });
+    }
   });
 
   it('shows the code of the loyalty card only with fidelity:read, and whether a card was used to everybody', async () => {

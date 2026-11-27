@@ -127,14 +127,14 @@ describe('the service of the sales over a repository that does not answer in tim
   let access: GroupAccess;
   const indexes = { ensure: () => new Promise<void>(() => undefined) };
   const users = { findById: async () => null };
-  const unreadable = (error: unknown): SalesRepository => ({ find: () => Promise.reject(error), totals: () => Promise.reject(error), findOne: () => Promise.reject(error), operators: () => Promise.reject(error) });
+  const unreadable = (error: unknown): SalesRepository => ({ find: () => Promise.reject(error), totals: () => Promise.reject(error), findOne: () => Promise.reject(error), findInvoice: () => Promise.reject(error), operators: () => Promise.reject(error) });
   before(async () => {
     access = (await accessFor(principal, groupId))!;
   });
 
   it('does not wait for the index, and shows the names of the products in the first language when the user is gone', async () => {
     const sale: Document = { _id: new ObjectId(), date: new Date('2026-05-01T00:00:00Z'), products: [{ name: { fr: 'Pizza', it: 'Pizza it' }, qt: 1, price: { taxed: 3 } }] };
-    const service = createSalesService({ repository: { find: async () => [sale], totals: async () => ({ count: 0, gross: 0, refunded: 0 }), findOne: async () => sale, operators: async () => new Map() }, users, indexes });
+    const service = createSalesService({ repository: { find: async () => [sale], totals: async () => ({ count: 0, gross: 0, refunded: 0 }), findOne: async () => sale, findInvoice: async () => null, operators: async () => new Map() }, users, indexes });
     const contactId = new ObjectId();
     const page = await service.list(principal, access, { contactId });
     assert.equal(page.items.length, 1);
@@ -153,6 +153,7 @@ describe('the service of the sales over a repository that does not answer in tim
     await assert.rejects(real.find(principal, access, {}, 1), (error: unknown) => error instanceof AppError && error.code === 'SERVICE_UNAVAILABLE');
     await assert.rejects(real.totals(principal, access, {}), (error: unknown) => error instanceof AppError && error.code === 'SERVICE_UNAVAILABLE');
     await assert.rejects(real.findOne(principal, access, {}), (error: unknown) => error instanceof AppError && error.code === 'SERVICE_UNAVAILABLE');
+    await assert.rejects(real.findInvoice(principal, access, {}), (error: unknown) => error instanceof AppError && error.code === 'SERVICE_UNAVAILABLE');
     await assert.rejects(real.operators(access, [new ObjectId()]), (error: unknown) => error instanceof AppError && error.code === 'SERVICE_UNAVAILABLE');
     assert.deepEqual([...(await real.operators(access, []))], []);
   });

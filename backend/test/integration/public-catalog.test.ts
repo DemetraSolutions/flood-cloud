@@ -1023,6 +1023,8 @@ describe('the catalog of the public API: more refusals', () => {
       'GET /products catalog:read',
       'GET /products/:productId catalog:read',
       'GET /products/:productId/stock catalog:read',
+      'GET /sales sales:read',
+      'GET /sales/:saleId sales:read',
       'GET /stock catalog:read',
       'GET /taxes catalog:read',
       'PATCH /categories/:categoryId catalog:write +writeLimit',

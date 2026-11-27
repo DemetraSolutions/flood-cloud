@@ -3,6 +3,9 @@ import type { Scope } from '../../shared/security/scope/scope.ts';
 import type { SalesCursor } from './sales.cursor.ts';
 import type { SalesFilters } from './sales.schemas.ts';
 
+/** The filters of a read: those of the table of the backoffice, which never asks for a parent bill of a split table, or the ones of the public API, which can. */
+export type ConditionFilters = Omit<SalesFilters, 'receiptType'> & { readonly receiptType?: SalesFilters['receiptType'] | 'partitioned' };
+
 /** A filter that matches no sale. */
 const NOTHING: Filter<Document> = { _id: { $in: [] } };
 
@@ -37,13 +40,16 @@ export function salesPerimeter(scope: Scope): Filter<Document> {
  * with no valid date is never read: the table is ordered by date.
  *
  * @param filters The validated filters.
+ * @param partitioned `include` (the public API) to list the parent bills of split tables too when no `receiptType` is asked; they are left out by default.
  * @returns The conditions, to be combined with {@link salesPerimeter}.
  */
-export function salesConditions(filters: SalesFilters): Filter<Document>[] {
-  const conditions: Filter<Document>[] = [
-    { date: { $type: 'date', ...(filters.from === undefined ? {} : { $gte: filters.from }), ...(filters.to === undefined ? {} : { $lt: filters.to }) } },
-    { receiptType: filters.receiptType === undefined ? { $ne: 'partitioned' } : filters.receiptType },
-  ];
+export function salesConditions(filters: ConditionFilters, partitioned: 'exclude' | 'include' = 'exclude'): Filter<Document>[] {
+  const conditions: Filter<Document>[] = [{ date: { $type: 'date', ...(filters.from === undefined ? {} : { $gte: filters.from }), ...(filters.to === undefined ? {} : { $lt: filters.to }) } }];
+  if (filters.receiptType !== undefined) {
+    conditions.push({ receiptType: filters.receiptType });
+  } else if (partitioned === 'exclude') {
+    conditions.push({ receiptType: { $ne: 'partitioned' } });
+  }
   if (filters.contactId !== undefined) {
     conditions.push({ 'customer._id': either(filters.contactId) });
   }
@@ -75,9 +81,10 @@ export function salesConditions(filters: SalesFilters): Filter<Document>[] {
  * @param scope Scope of the caller.
  * @param filters The validated filters.
  * @param after Where the page continues from, `null` for the first page and for the summary.
+ * @param partitioned As in {@link salesConditions}.
  */
-export function salesFilter(scope: Scope, filters: SalesFilters, after: SalesCursor | null = null): Filter<Document> {
-  const conditions = [salesPerimeter(scope), ...salesConditions(filters)];
+export function salesFilter(scope: Scope, filters: ConditionFilters, after: SalesCursor | null = null, partitioned: 'exclude' | 'include' = 'exclude'): Filter<Document> {
+  const conditions = [salesPerimeter(scope), ...salesConditions(filters, partitioned)];
   if (after !== null) {
     conditions.push({ $or: [{ date: { $lt: after.date } }, { date: after.date, _id: { $lt: after.id } }] });
   }

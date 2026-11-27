@@ -52,6 +52,8 @@ export const PERMISSIONS = Object.freeze({
   FIDELITY_CARDS_EXPORT: 'fidelityCards:export',
   FIDELITY_CARDS_IMPORT: 'fidelityCards:import',
   SALES_READ: 'sales:read',
+  SALES_WRITE: 'sales:write',
+  SALES_DELETE: 'sales:delete',
   ACTIVITY_LOG_READ: 'activityLog:read',
   SESSIONS_READ: 'sessions:read',
   SESSIONS_REVOKE: 'sessions:revoke',
@@ -71,6 +73,7 @@ export const PERMISSIONS = Object.freeze({
   ACTIVATIONS_READ: 'activations:read',
   ACTIVATIONS_MANAGE: 'activations:manage',
   SECURITY_POLICY_MANAGE: 'securityPolicy:manage',
+  E_INVOICING_ACCOUNTS_MANAGE: 'eInvoicingAccounts:manage',
 } as const);
 
 /** A permission of the catalog, as `resource:action`. */

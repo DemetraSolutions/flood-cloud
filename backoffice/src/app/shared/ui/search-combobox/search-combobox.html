@@ -14,6 +14,8 @@
       [attr.aria-expanded]="open()"
       [attr.aria-controls]="open() ? listId : null"
       [attr.aria-activedescendant]="activeId()"
+      [attr.aria-invalid]="error() ? 'true' : null"
+      [attr.aria-describedby]="error() ? errorId : null"
       (focus)="show()"
       (click)="show()"
       (input)="onInput($event)"
@@ -21,6 +23,12 @@
     />
     @if (value() !== '') {
       <button fc-icon-button icon="close" [label]="clearLabel()" (click)="clear()"></button>
+    }
+  </div>
+  <div class="error" [id]="errorId" aria-live="polite">
+    @if (error()) {
+      <fc-icon name="error" />
+      <span>{{ error() }}</span>
     }
   </div>
   @if (open()) {

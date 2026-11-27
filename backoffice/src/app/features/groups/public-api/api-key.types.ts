@@ -8,6 +8,7 @@ export const PUBLIC_PERMISSIONS = [
   'contacts:write',
   'fidelityCards:read',
   'fidelityCards:write',
+  'sales:read',
 ] as const;
 
 /** A permission of the public catalog. */

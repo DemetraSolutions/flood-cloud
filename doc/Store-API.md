@@ -2,7 +2,7 @@
 
 Documento per chi sviluppa il **server di punto vendita**: descrive solo le chiamate che il server di negozio può fare al cloud con la propria **chiave di negozio**. Si aggiorna a ogni passo che apre una nuova chiamata al negozio (registro in fondo).
 
-- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita, catalogo del punto vendita (lettura di prodotti, categorie, reparti, marche e gruppi di attributi; scrittura di prodotti, categorie e marche), contatti, gruppi di contatti e carte fedeltà avanzate (§4.10: lettura e scrittura, senza eliminazioni).
+- **Stato:** attivazione, contesto, configurazione completa di gruppo, azienda e punto vendita, paesi e province, utenti del punto vendita, catalogo del punto vendita (lettura di prodotti, categorie, reparti, marche e gruppi di attributi; scrittura di prodotti, categorie e marche), contatti, gruppi di contatti e carte fedeltà avanzate (§4.10: lettura e scrittura, senza eliminazioni), vendite (§4.11: creazione idempotente, rettifica, resi, annullo, eliminazione dei preventivi e letture del proprio punto vendita).
 - **Non è qui:** le API del backoffice (`doc/API.md`) e le API pubbliche per gli integratori (`doc/Public-API.md`).
 
 ## 1. Convenzioni
@@ -11,7 +11,7 @@ Documento per chi sviluppa il **server di punto vendita**: descrive solo le chia
 - **Formato:** JSON UTF-8 (`Content-Type: application/json`), body non compresso.
 - **Risposte:** `{ "data": … }`; le liste aggiungono `page`.
 - **Errori:** `{ "error": { "code": "…", "message": "…", "details": [ … ] } }`. Si decide in base a `code` e allo stato HTTP, mai al testo di `message`.
-- **Date:** ISO 8601 in UTC. **Importi:** interi in centesimi, **tranne i prezzi del catalogo (§4.9) e i saldi delle carte fedeltà (§4.10), che sono in unità di valuta decimali** (per esempio `12.2` euro, non `1220`). **Identificativi:** stringhe, da trattare come opache.
+- **Date:** ISO 8601 in UTC. **Importi:** interi in centesimi, **tranne i prezzi del catalogo (§4.9), i saldi delle carte fedeltà (§4.10) e gli importi delle vendite (§4.11), che sono in unità di valuta decimali** (per esempio `12.2` euro, non `1220`). **Identificativi:** stringhe, da trattare come opache.
 - **`X-Request-Id`:** ogni risposta lo porta; va scritto nei log del server di negozio e indicato nelle segnalazioni.
 - **Cache:** ogni risposta è `Cache-Control: no-store`.
 
@@ -555,6 +555,182 @@ Content-Type: application/json
 
 **Non esistono** per il negozio: l'eliminazione definitiva di un contatto o di una carta, il ripristino di un contatto dal cestino, il cestino multiplo, la scrittura dei gruppi di contatti, l'importazione e l'esportazione dei file.
 
+### 4.11 Vendite — `/v1/store-context/sales`
+
+Il server di negozio invia le vendite che la cassa ha fatto (anche **giorni dopo**, se è stato offline), le rettifica, registra i resi e gli annulli e, per un preventivo che la cassa rielabora, lo elimina. Tutte le chiamate usano la **chiave di negozio**; l'azienda e il punto vendita sono **sempre quelli della chiave** (nessun parametro o campo del corpo li sceglie). **Il negozio vede e scrive solo le vendite del proprio punto vendita**: una vendita di un altro punto vendita o di un altro gruppo non esiste (`404`), anche se la si conosce.
+
+**Principi.**
+
+- **Il cloud non rifiuta mai una vendita per una regola di business.** Una carta non attiva, un credito che non basta, un deposito di cassa mancante, un prodotto sconosciuto, un operatore che non è più attivo, totali che non tornano, un reso oltre la quantità venduta: la vendita si salva e il cloud registra un'**anomalia** che gli amministratori vedono nel backoffice. Si rifiuta soltanto un corpo malformato (`422`), una chiave non valida (`401`, `403`), un corpo troppo grande (`413`) e il limite di richieste (`429`).
+- **Idempotenza sulle chiavi naturali, senza `Idempotency-Key`** (la cassa può restare offline per giorni): la vendita è identificata dal suo `timestampId` **e dal punto vendita**, il reso dal suo `timestampId`, l'annullo dallo stato. Rimandare la stessa operazione dà `200` con l'esito della prima, senza scrivere altro.
+- **Operatore nel corpo** (`operatorId`), niente `X-Operator-Id`: è accettato solo se è uno degli utenti che il negozio legge da `GET /v1/store-context/users` (gli utenti del suo punto vendita, di un amministratore di azienda o di gruppo: stessa regola delle altre scritture); allora è salvato nella vendita e nei movimenti. Se non lo è (anche se è un utente di un altro punto vendita o un amministratore di piattaforma) la vendita si salva lo stesso, senza operatore, con l'anomalia `operatorUnknown`; se è nell'insieme ma non attivo, `operatorInactive`.
+- **Importi in unità di valuta decimali** (`12.2`, non `1220`): fino a 6 decimali per i prezzi unitari, 2 per totali e pagamenti. Date in ISO 8601 UTC.
+- **`If-Match` facoltativo** su rettifica, reso, annullo ed eliminazione: se c'è, deve essere l'`ETag` della vendita (`412` se è cambiata, `422` se non è un `ETag` nostro); se manca, vale l'ultima scrittura.
+- **Limite proprio: 600 scritture al minuto per chiave** (creazioni, rettifiche, resi, annulli, eliminazioni), separato da quello del catalogo e dei contatti; le letture contano solo nel limite generale di 600 richieste al minuto. Alla risposta `429` si aspettano i secondi di `Retry-After` e si **rimanda la stessa richiesta** (è idempotente): non serve un invio a lotti.
+- **Una vendita che arriva quando il punto vendita non è più operativo** (disattivato, licenza scaduta) riceve `403 STORE_DISABLED` come ogni altra chiamata: si inserisce dal backoffice.
+
+| Chiamata | Corpo o query | Risposta |
+|---|---|---|
+| `POST /v1/store-context/sales` | la vendita (sotto) | `201` + `Location` + `ETag`, o `200` se esisteva già |
+| `GET /v1/store-context/sales?…` | **una** ricerca: `timestampId=…`, oppure `receiptNumber=…` e/o `reportNumber=…` (con `serialNumber=…` facoltativo), oppure `contactId=…`; `limit` 1–**10** (default 10) | `200`, `data` lista (dal più recente), `page` `{ limit, next: null }` |
+| `GET /v1/store-context/sales/{saleId}` | — | `200` + `ETag` |
+| `PATCH /v1/store-context/sales/{saleId}` | rettifica (sotto) | `200` + `ETag` |
+| `POST /v1/store-context/sales/{saleId}/refunds` | il reso | `201` + `Location` (`…/refunds/{timestampId}`), o `200` se già registrato |
+| `POST /v1/store-context/sales/{saleId}/cancellation` | l'annullo | `201` + `Location`, o `200` se la vendita era già annullata |
+| `DELETE /v1/store-context/sales/{saleId}` | — | `204`; solo vendite **non fiscali** |
+| `PUT …` | — | `405` con `Allow` |
+
+#### Creazione
+
+Il corpo è per **elenco chiuso di proprietà**: una proprietà sconosciuta è `422` (`unknown`). Unica eccezione, l'**oggetto prodotto di ogni riga** (vedi sotto).
+
+| Campo | Note |
+|---|---|
+| `timestampId` | 1–64 caratteri `A-Z a-z 0-9 . _ : -`. Chiave di idempotenza insieme al punto vendita. |
+| `date` | ISO UTC. Una data oltre 24 ore nel futuro si salva e dà l'anomalia `dateInFuture`. |
+| `receiptType` | `receipt`, `invoice`, `charge` o `partitioned`. `partitioned` è la vendita madre di un **tavolo diviso**: porta i prodotti veri (il magazzino si muove come per ogni vendita), mentre le parti sono scontrini fiscali con una riga libera "Pasto completo"; **non ha effetti sulla fidelity** (i punti maturano sulle parti) e il backoffice la esclude dagli elenchi e dai ricavi come prima. Se porta un `fidelityCardCode`, un credito usato > 0 o una riga `000-r-*`, la vendita si salva lo stesso e il cloud registra l'anomalia `partitionedLoyalty` (mai applicata: la fidelity la portano le parti fiscali). Una vendita `invoice` crea anche **la fattura** (documento numerato dal cloud, §«Fattura dalla vendita» qui sotto). |
+| `nonFiscal` | `true` per un preventivo (non fiscale). Predefinito `false`. |
+| `operatorId` | id dell'utente che ha fatto la vendita, o `null`. |
+| `cashDesk` | `{ deviceId, name, serialNumber, driver }` della cassa; mai indirizzi o credenziali. |
+| `customer` | `{ "contactId": "…" }` o `null`. La copia del cliente la costruisce il server dal contatto del gruppo (mai dal corpo). Un contatto che non esiste: vendita senza cliente + anomalia `customerMissing`. |
+| `fidelityCardCode`, `lotteryCode` | testi o `null`. |
+| `products` | da 1 a 500 righe (vedi sotto). **Righe + modificatori + selezioni dei menu ≤ 500**: oltre, `422` (`products` / `tooMany`). |
+| `totals` | `{ taxable, tax, total, taxableBeforeDiscount?, totalBeforeDiscount?, discount?: { adjustment: "discount"/"surcharge", kind, percentage, value } }` |
+| `payments` | `{ cash, electronic, cheque, tickets, fidelityCredit, unpaid, paymentTypeId, posTerminalId, specific: [{ type, name, amount }] (≤ 20), ticketDetails: [{ name, amount, quantity }] (≤ 50) }`; ogni importo è facoltativo (`0`). `fidelityCredit` è il credito della carta usato per pagare e **non può essere negativo** (`422` `payments.fidelityCredit` / `minimum`, anche nella rettifica): un valore negativo aggiungerebbe credito invece di toglierlo. |
+| `fiscalReceiptInfo` | `{ date, report, number, amount }` (numero del rapporto giornaliero e dello scontrino) o `null`: si può mandare dopo con la rettifica. |
+| `table`, `delivery`, `reservation`, `appointment`, `hotel`, `fullMeal` | oggetti facoltativi con le sole proprietà dell'esempio; qualunque altra è `422`. |
+| `note`, `checkoutStartedAt` | nota (≤ 2000) e istante di inizio dell'incasso. |
+| `invoice` | solo con `receiptType: "invoice"` (altrimenti `422`, `invoice` / `incorrect`): `{ "type": "TD01"…, "xml": { … } }`. `type` è uno tra `TD01`, `TD02`, `TD03`, `TD06`, `TD24`, `TD25`, `TD26` (assente: `TD24` se la fattura riepiloga vendite non pagate, altrimenti `TD01`); `xml` è l'oggetto FatturaPA parziale che la cassa già costruisce (campi sconosciuti accettati entro i limiti delle righe, **ma il cloud ne salva soltanto le sezioni che la fattura elettronica legge**: tipo di sconto/maggiorazione, ordine di acquisto, trasporto, esigibilità IVA e pagamento; ogni altro campo viene scartato). **Ogni valore è controllato sul suo dominio**: `ScontoMaggiorazione.Tipo` ∈ {`SC`,`MG`}; `EsigibilitaIVA` ∈ {`I`,`D`,`S`} (`S` solo se il cliente ha lo split payment); `CondizioniPagamento` ∈ `TP01`–`TP03`; `ModalitaPagamento` ∈ `MP01`–`MP23`; date `YYYY-MM-DD` reali (date-ora `YYYY-MM-DDThh:mm:ss`); importi e pesi finiti, non negativi e limitati; testi con soli caratteri ammessi dalla fattura elettronica (latino di base e Latin-1, **niente caratteri di controllo né `<`, `>`, `&`**) e lunghezze dello schema. Un valore fuori dominio **si scarta** e la vendita registra l'anomalia `invoiceXmlInvalid` con i percorsi (`fields`); mai un rifiuto. **Banca e beneficiario non sono della cassa:** l'`IBAN` di un pagamento si accetta solo se è uno di quelli delle banche dell'azienda (e ABI, CAB, BIC e istituto vengono da quella banca, mai dalla cassa); altrimenti l'IBAN e i dati bancari si scartano (`invoiceIbanUnknown`). Il `Beneficiario` è sempre l'azienda. |
+| `unpaidSaleIds` | solo con `receiptType: "invoice"` (altrimenti `422`, `unpaidSaleIds` / `incorrect`): fino a **500** id delle vendite non pagate che la fattura **riepilogativa** raccoglie (§«Fattura dalla vendita»). `invoice.type: "TD24"` senza `unpaidSaleIds` si salva lo stesso con l'anomalia `invoiceTypeWithoutUnpaid`. |
+| `deliveryIds` | i DDT che la fattura raccoglie arriveranno con il modulo dei documenti: oggi un elenco non vuoto è `422` (`deliveryIds` / `notAllowed`), mai ignorato in silenzio. |
+
+**Righe.** Ogni elemento di `products` è **l'oggetto prodotto completo, come oggi lo manda la cassa** (con i campi del prodotto che il cloud non conosce): non serve toglierne nulla. Limiti: solo tipi JSON, al più 6 livelli e 2000 valori per riga, testi fino a 2000 caratteri, liste fino a 200 elementi, **nessuna chiave che inizi con `$` o contenga `.`** (altrimenti `422`, `forbiddenKey`). Il cloud **salva solo un elenco di campi**, che può crescere senza cambiare le casse installate:
+
+- dalla cassa: `qt` (quantità già moltiplicata per la quantità di vendita del barcode; **negativa per un reso nello stesso scontrino**), `price` (`price` imponibile unitario, `taxed` lordo unitario, `discount` in percentuale, `tax` aliquota, `listId`, `currency`, `taxData` con `id`, `value`, `natura`, `description`, `department`), `discountPercentage`, `timestampId` (della riga), `menuParentId`, `variantParentId`, `sent`, `sentBy`, `barcodeRead` (il barcode letto, usato per lo scarico), `halfPortion`, `generic`, `group`, `exit`, `scaleType`, `availability.scales`, `variant.status`, `modularBundle.priceRule`;
+- `selectedVariants.plus|minus|info[]` ridotti a `_id`, `qt`, `price` (`price`, `taxed`, `tax`) e `modularBundleSelected.products[]` ridotti a `_id` e `qt` (la quantità **già scalata** dalla cassa);
+- **dal catalogo del cloud, mai dalla cassa**: `_id`, `code`, `name`, `type`, `categories`, `departmentId`, `availability.warehouse`, `bundleProducts` e i costi (`simpleCost`, `lastAveragePrice.total.averagePrice`, `roomsSettings.percentageFee`). Una riga **senza `_id`**, o con `freeProduct: true`, è un prodotto libero: `name`, `code` e `departmentId` si prendono dalla cassa. Un `_id` che il catalogo non ha si salva con quello che dice la cassa e dà l'anomalia `productMissing`.
+- **Numeri entro limiti.** `|qt| ≤ 1.000.000` (righe, modificatori e selezioni dei menu) e `|price.*| ≤ 1.000.000.000`: un valore fuori limite **si scarta** (non si rifiuta la vendita) e il ricalcolo registra `quantityMissing` o `priceMissing` sulla riga. Un magazzino non va mai a `Infinity`: una quantità che, convertita nell'unità di giacenza, non è finita non muove quel prodotto (anomalia `invalidQuantity`).
+- **Ricariche della carta prepagata.** Una riga conta come ricarica (`000-r-multi…`, `000-r-mono…`) **solo** se è un prodotto del catalogo il cui `code` ha quel prefisso: un prodotto libero o un id sconosciuto con quel codice non dà credito e registra `refillNotInCatalog`. Una ricarica maggiore dei pagamenti diversi dal credito (contanti, elettronico, assegni, buoni) registra `refillNotCovered`. Il credito aggiunto da una vendita del negozio passa dalle **stesse soglie di allerta** delle carte dei contatti (`store.creditAlert`, per operazione e per giorno: §4.10), anche quando una rettifica porta la vendita su un'altra carta avanzata; nessun rifiuto, e un errore dell'allerta non rende mai una vendita già salvata un errore.
+
+**Esempio — richiesta:**
+```
+POST /v1/store-context/sales
+Authorization: Bearer fc_sk_…
+Content-Type: application/json
+
+{
+  "timestampId": "1732701600123-A1",
+  "date": "2026-11-27T10:00:00.000Z",
+  "receiptType": "receipt",
+  "operatorId": "665f1a2b3c4d5e6f7a8b9c01",
+  "cashDesk": { "deviceId": "dev-1", "name": "Cassa 1", "serialNumber": "99MEY012345" },
+  "customer": { "contactId": "665f1a2b3c4d5e6f7a8b9c02" },
+  "fidelityCardCode": "ABC-1",
+  "products": [
+    {
+      "_id": "665f1a2b3c4d5e6f7a8b9c10",
+      "name": { "it": "Pizza" },
+      "qt": 2,
+      "price": { "price": 10, "taxed": 12.2, "discount": 0, "tax": 22, "listId": "list-1", "currency": "EUR", "taxData": { "id": "tax-001", "value": 22, "natura": null, "description": "Ordinaria", "department": 1 } },
+      "timestampId": "line-1",
+      "barcodeRead": "8001234567890",
+      "description": "campo che il cloud non salva"
+    }
+  ],
+  "totals": { "taxable": 20, "tax": 4.4, "total": 24.4 },
+  "payments": { "cash": 20, "fidelityCredit": 4.4 },
+  "fiscalReceiptInfo": { "date": "2026-11-27T10:00:04.000Z", "report": 101, "number": 12, "amount": 24.4 }
+}
+```
+→ `201`, `Location: /v1/store-context/sales/665f…`, `ETag: "…"`:
+```
+{ "data": {
+  "id": "665f1a2b3c4d5e6f7a8b9c99", "timestampId": "1732701600123-A1", "date": "2026-11-27T10:00:00.000Z",
+  "receiptType": "receipt", "nonFiscal": false, "fiscalState": null,
+  "number": { "report": 101, "number": 12 }, "total": 24.4,
+  "checks": { "status": "ok", "anomalies": 0 },
+  "fidelity": { "cardCode": "ABC-1", "balance": 5.6, "points": [{ "collectionId": "1a2b…", "points": 15 }] },
+  "invoice": null, "version": "…"
+} }
+```
+`invoice` è `null` per ogni vendita che non sia una fattura (vedi sotto). `fidelity` è lo stato della carta **dopo** la vendita, da stampare sullo scontrino (`null` se la vendita non ha carta; per una carta semplice `balance` è `null` e `points` ha un solo elemento con `collectionId: null`). `checks.status` è `differences` se il ricalcolo del server (aritmetiche di righe, totali, IVA e pagamenti, con tolleranza di 0,01, e aliquota usata) non torna con la cassa; `checks.anomalies` è il numero delle anomalie registrate. **La cassa fa fede sui totali**: il cloud non li cambia mai.
+
+**Duplicati.** Se esiste già una vendita **dello stesso punto vendita con lo stesso `timestampId`** (anche scritta dal vecchio sistema) la risposta è `200`, con la stessa forma, `Location` e l'esito della prima: nessuna vendita nuova, nessun movimento. Se il corpo è diverso dal primo, la risposta è comunque `200` e il cloud registra l'anomalia `duplicateDiffers` nella vendita esistente: **non esiste `409`** per i duplicati, perché bloccherebbe per sempre la coda di una cassa offline.
+
+**Fattura dalla vendita (`receiptType: "invoice"`).** Nella **stessa transazione** della vendita il cloud crea il documento della fattura e risolve da solo, dal database, ciò che la cassa non deve (e non può) decidere:
+
+- **Prima di numerare.** Senza cliente (nessun `customer`, o un contatto che non esiste) **non c'è né numero né documento**: la vendita si salva con l'anomalia `invoiceCounterpartMissing` e `invoice: null`. Lo stesso per una **data fuori finestra** (dal 1° gennaio dell'anno precedente, nel fuso del punto vendita, a domani alla stessa ora): anomalia `invoiceDateOutOfRange`, nessun numero, nessun documento. Il backoffice è invece rifiutato (`422`, `customer` / `incorrect`, `date` / `outOfRange`).
+- **Numero e sezionale.** Il numero è progressivo per azienda, serie, sezionale e anno e **non si ripete mai**, qualunque cassa o il backoffice stiano fatturando nello stesso momento. Sezionale: quello scelto dal punto vendita se l'azienda lo ha ancora, altrimenti quello della cassa, altrimenti nessuno (se il sezionale del punto vendita è sparito la vendita non si rifiuta: anomalia `prefixSuffixMissing`). L'anno è quello della data della vendita nel fuso del punto vendita (a capodanno vale l'ora locale, non quella del server; fuso non valido: `Europe/Rome` e anomalia `timezoneInvalid`). L'ultimo numero emesso fuori da Flood (`lastInvoiceNumber`) vale solo per il primo anno, senza sezionale.
+- **Cedente e cliente.** `company` e `counterpart` del documento sono **copie costruite dal database** (l'azienda del punto vendita e il contatto indicato in `customer`), mai dati del corpo; la copia del cliente non porta mai account, password, token, servizi, note, carte né altri dati interni.
+- **Invio elettronico.** Solo se l'azienda ha un hub **che può portare le fatture del gruppo** — `aruba`, oppure `aruba__<dealer>` col dealer del gruppo — il documento prende un `progressivo_invio` (unico per azienda e anno su tutti i tipi) e, **dopo il commit**, il suo record viene messo nella coda di invio, **al più una volta** (la vendita registra il tentativo in `floodCloud.invoice.queuedAt` prima di scrivere il record). Con l'hub di un altro dealer: documento creato e numerato, **non** in coda (`sendStatus: "notQueued"`), nessun progressivo, anomalia `invoiceHubMismatch`. Senza hub: nessun progressivo, nessun record, `sendStatus` `null`.
+- **Vendite non pagate (`unpaidSaleIds`, TD24).** Le vendite indicate passano a `status: "invoiced"` nella stessa transazione, **in modo atomico**, e i loro id si salvano nel documento (`metadata.unpaidIds`, come il legacy). Si raccoglie solo una vendita **fiscale** (non un preventivo, non un conto madre `partitioned`, non una fattura) **del proprio punto vendita**, della **stessa azienda e dello stesso cliente** della fattura, con `unpaid > 0`, non già fatturata, né annullata né resa. Le altre **non si toccano**: la fattura si crea con l'anomalia `unpaidSaleInvalid` (con gli id); dal backoffice sono un `409` (`unpaidSaleIds.<posizione>` / `invalid`) senza scrivere nulla, e il perimetro è quello del ruolo. Se due riepilogative si contendono le stesse vendite la perdente riparte (fino a tre volte): poi `409` (`unpaidSaleIds` / `race`) dal backoffice e, dalla cassa, la fattura si crea **senza raccoglierle** con l'anomalia `unpaidSaleRace`.
+- **Limiti.** Ogni creazione di fattura passa da un budget proprio per chiave (`RATE_LIMIT_STORE_INVOICES_PER_STORE`, 60 al minuto: oltre, `429` con `Retry-After`) e, se le fatture di una chiave in un giorno UTC superano `STORE_INVOICE_ALERT_PER_DAY` (500), il registro delle attività scrive una sola volta l'allerta `store.invoiceAlert` (nessun rifiuto).
+
+Nella risposta (e in ogni ripetizione della stessa vendita) `invoice` dice dove trovare il documento e il numero da stampare:
+```
+"invoice": { "documentId": "665f…", "number": 42, "prefixSuffix": "FE", "prefixSuffixPosition": "prefix", "year": 2026, "sendStatus": "queued" }
+```
+`number` e `prefixSuffix` si stampano insieme secondo `prefixSuffixPosition` (`prefix`: `FE42`; `suffix`: `42FE`; `null`: solo il numero). `sendStatus` è `queued` (nella coda di invio), `notQueued` (l'azienda invia tramite hub ma il documento **non** è in coda: la coda non ha risposto, o l'hub non è del dealer del gruppo; il backoffice lo segnala come «non in coda» e, se la coda non aveva risposto, **la stessa vendita rimandata dalla cassa lo rimette in coda**, senza duplicarlo), un altro stato dell'invio elettronico o `null` (nessun hub). Un errore della coda **non** fa fallire la vendita: resta `201`. La **stessa vendita rimandata** non crea mai un secondo documento né un nuovo numero: risponde `200` con lo stesso `invoice`. `invoice` è `null` anche quando non si è potuta fare la fattura (senza cliente, data fuori finestra, azienda non trovata). Una vendita `invoice` non si elimina mai (`409`, `receiptType` / `invoice`: anche se era un preventivo), si annulla; la nota di credito arriva con il modulo dei documenti.
+
+**Cosa fa il cloud nella stessa transazione.** Salva la vendita nella forma che il sistema precedente legge; scarica il magazzino (solo se il gruppo lo usa, dal deposito di cassa del punto vendita; quantità nell'unità di giacenza; giacenze negative consentite; i modificatori `plus` e le selezioni dei menu scaricano come prodotti; una riga con quantità negativa carica); applica la fidelity (credito usato e punti della carta, sul totale al netto del credito e delle ricariche). Tutto o niente.
+
+#### Lettura
+
+`GET …/sales/{saleId}` e gli elementi delle ricerche hanno la stessa forma:
+```
+{ "data": {
+  "id": "665f…", "timestampId": "…", "date": "…", "receiptType": "receipt", "nonFiscal": false,
+  "fiscalState": null,                       // null | "refunded" | "canceled"
+  "operatorId": "665f…", "customer": { "contactId": "665f…" }, "fidelityCardCode": "ABC-1", "lotteryCode": null, "note": null,
+  "products": [ { "index": 0, "productId": "665f…", "lineId": "line-1", "code": "P-1", "name": { "it": "Pizza" }, "quantity": 2,
+                  "unitPrice": { "net": 10, "gross": 12.2 }, "discountPercent": 0, "taxRate": 22, "taxId": "tax-001", "barcode": null, "returned": 0 } ],
+  "totals": { "taxable": 20, "tax": 4.4, "total": 24.4, "discount": { "adjustment": null, "kind": null, "percentage": 0, "value": 0 } },
+  "payments": { "cash": 20, "electronic": 0, "cheque": 0, "tickets": 0, "fidelityCredit": 4.4, "unpaid": 0 },
+  "fiscalReceiptInfo": { "date": "…", "report": 101, "number": 12, "amount": 24.4 },
+  "refunds": [ { "timestampId": "R-1", "canceled": false, "date": "…", "products": [ { "index": 0, "productId": "665f…", "quantity": 1 } ],
+                 "value": { "taxable": 10, "tax": 2.2, "total": 12.2 }, "fiscalReceiptInfo": { … } } ],
+  "checks": { "status": "ok", "anomalies": 0 },
+  "version": "…"
+} }
+```
+- `index` è la **posizione stabile** della riga (le righe di una vendita non cambiano mai): è ciò che il reso usa. `returned` è la quantità già resa (da resi fatti dal nuovo sistema).
+- Del cliente c'è **solo l'id** del contatto: per i dati si legge il contatto (§4.10). Le anomalie e il ricalcolo si vedono nel backoffice, qui solo il numero.
+- Le ricerche per `receiptNumber`/`reportNumber` trovano la vendita da rendere o annullare (aggiungere `serialNumber` quando i numeri si ripetono tra più stampanti); `contactId` dà gli ultimi acquisti del cliente. Vale solo il proprio punto vendita, preventivi compresi.
+
+#### Rettifica — `PATCH …/sales/{saleId}`
+
+Fusione dei campi mandati (merge patch, `Content-Type: application/json`): `operatorId`, `payments` (gli importi non mandati restano), `customer` (`{ contactId }` o `null` per toglierlo), `fidelityCardCode` (o `null`), `fiscalReceiptInfo` (sostituisce tutto: serve per mandare il numero dello scontrino dopo la vendita) e `lotteryCode`. **Righe e totali non cambiano mai**: si correggono con un reso o un annullo. Una proprietà diversa è `422`; un corpo vuoto è `422`.
+
+Il cambio di carta, di cliente o del credito usato **riconcilia la fidelity** (i punti della carta vecchia tornano indietro, la nuova li riceve). Ripetere la stessa rettifica non scrive nulla e dà lo stesso `ETag`. Una vendita già annullata o già in una fattura riepilogativa si rettifica comunque (con un'anomalia).
+
+#### Reso — `POST …/sales/{saleId}/refunds`
+
+```
+{
+  "timestampId": "R-1732790000000-A1",
+  "date": "2026-11-28T09:00:00.000Z",
+  "operatorId": "665f…",
+  "products": [ { "index": 0, "productId": "665f…", "quantity": 1 } ],
+  "value": { "taxable": 10, "tax": 2.2, "total": 12.2 },
+  "fiscalReceiptInfo": { "date": "…", "report": 102, "number": 3, "amount": 12.2 }
+}
+```
+`index` è la posizione della riga nella vendita; `productId` è facoltativo e, se c'è, deve essere quello della riga (altrimenti `422`, `products.N.productId` / `incorrect`); un `index` che non è una riga, o è una riga con quantità venduta ≤ 0 (per esempio un reso nello stesso scontrino), è `422` (`products.N.index` / `incorrect`). `quantity` > 0. `value` è facoltativo (se manca lo calcola il cloud). Il reso è **parziale e ripetibile**: ogni reso ha il proprio `timestampId`; lo stesso `timestampId` dà `200` col reso già registrato. Una quantità oltre il venduto, o un reso su una vendita annullata, **non si rifiuta**: anomalia (`refundExceedsSold`, `refundAfterCancel`). Effetti: la vendita passa a `fiscalState: "refunded"`, il magazzino carica le quantità rese e la fidelity toglie i punti **in proporzione** a quanto è stato reso in tutto. Se la riga resa è una **ricarica** valida (vedi sopra), il suo credito si **storna in proporzione alla quantità resa** (ricarica da 100 resa per intero: −100; una unità su due da 50: −50), in modo cumulativo e **mai oltre quanto la vendita aveva ricaricato** (ogni riga conta `max(0, min(reso, venduto)) × max(0, prezzo)`; il totale resta tra 0 e le ricariche della vendita: un reso non dà mai credito); il credito usato per pagare non si tocca con un reso parziale (l'annullo storna tutto). Una vendita non può avere più di **200 elementi in `refund[]`** (un annullo ne è uno): un reso ne lascia sempre uno libero; oltre, `409` (`details` `refund` / `refundsLimit`): è un limite di dimensione del documento, non una regola di business. Un reso già registrato (stesso `timestampId`) è sempre `200`. Risposta: `{ "data": { "sale": <vendita>, "refund": <il reso> } }`.
+
+#### Annullo — `POST …/sales/{saleId}/cancellation`
+
+Corpo: `{ "date": "…", "operatorId": "665f…", "fiscalReceiptInfo": { … } }` (`date` obbligatoria). `fiscalState` diventa `"canceled"`; l'annullo si **aggiunge** ai resi (che restano); il magazzino torna com'era prima della vendita e la fidelity è stornata del tutto, ricariche comprese. **Idempotente per stato**: su una vendita già annullata la risposta è `200`, senza scrivere. Risposta: la vendita.
+
+#### Eliminazione — `DELETE …/sales/{saleId}`
+
+Solo per una vendita **non fiscale** — `sType` esattamente `true`, **senza numero di scontrino** (`fiscalReceiptInfo.number` assente o `null`: un preventivo che ha ricevuto un numero è una vendita fiscale) e non in una fattura riepilogativa — cioè il **preventivo che la cassa rielabora**: storna del tutto magazzino e fidelity, ne scrive la **lapide** e la elimina (`204`). Una vendita fiscale non si elimina mai: si annulla (`409`, `details` `nonFiscal` / `fiscal`); una vendita già in una fattura riepilogativa nemmeno (`409`, `status` / `invoiced`).
+
+**Un preventivo eliminato non torna.** La cassa dà alla vendita rielaborata un **nuovo** `timestampId`. Se però la coda offline reinvia la creazione del preventivo eliminato (la sua chiave `punto vendita + timestampId` ha la lapide; più preventivi del vecchio sistema con lo stesso `timestampId` si eliminano tutti, la lapide è una per chiave), la risposta è `200` con `{ "data": { "status": "deleted", "saleId": "…", "timestampId": "…" } }`, **senza** `Location` né `ETag`, **senza alcun effetto** (nessuna vendita, movimento o credito) e mai un errore `4xx` (bloccherebbe la coda). La cassa lo tratta come "già gestita".
+
+#### Vendite fatte dal vecchio sistema
+
+Un reso, un annullo, una rettifica o un'eliminazione di una vendita **scritta dal vecchio sistema** funzionano: alla prima operazione il cloud la **adotta** ricostruendo lo stato già applicato (magazzino dai suoi movimenti, fidelity dai dati salvati) e registra l'anomalia `legacyStateApproximated`. Per la fidelity di una vendita adottata il cloud usa le **formule del vecchio sistema** sui dati salvati: carta semplice `floor(totale lordo / regola)`; carta avanzata, credito usato e righe di ricarica come memorizzate, punti `floor(totale lordo / conversione)` per ogni raccolta del tipo di carta (alle condizioni di data e minimo della raccolta). Se la carta avanzata **non esisteva ancora** alla data della vendita (o non ha data di creazione) non si assume nessun effetto e si registra `legacyCardAfterSale`: non si restituisce mai credito che il vecchio sistema non aveva addebitato. Un punto vendita deve passare al nuovo sistema **tutto insieme**: non si fanno resi con il vecchio sistema su vendite create con questo.
+
 ## 5. Stati ed errori di ogni chiamata autenticata
 
 | Stato | `code` | Quando | Cosa fa il server di negozio |
@@ -564,13 +740,14 @@ Content-Type: application/json
 | `403` | `FORBIDDEN` | La chiamata non è aperta al server di negozio; oppure, nel catalogo, un campo di una voce condivisa con altri punti vendita (`details` nomina il campo). | Errore di integrazione, o per i campi condivisi: si possono cambiare solo i dati del proprio punto vendita. |
 | `403` | `OPERATOR_NOT_ALLOWED` | Scrittura del catalogo o di contatti e carte senza un operatore valido (§4.9, §4.10): la stessa risposta per ogni motivo. | Mostra "operatore non autorizzato"; non riprova. |
 | `403` | `FEATURE_DISABLED` | Reparti di un gruppo senza la funzione `cash`. | Non scarica i reparti. |
-| `404` | `NOT_FOUND` | Risorsa inesistente o non del proprio punto vendita (nel catalogo: un prodotto, una categoria di un altro punto vendita o di un altro gruppo; contatti e carte: di un altro gruppo). | Toglie la voce dalla propria copia; una voce che non esiste non si scrive. |
-| `409` | `CONFLICT` | Catalogo: la voce è nel cestino o è cambiata mentre si scriveva, la categoria è usata o c'è un ciclo, `Idempotency-Key` riusata con un corpo diverso. Contatti e carte (§4.10): contatto già nel cestino o cambiato mentre si scriveva, `account.email` o `account.phone` già usati, codice carta già esistente, saldo o punti che andrebbero sotto zero, rettifica dei punti di una carta avanzata dal contatto. | Rilegge la voce e riprova se ha senso. |
-| `412` | `PRECONDITION_FAILED` | Catalogo, contatti, carte: la voce non è più alla versione dell'`If-Match`. | Rilegge la voce (nuovo `ETag`) e riapplica la modifica. |
+| `404` | `NOT_FOUND` | Risorsa inesistente o non del proprio punto vendita (vendite: una vendita di un altro punto vendita o gruppo; nel catalogo: un prodotto, una categoria di un altro punto vendita o di un altro gruppo; contatti e carte: di un altro gruppo). | Toglie la voce dalla propria copia; una voce che non esiste non si scrive. |
+| `409` | `CONFLICT` | Vendite (§4.11): l'eliminazione di una vendita fiscale (o con numero di scontrino), già in una fattura riepilogativa o che è essa stessa una fattura (`receiptType` / `invoice`); resi o annullo oltre i 200 elementi di `refund[]` (`refundsLimit`). Catalogo: la voce è nel cestino o è cambiata mentre si scriveva, la categoria è usata o c'è un ciclo, `Idempotency-Key` riusata con un corpo diverso. Contatti e carte (§4.10): contatto già nel cestino o cambiato mentre si scriveva, `account.email` o `account.phone` già usati, codice carta già esistente, saldo o punti che andrebbero sotto zero, rettifica dei punti di una carta avanzata dal contatto. | Rilegge la voce e riprova se ha senso. |
+| `412` | `PRECONDITION_FAILED` | Catalogo, contatti, carte, vendite: la voce non è più alla versione dell'`If-Match`. | Rilegge la voce (nuovo `ETag`) e riapplica la modifica. |
 | `413` / `415` | `PAYLOAD_TOO_LARGE` / `UNSUPPORTED_MEDIA_TYPE` | Corpo oltre il limite (§4.9) o non JSON. | Errore di integrazione. |
-| `429` | `RATE_LIMITED` | Anche: oltre 120 scritture al minuto per chiave (catalogo, contatti e carte insieme). | Aspetta `Retry-After`. |
-| `422` | `VALIDATION_ERROR` | Parametro, identificativo o corpo non validi (anche `simpleCost`, `suppliers`, `image`, `gallery` nei prodotti, `image`, `icon` nelle categorie e `image` nelle marche); `details` nomina i campi. Mancano `If-Match` o `Idempotency-Key`. | Errore di integrazione, o dato da correggere. |
+| `429` | `RATE_LIMITED` | Anche: oltre 120 scritture al minuto per chiave (catalogo, contatti e carte insieme); oltre **600 scritture di vendite al minuto** per chiave (§4.11, limite a parte). | Aspetta `Retry-After` e rimanda la stessa richiesta (le vendite sono idempotenti). |
+| `422` | `VALIDATION_ERROR` | Parametro, identificativo o corpo non validi (vendite: chiavi `$`/`.` o troppo profonde nell'oggetto prodotto, più di 500 tra righe, modificatori e selezioni, proprietà sconosciute, posizione di un reso che non è una riga; anche `simpleCost`, `suppliers`, `image`, `gallery` nei prodotti, `image`, `icon` nelle categorie e `image` nelle marche); `details` nomina i campi. Mancano `If-Match` o `Idempotency-Key`. | Errore di integrazione, o dato da correggere. |
 | `429` | `RATE_LIMITED` | Oltre **600 richieste al minuto** per chiave. Contano tutte le richieste, anche quelle rifiutate. | Aspetta i secondi di `Retry-After`. |
+| `503` | `SERVICE_UNAVAILABLE` | Vendite: l'indice univoco della chiave non è disponibile: **nessuna vendita viene salvata** senza. | Riprova con attesa crescente. |
 | `5xx` | — | Errore del cloud. | Riprova con attesa crescente; segnala `X-Request-Id`. |
 
 Un punto vendita ripristinato dal cestino **non riottiene** la vecchia chiave: serve una nuova attivazione.
@@ -605,3 +782,5 @@ Queste operazioni **non** sono e non saranno aperte alla chiave di negozio: risp
 | 2026-11-25 | Configurazione del punto vendita (§4.5): `integrations.satispay.activationCode` non è più presente (si salva solo `keyId`); descritte `integrations.tsh.categoriesMap` e `categories`. Le nuove route del modulo delle integrazioni non sono aperte al negozio (§6). |
 | 2026-11-25 | Contatti, gruppi di contatti e carte fedeltà avanzate (§4.10): scarico incrementale dei contatti e delle carte, ricerca, dettaglio, scritture con l'operatore (permesso `contacts`), rettifiche e movimenti delle carte, rettifica dei punti delle carte semplici; nessuna eliminazione. Limite noto dello scarico incrementale delle carte (saldi). |
 | 2026-11-25 | Contatti e carte (§4.10): i movimenti scritti dal negozio portano `operator.store: true`; segnalazioni agli amministratori per i crediti oltre soglia e per i codici di carte avanzate già di altri contatti, traccia delle letture dei contatti (nessun rifiuto); regola dello scarico dei saldi. |
+| 2026-11-27 | Vendite (§4.11): creazione idempotente sul `timestampId` (mai rifiutata per regole di business: anomalie nel backoffice), ricerche, dettaglio, rettifica, resi parziali e ripetibili, annullo, eliminazione dei soli preventivi; importi decimali; limite proprio di 600 scritture al minuto per chiave; `X-Operator-Id` non richiesto (operatore nel corpo); adozione delle vendite del vecchio sistema. |
+| 2026-11-27 | Vendite (§4.11), correzioni: credito usato non negativo; `receiptType: partitioned` (madre di un tavolo diviso, senza fidelity); limiti dei numeri delle righe; ricariche solo da prodotti del catalogo, storno del credito di una ricarica con il reso, allerte `store.creditAlert`; eliminazione solo con `sType` `true` e senza numero di scontrino; la lapide di un preventivo eliminato (`200` `status: deleted`); operatore solo tra gli utenti di `GET /store-context/users`; al più 200 elementi in `refund[]`; formule del vecchio sistema nell'adozione. |

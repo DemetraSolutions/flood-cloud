@@ -29,6 +29,7 @@ describe('key model', () => {
         'contacts:write': false,
         'fidelityCards:read': false,
         'fidelityCards:write': false,
+        'sales:read': false,
       },
       companyIds: [],
       placeIds: [],
@@ -57,6 +58,7 @@ describe('key model', () => {
         'contacts:write': false,
         'fidelityCards:read': false,
         'fidelityCards:write': false,
+        'sales:read': false,
       },
       companyIds: ['c1'],
       placeIds: ['p1', 'p2'],
@@ -79,6 +81,7 @@ describe('key model', () => {
         'contacts:write': false,
         'fidelityCards:read': false,
         'fidelityCards:write': false,
+        'sales:read': false,
       },
     });
 
@@ -159,6 +162,7 @@ describe('key model', () => {
               'contacts:write': false,
               'fidelityCards:read': false,
               'fidelityCards:write': false,
+              'sales:read': false,
             },
             companyIds: ['c1'],
             placeIds: ['p9'],

@@ -246,13 +246,14 @@ describe('checkUserChange: permissions and matrix', () => {
     assert.deepEqual(checkUserChange(sa, null, defaultView('PA', { logs: { r: true, w: true } })), ['permissionNotHeld']);
   });
 
-  it('requires the actor to hold the documents flags: the read one through sales:read, the write one (which grants nothing) through his own matrix', () => {
+  it('requires the actor to hold the documents flags: the read one through sales:read, the write one through sales:write and sales:delete (his own matrix)', () => {
     const view = (flags: { r: boolean; w: boolean }) => defaultView('PA', { documents: flags });
     // The default matrix of an SA has documents r/w: he hands out both.
     assert.deepEqual(checkUserChange(actors.SA, null, view({ r: true, w: true })), []);
     // Without sales:read he cannot hand out the read; without his own write flag, not the write.
     assert.deepEqual(checkUserChange(actorWithout('SA', ['sales:read']), null, view({ r: true, w: false })), ['permissionNotHeld']);
-    const readOnly = { ...actors.SA, matrix: normalizeMatrix(legacyOf('SA', { documents: { r: true, w: false } })) };
+    // His permissions follow his matrix: with the write flag off he holds neither `sales:write` nor `sales:delete`.
+    const readOnly = { ...actorWithout('SA', ['sales:write', 'sales:delete']), matrix: normalizeMatrix(legacyOf('SA', { documents: { r: true, w: false } })) };
     assert.deepEqual(checkUserChange(readOnly, null, view({ r: true, w: false })), []);
     assert.deepEqual(checkUserChange(readOnly, null, view({ r: true, w: true })), ['permissionNotHeld']);
     // The inherited matrix follows the same rule.

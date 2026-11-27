@@ -12,6 +12,7 @@ import { I18nService } from '../../../core/i18n/i18n.service';
 import { TPipe } from '../../../core/i18n/t-pipe';
 import { failureMessage } from '../../forms/form-errors';
 import { createDebouncer } from '../../util/debouncer';
+import { Icon } from '../icon/icon';
 import { IconButton } from '../icon-button/icon-button';
 import { uniqueId } from '../unique-id';
 
@@ -32,11 +33,12 @@ export const SEARCH_COMBOBOX_DEBOUNCE_MS = 250;
  * used. Keys: arrows, Home, End, Enter, Escape. A clear button removes the choice.
  *
  * The chosen value lives in the parent (`value`, e.g. a URL parameter); `valueLabel` is the
- * name to show for a value the component did not choose itself (resolved by the parent).
+ * name to show for a value the component did not choose itself (resolved by the parent). An
+ * `error` is shown under the field, linked with `aria-describedby`, and sets `aria-invalid`.
  */
 @Component({
   selector: 'fc-search-combobox',
-  imports: [IconButton, TPipe],
+  imports: [Icon, IconButton, TPipe],
   templateUrl: './search-combobox.html',
   styleUrls: ['../field.css', './search-combobox.css'],
   host: { '(focusout)': 'onFocusOut($event)' },
@@ -61,11 +63,14 @@ export class SearchCombobox {
   readonly placeholder = input<string | null>(null);
   /** Accessible name of the clear button (already translated). */
   readonly clearLabel = input.required<string>();
+  /** Error message (already translated); empty or null when the choice is valid. */
+  readonly error = input<string | null>(null);
   /** The choice changed: the option chosen, `null` when cleared. */
   readonly choice = output<SearchOption | null>();
 
   protected readonly inputId = uniqueId('fc-search-combobox');
   protected readonly listId = `${this.inputId}-list`;
+  protected readonly errorId = `${this.inputId}-error`;
   protected readonly open = signal(false);
   protected readonly text = signal('');
   protected readonly items = signal<readonly SearchOption[]>([]);

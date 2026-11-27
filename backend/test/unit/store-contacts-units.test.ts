@@ -39,6 +39,29 @@ describe('the audit of the contacts and loyalty cards of a store', () => {
     ]);
   });
 
+  it('alerts a credit a backoffice user added with the same limits, the user as the actor and a counter of his own', async () => {
+    const { audit, activityLog } = audited();
+    const user = { userId: new ObjectId() };
+    const groupId = new ObjectId();
+    await audit.creditAddedByUser(user, groupId, client, 'c1', 0);
+    await audit.creditAddedByUser(user, groupId, client, 'c1', 100);
+    assert.equal(activityLog.entries.length, 0);
+    await audit.creditAddedByUser(user, groupId, client, 'c1', 100.5);
+    await audit.creditAddedByUser(user, groupId, noAddress, 'c1', 99.5);
+    await audit.creditAddedByUser(user, groupId, noAddress, 'c1', 5);
+    // Another user, and a store key, have their own counters.
+    await audit.creditAddedByUser({ userId: new ObjectId() }, groupId, client, 'c1', 90);
+    await audit.creditAdded(store, operator, client, 'c1', 90);
+    assert.equal('ip' in activityLog.entries[1]!, false, 'no address, none written');
+    assert.deepEqual(activityLog.entries.map((entry) => [entry.action, entry.actor.kind, entry.resource, entry.metadata?.['reason'], entry.groupId]), [
+      ['store.creditAlert', 'user', { type: 'fidelityCard', id: 'c1' }, 'operation', groupId],
+      ['store.creditAlert', 'user', { type: 'fidelityCard', id: 'c1' }, 'daily', groupId],
+    ]);
+    const broken = audited(undefined, { consume: () => Promise.reject(new Error('down')), peek: () => Promise.reject(new Error('down')) } as never);
+    await broken.audit.creditAddedByUser(user, groupId, client, 'c1', 10);
+    assert.equal(broken.log.events.filter((event) => event['level'] === 'error').length, 1);
+  });
+
   it('writes an alert without an address when the request has none, and never rejects: a failure is logged', async () => {
     const { audit, activityLog, log } = audited();
     await audit.cardRelinked(store, operator, noAddress, 'k1', 'c1', 2);
@@ -75,7 +98,7 @@ describe('the audit of the contacts and loyalty cards of a store', () => {
 
 describe('the contacts service of a store', () => {
   const caller = { kind: 'store' };
-  const noAudit: StoreContactsAudit = { creditAdded: () => Promise.resolve(), cardRelinked: () => Promise.resolve(), contactsRead: () => Promise.resolve() };
+  const noAudit: StoreContactsAudit = { creditAdded: () => Promise.resolve(), creditAddedByUser: () => Promise.resolve(), cardRelinked: () => Promise.resolve(), contactsRead: () => Promise.resolve() };
 
   it('does not turn a card that cannot be read after a write into a failure of the write: it is logged', async () => {
     const log = memoryLogger();
@@ -92,5 +115,20 @@ describe('the contacts service of a store', () => {
     assert.equal(await service.createContact(store, operator, access, {} as never, client), result);
     assert.equal(log.events.filter((event) => event['level'] === 'error').length, 1);
     void caller;
+  });
+
+  it('tells the credit of a card created without an initial balance as zero', async () => {
+    const added: number[] = [];
+    const audit: StoreContactsAudit = { ...noAudit, creditAdded: (_store, _operator, _client, _cardId, amount) => { added.push(amount); return Promise.resolve(); } };
+    const created = { entity: { id: 'c1' }, version: 'v' };
+    const service = createStoreContactsService({
+      contacts: {} as never,
+      contactGroups: {} as never,
+      cards: { create: () => Promise.resolve(created) } as never,
+      audit,
+      logger: memoryLogger().logger,
+    });
+    assert.equal(await service.createCard(store, operator, {} as never, { code: 'X1', cardTypeId: 't' } as never, client), created);
+    assert.deepEqual(added, [0]);
   });
 });

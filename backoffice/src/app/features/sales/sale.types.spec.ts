@@ -1,10 +1,12 @@
 import {
   badgeText,
+  invoiceNotQueued,
   periodOf,
   receiptLabel,
   SALE_BADGE_KEYS,
   saleBadges,
   SaleFilter,
+  SaleInvoice,
   saleParams,
   saleRoute,
   SaleRow,
@@ -143,5 +145,29 @@ describe('badgeText', () => {
 
   it('lists every kind of badge', () => {
     expect(SALE_BADGE_KEYS).toHaveLength(7);
+  });
+});
+
+describe('invoiceNotQueued', () => {
+  const invoice = (over: Partial<SaleInvoice> = {}): SaleInvoice => ({
+    documentId: 'd1',
+    number: null,
+    prefixSuffix: null,
+    year: null,
+    sendStatus: null,
+    notQueued: false,
+    documentFound: true,
+    ...over,
+  });
+
+  it('is false without an invoice and for an invoice that goes on', () => {
+    expect(invoiceNotQueued(null)).toBe(false);
+    expect(invoiceNotQueued(invoice())).toBe(false);
+    expect(invoiceNotQueued(invoice({ sendStatus: 'queued' }))).toBe(false);
+  });
+
+  it('is true when the server says the sending did not start, or the state of the document does', () => {
+    expect(invoiceNotQueued(invoice({ notQueued: true }))).toBe(true);
+    expect(invoiceNotQueued(invoice({ sendStatus: 'notQueued' }))).toBe(true);
   });
 });

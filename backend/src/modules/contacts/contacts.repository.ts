@@ -183,6 +183,21 @@ export interface ContactsRepository {
    * @returns The balance after, `null` when nothing matched (no such contact or card, or the balance would go below zero).
    */
   adjustPoints(principal: ScopeHolder, access: GroupAccess, id: ObjectId, code: string, delta: number): Promise<number | null>;
+  /**
+   * The contact whose simple card a sale moves (step VS2): the customer of the sale when it has the card code; otherwise the only contact of the group, not in the trash, that has it. A card whose points are not a number (or missing) does not
+   * count, as the points could not be added to it.
+   *
+   * @param customerId The customer of the sale, `null` when it has none.
+   * @returns The contact id, `none` when no contact has the card, `ambiguous` when more than one has it and none is the customer.
+   */
+  saleCardHolder(principal: ScopeHolder, access: GroupAccess, code: string, customerId: ObjectId | null): Promise<ObjectId | 'none' | 'ambiguous'>;
+  /**
+   * Adds `delta` (with its sign) to the points of a simple card of a contact that is not in the trash, for a sale (step VS2): atomically, by the code of the card (never by position) and **without** the guard of non-negativity of
+   * {@link ContactsRepository.adjustPoints}: a sale of the point of sale is never refused, only the manual adjustments are blocked below zero.
+   *
+   * @returns The points after, `null` when nothing matched (no such contact or card, or its points are not a number).
+   */
+  addSalePoints(principal: ScopeHolder, access: GroupAccess, id: ObjectId, code: string, delta: number): Promise<number | null>;
   /** The cards of a contact that is not in the trash (`{ fidelities }`), or `null`. */
   cardsOf(principal: ScopeHolder, access: GroupAccess, id: ObjectId): Promise<Document | null>;
   /**
@@ -413,6 +428,26 @@ export function createContactsRepository(databases: Databases): ContactsReposito
         { _id: id, trash: { $ne: true }, fidelities: { $elemMatch: { code, points: balance } } },
         { $inc: { 'fidelities.$[card].points': delta } },
         { arrayFilters: [{ 'card.code': code, 'card.points': balance }], returnDocument: 'after', projection: { fidelities: 1 } },
+      );
+      const card = ((updated?.['fidelities'] ?? []) as Document[]).find((candidate) => candidate['code'] === code);
+      return typeof card?.['points'] === 'number' ? card['points'] : null;
+    },
+
+    saleCardHolder: async (principal, access, code, customerId) => {
+      const holds = { fidelities: { $elemMatch: { code, $or: [{ points: { $exists: false } }, { points: { $type: 'number' } }] } } };
+      if (customerId !== null && (await read(() => contacts(principal, access).findOne({ _id: customerId, trash: { $ne: true }, ...holds }, { projection: { _id: 1 }, maxTimeMS: LIST_MAX_TIME_MS }))) !== null) {
+        return customerId;
+      }
+      const found = await read(() => contacts(principal, access).find({ trash: { $ne: true }, ...holds }, { projection: { _id: 1 }, limit: 2, maxTimeMS: LIST_MAX_TIME_MS }).toArray());
+      return found.length === 0 ? 'none' : found.length === 1 ? (found[0]!['_id'] as ObjectId) : 'ambiguous';
+    },
+
+    addSalePoints: async (principal, access, id, code, delta) => {
+      const numeric = { $or: [{ 'card.points': { $exists: false } }, { 'card.points': { $type: 'number' } }] };
+      const updated = await contacts(principal, access).findOneAndUpdate(
+        { _id: id, trash: { $ne: true }, fidelities: { $elemMatch: { code, $or: [{ points: { $exists: false } }, { points: { $type: 'number' } }] } } },
+        { $inc: { 'fidelities.$[card].points': delta } },
+        { arrayFilters: [{ 'card.code': code, ...numeric }], returnDocument: 'after', projection: { fidelities: 1 } },
       );
       const card = ((updated?.['fidelities'] ?? []) as Document[]).find((candidate) => candidate['code'] === code);
       return typeof card?.['points'] === 'number' ? card['points'] : null;

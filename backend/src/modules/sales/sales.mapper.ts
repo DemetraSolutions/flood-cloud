@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import type { Document } from 'mongodb';
 import { dateOf } from '../groups/catalogs/kit.ts';
 import { clearText, displayNameOf } from '../contacts/contacts.document.ts';
+import { versionOf } from './sales.document.ts';
 
 /** Most product lines the detail of a sale shows. */
 export const SALE_MAX_LINES = 500;
@@ -53,6 +54,67 @@ export interface SaleRow {
 export interface SaleRefundDetail extends SaleRefundRow {
   readonly date: string | null;
   readonly amount: number;
+  /** The refund was canceled: it no longer counts in what was returned. */
+  readonly canceled: boolean;
+}
+
+/** One difference of a total found by the check of the server: what the point of sale said and what the server computes (never a cost). */
+export interface SaleCheckTotal {
+  readonly field: string;
+  readonly pos: number | null;
+  readonly server: number | null;
+}
+
+/** One difference of a line found by the check of the server; `pos` and `server` only for a difference of a number. */
+export interface SaleCheckLine {
+  readonly index: number;
+  readonly code: string;
+  readonly pos: number | null;
+  readonly server: number | null;
+}
+
+/** The check the server made of the sale when it was written; `null` in the detail when the sale has none (a sale of the legacy). */
+export interface SaleServerCheck {
+  readonly checkedAt: string | null;
+  readonly status: 'ok' | 'differences' | null;
+  readonly totals: readonly SaleCheckTotal[];
+  readonly lines: readonly SaleCheckLine[];
+  readonly linesTruncated: boolean;
+}
+
+/** An anomaly the server found and went around: where it comes from and what it is, with the non personal data it saved (never a card code). */
+export interface SaleAnomalyView {
+  readonly at: string | null;
+  readonly operation: string | null;
+  readonly source: string | null;
+  readonly code: string | null;
+  readonly productId: string | null;
+  readonly collectionId: string | null;
+  readonly type: string | null;
+  /** The ids of the sales a deferred invoice could not gather. */
+  readonly ids: readonly string[];
+  /** The paths of the fields of the invoice that were out of their domain. */
+  readonly fields: readonly string[];
+}
+
+/** The invoice document of a sale: the number it was given and, read from the document itself, where it is in the sending. */
+export interface SaleInvoiceDetail {
+  readonly documentId: string | null;
+  readonly number: number | null;
+  readonly prefixSuffix: string | null;
+  readonly year: number | null;
+  /** The state of sending of the document as it is now (`queued`, `notQueued`, the one the e-invoicing moved it to); `null` when the document has none (it is not sent from here) or was not found. */
+  readonly sendStatus: string | null;
+  /** The invoice goes through a hub and is not in the send queue yet. */
+  readonly notQueued: boolean;
+  /** Whether the document of the invoice exists in the group (the reference of the sale may be left over). */
+  readonly documentFound: boolean;
+}
+
+/** An operation made on a sale by this backend: its kind and when, never who. */
+export interface SaleOperationView {
+  readonly kind: string | null;
+  readonly at: string | null;
 }
 
 /** A product line of a sale. */
@@ -68,6 +130,10 @@ export interface SaleLine {
   readonly discount: number;
   /** The modifiers of the line as text (`+ extra cheese, - onion`), for information. */
   readonly variants: string | null;
+  /** The position of the line in the sale (what a refund names). */
+  readonly index: number;
+  /** How much of the line was already returned by the refunds that were not canceled; what is still returnable is `quantity - returned`. */
+  readonly returned: number;
 }
 
 /** A sale as the detail shows it. */
@@ -90,6 +156,20 @@ export interface SaleDetail extends Omit<SaleRow, 'refunds'> {
   /** Whether the sale used a loyalty card, shown to everyone. */
   readonly fidelityCardUsed: boolean;
   readonly note: string | null;
+  /** The sale was canceled. */
+  readonly canceled: boolean;
+  /** What the refunds that were not canceled returned, with tax. */
+  readonly returnedValue: number;
+  /** The check of the server; `null` for a sale without one. */
+  readonly serverCheck: SaleServerCheck | null;
+  /** The anomalies of the sale (the newest 200), oldest first; none for a sale of the legacy. */
+  readonly anomalies: readonly SaleAnomalyView[];
+  /** The invoice of the sale; `null` when it has none. */
+  readonly invoice: SaleInvoiceDetail | null;
+  /** The operations made by this backend, oldest first. */
+  readonly operations: readonly SaleOperationView[];
+  /** The version of the sale (the strong tag of `If-Match` of the writes of the backoffice, which carry it in quotes): it changes with every write of the new backend and of the legacy. */
+  readonly version: string;
 }
 
 /** The fields the rows of the table read: never the whole sale. */
@@ -121,6 +201,9 @@ export const DETAIL_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
   ...ROW_PROJECTION,
   'refund.fiscalReceiptInfo.date': 1,
   'refund.fiscalReceiptInfo.amount': 1,
+  'refund.canceled': 1,
+  'refund.returnedGoods.index': 1,
+  'refund.returnedGoods.returnedQt': 1,
   'refund.returnedGoodsValue.priceTaxed': 1,
   'products._id': 1,
   'products.code': 1,
@@ -148,29 +231,53 @@ export const DETAIL_PROJECTION: Readonly<Record<string, 1>> = Object.freeze({
   'fiscalReceiptInfo.amount': 1,
   'fidelityCard.code': 1,
   savedCheckoutsNote: 1,
+  // What the version of the sale is made of (`versionOf`): its last update and how many operations and refunds it has.
+  updateDate: 1,
+  'floodCloud.operations.kind': 1,
+  'floodCloud.operations.at': 1,
+  // The check and the anomalies of the server (never the key, the hash of the body, the loyalty data or who made the sale).
+  'floodCloud.serverCheck.checkedAt': 1,
+  'floodCloud.serverCheck.status': 1,
+  'floodCloud.serverCheck.totals': 1,
+  'floodCloud.serverCheck.lines': 1,
+  'floodCloud.serverCheck.linesTruncated': 1,
+  'floodCloud.anomalies.at': 1,
+  'floodCloud.anomalies.operation': 1,
+  'floodCloud.anomalies.source': 1,
+  'floodCloud.anomalies.code': 1,
+  'floodCloud.anomalies.productId': 1,
+  'floodCloud.anomalies.collectionId': 1,
+  'floodCloud.anomalies.type': 1,
+  'floodCloud.anomalies.ids': 1,
+  'floodCloud.anomalies.fields': 1,
+  // The reference to the invoice document, to read its state of sending.
+  'floodCloud.invoice.documentId': 1,
+  'floodCloud.invoice.number': 1,
+  'floodCloud.invoice.prefixSuffix': 1,
+  'floodCloud.invoice.year': 1,
 });
 
 /** A plain object, or `null` for anything else (a list, a text, a missing value). */
-function objectOf(raw: unknown): Document | null {
+export function objectOf(raw: unknown): Document | null {
   return typeof raw === 'object' && raw !== null && !Array.isArray(raw) && !(raw instanceof ObjectId) && !(raw instanceof Date) ? (raw as Document) : null;
 }
 
 /** A finite number; `null` for a text, a `NaN` (the legacy stores one when a value was missing) and anything else. */
-function numberOf(raw: unknown): number | null {
+export function numberOf(raw: unknown): number | null {
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
 }
 
 /** An amount: a finite number, `0` for anything else. */
-const amountOf = (raw: unknown): number => numberOf(raw) ?? 0;
+export const amountOf = (raw: unknown): number => numberOf(raw) ?? 0;
 
 /** An integer number of a receipt or of a report: a finite whole number, or a text of digits; `null` otherwise. */
-function integerOf(raw: unknown): number | null {
+export function integerOf(raw: unknown): number | null {
   const value = typeof raw === 'string' && /^\d{1,15}$/.test(raw) ? Number(raw) : numberOf(raw);
   return value !== null && Number.isSafeInteger(value) ? value : null;
 }
 
 /** The id of a reference as text: an `ObjectId`, or a text of 24 hexadecimal characters (the old documents); `null` otherwise. */
-function idOf(raw: unknown): string | null {
+export function idOf(raw: unknown): string | null {
   if (raw instanceof ObjectId) {
     return raw.toHexString();
   }
@@ -178,13 +285,13 @@ function idOf(raw: unknown): string | null {
 }
 
 /** A text of the sale: trimmed, cut to a safe length, `null` when it is missing, empty or not a text. */
-function textOf(raw: unknown, max = MAX_TEXT_LENGTH): string | null {
+export function textOf(raw: unknown, max = MAX_TEXT_LENGTH): string | null {
   const text = typeof raw === 'string' ? raw.trim().slice(0, max) : '';
   return text === '' ? null : text;
 }
 
 /** The fiscal numbers of a `fiscalReceiptInfo`, `null` when it has none. */
-function fiscalNumberOf(raw: unknown): FiscalNumber | null {
+export function fiscalNumberOf(raw: unknown): FiscalNumber | null {
   const info = objectOf(raw);
   const report = integerOf(info?.['reportNumber']);
   const number = integerOf(info?.['number']);
@@ -192,7 +299,7 @@ function fiscalNumberOf(raw: unknown): FiscalNumber | null {
 }
 
 /** A name kept by language (`{ it: 'Pizza', en: 'Pizza' }`) in one language: the asked one, else the first text the object has; `null` for anything else. */
-function localizedOf(raw: unknown, language: string | null): string | null {
+export function localizedOf(raw: unknown, language: string | null): string | null {
   const names = objectOf(raw);
   if (names === null) {
     return null;
@@ -202,10 +309,10 @@ function localizedOf(raw: unknown, language: string | null): string | null {
 }
 
 /** A list of stored values: the list, or none when the value is not a list. */
-const listOf = (raw: unknown): unknown[] => (Array.isArray(raw) ? (raw as unknown[]) : []);
+export const listOf = (raw: unknown): unknown[] => (Array.isArray(raw) ? (raw as unknown[]) : []);
 
 /** The refunds of a sale: every element that is an object, with its fiscal numbers (`null` when it has none). */
-function refundsOf(raw: unknown): Document[] {
+export function refundsOf(raw: unknown): Document[] {
   return listOf(raw).map(objectOf).filter((refund): refund is Document => refund !== null);
 }
 
@@ -269,7 +376,7 @@ function variantsOf(raw: unknown, language: string | null): string | null {
 }
 
 /** A product line of a sale. */
-function lineOf(raw: unknown, language: string | null): SaleLine {
+function lineOf(raw: unknown, index: number, returned: number, language: string | null): SaleLine {
   const line = objectOf(raw);
   const price = objectOf(line?.['price']);
   return {
@@ -280,6 +387,92 @@ function lineOf(raw: unknown, language: string | null): SaleLine {
     unitPrice: amountOf(price?.['taxed']),
     discount: amountOf(price?.['discount']),
     variants: variantsOf(line?.['selectedVariants'], language),
+    index,
+    returned,
+  };
+}
+
+/** How much of each line the refunds that were not canceled returned, by position of the line (a position outside the lines is ignored). */
+function returnedByLine(refunds: readonly Document[], count: number): number[] {
+  const returned = Array.from({ length: count }, () => 0);
+  for (const refund of refunds) {
+    for (const good of listOf(refund['returnedGoods']).map(objectOf)) {
+      const index = integerOf(good?.['index']);
+      if (refund['canceled'] !== true && index !== null && index >= 0 && index < count) {
+        returned[index] = returned[index]! + amountOf(good?.['returnedQt']);
+      }
+    }
+  }
+  return returned;
+}
+
+/** The check of the server saved in a sale, read tolerantly; `null` when the sale has none. */
+function serverCheckOf(raw: unknown): SaleServerCheck | null {
+  const check = objectOf(raw);
+  if (check === null) {
+    return null;
+  }
+  const status = check['status'];
+  return {
+    checkedAt: dateOf(check['checkedAt']),
+    status: status === 'ok' || status === 'differences' ? status : null,
+    totals: listOf(check['totals']).flatMap((entry) => {
+      const total = objectOf(entry);
+      return total === null ? [] : [{ field: textOf(total['field']) ?? '', pos: numberOf(total['pos']), server: numberOf(total['server']) }];
+    }),
+    lines: listOf(check['lines']).flatMap((entry) => {
+      const line = objectOf(entry);
+      const index = integerOf(line?.['index']);
+      return line === null || index === null ? [] : [{ index, code: textOf(line['code']) ?? '', pos: numberOf(line['pos']), server: numberOf(line['server']) }];
+    }),
+    linesTruncated: check['linesTruncated'] === true,
+  };
+}
+
+/** A list of texts of an anomaly, the ones that are not texts left out. */
+const textsOf = (raw: unknown): string[] => listOf(raw).flatMap((entry) => textOf(entry) ?? []);
+
+/** The anomalies of a sale: the fields of the allowlist only (the others a document may hold are never read). */
+function anomaliesOf(raw: unknown): SaleAnomalyView[] {
+  return listOf(raw).flatMap((entry) => {
+    const anomaly = objectOf(entry);
+    return anomaly === null
+      ? []
+      : [{ at: dateOf(anomaly['at']), operation: textOf(anomaly['operation']), source: textOf(anomaly['source']), code: textOf(anomaly['code']), productId: idOf(anomaly['productId']), collectionId: idOf(anomaly['collectionId']), type: textOf(anomaly['type']), ids: textsOf(anomaly['ids']), fields: textsOf(anomaly['fields'])}];
+  });
+}
+
+/**
+ * What to read to know the state of the invoice of a sale: its document by id when the sale carries the reference (`floodCloud.invoice.documentId`), else, for a sale of the legacy that is an invoice, the document of the same company, date and sale.
+ *
+ * @param sale The stored sale, read with {@link DETAIL_PROJECTION}.
+ * @returns The filter on `documents`, or `null` when the sale has no invoice to look for.
+ */
+export function invoiceFilterOf(sale: Document): Document | null {
+  const documentId = idOf(objectOf(objectOf(sale['floodCloud'])?.['invoice'])?.['documentId']);
+  if (documentId !== null) {
+    return { _id: new ObjectId(documentId) };
+  }
+  return sale['receiptType'] === 'invoice' && sale['companyId'] !== undefined && sale['date'] instanceof Date ? { companyId: sale['companyId'], date: sale['date'], saleId: sale['_id'] } : null;
+}
+
+/** The invoice of a sale from its reference and from its document (as `invoiceFilterOf` found it, `null` when there is none). */
+function invoiceOf(sale: Document, invoiceDocument: Document | null): SaleInvoiceDetail | null {
+  const reference = objectOf(objectOf(sale['floodCloud'])?.['invoice']);
+  const documentId = idOf(reference?.['documentId']) ?? idOf(invoiceDocument?.['_id']);
+  if (documentId === null) {
+    return null;
+  }
+  const date = invoiceDocument?.['date'];
+  const sendStatus = textOf(invoiceDocument?.['sendStatus']);
+  return {
+    documentId,
+    number: integerOf(reference?.['number']) ?? integerOf(invoiceDocument?.['number']),
+    prefixSuffix: textOf(reference?.['prefixSuffix']) ?? textOf(invoiceDocument?.['prefixSuffix']),
+    year: integerOf(reference?.['year']) ?? (date instanceof Date ? date.getUTCFullYear() : null),
+    sendStatus,
+    notQueued: sendStatus === 'notQueued',
+    documentFound: invoiceDocument !== null,
   };
 }
 
@@ -290,20 +483,24 @@ function lineOf(raw: unknown, language: string | null): SaleLine {
  * @param operators The name of the operator of the sale, by hexadecimal id.
  * @param language The language of the user, for the names of the products; the first one of each name when it has none.
  * @param showCardCode Whether the caller may see the code of the loyalty card (`fidelity:read`).
+ * @param invoiceDocument The document of the invoice of the sale as it is now in the group (the state of sending is the one the e-invoicing keeps there), `null` when there is none or it was not found.
  */
-export function saleDetail(document: Document, operators: ReadonlyMap<string, string>, language: string | null, showCardCode: boolean): SaleDetail {
+export function saleDetail(document: Document, operators: ReadonlyMap<string, string>, language: string | null, showCardCode: boolean, invoiceDocument: Document | null): SaleDetail {
   const { refunds: _refunds, ...row } = saleRow(document, operators);
   const receipt = objectOf(document['fiscalReceiptInfo']);
   const adjustment = document['adjustmentType'];
   const lines = listOf(document['products']);
   const cardCode = textOf(objectOf(document['fidelityCard'])?.['code']);
+  const refunds = refundsOf(document['refund']);
+  const returned = returnedByLine(refunds, lines.length);
+  const cloud = objectOf(document['floodCloud']);
   return {
     ...row,
-    refunds: refundsOf(document['refund']).map((refund) => {
+    refunds: refunds.map((refund) => {
       const info = objectOf(refund['fiscalReceiptInfo']);
-      return { ...(fiscalNumberOf(info) ?? { report: null, number: null }), date: dateOf(info?.['date']), amount: amountOf(objectOf(refund['returnedGoodsValue'])?.['priceTaxed']) };
+      return { ...(fiscalNumberOf(info) ?? { report: null, number: null }), date: dateOf(info?.['date']), amount: amountOf(objectOf(refund['returnedGoodsValue'])?.['priceTaxed']), canceled: refund['canceled'] === true };
     }),
-    products: lines.slice(0, SALE_MAX_LINES).map((line) => lineOf(line, language)),
+    products: lines.slice(0, SALE_MAX_LINES).map((line, index) => lineOf(line, index, returned[index]!, language)),
     productsCount: lines.length,
     totals: {
       total: row.total,
@@ -323,5 +520,15 @@ export function saleDetail(document: Document, operators: ReadonlyMap<string, st
     fidelityCardCode: showCardCode ? cardCode : null,
     fidelityCardUsed: cardCode !== null,
     note: textOf(document['savedCheckoutsNote'], MAX_NOTE_LENGTH),
+    canceled: row.fiscalState === 'canceled',
+    returnedValue: Math.round(refunds.reduce((sum, refund) => sum + (refund['canceled'] === true ? 0 : amountOf(objectOf(refund['returnedGoodsValue'])?.['priceTaxed'])), 0) * 100) / 100,
+    serverCheck: serverCheckOf(cloud?.['serverCheck']),
+    anomalies: anomaliesOf(cloud?.['anomalies']),
+    invoice: invoiceOf(document, invoiceDocument),
+    operations: listOf(cloud?.['operations']).flatMap((entry) => {
+      const operation = objectOf(entry);
+      return operation === null ? [] : [{ kind: textOf(operation['kind']), at: dateOf(operation['at']) }];
+    }),
+    version: versionOf(document),
   };
 }

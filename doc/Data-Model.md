@@ -112,7 +112,7 @@ Realizzata (passo 4A, D-09, decisione dell'utente del 2026-11-06): una ragione s
 | `phone` | string \| null | |
 | `source` | `manual` \| `migration` \| `user` | creato da "Nuovo dealer", dalla migrazione o dalla creazione di un utente D |
 | `createdAt`, `updatedAt`, `createdBy` | | |
-Nessun validatore del database (D-32); indice univoco parziale `vatNumber_1` (solo quando è stringa). Campo **opzionale** `priceOverrides` (passo 9-ter/4): `{ plans?: { <chiavePiano>: centesimi }, services?: { <servizio>: centesimi } }`, parziale, stessi limiti del listino (al più 30 piani); assente = nessuna personalizzazione; scritto solo dal PSA (`PUT /v1/dealers/{dealerId}/price-overrides`) con un `$set` guardato dal valore letto, un insieme vuoto lo toglie (`$unset`); non compare nelle risposte dell'anagrafica. Creazione del dealer e del suo utente D nella stessa transazione; l'eliminazione definitiva dell'utente D elimina anche l'anagrafica. I dealer esistenti sono stati registrati con lo script `migrate:dealers` (ragione sociale = username) il 2026-11-06: 1 in `development`, 5 in `production`.
+Nessun validatore del database (D-32); indice univoco parziale `vatNumber_1` (solo quando è stringa). Campo **opzionale** `priceOverrides` (passo 9-ter/4): `{ plans?: { <chiavePiano>: centesimi }, services?: { <servizio>: centesimi } }`, parziale, stessi limiti del listino (al più 30 piani); assente = nessuna personalizzazione; scritto solo dal PSA (`PUT /v1/dealers/{dealerId}/price-overrides`) con un `$set` guardato dal valore letto, un insieme vuoto lo toglie (`$unset`); non compare nelle risposte dell'anagrafica. Campo **opzionale** `integrations.aruba` (passo EI1): l'account Aruba del dealer per la fatturazione elettronica (hub `aruba__<id del dealer>`), vedi **Account Aruba** sotto; scritto solo dal PSA con `$set`/`$unset` della sola chiave `integrations.aruba` (mai la sostituzione del documento, le altre chiavi di `integrations` restano), non compare nelle risposte dell'anagrafica. Creazione del dealer e del suo utente D nella stessa transazione; l'eliminazione definitiva dell'utente D elimina anche l'anagrafica. I dealer esistenti sono stati registrati con lo script `migrate:dealers` (ragione sociale = username) il 2026-11-06: 1 in `development`, 5 in `production`.
 
 ## userCredentials — credenziali del nuovo backend
 Realizzata (passo 3A, D-03): `_id` = id dell'utente, `passwordHash` (scrypt `scrypt$N$r$p$salt$hash`, facoltativo), `legacyHashFingerprint` (SHA-256 dell'hash legacy da cui deriva, o null), `passwordChangedAt`, `failedLogins`, `lockedUntil` (blocco progressivo dal 5° fallimento: 1, 2, 4, 8, poi 15 minuti; azzerati dal reset dell'amministratore), `mustChangePassword` (password provvisoria impostata da un amministratore: va cambiata al primo accesso; passo 3B), `lastLoginAt`, `createdAt`, `updatedAt`. Nessun indice oltre `_id`.
@@ -323,7 +323,7 @@ Collection `legacy-write` (`PRODUCTS_CATEGORIES_OWNED_FIELDS` e `PRODUCTS_CATEGO
 Riferimenti alla categoria (controllati prima di eliminarla, vedi `doc/API.md`): `products_categories.parentId` e `variantsCategories`; `products.categories`, `products.variantsCategories`, `products.selectableBundleProducts[].categoryId`, `products.selectableVariantsBundleProducts[].categoryId`; `groups.promotions[]` (`conditions.categories.ids`, `actions.categoriesIds`); nei punti vendita (letti dalle copie in `common.places`) `printStations[].summaryCategoriesIds`, `kiosk.upsellingCategoryId`, `kiosk.productsCategories[]._id`, `selfOrdering.priceListsConfig.<listino>.productsCategories[]._id`, `integrations.tsh.categoriesMap.<idCategoria>`. Degli id dei punti vendita (postazioni di stampa, centri di produzione) si leggono solo `printStations[].id` e `productionCenter[].id`.
 
 ## products — prodotti del gruppo (database del gruppo)
-Collection `legacy-write` (`PRODUCTS_OWNED_FIELDS`, `PRODUCTS_OWNED_TREES`, `PRODUCTS_STOCK_LEAVES` e `PRODUCTS_INSERT_ONLY_FIELDS`, passo C3): il backend inserisce documenti interi nella forma che scrive il backoffice legacy (`POST /v1/groups/{groupId}/products`, 58 chiavi, array sempre presenti), modifica solo i campi posseduti con `$set`/`$unset` (per **percorso foglia** dentro `availability`, `variant`, `modularBundle`, `colors.pos`, `shippingInfo`, `roomsSettings`, `integrations`, `medias.images`; le mappe `printStations` e `printStationsNoRooms` come alberi, una voce per punto vendita; `quantity` solo alle foglie `quantity.__<placeId>.__<storageId>.min|max|location`), imposta `trash`/`trashDate` ed elimina (definitivamente, solo dal cestino). **Mai scritti**: `quantity.*.value`, `quantity` come oggetto intero (nel registro è solo-inserimento e lettura, come `lastAveragePrice`: l'ultima barriera rifiuta `quantity`, `quantity.__p`, `quantity.__p.__s` e `quantity.__p.__s.value`; si scrivono solo le foglie `min|max|location`) e `lastAveragePrice` (li muove il magazzino; `lastAveragePrice` si scrive solo azzerato in un documento nuovo), `tags`, `related`, `parentId` (sempre vuoti, solo in un documento nuovo), `integrations.easyappear` (`false` in un documento nuovo), e ogni chiave che il registro non elenca (quelle del POS e delle integrazioni restano). I prezzi (`prices`) sono scritti dalle route del prodotto e, nella sola copia dell'aliquota, dal riallineamento di un'aliquota del gruppo (`prices[].tax` e `prices[].taxData`, con `price` ricalcolato). Nessun indice (a oggi in 29 database su 150 ci sono `barcode.value_1` e `code_1`, creati altrove; le ricerche per `code`, barcode e PLU sono scansioni limitate con `maxTimeMS`). Dati reali del 2026-11-23: 94.437 prodotti, fino a 5.172 per gruppo e 28 KB per documento, 16.159 nel cestino.
+Collection `legacy-write` (`PRODUCTS_OWNED_FIELDS`, `PRODUCTS_OWNED_TREES`, `PRODUCTS_STOCK_LEAVES` e `PRODUCTS_INSERT_ONLY_FIELDS`, passo C3): il backend inserisce documenti interi nella forma che scrive il backoffice legacy (`POST /v1/groups/{groupId}/products`, 58 chiavi, array sempre presenti), modifica solo i campi posseduti con `$set`/`$unset` (per **percorso foglia** dentro `availability`, `variant`, `modularBundle`, `colors.pos`, `shippingInfo`, `roomsSettings`, `integrations`, `medias.images`; le mappe `printStations` e `printStationsNoRooms` come alberi, una voce per punto vendita; `quantity` solo alle foglie `quantity.__<placeId>.__<storageId>.min|max|location`), imposta `trash`/`trashDate` ed elimina (definitivamente, solo dal cestino). **Mai scritti dal catalogo**: `quantity.*.value` (dal passo VS1 lo muove solo il servizio `stock` con `$inc`, sezione `warehouse`), `quantity` come oggetto intero (nel registro è solo-inserimento e lettura, come `lastAveragePrice`: l'ultima barriera rifiuta `quantity`, `quantity.__p`, `quantity.__p.__s` e `quantity.__p.__s.value`; si scrivono solo le foglie `min|max|location`) e `lastAveragePrice` (li muove il magazzino; `lastAveragePrice` si scrive solo azzerato in un documento nuovo), `tags`, `related`, `parentId` (sempre vuoti, solo in un documento nuovo), `integrations.easyappear` (`false` in un documento nuovo), e ogni chiave che il registro non elenca (quelle del POS e delle integrazioni restano). I prezzi (`prices`) sono scritti dalle route del prodotto e, nella sola copia dell'aliquota, dal riallineamento di un'aliquota del gruppo (`prices[].tax` e `prices[].taxData`, con `price` ricalcolato). Nessun indice (a oggi in 29 database su 150 ci sono `barcode.value_1` e `code_1`, creati altrove; le ricerche per `code`, barcode e PLU sono scansioni limitate con `maxTimeMS`). Dati reali del 2026-11-23: 94.437 prodotti, fino a 5.172 per gruppo e 28 KB per documento, 16.159 nel cestino.
 
 **Sincronizzazione dei tabacchi (passo C7).** Scrive questa collection con `bulkWrite` in una transazione, **senza nessuna chiave nuova**: inserisce prodotti interi di `type: 'tobaccos'` e, sui prodotti `tobaccos`/`games`/`monopoly` abbinati per `code`, imposta soltanto `noDiscount`, `availability.warehouse`, `name.it`, `shortName.it`, `description.it`, `shortDescription.it`, `categories`, `prices`, `barcode` (se il listino ne ha), `placesAvailability` e `updateDate`, più `status` (disattivazione dei tabacchi usciti dal listino, riattivazione di quelli tornati). Tutti campi già posseduti.
 
@@ -360,7 +360,7 @@ Mapping campo API ↔ campo del documento (le chiavi senza funzione del gruppo n
 | `prices[]` | `prices[] { id, listId, currency, tax, taxData{ id, value, department, description, natura }, price, taxed, discount, startDate, endDate, startTimeDaily, endTimeDaily, weekDays, fromQt, maxQtSell }` | vedi sotto |
 | `places[] { placeId, favorite, favoriteHandheld, position, productionCenterId }` | `placesAvailability[] { id, favorite, favoriteHandheld, position, productionCenterId }` | **due forme**: oggetti (69.305 elementi) e ObjectId semplici (78, formato storico, riscritti nella forma attuale solo quando si scrive `places`); vuota o assente in 30.996 documenti = per tutti; 78 riferimenti a punti vendita inesistenti |
 | `printStations`, `counterPrintStations` | `printStations`, `printStationsNoRooms` | mappe `{ "__<placeId>": [idPostazione] }` |
-| `stock { <placeId> { <storageId> { quantity, min, max, location } } }` | `quantity { "__<placeId>" { "__<storageId>" { value, min, max, location } } }` | `value` sola lettura (`$inc` del magazzino); si scrivono `min`, `max`, `location` |
+| `stock { <placeId> { <storageId> { quantity, min, max, location } } }` | `quantity { "__<placeId>" { "__<storageId>" { value, min, max, location } } }` | `value` sola lettura per il catalogo (`$inc` del servizio `stock`, passo VS1); si scrivono `min`, `max`, `location` |
 | `costs` | `lastAveragePrice { lastSupplierId, total{ lastPrice, averagePrice, weightedAveragePrice, … }, suppliers{ <id> { … } } }` | solo lettura; zero in un documento nuovo |
 | `simpleCost` | `simpleCost` | numero o `null` |
 | `suppliers[] { contactId, code, name, minQuantity, deliveryTime, deliveryTimeUnit, favorite, priceLists[] }` | `suppliers[] { id, code, name, minQt, deliveryTime, deliveryTimeUnit, favorite, companyLists[{ id, price, discount1, discount2, discount3 }] }` | `id` ObjectId (o testo, scritto dal magazzino), `delivetyTime` (refuso del magazzino) letto come `deliveryTime`; le chiavi sconosciute di un elemento restano |
@@ -407,10 +407,17 @@ Passo 9-ter. Letta da tutti (select del backoffice, POS), scritta dal solo PSA. 
 
 Campi posseduti (`COUNTRIES_OWNED_FIELDS`): `code`, `name`, `areas`, `insertDate`, `updateDate`; ogni altra chiave di un paese o di una provincia è del legacy e non si tocca mai. Scritture: inserimento di un documento intero (`areas: []`), `$set` di `name` e `updateDate`, `$push` / `$pull` / `$set` posizionale (`arrayFilters`) su `areas`, `deleteOne`. L'inserimento di una provincia è **un solo update atomico** condizionato dall'assenza di quel `code` tra le province: l'elenco non si legge e riscrive mai. **Indici:** nessuno. L'unicità del `code` di paese è garantita dalle scritture (controllo prima e dopo l'inserimento); l'indice univoco aspetta il conteggio dei duplicati in produzione, non ancora fatto (in development nessun duplicato su 240 paesi). Un paese o una provincia **in uso** (`countryCode`, e `countryAreaCode`, di una azienda o di un punto vendita nelle copie del common, cestinati compresi) non si elimina; i contatti dei gruppi non si controllano.
 
-## documents — coda di invio del legacy (database esterno `<prefisso><env>_queue`, sola lettura)
-Passo 9-ter/3. Non è un database di Flood Cloud: è la **coda delle fatture e note di credito elettroniche** del legacy (`ms-documents-service`, `ms-sales-service` e `CronEngine`, che è l'unico a inviare). Sta sul cluster del database common (`APP_ENV` e `DB_NAME_PREFIX` come gli altri, nome costruito solo da `src/db/names.ts`), collection `documents`, registrata `legacy-read`. Il backend la legge **solo** dal repository dei documenti in errore, attraverso `Databases.queue()` (connessione di analisi, sola lettura: nessun metodo di scrittura, nessuna aggregazione `$out`/`$merge`); **non scrive nulla e non crea nessun indice** (oggi esiste solo `_id`; in produzione non è stata profilata, per questo ogni query ha `maxTimeMS`, un limite e il cursore su `_id`). Un database o una collection assenti si leggono come vuoti.
+## documents — fatture del gruppo e coda di invio del legacy
 
-Un documento in coda è una **copia intera** del documento fiscale del gruppo più `groupId` e `dealerId`. Campi che il backend legge (proiezione fissa, ogni valore trattato come dato legacy non fidato: il tipo sbagliato diventa `null`):
+### documents del database del gruppo (collection legacy condivisa, passo VS5)
+`legacy-write` (`DOCUMENTS_OWNED_FIELDS`). Il nuovo backend **inserisce** il documento di una fattura creata da una vendita `invoice` (modulo `sales`, `sales.invoice.repository.ts`, nella transazione della vendita) nella forma del `doc3` del legacy e poi cambia **solo** `sendStatus` (`notQueued` → `queued`, con filtro sullo stato letto: il worker dell'invio può averlo già spostato). Campi (tipi BSON del driver: interi in Int32, gli altri numeri Double, come il legacy): `_id`, `userId` (operatore, `ObjectId` o `null`), `date` (data della vendita), `number`, `prefixSuffix` (`''` senza sezionale), `type: 'invoice'`, `companyId`, `placeId`, `storageId` (deposito di cassa, o `null`), `company` e `counterpart` (**copie costruite dal database per allowlist**: dell'azienda `_id`, `name`, `code`, `code2`, indirizzo, `countryAreaCode`, `countryCode`, `currencyCode`, `email`, `telephone`, `invoicesPS`, `invoicesPSValues`, `banks` (`id`, `name`, `iban`, `abi`, `cab`, `bic`, `default`), `settings.global.discountLines` e di `fattura_elettronica` solo `hub`, `IdTrasmittente_paese|codice`, `rea_*`, `regime_fiscale`; del contatto l'anagrafica di persona e di azienda, `contactCode`, recapiti e di `fattura_elettronica` `formato_trasmissione`, `identificativo`, `codice_destinatario`, `pec`, `regime_fiscale`, `split_payment`, `riferimento_amministrazione`; **mai** account, `password`, `tokens`, servizi, note, carte, listini, integrazioni, impostazioni di e-commerce o logo), `customerType`, `note`, `adjustmentType`, `discountPercentage`, `discountValue`, `totalTaxableWithoutDiscount`, `totalTaxable`, `totalTax`, `totalWithoutDiscount`, `total` (numeri, mai testi), `totalLastPrices: 0`, `records` (le righe della vendita, già ridotte all'allowlist), `saleId`, `saleTimestampId`, `fattura_elettronica { tipo, progressivo_invio }` (`progressivo_invio` `null` se il documento non va in coda: senza hub o con un hub non ammesso; non si consuma), `XML` (allowlist con controllo di dominio dei valori, o `null`), `metadata { unpaidIds }` (solo la riepilogativa: gli id delle vendite raccolte, come testi), `sendStatus` (`null` senza hub, `notQueued` con un hub finché non è in coda o se l'hub non è ammesso), `groupId` (solo se va in coda), `insertDate`, `updateDate`. Senza cliente o con la data fuori finestra **non si crea nessun documento**. Indici: nessuno dichiarato; la numerazione (VS3) ne crea due di supporto a runtime.
+
+**Legame con la vendita.** La vendita porta `floodCloud.invoice { documentId, number, prefixSuffix, year, queuedAt? }`; `queuedAt` è il segno del tentativo di mettere il record in coda (scritto prima del record, tolto se la coda rifiuta: una ripetizione della vendita rimette in coda solo un documento senza segno). Per le vendite del legacy il documento si trova per `{ companyId, date, saleId }` (la data del documento è quella della vendita: usa l'indice `companyId_1_date_-1`).
+
+### Coda di invio (database esterno `<prefisso><env>_queue`)
+Passo 9-ter/3. Non è un database di Flood Cloud: è la **coda delle fatture e note di credito elettroniche** del legacy (`ms-documents-service`, `ms-sales-service` e `CronEngine`, che è l'unico a inviare; in futuro il microservizio di invio). Sta sul cluster del database common (`APP_ENV` e `DB_NAME_PREFIX` come gli altri, nome costruito solo da `src/db/names.ts`), collection `documents`, registrata `legacy-write` (`QUEUE_DOCUMENTS_OWNED_FIELDS`) dal passo VS5. Il backend la **legge** solo dal repository dei documenti in errore, attraverso `Databases.queue()` (connessione di analisi, sola lettura: nessun metodo di scrittura, nessuna aggregazione `$out`/`$merge`); l'**unica scrittura** (passo VS5) è `Databases.queueInbox().enqueue(record)`, un accesso minimo, usato solo dal servizio di scrittura delle vendite, che con un `updateOne` `upsert` e `$setOnInsert` sull'`_id` del documento inserisce il record **una volta sola** (una ripetizione non lo duplica né sovrascrive i campi del consumatore) e rifiuta ogni campo fuori da `QUEUE_DOCUMENTS_OWNED_FIELDS`; **non crea nessun indice e non cambia né cancella mai un record** (oggi esiste solo `_id`; in produzione non è stata profilata, per questo ogni query ha `maxTimeMS`, un limite e il cursore su `_id`). Un database o una collection assenti si leggono come vuoti.
+
+Un documento in coda è una **copia intera** del documento fiscale del gruppo più `groupId` e `dealerId`; quello scritto dal nuovo backend (VS5) è `{ _id (lo stesso del documento), dealerId, …documento, sendStatus: null, sale: { _id, fullMeal } }`, scritto **dopo** il commit della vendita e solo se l'azienda ha un hub (`aruba` o `aruba__<dealer>`) e la fattura un cliente; il tentativo è segnato in `floodCloud.invoice.queuedAt` della vendita, così un record non si scrive due volte. Campi che il backend legge (proiezione fissa, ogni valore trattato come dato legacy non fidato: il tipo sbagliato diventa `null`):
 
 | Campo | Tipo atteso | Uso |
 |---|---|---|
@@ -456,7 +463,7 @@ Clienti, fornitori e contatti generici (né l'uno né l'altro): una sola collect
 | `eInvoicing.paymentTerms`, `.paymentMethod`, `.taxRegime` | `fattura_elettronica.condizioni_pagamento`, `.modalita_pagamento`, `.regime_fiscale` | `TP01`–`TP03`, `MP01`–`MP23`, `RF01`, `RF02`, `RF04`–`RF19`; `''` per nessuno |
 | `eInvoicing.administrationReference` | `fattura_elettronica.riferimento_amministrazione` | |
 | `eInvoicing.splitPayment`, `.requirePurchaseOrderData` | `fattura_elettronica.split_payment`, `.richiedi_dati_ordine_acquisto` | booleani |
-| `fidelityCards[]` `{ code, points }` | `fidelities[]` `{ code, points }` | `code` si scrive solo aggiungendo un elemento con zero punti o togliendolo per codice (un solo `updateOne` a pipeline che riparte dagli elementi del server, mai dall'array del client); `points` lo muovono le vendite e le rettifiche (`$inc` su `fidelities.$[carta].points`), mai una scrittura del contatto | In lettura ogni elemento ha anche `advanced` (la carta di `fidelity_cards` con quel codice, vedi sotto), mai scritto. **Nessuna unicità del codice tra contatti** (più contatti possono avere la stessa carta).
+| `fidelityCards[]` `{ code, points }` | `fidelities[]` `{ code, points }` | `code` si scrive solo aggiungendo un elemento con zero punti o togliendolo per codice (un solo `updateOne` a pipeline che riparte dagli elementi del server, mai dall'array del client); `points` lo muovono le vendite (dal passo VS2 anche il nuovo backend, con `$inc` su `fidelities.$[card].points` e `arrayFilters` sul codice, **senza** guardia di non negatività: una vendita non si rifiuta mai) e le rettifiche (`$inc` su `fidelities.$[carta].points`, mai sotto zero), mai una scrittura del contatto | In lettura ogni elemento ha anche `advanced` (la carta di `fidelity_cards` con quel codice, vedi sotto), mai scritto. **Nessuna unicità del codice tra contatti** (più contatti possono avere la stessa carta).
 | `services[]` `{ productId, duration }` | `services[]` `{ id, time }` | `id` `ObjectId` di un prodotto `type: service`, `time` `HH:mm` |
 | `account.email`, `account.phone` | `account.email`, `account.telephone` | **nessuna chiave** quando vuoti (gli indici univoci parziali del legacy rifiutano un valore vuoto ripetuto); `account.password` e `account.tokens` sono morti e **mai** letti né scritti |
 | `trashed`, `trashedAt` | `trash`, `trashDate` | |
@@ -485,19 +492,20 @@ Versione (`ETag`): `code`, `cardTypeId`, `status`. Chiavi sconosciute del legacy
 
 ## fidelity_cards_movements — storia delle carte avanzate (database del gruppo, collection legacy condivisa, passo F1)
 
-Collection `legacy-write` (`FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS`) in **sola inserzione** di movimenti `manually` (mai modificati; inseriti nella stessa transazione della carta o del `$inc` che spiegano) e, dal passo K3, di movimenti `import`: il credito e i punti iniziali di una carta **creata dal file XLSX** (`doc/API.md` "Carte fedeltà avanzate: import ed export XLSX"), uno per componente, scritti nella transazione dell'importazione con `userId` di chi importa; `balance` e `points` con segno come per `manually`. Nessun indice nuovo. Le vendite del legacy vi scrivono `sale` e `canceled_sale`: si leggono, non si scrivono.
+Collection `legacy-write` (`FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS`) in **sola inserzione** di movimenti `manually` (mai modificati; inseriti nella stessa transazione della carta o del `$inc` che spiegano) e, dal passo K3, di movimenti `import`: il credito e i punti iniziali di una carta **creata dal file XLSX** (`doc/API.md` "Carte fedeltà avanzate: import ed export XLSX"), uno per componente, scritti nella transazione dell'importazione con `userId` di chi importa; `balance` e `points` con segno come per `manually`. Nessun indice nuovo. Dal passo VS2 il servizio `loyalty` vi inserisce anche i movimenti delle **vendite del nuovo backend**: `sale` (anche per resi e modifiche, con il segno) e `canceled_sale` (annullo), uno per il credito e uno per ogni raccolta toccata, con il nuovo campo **`saleId`** (`ObjectId` della vendita, `FIDELITY_CARDS_MOVEMENTS_OWNED_FIELDS`), `date` = data della vendita, `userId` dell'operatore e `storeKeyId` se c'è; scritti nella transazione della vendita, mai modificati. Le vendite del legacy vi scrivono gli stessi tipi, senza `saleId` garantito: si leggono.
 
 | API | Documento | Note |
 |---|---|---|
 | `id` | `_id` | |
 | `date` | `date` | `Date` |
-| `type` | `type` | testo (`manually` per le rettifiche e i valori iniziali della creazione dal backoffice, `import` per i valori iniziali di una carta creata dal file XLSX; `sale` e `canceled_sale` sono del legacy) |
+| `type` | `type` | testo (`manually` per le rettifiche e i valori iniziali della creazione dal backoffice, `import` per i valori iniziali di una carta creata dal file XLSX; `sale` e `canceled_sale` li scrivono le vendite, dal passo VS2 anche questo backend, con `saleId`) |
 | `balance` | `balance` | credito mosso, con segno (`0` se solo punti) |
 | `points` | `points` | punti mossi, con segno (`0` se solo credito) |
 | `collection` | `pointsCollectionId` | id testo di una raccolta o `null` |
 | `operator` | `userId` | `ObjectId` dell'utente che ha scritto, risolto nel solo nome visualizzato; `null` per un movimento creato da una **chiave API pubblica** (passo K4) |
 | (non esposto come id nell'API pubblica) | `apiKeyId` | `ObjectId` della chiave API pubblica che ha scritto il movimento (passo K4, solo con `userId` `null`); il nome si legge da `apiKeys` del common filtrato per gruppo; il legacy non lo legge né lo riscrive |
 | `operator.store` (`true`, solo in `/v1`) | `storeKeyId` | `ObjectId` della chiave di negozio del server di punto vendita che ha scritto il movimento (passo K5; con `userId` = l'operatore dichiarato in `X-Operator-Id`): il backoffice può mostrarlo come fatto dalla cassa; non esposto nell'API pubblica; il legacy non lo legge né lo riscrive |
+| (non esposto) | `saleId` | `ObjectId` della vendita che ha scritto il movimento (passo VS2, solo `sale` e `canceled_sale`): lo storno e il reso della vendita si calcolano da quello che la vendita ha già applicato; il legacy non lo riscrive |
 | (non esposto) | `cardId`, `cardCode` | i movimenti si cercano per l'uno **o** l'altro |
 
 ## contacts_groups — gruppi di contatti (database del gruppo, collection legacy condivisa, passo K1)
@@ -524,12 +532,13 @@ Sola lettura (`legacy-read`), solo con un accesso verificato al gruppo e sul clu
 | `contacts` | esistenza dei clienti nelle promozioni; letture compatte `lookup/customers` e `lookup/suppliers` (solo `_id`, `trash`, `customer`, `supplier`, `companyName`, `name`, `surname`, `companyLists`: mai email, telefoni, indirizzi); dal passo K1 collection `legacy-write` gestita da `/contacts` (vedi la sua sezione); `contactAssociations` per l'eliminazione di un altro contatto (solo `_id`, filtro su `associatedCompanyId`) | tutti i campi di `CONTACTS_OWNED_FIELDS` per il dettaglio, `_id` per i controlli |
 | `contacts_groups` | esistenza dei gruppi di contatti nelle promozioni; lettura compatta `lookup/contact-groups`; dal passo K1 collection `legacy-write` gestita da `/contact-groups` (vedi la sua sezione) | `_id`, `name`, `priceListId`, `discountPercentage`, `insertDate`, `updateDate` (nessun flag di cestino) |
 | `fidelity_cards`, `fidelity_cards_movements` | dal passo F1 `legacy-write` (sezioni qui sopra); lette anche dai contatti (`advanced` di `fidelityCards[]`, la rettifica dei punti del contatto) e per rifiutare l'eliminazione di un tipo di carta o di una raccolta punti in uso | `code`, `cardTypeId`, `status`, `balance`, `pointsCollections` |
-| `documents`, `calendar`, `table_reservation`, `warehouse` | **sola lettura**, solo per rifiutare l'eliminazione definitiva di un contatto che citano (passo K1): una ricerca per id alla volta, `limit` 20, `maxTimeMS` 5 s (`503` oltre: l'eliminazione non procede). Nessun indice creato né scrittura. `documents` del gruppo è un'altra collection di quella della coda di invio (database `queue`, stesso nome) |
-| `sales` | **sola lettura** (nessuna scrittura né cancellazione). Dal passo K1 per rifiutare l'eliminazione definitiva di un contatto (`customer._id`, `appointment.customerId`); dal passo V1 anche dal modulo `sales` (sezione sotto: elenco, riepilogo e dettaglio, con `sales:read` e il perimetro del ruolo). **Un solo indice creato dal nuovo backend**: `{ customer._id: 1, date: -1 }` (sezione sotto) | `_id`; filtri su `sales.customer._id` e `sales.appointment.customerId`, `documents.counterpart._id`, `calendar.customerId`, `table_reservation.customerId`, `warehouse.supplierId` (ogni id come `ObjectId` **e** come testo esadecimale) |
+| `documents` (passo VS3) | oltre a quanto segue: letto dal servizio di numerazione (massimo di `number` e di `fattura_elettronica.progressivo_invio` per azienda, tipo, sezionale e anno, `limit 1`, `maxTimeMS`); due indici non univoci di supporto, sezione `document_counters` | `companyId`, `type`, `prefixSuffix`, `number`, `date`, `fattura_elettronica.progressivo_invio` |
+| `documents`, `calendar`, `table_reservation` | **sola lettura**, solo per rifiutare l'eliminazione definitiva di un contatto che citano (passo K1): una ricerca per id alla volta, `limit` 20, `maxTimeMS` 5 s (`503` oltre: l'eliminazione non procede). Nessun indice creato né scrittura. `documents` del gruppo è un'altra collection di quella della coda di invio (database `queue`, stesso nome) |
+| `sales` | **`legacy-write` dal passo VS4a** (`SALES_OWNED_FIELDS`, sezione sotto; `legacy-read` per i passi K1 e V1). Dal passo K1 per rifiutare l'eliminazione definitiva di un contatto (`customer._id`, `appointment.customerId`); dal passo V1 anche dal modulo `sales` (sezione sotto: elenco, riepilogo e dettaglio, con `sales:read` e il perimetro del ruolo). **Indici creati dal nuovo backend**: `{ customer._id: 1, date: -1 }` (V1) e, dal passo VS4a, `floodCloud.key_1` (univoco parziale) e `timestampId_1` (sezione sotto) | `_id`; filtri su `sales.customer._id` e `sales.appointment.customerId`, `documents.counterpart._id`, `calendar.customerId`, `table_reservation.customerId`, `warehouse.supplierId` (ogni id come `ObjectId` **e** come testo esadecimale; la collection `warehouse` è scritta dal servizio `stock`, sezione sotto) |
 | `products` (passo K1) | il controllo dei riferimenti di un contatto: `suppliers[].id`, `lastAveragePrice.lastSupplierId` (anche prodotti cestinati) e i listini fornitore citati `suppliers[].companyLists[].id` (solo non cestinati); i servizi di un contatto (`type: service`) | `_id`, `type`, `trash`, `suppliers.id`, `suppliers.companyLists.id`, `lastAveragePrice.lastSupplierId` |
 
-## sales — vendite del punto vendita (database del gruppo, passo V1)
-Collection del **legacy** (`legacy-read`): il documento lo ricostruisce il server legacy alla sincronizzazione del POS (`ms-sales-service`, `insertOne`); il nuovo backend lo **legge soltanto**, sempre filtrato dal perimetro del ruolo (CA: `companyId` nelle proprie aziende; PA: `placeId` nei propri punti vendita), con proiezioni fisse, `maxTimeMS` 5 s (`503` oltre) e un limite a ogni lettura. Gli importi sono in **unità di valuta** (numeri a virgola mobile, nessun campo valuta: la valuta è una per gruppo), `date` è un istante UTC. Una lettura è **tollerante**: un campo mancante o di tipo sbagliato (compreso un `NaN`) vale `null`, `0` o `[]`.
+## sales — vendite del punto vendita (database del gruppo, passi V1 e VS4a)
+Collection del **legacy**, `legacy-write` dal passo VS4a (scrittura: sezione "Scrittura" in fondo a questa); fino al V1 il documento lo ricostruisce solo il server legacy alla sincronizzazione del POS (`ms-sales-service`, `insertOne`); la lettura (V1) è sempre filtrata dal perimetro del ruolo (CA: `companyId` nelle proprie aziende; PA: `placeId` nei propri punti vendita), con proiezioni fisse, `maxTimeMS` 5 s (`503` oltre) e un limite a ogni lettura. Gli importi sono in **unità di valuta** (numeri a virgola mobile, nessun campo valuta: la valuta è una per gruppo), `date` è un istante UTC. Una lettura è **tollerante**: un campo mancante o di tipo sbagliato (compreso un `NaN`) vale `null`, `0` o `[]`.
 
 | Campo letto | Uso |
 |---|---|
@@ -550,16 +559,184 @@ Collection del **legacy** (`legacy-read`): il documento lo ricostruisce il serve
 | `products[]` | righe del dettaglio: `_id`, `code`, `name` (oggetto per lingua), `qt`, `price.taxed`, `price.discount`, `selectedVariants.{plus,minus,info}[].name/qt` |
 | `fidelityCard.code`, `savedCheckoutsNote` | carta fedeltà e nota del dettaglio |
 
-**Mai letti:** `lotteryId`, `delivery`, `reservation`, `hotel`, `posTerminalId`, `tickets`, `appointment`, `customer.*` oltre al nome, `device.companyData/placeData`, e le forme dismesse (`paymentType`, `cashAmountValue`, `XML`, `returnedGoods`). Nessun campo si scrive.
+**Mai letti dal modulo di lettura (V1):** `lotteryId`, `delivery`, `reservation`, `hotel`, `posTerminalId`, `tickets`, `appointment`, `customer.*` oltre al nome, `device.companyData/placeData`, e le forme dismesse (`paymentType`, `cashAmountValue`, `XML`; `returnedGoods` si legge solo nei resi del nuovo backend, VS4a).
 
 **Indici.** Il legacy crea (a ogni vendita sincronizzata) `timestampId`, `companyId`, `placeId`, `date`, `{ sType, date }`, un composto multikey e `{ receiptType, sType, date: -1 }`; **nessuno su `customer._id`**. Il nuovo backend crea l'indice **`{ customer._id: 1, date: -1 }`** (nome `customer._id_1_date_-1`, non univoco) **a runtime** alla prima lettura con `contactId` di un gruppo (una volta per gruppo e per processo, senza far attendere la richiesta; `IndexBuildAlreadyInProgress` e gli indici equivalenti già presenti sono `info` nel log, ogni altro errore è `error` con il gruppo e mai dati) e alla creazione del cliente (onboarding, come l'indice delle carte). È la prima eccezione, decisa dall'utente, alla regola "nessun indice sulle collection delle vendite del legacy".
 
 **Difetti noti del legacy.** Le vendite con un cliente creato al volo al POS restano senza `customer._id` (non compaiono tra gli acquisti di un cliente: per la migrazione serve una decisione, fuori dal passo V1). Uno scontrino incluso in una fattura differita (TD24) può contare due volte nei totali.
 
+### Scrittura delle vendite (passo VS4a)
+Il servizio `modules/sales/sales.write.service.ts` **inserisce** vendite intere nella forma del `insertOne` del legacy, ne **modifica** i soli campi posseduti (`SALES_OWNED_FIELDS`: i nomi del legacy, più `floodCloud`; `status` solo per segnare `invoiced` una vendita raccolta da una fattura riepilogativa, passo VS5) e **elimina** una vendita non fiscale (`sType`). Le righe non si modificano mai dopo l'inserimento. Il legacy continua a leggere e scrivere gli stessi documenti: non legge né riscrive `floodCloud` (il suo `updateOne` ha un elenco di `$set`).
+
+Campi della vendita scritti dal nuovo backend, con i tipi: `_id`, `companyId`, `placeId`, `userId` (`ObjectId`; `userId` anche `null`), `timestampId` (testo), `customer` (copia del contatto per allowlist, o `null`), `customerType` (`1` persona, `2` azienda, `null`), `lotteryId`, `fidelityCard` (`{ code }` o `null`), `products[]` (righe ridotte all'allowlist `LINE_FIELDS` + identità dal catalogo, vedi `doc/Store-API.md` §4.11), `refund[]` (reso: `timestampId`, `date`, `userId`, `returnedGoods[]` con `index` e `returnedQt`, `returnedGoodsValue { totalNoTax, taxValue, priceTaxed }`, `fiscalReceiptInfo`; annullo: `canceled: true`, `timestampId: null`), `returnedGoods` e `returnedGoodsValue` (l'ultimo reso), `receiptType`, `paymentTypeId`, `specificPayments`, `cashAmount`, `electronicAmount`, `ticketsAmount`, `tickets`, `chequeAmount`, `paymentDiscountAmount`, `unpaid`, `posTerminalId`, `adjustmentType`, `discountType`, `discountPercentage`, `discountValue`, `date` (`Date`), `checkoutSessionStartedAt`, `finalTotalTaxableWithoutDiscount`, `finalTotalTaxWithoutDiscount`, `finalTotalTaxable`, `finalTotalTax`, `finalTotalCheckout`, `finalTotalCheckoutWithoutDiscount`, `device { settings { id, name, serialNumber, driver }, companyId, placeId }` (gli id come testo, come il POS legacy), `table { originalTable { id, name, roomId }, startDate, covers, partition }`, `appointment`, `savedCheckoutsNote`, `fiscalReceiptInfo { date, number, amount, reportNumber }`, `fullMeal`, `delivery`, `reservation`, `hotel`, `fiscalState` (`''`, `refunded`, `canceled`), `sType`, `insertDate`, `updateDate` (`null` alla creazione).
+
+**`floodCloud`** (un solo oggetto, il resto resta del legacy):
+
+| Campo | Contenuto |
+|---|---|
+| `v` | versione della forma (1) |
+| `key` | `<placeId>|<timestampId>` (testo), **solo** per le vendite create dal nuovo backend; non per quelle adottate dal legacy |
+| `createdBy` | `{ kind: 'store', storeKeyId }`, `{ kind: 'user', userId }` o `{ kind: 'legacy' }` (vendita adottata) |
+| `bodyHash` | sha256 del corpo normalizzato della creazione, per riconoscere un duplicato con corpo diverso |
+| `serverCheck` | `{ checkedAt, status: 'ok'/'differences', totals[{field,pos,server}], lines[{index,code,pos?,server?}] (≤ 100), linesTruncated }`; `null` per una vendita adottata non ancora rettificata |
+| `anomalies[]` | `{ at, operation, source: 'sale'/'stock'/'loyalty', code, productId?, collectionId?, type? }`, al più 200 (le ultime) |
+| `loyalty` | `{ applied, full, cardCode }`: gli effetti sulle carte realmente applicati e quelli dell'intera vendita (`{ advanced: { cardId, code, balance, points }, simple: { code, points, contactId } }` o `null`) |
+| `operations[]` | `{ kind: 'create'/'amend'/'refund'/'cancel'/'delete', at, by, ref }`, al più 200 |
+| `legacy` | per una vendita adottata: `{ adoptedAt, stockBaseline[], refundCount }` (la baseline è lo stato di magazzino già applicato dal legacy, `{ placeId, storageId, productId, companyId, value }`); altrimenti `null` |
+| `cancellation` | `{ date, userId, fiscalReceiptInfo }` dopo un annullo, altrimenti `null` |
+
+**`receiptType`.** Oltre a `receipt`, `invoice` e `charge` il nuovo backend scrive `partitioned` (la vendita madre di un tavolo diviso, con i prodotti veri); non ha effetti di fidelity. **`refund[]`**: al più 200 elementi per vendita (limite di dimensione, `409 refundsLimit`).
+
+### sales_tombstones — lapidi dei preventivi eliminati (database del gruppo, collection nuova, passo VS4a)
+`ownership: 'new'`. Un documento `{ _id, key, saleId, deletedAt }` per ogni vendita non fiscale eliminata: `key` è `<placeId>|<timestampId>` (la stessa di `floodCloud.key`), `saleId` l'id che aveva, `deletedAt` l'istante. Scritto nella stessa transazione dell'eliminazione (storno di magazzino e fidelity incluso), mai modificato né cancellato. Una creazione con quella chiave non ricrea nulla e risponde `200` con `{ status: 'deleted', saleId, timestampId }`. Indice **univoco** `key_1`, creato a runtime con quelli delle vendite e all'onboarding (mai dichiarato nel registro); senza indice univoco verificato con `listIndexes` nessuna vendita viene salvata (`503`).
+
+**Indici creati dal nuovo backend** (a runtime alla prima scrittura di un gruppo e all'onboarding; mai dichiarati nel registro): `floodCloud.key_1` **univoco e parziale** (`partialFilterExpression: { 'floodCloud.key': { $type: 'string' } }`: non vincola le vendite del legacy, che può avere doppioni di `(placeId, timestampId)`) e `timestampId_1` (non univoco, lo stesso nome e chiave che il legacy crea a ogni vendita: nessun effetto dove c'è già; serve alla ricerca per `timestampId` e alla ricerca della vendita del legacy). Senza l'indice univoco la creazione di una vendita risponde `503`.
+
+## warehouse — movimenti di magazzino (database del gruppo, collection legacy condivisa, passo VS1)
+Collection `legacy-write` (`WAREHOUSE_OWNED_FIELDS`): il servizio `stock` (`modules/stock/`) **inserisce** documenti interi nella forma che legge il backoffice legacy e che il legacy può stornare; non modifica né cancella mai un movimento (lo storno è un nuovo movimento). Anche i contatti la leggono (`supplierId`) per rifiutare l'eliminazione definitiva di un fornitore.
+
+| Campo | Valore scritto |
+|---|---|
+| `type` | `'D'` (scarico) o `'L'` (carico); un movimento per tipo e per deposito |
+| `rule` | copia intera della causale del gruppo (`warehouseRules`): per `D` `type 'D'`, `cashD: true`, `quantity '-'`; per `L` `type 'L'`, `cashL: true`, `quantity '+'` |
+| `date`, `insertDate`, `updateDate` | `Date` (la data è quella del target; per uno storno, l'istante dello storno) |
+| `companyId`, `placeId`, `storageId` | `ObjectId`; il deposito è l'ultimo di `places.storages[]` con `cash: true`, risolto dal server |
+| `saleId` | `ObjectId` se l'origine è una vendita, altrimenti `null` |
+| `documentId` | `ObjectId`, solo se l'origine è un documento |
+| `supplierId`, `documentDate`, `documentNumber` | `null` |
+| `documentType`, `note` | `''` |
+| `records[]` | `product` (istantanea ridotta a ciò che il legacy legge da un movimento salvato: `_id` e `type` per lo storno, `code`, `name` e `measureLoad` per il dettaglio; mai il prodotto intero), `barcode: null`, `listId: null`, `code` (del prodotto), `name: null`, `quantity` (valore assoluto, **unità di carico**), `price` (`lastAveragePrice.total.weightedAveragePrice` o 0), `discount1..3: 0`, `discountedPrice`, `value` (con segno, unità di carico) |
+| `origin` | `{ kind: 'sale' \| 'document' \| 'manual', id: ObjectId, seq: Int32 }`: non letto né riscritto dal legacy. I movimenti del legacy non lo hanno |
+| `userId` | `ObjectId` dell'operatore, o `null` |
+| `storeKeyId` | `ObjectId` della chiave di negozio che ha richiesto il movimento (solo se c'è) |
+
+- **Indice** (creato a runtime e all'onboarding, mai nel registro): univoco e parziale `origin.kind_1_origin.id_1_origin.seq_1` su `{ origin.kind, origin.id, origin.seq }` con `partialFilterExpression: { 'origin.kind': { $exists: true } }`. Rende idempotente la riconciliazione (un `seq` per origine) e non tocca i movimenti del legacy.
+- **Stato di un'origine** = somma dei `records[].value` dei suoi movimenti, per `(placeId, storageId, product._id)`.
+- **Giacenza.** `products.quantity.__<placeId>.__<storageId>.value` è scritto **solo** dal servizio `stock`, con `$inc` (mai `$set`), nella stessa transazione dell'inserimento del movimento; è in unità di carico e può essere negativo. Il catalogo dei prodotti non lo scrive mai (solo `min`, `max`, `location`); `lastAveragePrice` non è toccato dallo `stock`.
+
+## document_counters — contatori della numerazione dei documenti fiscali (database del gruppo, collection nuova, passo VS3)
+Collection **nuova** (`ownership: 'new'`, il legacy non la conosce), scritta solo dal repository del servizio `document-numbering` (`modules/document-numbering/`) con un `findOneAndUpdate` a pipeline in upsert dentro la transazione del documento. Un documento per azienda, serie, sezionale e anno fiscale.
+
+| Campo | Tipo | Note |
+|---|---|---|
+| `companyId` | ObjectId | l'azienda del documento (letta dalla copia nel common, mai dal client) |
+| `series` | string | `invoice`, `credit-note` oppure `_sendProgressive` (progressivo di invio, uno per azienda e anno su tutti i tipi e i sezionali) |
+| `prefixSuffix` | string | nome del sezionale, `''` senza sezionale (sempre `''` per `_sendProgressive`) |
+| `year` | integer | anno solare della data del documento nel fuso del punto vendita (`Europe/Rome` se manca o non è valido) |
+| `last` | integer | ultimo numero dato: `max(last, massimo in documents, base) + 1` a ogni riserva |
+| `insertDate`, `updateDate` | Date | |
+
+- **Indice** (creato a runtime e all'onboarding, mai nel registro: i database dei gruppi non dichiarano indici): univoco `companyId_1_series_1_prefixSuffix_1_year_1` su `{ companyId, series, prefixSuffix, year }`.
+- **Documenti del legacy** (`documents`, sola lettura): il servizio legge `companyId`, `type` (`invoice`, `credit-note`), `prefixSuffix` (`''`, assente o `null` valgono "senza sezionale"), `number`, `date` e `fattura_elettronica.progressivo_invio`. Il nuovo backend crea su `documents` due indici **non univoci** (eccezione decisa dall'utente: finora la collection non aveva indici dal nuovo backend): `companyId_1_type_1_prefixSuffix_1_date_-1` e `companyId_1_date_-1`.
+- **Copie nel common** lette (`readNumberingSetup`): dell'azienda `invoicesPS` (`prefix`, `suffix` o `null`: dove sta il sezionale nella stampa), `invoicesPSValues[] { name, cash }` (al più uno con `cash: true`: il sezionale della cassa) e `settings.global.lastInvoiceNumber` (ultimo numero emesso fuori da Flood); del punto vendita `companyId`, `invoicePS` e `timezone`.
+
 ## settings — impostazioni della piattaforma (database common)
 Un documento per chiave, collection nuova (la scrive solo il PSA tramite il backoffice): `{ key, value, updatedAt, updatedBy }`, indice univoco su `key`.
 - `PRICE_LIST`: il listino delle attivazioni (vedi `doc/API.md`).
 - `SECURITY_POLICY`: la politica di sicurezza, `value` = `{ nonBrowserRequests?: 'report' | 'block', sustainedLimits?: 'report' | 'enforce' }`. **Ogni campo è presente solo dopo che il PSA lo ha salvato**: un campo assente (o con un valore non valido, ignorato) vale il predefinito del server, cioè `report` per `nonBrowserRequests` e, per `sustainedLimits`, `RATE_LIMIT_API_SUSTAINED_MODE` (`report` se la variabile manca); un valore salvato prevale sempre sulla variabile. Un documento assente vale tutti i predefiniti. Con `SECURITY_POLICY_FORCE_REPORT=on` il valore salvato non ha effetto (la politica in vigore è `report`, fonte `forced`). Mai altri campi (le soglie restano nelle variabili d'ambiente). Le istanze del server tengono una copia in memoria di 30 secondi.
+
+- `INTEGRATIONS`: le integrazioni della piattaforma, `value` = `{ aruba?: ArubaAccount }`: l'account Aruba **della piattaforma Flood** (hub `aruba`), stessa forma di quello dei dealer. Il documento si crea al primo salvataggio (l'indice univoco su `key` decide tra due salvataggi contemporanei); togliere l'account fa `$unset` di `value.aruba` e il documento resta. Scritto solo dal PSA, con un `$set` di `value.aruba` guardato dal valore letto.
+
+### Account Aruba della fatturazione elettronica (passo EI1)
+Stessa forma in `dealers.<dealer>.integrations.aruba` e in `settings` `INTEGRATIONS` → `value.aruba`:
+
+| Campo | Tipo | Note |
+|---|---|---|
+| `enabled` | boolean | l'account può inviare |
+| `username` | string | ASCII stampabile senza spazi (`[\x21-\x7e]`), 1–100; **univoco tra tutti gli account** (dealer e piattaforma), controllato dal servizio di scrittura (`409`), nessun indice (stesso schema di `vatNumber` delle aziende: la gara tra due salvataggi contemporanei dello stesso username non è coperta) |
+| `password` | `StoredCredential` | la password cifrata, vedi sotto; mai in chiaro, mai nelle risposte |
+| `maxPerHour` | integer | 1–1000, tetto di invii all'ora dell'account (oggi 55) |
+| `maxPerYear` | integer \| null | 1–100 000 000, `null` = nessun tetto annuale (oggi 10 000, Tier 0) |
+| `updatedAt`, `updatedBy` | Date, ObjectId | |
+
+**Credenziale cifrata (`StoredCredential`, formato v2)**: cifratura ibrida con la sola chiave **pubblica** del destinatario: `{ v: 2, kid, epk, iv, tag, data }`, tutti i campi binari in base64url.
+
+- **Destinatario**: chiave pubblica **X25519** (`CREDENTIALS_PUBLIC_KEY`, PEM SPKI); `kid` = `CREDENTIALS_PUBLIC_KEY_ID` (`^[a-z0-9-]{1,32}$`), con cui il lettore sceglie la chiave privata.
+- **Per ogni cifratura**: coppia X25519 effimera nuova; `epk` = chiave pubblica effimera **grezza di 32 byte** (il membro `x` del suo JWK, in base64url); `shared = X25519(privata effimera, pubblica del destinatario)`.
+- **Chiave AES**: `HKDF-SHA-256(ikm = shared, salt = epk(32 byte) || destinatario grezzo(32 byte), info = "flood-cloud:credential:v2:" + contesto, lunghezza 32 byte)`.
+- **Cifratura**: AES-256-GCM, `iv` 12 byte casuali, `tag` 16 byte, **AAD** = il contesto in UTF-8; `data` = il testo cifrato. Il contesto lega il testo al suo posto (e alla chiave derivata), così non si può spostare su un altro account: dealer `einvoicing:aruba:dealer:<dealerId in esadecimale minuscolo>:password`, piattaforma `einvoicing:aruba:platform:password`.
+- Il backend **cifra soltanto** e non ha modo di decifrare (ha la sola chiave pubblica); la chiave privata è un Secret del solo servizio di invio (`einvoicing-worker/`). Nessun validatore del database (D-32), nessuna collection nuova. Nessun dato è mai stato salvato con un formato precedente.
+
+**Contratto del worker** (chi legge `integrations.aruba` dei dealer e `value.aruba` di `settings`, chiave `INTEGRATIONS`):
+
+- non scrive **mai** dentro `integrations.aruba` né `value.aruba`: contatori, token e stato vanno in una sua collection;
+- rifiuta ogni `v` che non conosce (oggi solo `2`) e sceglie la chiave privata dal `kid`;
+- ricostruisce l'AAD (e l'`info` HKDF) dal **posto** in cui il documento vive (`_id` del dealer in esadecimale minuscolo, oppure piattaforma), mai da un campo salvato;
+- chiama `setAuthTag` **prima** di `final()` e tratta ogni errore di autenticazione come credenziale non utilizzabile;
+- rilegge l'account prima di ogni accesso ad Aruba: disabilitato o rimosso ⇒ si ferma e scarta il token in cache;
+- fa rispettare `maxPerHour` e `maxPerYear`;
+- non registra mai in log la password in chiaro, il token Aruba né il testo cifrato;
+- si collega con un utente MongoDB in **sola lettura** su `dealers` e `settings`.
+
+## einvoicingWorkerLeases — lease del microservizio di invio (database common, collection nuova, passo EI2)
+Un solo documento che garantisce un'unica istanza attiva di `einvoicing-worker/` (scritto **solo** dal worker; il backend non la usa). `_id` = `einvoicing-worker`. Nessun indice oltre a `_id`, nessun validatore `$jsonSchema` (D-32).
+
+| Campo | Tipo | Note |
+|---|---|---|
+| `_id` | string | sempre `einvoicing-worker` |
+| `holder` | string | `WORKER_INSTANCE_ID` dell'istanza titolare (su GKE il nome del pod) |
+| `epoch` | integer | parte da 1; incrementato a ogni presa che cambia titolare o avviene dopo la scadenza (token di fencing per le scritture dei passi successivi) |
+| `acquiredAt` | Date | istante della presa corrente (invariato dai rinnovi) |
+| `renewedAt` | Date | ultimo rinnovo |
+| `expiresAt` | Date | il lease è libero per chiunque da questo istante; l'arresto ordinato lo porta a «adesso» |
+
+Presa atomica con `findOneAndUpdate` (filtro `expiresAt <= adesso` oppure stesso titolare, `upsert`); se un altro titolare è valido l'upsert fallisce con chiave duplicata. Rinnovo e rilascio aggiornano solo con titolare **e** `epoch` acquisiti. Scadenza giudicata con l'orologio del worker.
+
+## Coda di invio delle fatture elettroniche — campi aggiunti dal worker (database queue, collection `documents` del legacy, passo EI5)
+La forma del record resta quella del legacy; il worker (`einvoicing-worker/`) **aggiunge soltanto** campi e non ne rimuove né ne cambia di esistenti oltre a quelli che il legacy già scriveva (`sent`, `hubId`, `error`, `sendStatus`). `sent` e `hubId` si scrivono una volta sola (filtro `hubId` assente) e senza il vincolo dell'`epoch`.
+
+| Campo | Note |
+|---|---|
+| `worker.state` | `claimed` (preso in carico o in attesa di un nuovo tentativo), `uploading` (il file può essere già al provider: prima di ricaricare si interroga il provider), `uploaded` (accettato, si interroga lo stato), `done` (finito con errore, il record resta), `failed` (non inviabile: validazione o rifiuto del provider), `review` (da controllare a mano, non più interrogato; anche un record che poteva essere già inviato e di cui non si può costruire il riferimento, `lastCode NO_REF`) |
+| `worker.epoch` | `epoch` del lease del worker che ha in carico il record: ogni scrittura lo richiede uguale (fencing) |
+| `worker.leaseUntil` | fine della presa in carico; un record è di nuovo prendibile da quell'istante |
+| `worker.attempts` | numero di prese in carico |
+| `worker.nextAttemptAt` | non si riprova prima di questo istante |
+| `worker.uploadedAt`, `worker.nextStatusAt`, `worker.statusChecks`, `worker.notFoundChecks` | caricamento, prossima richiesta di stato, risposte ricevute, risposte «file sconosciuto» (per i record del legacy `uploadedAt` è la data dell'`_id`) |
+| `worker.lastCode` | ultimo codice utile (esito del provider, stato, `VALIDATION`, `MAYBE_SENT`, `ERROR`) |
+| `worker.historyPending`, `worker.historyKey`, `worker.historyConflict` | la voce dello storico non è ancora scritta (e con quale chiave) / la chiave era già nello storico (collisione, mai rielaborata) |
+| `worker.sdiErrors` | `[{ code, description }]`, al più 20, dai dettagli dello scarto SdI |
+| `worker.validation` | `[{ code, path, severity, message }]`, al più 50, della validazione che ha bloccato l'invio |
+
+- `error` è nella forma già letta da «Documenti in errore» (`errorCode`, `errorDescription`): nuovi codici `VALIDATION` (con `issues: [{ code, path, message }]`, al più 50), `SDI_REJECTED`, `PROCESSING_ERROR`, `REFUSED`; per un rifiuto del provider `errorCode` è il codice del provider. Rimuovere `error` da un record `failed` lo rimette in coda (nuovo tentativo manuale).
+- `sendStatus` (anche sul documento del gruppo, `<prefisso><env>_<groupId>.documents`, unico campo scritto dal worker): `validationError` (nuovo, non inviata), `processingError`, `takingCharge`, `sent`, `rejected` (scarto SdI), `refused` (rifiuto del committente, ora distinto), `delivered`, `notDelivered`, `deliveryImpossible`, `accepted`, `effectiveDate`.
+
+- **Indici sulla coda** (creati dal worker, idempotenti, solo con almeno un hub abilitato; il legacy non li usa e non è toccato): `einvoicingWorker_upload` su `{ company.fattura_elettronica.hub: 1, _id: 1 }` e `einvoicingWorker_status` su `{ worker.state: 1, worker.nextStatusAt: 1 }`.
+- Lo stato del dealer che possiede un hub `<provider>__<dealerId>` è quello del suo utente D in `users` (stesso `_id`): il worker legge soltanto `status` e `trash`.
+
+## einvoicingWorkerLimits — limitatori del microservizio di invio (database common, collection nuova, passo EI5)
+Scritta **solo** dal worker. `_id` = chiave: `ip:<provider>:<upload|status>`, `account:<hub>:<upload|status>`, `seller:<hub>:<company.code>`. Nessun validatore (D-32).
+
+| Campo | Note |
+|---|---|
+| `epoch` | `epoch` del lease di chi ha scritto: si sostituisce il documento solo con `epoch <=` il proprio |
+| `nextAt` | primo istante di un nuovo uso (intervallo minimo più jitter) |
+| `until` | fine di un cooldown o di un backoff |
+| `step` | tentativi con `retry` dell'account dall'ultimo successo (indice nei gradini di backoff) |
+| `recent` | usi dell'ultima ora (solo con tetto orario) |
+| `year`, `yearCount` | anno solare (Europe/Rome) e usi nell'anno (solo con tetto annuale) |
+| `expireAt` | scadenza (indice TTL, `expireAfterSeconds: 0`); assente se c'è un conteggio annuale |
+
+## einvoicingSentInvoices — storico delle fatture inviate (database common, collection nuova, passo EI5)
+Scritta **solo** dal worker, per il controllo del duplicato 00404. `{ key, queueId, hub, providerId, sentAt, released, releasedAt? }`: `key` = chiave di `duplicateKeyOf` (cedente, numero, anno, classe nota di credito), `providerId` = `hubId` del record. Indice univoco **parziale** `key_1_unreleased` su `{ key }` con `partialFilterExpression: { released: false }` (creato dal worker, idempotente). `released: true` quando lo SdI scarta la fattura (`rejected`, `processingError`) o il committente la rifiuta (`refused`). Le fatture inviate dal legacy prima del passaggio non ci sono.
+
+## einvoicingShadowReports — rapporti della fase ombra (database common, collection nuova, passo EI7)
+Scritta **solo** dal worker in modalità `shadow`: l'esito dell'analisi di un record della coda **senza invio**. Un documento per `{ queueId, codeVersion }`. Nessun validatore (D-32). Mai l'XML né dati di cedente o committente.
+
+| Campo | Tipo | Note |
+|---|---|---|
+| `queueId` | ObjectId | `_id` del record della coda |
+| `hub` | string | hub del record (`company.fattura_elettronica.hub`) |
+| `groupId` | string \| null | gruppo del record (24 caratteri esadecimali) |
+| `documentType` | string \| null | `TD01`… (`null` se il record non è leggibile) |
+| `number`, `date` | string \| null | numero (con sezione) e data (`YYYY-MM-DD`) come appaiono nella fattura; `null` se il record non è mappabile |
+| `outcome` | string | `ok` \| `warnings` \| `blocked` \| `mappingFailed` |
+| `issues` | array | `{ code, path, severity }` (al più 50): codice, percorso XSD, `error` \| `warning`; **mai il messaggio né un valore** |
+| `xmlBytes`, `xmlSha256` | number, string \| null | dimensione e SHA-256 del file che sarebbe partito (`null` se non costruito) |
+| `codeVersion` | string | `version` di `package.json` più `+<BUILD_SHA>` se impostato |
+| `analysedAt` | Date | momento dell'analisi |
+
+Indici (creati dal worker, idempotenti): `shadow_queue_version` **univoco** su `{ queueId: 1, codeVersion: 1 }` (rende idempotente l'analisi: scrittura con `$setOnInsert`) e `shadow_ttl` su `{ analysedAt: 1 }` con `expireAfterSeconds: 2592000` (30 giorni).
 
 ## Domande aperte
 1. `groups.dealerId`: nel legacy riferisce l'`_id` dell'utente `D` (D-09, anagrafica nella collection `dealers`, con lo stesso `_id`). Aperto: se un dealer possa avere più utenti.

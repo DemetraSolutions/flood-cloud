@@ -131,6 +131,12 @@ export interface Config {
   readonly rateLimitStoreKeyAdminPerUser: number;
   /** Writes of the catalog allowed to a store key per minute (`RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE`). */
   readonly rateLimitStoreCatalogWritePerStore: number;
+  /** Writes of the sales (creation, amendment, refund, cancellation and deletion) allowed to a store key per minute (`RATE_LIMIT_STORE_SALES_WRITE_PER_STORE`): a till back online may send the sales of days. */
+  readonly rateLimitStoreSalesWritePerStore: number;
+  /** Creations of invoices (sales of type `invoice`) allowed to a store key per minute (`RATE_LIMIT_STORE_INVOICES_PER_STORE`): every invoice takes a number and may go to the send queue. */
+  readonly rateLimitStoreInvoicesPerStore: number;
+  /** Invoices a store key may create in a UTC day before an alert is raised (`STORE_INVOICE_ALERT_PER_DAY`). Nothing is refused. */
+  readonly storeInvoiceAlertPerDay: number;
   /** Credit a store key may add to a loyalty card in one operation before an alert is raised, in currency units (`STORE_CREDIT_ALERT_PER_OPERATION`). Nothing is refused. */
   readonly storeCreditAlertPerOperation: number;
   /** Credit a store key may add in a day (UTC) before an alert is raised, in currency units (`STORE_CREDIT_ALERT_PER_DAY`). Nothing is refused. */
@@ -171,6 +177,13 @@ export interface Config {
   readonly rateLimitCervedLookupPerUserDaily: number;
   /** Key of the Cerved API (`CERVED_API_KEY`), a secret; `null` when not configured: the VAT lookup then answers `503`. */
   readonly cervedApiKey: Secret | null;
+  /**
+   * The X25519 public key the e-invoicing provider passwords are encrypted for (`CREDENTIALS_PUBLIC_KEY`, PEM SPKI); `null` when not configured: saving an account then answers `503` (reading and removing one still work).
+   * It is not a secret: this server can only encrypt, the private key belongs to the e-invoicing worker alone.
+   */
+  readonly credentialsPublicKey: KeyObject | null;
+  /** Id of that key (`CREDENTIALS_PUBLIC_KEY_ID`, `[a-z0-9-]{1,32}`), written next to every ciphertext; `null` exactly when {@link Config.credentialsPublicKey} is. */
+  readonly credentialsPublicKeyId: string | null;
   /** Base URL of the Cerved API (`CERVED_BASE_URL`): an `https` origin (`http` only for `localhost` and `127.0.0.1`), without trailing slash. */
   readonly cervedBaseUrl: string;
   /** Base URL of the Dojo API (`DOJO_BASE_URL`), the real one by default. */
@@ -439,6 +452,53 @@ function readCervedKey(env: Env, issues: ConfigIssue[]): Secret | null | undefin
     return undefined;
   }
   return new Secret(raw);
+}
+
+/** An id of the credentials public key. */
+const CREDENTIALS_KEY_ID = /^[a-z0-9-]{1,32}$/;
+
+/** What {@link readCredentialsKey} found: both values or none. */
+interface CredentialsKeySettings {
+  readonly key: KeyObject | null;
+  readonly keyId: string | null;
+}
+
+/**
+ * Reads `CREDENTIALS_PUBLIC_KEY` and `CREDENTIALS_PUBLIC_KEY_ID`: both optional, but together (an id without a key, or a key without an id, is an issue). The key is a PEM SPKI public key of type X25519 (a `\n` typed in a one-line value
+ * counts as a line break); any other key type is refused. The value is never echoed.
+ *
+ * @returns The pair (both `null` when unset), or `undefined` after recording an issue.
+ */
+function readCredentialsKey(env: Env, issues: ConfigIssue[]): CredentialsKeySettings | undefined {
+  const raw = optionalVariable(env, 'CREDENTIALS_PUBLIC_KEY');
+  const keyId = optionalVariable(env, 'CREDENTIALS_PUBLIC_KEY_ID');
+  const before = issues.length;
+  let key: KeyObject | null = null;
+  if (raw !== undefined) {
+    const text = raw.trim().replaceAll('\\n', '\n');
+    try {
+      // `createPublicKey` also derives the public key from a private PEM: a private key must never be accepted here.
+      key = text.includes('PRIVATE KEY') ? null : createPublicKey(text);
+    } catch {
+      // Not a key at all: the issue below says so (the message of the parser may echo a part of the value).
+      key = null;
+    }
+    if (key?.asymmetricKeyType !== 'x25519') {
+      key = null;
+      issues.push({ variable: 'CREDENTIALS_PUBLIC_KEY', reason: 'must be a PEM (SPKI) X25519 public key' });
+    }
+  }
+  if (keyId !== undefined && !CREDENTIALS_KEY_ID.test(keyId)) {
+    issues.push({ variable: 'CREDENTIALS_PUBLIC_KEY_ID', reason: 'must be 1 to 32 lower case letters, digits or dashes' });
+  } else if (raw !== undefined && keyId === undefined) {
+    issues.push({ variable: 'CREDENTIALS_PUBLIC_KEY_ID', reason: 'is required when CREDENTIALS_PUBLIC_KEY is set' });
+  } else if (raw === undefined && keyId !== undefined) {
+    issues.push({ variable: 'CREDENTIALS_PUBLIC_KEY', reason: 'is required when CREDENTIALS_PUBLIC_KEY_ID is set' });
+  }
+  if (issues.length > before) {
+    return undefined;
+  }
+  return { key, keyId: keyId ?? null };
 }
 
 /** Why a base URL is refused (the same for every provider; the value is never echoed). */
@@ -872,6 +932,9 @@ export function loadConfig(env: Env): Config {
   const rateLimitStoreActivationPerIp = readInteger(env, issues, 'RATE_LIMIT_STORE_ACTIVATION_PER_IP', 10, 1, 100000);
   const rateLimitStoreKeyAdminPerUser = readInteger(env, issues, 'RATE_LIMIT_STORE_KEY_ADMIN_PER_USER', 20, 1, 100000);
   const rateLimitStoreCatalogWritePerStore = readInteger(env, issues, 'RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE', 120, 1, 1_000_000);
+  const rateLimitStoreSalesWritePerStore = readInteger(env, issues, 'RATE_LIMIT_STORE_SALES_WRITE_PER_STORE', 600, 1, 1_000_000);
+  const rateLimitStoreInvoicesPerStore = readInteger(env, issues, 'RATE_LIMIT_STORE_INVOICES_PER_STORE', 60, 1, 1_000_000);
+  const storeInvoiceAlertPerDay = readInteger(env, issues, 'STORE_INVOICE_ALERT_PER_DAY', 500, 1, 1_000_000);
   const storeCreditAlertPerOperation = readInteger(env, issues, 'STORE_CREDIT_ALERT_PER_OPERATION', 500, 1, 1_000_000_000);
   const storeCreditAlertPerDay = readInteger(env, issues, 'STORE_CREDIT_ALERT_PER_DAY', 5000, 1, 1_000_000_000);
   const rateLimitPublicCatalogWritePerKey = readInteger(env, issues, 'RATE_LIMIT_PUBLIC_CATALOG_WRITE_PER_KEY', 60, 1, 1_000_000);
@@ -892,6 +955,7 @@ export function loadConfig(env: Env): Config {
   const rateLimitCervedLookupPerUser = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER', 10, 1, 100000);
   const rateLimitCervedLookupPerUserDaily = readInteger(env, issues, 'RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY', 200, 1, 1_000_000);
   const cervedApiKey = readCervedKey(env, issues);
+  const credentialsKey = readCredentialsKey(env, issues);
   const cervedBaseUrl = readBaseUrl(env, issues, appEnv, 'CERVED_BASE_URL', DEFAULT_CERVED_BASE_URL);
   const dojoBaseUrl = readBaseUrl(env, issues, appEnv, 'DOJO_BASE_URL', DEFAULT_DOJO_BASE_URL);
   const dojoResellerId = readFormed(env, issues, 'DOJO_RESELLER_ID', PROVIDER_ID, 'must be 1 to 64 letters, digits, spaces, dots, dashes or underscores, not starting or ending with a space');
@@ -982,6 +1046,9 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp === undefined ||
     rateLimitStoreKeyAdminPerUser === undefined ||
     rateLimitStoreCatalogWritePerStore === undefined ||
+    rateLimitStoreSalesWritePerStore === undefined ||
+    rateLimitStoreInvoicesPerStore === undefined ||
+    storeInvoiceAlertPerDay === undefined ||
     storeCreditAlertPerOperation === undefined ||
     storeCreditAlertPerDay === undefined ||
     rateLimitPublicCatalogWritePerKey === undefined ||
@@ -1002,6 +1069,7 @@ export function loadConfig(env: Env): Config {
     rateLimitCervedLookupPerUser === undefined ||
     rateLimitCervedLookupPerUserDaily === undefined ||
     cervedApiKey === undefined ||
+    credentialsKey === undefined ||
     cervedBaseUrl === undefined ||
     dojoBaseUrl === undefined ||
     dojoResellerId === undefined ||
@@ -1061,6 +1129,9 @@ export function loadConfig(env: Env): Config {
     rateLimitStoreActivationPerIp,
     rateLimitStoreKeyAdminPerUser,
     rateLimitStoreCatalogWritePerStore,
+    rateLimitStoreSalesWritePerStore,
+    rateLimitStoreInvoicesPerStore,
+    storeInvoiceAlertPerDay,
     storeCreditAlertPerOperation,
     storeCreditAlertPerDay,
     rateLimitPublicCatalogWritePerKey,
@@ -1081,6 +1152,8 @@ export function loadConfig(env: Env): Config {
     rateLimitCervedLookupPerUser,
     rateLimitCervedLookupPerUserDaily,
     cervedApiKey,
+    credentialsPublicKey: credentialsKey.key,
+    credentialsPublicKeyId: credentialsKey.keyId,
     cervedBaseUrl,
     dojoBaseUrl,
     dojoResellerId,

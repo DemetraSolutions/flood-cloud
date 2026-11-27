@@ -77,6 +77,9 @@ function serviceFailingAt(step: Step | null, extra: { readonly placeOutcome?: 'n
       insertDepartments: (principal, access, documents, session) => after('departments', repository.insertDepartments(principal, access, documents, session)),
       createCardIndex: (principal, access) => repository.createCardIndex(principal, access),
       createSalesIndex: (principal, access) => repository.createSalesIndex(principal, access),
+      createStockIndex: (principal, access) => repository.createStockIndex(principal, access),
+      createNumberingIndexes: (principal, access) => repository.createNumberingIndexes(principal, access),
+      createSalesKeyIndex: (principal, access) => repository.createSalesKeyIndex(principal, access),
     },
     users: { prepareGroupAdmin: async (principal, input) => {
       const prepared = await usersService.prepareGroupAdmin(principal, input);

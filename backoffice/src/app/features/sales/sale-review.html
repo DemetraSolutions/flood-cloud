@@ -1,0 +1,111 @@
+<ng-template #amount let-value>
+  @if (value === null) {
+    <span aria-hidden="true">{{ dash }}</span>
+    <span class="visually-hidden">{{ 'SALES.CHECK.UNAVAILABLE' | t }}</span>
+  } @else {
+    {{ value }}
+  }
+</ng-template>
+
+@if (check(); as serverCheck) {
+  <section aria-labelledby="sale-check">
+    <h2 id="sale-check" tabindex="-1">{{ 'SALES.SECTION.CHECK' | t }}</h2>
+    <p class="note">{{ 'SALES.CHECK.INTRO' | t }}</p>
+    <p class="row">
+      <fc-status-badge [tone]="serverCheck.tone">{{ serverCheck.state | t }}</fc-status-badge>
+      @if (serverCheck.checkedAt !== '') {
+        <span class="note">{{ 'SALES.CHECK.CHECKED_AT' | t: { date: serverCheck.checkedAt } }}</span>
+      }
+    </p>
+    @if (serverCheck.totals.length > 0) {
+      <fc-data-table
+        [caption]="'SALES.CHECK.TOTALS' | t"
+        [columns]="totalColumns()"
+        [rows]="serverCheck.totals"
+        [rowKey]="rowKey"
+        rowHeader="label"
+      >
+        @for (column of ['pos', 'server', 'delta']; track column) {
+          <ng-template [fcCell]="column" let-row>
+            <ng-container *ngTemplateOutlet="amount; context: { $implicit: row[column] }" />
+          </ng-template>
+        }
+      </fc-data-table>
+    }
+    @if (serverCheck.lines.length > 0) {
+      <fc-data-table
+        [caption]="'SALES.CHECK.LINES' | t"
+        [columns]="lineColumns()"
+        [rows]="serverCheck.lines"
+        [rowKey]="rowKey"
+        rowHeader="label"
+      >
+        @for (column of ['pos', 'server']; track column) {
+          <ng-template [fcCell]="column" let-row>
+            <ng-container *ngTemplateOutlet="amount; context: { $implicit: row[column] }" />
+          </ng-template>
+        }
+      </fc-data-table>
+    }
+    @if (serverCheck.linesTruncated) {
+      <p class="note" role="note">{{ 'SALES.CHECK.LINES_TRUNCATED' | t }}</p>
+    }
+  </section>
+}
+
+<section aria-labelledby="sale-anomalies">
+  <h2 id="sale-anomalies" tabindex="-1">{{ 'SALES.SECTION.ANOMALIES' | t }}</h2>
+  <p class="note">{{ 'SALES.ANOMALIES.INTRO' | t }}</p>
+  @if (anomalies().length > 0) {
+    <fc-data-table
+      [caption]="'SALES.ANOMALIES.TABLE' | t"
+      [columns]="anomalyColumns()"
+      [rows]="anomalies()"
+      [rowKey]="rowKey"
+      rowHeader="code"
+    />
+  } @else {
+    <p class="emphasis">{{ 'SALES.ANOMALIES.NONE' | t }}</p>
+  }
+</section>
+
+@if (invoice(); as invoiceDetail) {
+  <section aria-labelledby="sale-invoice">
+    <h2 id="sale-invoice" tabindex="-1">{{ 'SALES.SECTION.INVOICE' | t }}</h2>
+    <p class="row">
+      @if (invoiceNumber() !== '') {
+        <span class="emphasis">{{ invoiceNumber() }}</span>
+      }
+      @if (notQueued()) {
+        <fc-status-badge tone="warning">{{ 'SALES.INVOICE.NOT_QUEUED' | t }}</fc-status-badge>
+      }
+      @if (sendStatus(); as status) {
+        <fc-status-badge [tone]="status.tone">{{ status.text }}</fc-status-badge>
+      }
+      @if (!invoiceDetail.documentFound) {
+        <fc-status-badge tone="danger">{{ 'SALES.INVOICE.DOCUMENT_MISSING' | t }}</fc-status-badge>
+      }
+    </p>
+    @if (notQueued()) {
+      <p class="note" role="note">{{ 'SALES.INVOICE.NOT_QUEUED_NOTE' | t }}</p>
+    } @else if (invoiceHasNoSending() && invoiceDetail.documentFound) {
+      <p class="note">{{ 'SALES.INVOICE.NO_SENDING' | t }}</p>
+    }
+    @if (!invoiceDetail.documentFound) {
+      <p class="note" role="note">{{ 'SALES.INVOICE.DOCUMENT_MISSING_NOTE' | t }}</p>
+    }
+  </section>
+}
+
+@if (operations().length > 0) {
+  <section aria-labelledby="sale-operations">
+    <h2 id="sale-operations">{{ 'SALES.SECTION.OPERATIONS' | t }}</h2>
+    <fc-data-table
+      [caption]="'SALES.OPERATIONS.TABLE' | t"
+      [columns]="operationColumns()"
+      [rows]="operations()"
+      [rowKey]="rowKey"
+      rowHeader="kind"
+    />
+  </section>
+}

@@ -21,6 +21,7 @@ type Search = (text: string) => Promise<readonly SearchOption[]>;
       [search]="search"
       [value]="value()"
       [valueLabel]="valueLabel()"
+      [error]="error()"
       (choice)="choices.push($event)"
     /><button id="outside" type="button">fuori</button>`,
 })
@@ -29,6 +30,7 @@ class Host {
   readonly value = signal('');
   readonly valueLabel = signal<string | null>(null);
   readonly placeholder = signal<string | null>('Tutti');
+  readonly error = signal<string | null>(null);
   readonly choices: (SearchOption | null)[] = [];
 }
 
@@ -336,5 +338,22 @@ describe('SearchCombobox', () => {
     host.placeholder.set(null);
     await view();
     expect(input.hasAttribute('placeholder')).toBe(false);
+  });
+
+  it('shows its error under the field, linked to the input, and takes it away', async () => {
+    const { host, input, root, view } = await render();
+    const message = () => root.querySelector('.error')?.textContent?.trim();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+    expect(input.getAttribute('aria-describedby')).toBeNull();
+    expect(message()).toBe('');
+    host.error.set('Cliente non valido');
+    await view();
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(message()).toBe('Cliente non valido');
+    expect(input.getAttribute('aria-describedby')).toBe(root.querySelector('.error')?.id);
+    host.error.set(null);
+    await view();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+    expect(input.getAttribute('aria-describedby')).toBeNull();
   });
 });

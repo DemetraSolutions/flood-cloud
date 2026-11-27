@@ -7,7 +7,7 @@ import type { AuthPrincipal } from '../../shared/security/scope/principal.ts';
 import type { UsersRepository } from '../users/users.repository.ts';
 import { decodeSalesCursor, encodeSalesCursor } from './sales.cursor.ts';
 import { salesFilter, salesPerimeter } from './sales.filters.ts';
-import { operatorIdsOf, saleDetail, saleRow } from './sales.mapper.ts';
+import { invoiceFilterOf, operatorIdsOf, saleDetail, saleRow } from './sales.mapper.ts';
 import type { SaleDetail, SaleRow } from './sales.mapper.ts';
 import type { SalesRepository } from './sales.repository.ts';
 import type { SalesIndexGuard } from './sales.indexes.ts';
@@ -54,7 +54,7 @@ export interface SalesService {
    */
   summary(principal: AuthPrincipal, access: GroupAccess, query: SalesSummaryQuery): Promise<SalesSummary>;
   /**
-   * One sale with its lines, totals, payments and refunds. A sale that is not fiscal is readable by its id.
+   * One sale with its lines, totals, payments, refunds, the check and anomalies of the server, its invoice (with the state of sending read from the document) and what is still returnable. A sale that is not fiscal is readable by its id.
    *
    * @param principal The authenticated caller.
    * @param access Verified access to the group.
@@ -118,8 +118,9 @@ export function createSalesService(deps: SalesDeps): SalesService {
       if (document === null) {
         throw new AppError('NOT_FOUND');
       }
-      const [operators, user] = await Promise.all([repository.operators(access, operatorIdsOf([document])), users.findById(principal.userId)]);
-      return saleDetail(document, operators, user?.user.language ?? null, hasPermission(principal, 'fidelity:read'));
+      const invoiceFilter = invoiceFilterOf(document);
+      const [operators, user, invoice] = await Promise.all([repository.operators(access, operatorIdsOf([document])), users.findById(principal.userId), invoiceFilter === null ? null : repository.findInvoice(principal, access, invoiceFilter)]);
+      return saleDetail(document, operators, user?.user.language ?? null, hasPermission(principal, 'fidelity:read'), invoice);
     },
   };
 }

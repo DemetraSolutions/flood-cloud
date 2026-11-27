@@ -100,6 +100,11 @@ data:
   RATE_LIMIT_STORE_ACTIVATION_PER_IP: ""
   RATE_LIMIT_STORE_KEY_ADMIN_PER_USER: ""
   RATE_LIMIT_STORE_CATALOG_WRITE_PER_STORE: ""
+  # Sales writes per minute per store key (default 600)
+  RATE_LIMIT_STORE_SALES_WRITE_PER_STORE: ""
+  # Invoices per minute per store key (default 60) and the daily count of invoices of a key that raises an alert (default 500)
+  RATE_LIMIT_STORE_INVOICES_PER_STORE: ""
+  STORE_INVOICE_ALERT_PER_DAY: ""
   STORE_ACTIVATION_CODE_TTL_MINUTES: ""
   # Alerts (nothing is refused) when a store key adds credit to loyalty cards: above this much in one
   # operation (default 500) or in a UTC day (default 5000), in currency units
@@ -139,6 +144,11 @@ data:
   # Optional. Lookups per day (window of 24 hours) allowed to one user (1-1000000), a cap on the cost.
   # Empty: default 200
   RATE_LIMIT_CERVED_LOOKUP_PER_USER_DAILY: ""
+  # Optional. The public key (PEM, X25519) the e-invoicing provider passwords are encrypted for, and its id (1-32
+  # lower case letters, digits or dashes, written next to every ciphertext). Not a secret. The private key is a Secret
+  # of the e-invoicing worker only and never reaches the backend. Both empty: saving an Aruba account answers 503.
+  CREDENTIALS_PUBLIC_KEY: ""
+  CREDENTIALS_PUBLIC_KEY_ID: ""
   # Optional. Host of the files (images) of the groups, written in the `filesHost` of every group the
   # onboarding of a new customer creates: an https URL without credentials, query or fragment, e.g. the
   # public address of the media bucket. Empty: new groups have an empty `filesHost`.

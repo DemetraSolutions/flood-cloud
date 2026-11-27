@@ -249,6 +249,12 @@ export function createOnboardingService(deps: OnboardingServiceDeps): Onboarding
       await repository.createCardIndex(principal, access);
       // The collection of the sales gets the index of the purchases of a customer too (step V1), so the first read for a customer finds it.
       await repository.createSalesIndex(principal, access);
+      // And the unique index of the origins of the warehouse movements (step VS1), so the first sale of the customer finds it.
+      await repository.createStockIndex(principal, access);
+      // And the indexes of the numbering of the fiscal documents (step VS3), so the first invoice of the customer finds them.
+      await repository.createNumberingIndexes(principal, access);
+      // And the unique index of the key of the sales (step VS4a), so the first sale of the customer finds it.
+      await repository.createSalesKeyIndex(principal, access);
 
       const context = { actor: actorOf(principal), groupId, requestId: client.requestId, ...(client.ip === null ? {} : { ip: client.ip }) };
       await recordDataChange(activityLog, {

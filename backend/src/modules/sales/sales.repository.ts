@@ -50,6 +50,16 @@ export interface SalesRepository {
    */
   findOne(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>): Promise<Document | null>;
   /**
+   * The document of the invoice of a sale, with only what shows its number and its state of sending (the e-invoicing moves `sendStatus` in it, so it is read from the document and not from the sale).
+   *
+   * @param principal The authenticated caller.
+   * @param access Verified access to the group.
+   * @param filter From `invoiceFilterOf` over a sale the caller may read.
+   * @returns The document, or `null` when it does not exist.
+   * @throws {AppError} `SERVICE_UNAVAILABLE` when the read exceeds its time limit.
+   */
+  findInvoice(principal: AuthPrincipal, access: GroupAccess, filter: Filter<Document>): Promise<Document | null>;
+  /**
    * The names of the operators of a page of sales, read from the users of the group (an operator of another group is not found).
    *
    * @param access Verified access to the group.
@@ -102,6 +112,9 @@ export function createSalesRepository(databases: Databases): SalesRepository {
     },
 
     findOne: (principal, access, filter) => bounded(() => sales(principal, access).findOne(filter, { projection: { ...DETAIL_PROJECTION }, maxTimeMS: LIST_MAX_TIME_MS })),
+
+    findInvoice: (principal, access, filter) =>
+      bounded(() => groupDatabaseFor(principal, access, databases).collection('documents').findOne(filter, { projection: { number: 1, prefixSuffix: 1, date: 1, sendStatus: 1 }, maxTimeMS: LIST_MAX_TIME_MS })),
 
     operators: async (access, ids) => {
       if (ids.length === 0) {

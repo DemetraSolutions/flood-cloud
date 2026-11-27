@@ -158,8 +158,8 @@ describe('the contacts and the cards of the public API: who may call them', () =
 
   it('has no route to delete for good, to adjust the points of a contact, to import or export, or to write the groups of contacts', async () => {
     const id = hex(new ObjectId());
-    for (const [method, path] of [['DELETE', `/contacts/${id}`], ['POST', '/contacts/trash'], ['POST', `/contacts/${id}/fidelity-cards/X/points-adjustments`], ['POST', '/contacts/import'], ['DELETE', `/fidelity-cards/${id}`], ['POST', '/contact-groups'], ['PATCH', `/contact-groups/${id}`], ['DELETE', `/contact-groups/${id}`], ['GET', '/sales']] as const) {
-      const reply = await send(all, method, path, method === 'GET' ? undefined : {}, { 'idempotency-key': randomUUID(), 'if-match': '"x"' });
+    for (const [method, path] of [['DELETE', `/contacts/${id}`], ['POST', '/contacts/trash'], ['POST', `/contacts/${id}/fidelity-cards/X/points-adjustments`], ['POST', '/contacts/import'], ['DELETE', `/fidelity-cards/${id}`], ['POST', '/contact-groups'], ['PATCH', `/contact-groups/${id}`], ['DELETE', `/contact-groups/${id}`]] as const) {
+      const reply = await send(all, method, path, {}, { 'idempotency-key': randomUUID(), 'if-match': '"x"' });
       assert.ok([404, 405].includes(reply.status), `${method} ${path}: ${String(reply.status)}`);
     }
   });

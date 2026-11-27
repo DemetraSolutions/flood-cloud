@@ -13,7 +13,9 @@ const USERS_DELETE = [P.USERS_DELETE] as const;
 const DEALERS = [P.DEALERS_READ, P.DEALERS_CREATE, P.DEALERS_UPDATE] as const;
 const COMPANIES = [P.COMPANIES_READ, P.COMPANIES_CREATE, P.COMPANIES_UPDATE, P.COMPANIES_TRASH, P.COMPANIES_DELETE] as const;
 /** Loyalty data, the product data kept in the group document (favorites, promotions), the contacts of the group (`doc/Tasks.md` step K1: shared by every place of the group) and the read of its sales (step V1, `sales:read`, which the server limits to the perimeter of the role): every role that works in a group; the user's own matrix narrows it. */
-const GROUP_DATA = [P.FIDELITY_READ, P.FIDELITY_UPDATE, P.PRODUCTS_READ, P.PRODUCTS_UPDATE, P.CONTACTS_READ, P.CONTACTS_WRITE, P.SALES_READ] as const;
+const GROUP_DATA = [P.FIDELITY_READ, P.FIDELITY_UPDATE, P.PRODUCTS_READ, P.PRODUCTS_UPDATE, P.CONTACTS_READ, P.CONTACTS_WRITE, P.SALES_READ, P.SALES_WRITE] as const;
+/** The definitive deletion of a sale that is not fiscal (`doc/Tasks.md` step VS4b, decision 9): only the PSA, the dealers and the group administrators, whatever the matrix says; never a company or place administrator. */
+const SALES_DELETE = [P.SALES_DELETE] as const;
 /** The places a group administrator manages: read, update, trash and delete (a trashed place is deleted for good with its own permission, like `users:delete`); he does not create them. A CA and a PA read and update (a CA the places of his companies, a PA his own). */
 const PLACES = [P.PLACES_READ, P.PLACES_UPDATE, P.PLACES_TRASH, P.PLACES_DELETE] as const;
 
@@ -48,6 +50,9 @@ const ACTIVATIONS_MANAGE = [P.ACTIVATIONS_MANAGE] as const;
 /** The security policy of the platform (what happens to a request that does not look like a browser's): read it and change it, only the PSA. */
 const SECURITY_POLICY = [P.SECURITY_POLICY_MANAGE] as const;
 
+/** The Aruba accounts of the e-invoicing (the platform's and the dealers' own, with the password written but never read back): only the PSA. */
+const E_INVOICING_ACCOUNTS = [P.E_INVOICING_ACCOUNTS_MANAGE] as const;
+
 /**
  * What the server of a point of sale may do with its store key (`doc/Security-Model.md` section 8.2): an explicit allowlist, never derived from a role, a matrix or a request, and never
  * extended from the interface. For now only the reading of its own place; the domains that come later (cash desk, sales, catalog) add what they decide, each with its own step.
@@ -60,9 +65,9 @@ export const STORE_PROFILE: ReadOnlySet<Permission> = frozenSet<Permission>([P.P
  * immutable.
  */
 export const ROLE_CEILING: Readonly<Record<Role, ReadOnlySet<Permission>>> = Object.freeze({
-  PSA: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...ACTIVATIONS_MANAGE, ...SECURITY_POLICY, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
-  D: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
-  SA: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, ...GROUP_DATA, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  PSA: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, P.GROUPS_SUSPEND, P.GROUPS_TRASH, ...DEALERS, ...TOBACCOS, ...COUNTRIES, ...TRASH, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...ACTIVATIONS_MANAGE, ...SECURITY_POLICY, ...E_INVOICING_ACCOUNTS, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...SALES_DELETE, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  D: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_CREATE, P.GROUPS_UPDATE, ...ERROR_DOCUMENTS, ...ACTIVATIONS_READ, ...COMPANIES, ...PLACES, P.PLACES_CREATE, ...STORE_KEYS, ...API_KEYS, ...GROUP_DATA, ...SALES_DELETE, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
+  SA: frozenSet<Permission>([...TOBACCO_SYNC, ...WORKBOOKS, P.GROUPS_READ, P.GROUPS_UPDATE, ...COMPANIES, ...PLACES, ...GROUP_DATA, ...SALES_DELETE, ...USERS, ...USERS_DELETE, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   CA: frozenSet<Permission>([P.COMPANIES_READ, P.COMPANIES_UPDATE, P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   PA: frozenSet<Permission>([P.PLACES_READ, P.PLACES_UPDATE, ...GROUP_DATA, ...USERS, P.ACTIVITY_LOG_READ, ...SESSIONS, ...PROFILE, ...CLIENT_ERRORS]),
   E: frozenSet<Permission>(),

@@ -46,6 +46,7 @@ Ogni chiave ha uno o più permessi; una richiesta a un endpoint il cui permesso 
 | `contacts:write` | creare, modificare, cestinare e ripristinare i contatti |
 | `fidelityCards:read` | `GET /fidelity-cards`, `GET /fidelity-cards/{cardId}`, `GET /fidelity-cards/{cardId}/movements` (credito e punti delle carte) |
 | `fidelityCards:write` | **muove credito prepagato**: creare carte (anche con credito e punti iniziali), cambiarne tipo e stato, rettificare credito e punti |
+| `sales:read` | `GET /sales`, `GET /sales/{saleId}`: gli scontrini e le fatture dei punti vendita (importi in centesimi, **nessun dato personale del cliente**) |
 
 `catalog:write` si concede solo alle chiavi che devono scrivere e **non include** `catalog:read`: una chiave di sola scrittura riceve la voce che ha scritto, ma non legge il catalogo. Per scrivere e rileggere servono entrambi. Lo stesso vale per `contacts:write` e `fidelityCards:write`, che **non includono** `contacts:read` e `fidelityCards:read`. Concedi `contacts:read` e `fidelityCards:write` solo a sistemi fidati: il primo dà accesso a dati personali, il secondo permette di spendere o accreditare credito.
 
@@ -918,6 +919,96 @@ curl -X POST https://<host>/public/v1/fidelity-cards/665f1c2e9b1d4a0012ab6001/ad
 ```
 **Risposta** `200` con la carta aggiornata (credito e punti nuovi; l'`ETag` non cambia). Errori: `404`, `409` (credito o punti insufficienti: `details` indica `balance` o `points.<raccolta>` con `insufficient`; `Idempotency-Key` con corpo diverso o in attesa), `422` (credito su un tipo non prepagato, raccolta non del tipo, nessuna variazione), `403`, `429`.
 
+## Vendite
+
+Le vendite dei punti vendita (scontrini, fatture, addebiti), **in sola lettura**, con il permesso `sales:read`. Una chiave **ristretta** a determinate aziende o punti vendita vede solo le vendite di quelli. `404` significa che la vendita non esiste oppure è fuori dalle restrizioni della chiave; lo stesso vale per una chiave le cui restrizioni non corrispondono a nessun punto vendita attivo.
+
+- **Importi in centesimi interi** (`totalCents: 2440` è 24,40), mai decimali. Le percentuali (`discountPercent`, `taxRatePercent`) sono numeri.
+- **Che cosa non c'è.** Non si espongono dati personali del cliente (della vendita si legge solo `customerId`, l'identificativo del contatto, che si può risolvere con `GET /contacts/{contactId}` se la chiave ha `contacts:read`), né l'operatore, il codice della carta fedeltà, il codice lotteria, le note, i dati di consegna o di prenotazione, la cassa (nome, numero di serie e impostazioni) né i costi.
+- **Conti madre dei tavoli divisi (`receiptType: "partitioned"`).** Un tavolo diviso in più scontrini produce un conto madre che contiene i **prodotti reali** del tavolo e, per ogni parte pagata, uno scontrino che porta soltanto una riga segnaposto "Pasto completo". Il conto madre **non è uno scontrino**: **non va contato come scontrino né sommato ai ricavi** (i suoi totali non sono incassi: gli incassi sono quelli degli scontrini delle parti); va usato, invece, per le statistiche per prodotto e per categoria. Al contrario le righe "Pasto completo" degli scontrini delle parti **non vanno usate** per le statistiche sui prodotti. Per escludere i conti madre dall'elenco passa `partitioned=exclude`; per leggerli da soli `receiptType=partitioned`.
+- **Righe.** `products` contiene al più 500 righe; `productsCount` è il numero reale (maggiore se la vendita ne ha di più). `name` è il nome del prodotto nella prima lingua disponibile.
+- **Resi e annulli.** `fiscalState` è `refunded` (reso, anche parziale), `canceled` (annullata) o `null`; `refunds` elenca i resi con data, numeri fiscali e importo reso. Una vendita annullata va esclusa dai ricavi; una resa parziale va sottratta per l'importo reso.
+
+```json
+{
+  "id": "665f1c2e9b1d4a0012ab7001",
+  "date": "2026-05-10T10:00:00.000Z",
+  "receiptType": "receipt",
+  "number": { "report": 101, "number": 12 },
+  "fiscalState": null,
+  "refunds": [],
+  "invoiced": false,
+  "companyId": "665f1c2e9b1d4a0012ab3001",
+  "placeId": "665f1c2e9b1d4a0012ab4001",
+  "customerId": "665f1c2e9b1d4a0012ab5001",
+  "products": [
+    { "productId": "665f1c2e9b1d4a0012ab2001", "code": "PZ", "name": "Pizza", "quantity": 2, "unitPriceCents": 1220, "discountPercent": 0, "taxRatePercent": 22 }
+  ],
+  "productsCount": 1,
+  "totals": { "totalCents": 2440, "taxableCents": 2000, "taxCents": 440, "discount": { "adjustment": null, "percentage": 0, "valueCents": 0 } },
+  "payments": { "cashCents": 2440, "electronicCents": 0, "chequeCents": 0, "ticketsCents": 0, "fidelityCreditCents": 0 },
+  "unpaidCents": 0
+}
+```
+
+`receiptType` è `receipt` (scontrino), `invoice` (fattura), `charge` (addebito), `partitioned` (conto madre, vedi sopra) o `null` per una vendita di cui il tipo non è noto. `invoiced` è `true` se la vendita è stata inclusa in una fattura differita. `number` è il numero fiscale dello scontrino (`report` è il numero della chiusura giornaliera), `null` se non c'è. `unpaidCents` è l'importo non pagato (addebito o credito).
+
+### GET /sales
+Elenca le vendite dalla più recente. **Permesso:** `sales:read`. Parametri (ogni altro è `422`):
+
+| Parametro | Significato |
+|---|---|
+| `from`, `to` | periodo: `from` **incluso**, `to` **escluso**, data ISO (`2026-05-01` o `2026-05-01T00:00:00Z`, UTC). **Obbligatori entrambi** senza `contactId`; intervallo **al più 1 anno** (`422`: `from`/`required`, `to`/`required`, `to`/`incorrect` se non dopo `from`, `to`/`maximum` oltre l'anno) |
+| `contactId` | solo le vendite di quel contatto; con questo filtro il periodo è facoltativo |
+| `companyId`, `placeId` | restringono ad un'azienda o a un punto vendita (dentro le restrizioni della chiave) |
+| `receiptType` | `receipt`, `invoice`, `charge`, `partitioned` |
+| `partitioned` | `include` (predefinito) o `exclude`: se elencare i conti madre dei tavoli divisi. `receiptType=partitioned` con `partitioned=exclude` è `422` |
+| `fiscalState` | `none` (né annullata né resa), `canceled`, `refunded` (anche il reso parziale) |
+| `limit`, `cursor` | pagina: `limit` 1–**50** (default 20), `cursor` come ricevuto in `page.next` (un valore diverso è `422`) |
+
+Non esistono filtri incrementali: rileggi il periodo che ti serve.
+
+**Richiesta**
+```sh
+curl -H "X-Api-Key: $FLOOD_API_KEY" "https://<host>/public/v1/sales?from=2026-05-01&to=2026-06-01&partitioned=exclude&limit=20"
+```
+**Risposta** `200`
+```json
+{
+  "data": [
+    {
+      "id": "665f1c2e9b1d4a0012ab7001",
+      "date": "2026-05-10T10:00:00.000Z",
+      "receiptType": "receipt",
+      "number": { "report": 101, "number": 12 },
+      "fiscalState": null,
+      "refunds": [],
+      "invoiced": false,
+      "companyId": "665f1c2e9b1d4a0012ab3001",
+      "placeId": "665f1c2e9b1d4a0012ab4001",
+          "customerId": null,
+      "products": [
+        { "productId": "665f1c2e9b1d4a0012ab2001", "code": "PZ", "name": "Pizza", "quantity": 2, "unitPriceCents": 1220, "discountPercent": 0, "taxRatePercent": 22 }
+      ],
+      "productsCount": 1,
+      "totals": { "totalCents": 2440, "taxableCents": 2000, "taxCents": 440, "discount": { "adjustment": null, "percentage": 0, "valueCents": 0 } },
+      "payments": { "cashCents": 2440, "electronicCents": 0, "chequeCents": 0, "ticketsCents": 0, "fidelityCreditCents": 0 },
+      "unpaidCents": 0
+    }
+  ],
+  "page": { "limit": 20, "next": "eyJ2ZXIiOjEs..." }
+}
+```
+
+### GET /sales/{saleId}
+Una vendita, con la stessa forma di quelle dell'elenco. **Permesso:** `sales:read`. `404` se la vendita non esiste oppure è fuori dalle restrizioni della chiave.
+
+**Richiesta**
+```sh
+curl -H "X-Api-Key: $FLOOD_API_KEY" "https://<host>/public/v1/sales/665f1c2e9b1d4a0012ab7001"
+```
+**Risposta** `200`: `{ "data": { …come sopra… } }`.
+
 ## Buone pratiche di integrazione
 - Conserva la chiave in un gestore di segreti e **non** inserirla in repository, log o richieste di assistenza; se sospetti che sia esposta, chiedi subito la revoca.
 - Usa una chiave per ogni sistema, con i soli permessi e le sole restrizioni che servono.
@@ -926,5 +1017,6 @@ curl -X POST https://<host>/public/v1/fidelity-cards/665f1c2e9b1d4a0012ab6001/ad
 - Per tenere allineato il catalogo usa l'aggiornamento incrementale (`updatedSince`) più una rilettura completa periodica; per le scritture genera un `Idempotency-Key` per ogni creazione e conserva l'`ETag` di ogni voce letta.
 - Dai a una chiave di scrittura solo le restrizioni che servono: una chiave senza restrizioni può modificare ogni prodotto dell'attività.
 - Per i contatti e le carte, genera un `Idempotency-Key` per ogni creazione e per ogni rettifica, e non ripeterle con una chiave nuova se non sai se la prima è andata a buon fine: leggi prima la carta.
+- Per le statistiche di vendita non contare i conti madre `partitioned` come scontrini né sommarne i totali, e non usare le righe "Pasto completo" degli scontrini delle parti per le statistiche sui prodotti.
 - Dai `contacts:read` e `fidelityCards:write` solo a chi ne ha davvero bisogno: i contatti sono dati personali e le rettifiche muovono credito.
 - Registra l'header `X-Request-Id` delle risposte con errore.

@@ -9,12 +9,24 @@
     <button fc-button variant="secondary" type="button" (click)="back()">{{ 'SALES.BACK' | t }}</button>
   </p>
 } @else if (sale(); as current) {
+  @if (stale()) {
+    <p class="warning" role="alert">
+      <fc-icon name="alert" />
+      <span>{{ 'SALES.REREAD_FAILED' | t }}</span>
+      <button fc-button variant="secondary" type="button" [loading]="refreshing()" (click)="reload()">
+        {{ 'COMMON.RETRY' | t }}
+      </button>
+    </p>
+  }
   <fc-sale-view
     [groupId]="groupId()"
     [sale]="current"
     [currency]="currency()"
     [names]="names()"
+    [refreshing]="refreshing()"
     (back)="back()"
+    (reload)="reload()"
+    (deleted)="afterDeletion()"
   />
 } @else {
   <p role="status">{{ 'COMMON.LOADING' | t }}</p>

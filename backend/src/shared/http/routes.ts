@@ -70,7 +70,7 @@ export interface UserAuth {
  * The only path parameters a store route may have: the ids of the entries it reads or writes (the catalog `/store-context/catalog/products/:productId`, the contacts and the loyalty cards). The builder checks each one is the text of
  * an id before anything else of the route runs; the group, the company and the place are never a parameter, they come from the store key.
  */
-export const STORE_PATH_PARAMETERS = Object.freeze(['productId', 'categoryId', 'brandId', 'attributeGroupId', 'contactId', 'cardId'] as const);
+export const STORE_PATH_PARAMETERS = Object.freeze(['productId', 'categoryId', 'brandId', 'attributeGroupId', 'contactId', 'cardId', 'saleId'] as const);
 
 /**
  * The path parameters of a store route that are text, not ids: the code of a loyalty card (`/store-context/contacts/:contactId/fidelity-cards/:code/points-adjustments`). A route that has one **declares** it, with the schema

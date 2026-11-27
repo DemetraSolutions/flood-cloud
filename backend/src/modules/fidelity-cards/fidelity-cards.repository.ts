@@ -17,8 +17,10 @@ import { CARDS_LIST, MOVEMENTS_LIST } from './fidelity-cards.schemas.ts';
 
 const PROJECTION = entityProjection(FIDELITY_CARDS_OWNED_FIELDS);
 
-/** A movement of the history of a card, as it is inserted: `manually` (the sales are the legacy's), or `import` for the credit and the points a card is given by the workbook. */
+/** A movement of the history of a card, as it is inserted: `manually` for what an operator does, `import` for the credit and the points a card is given by the workbook, `sale` or `canceled_sale` for the effects of a sale (step VS2, always with its `saleId`). */
 export interface NewMovement {
+  /** The id of the movement when the caller needs to know it (the effects of a sale return the ids they wrote); the database makes one otherwise. */
+  readonly _id?: ObjectId;
   /** The user who made the movement; `null` for the one made by a public API key (the activity log names the key). */
   readonly userId: ObjectId | null;
   /** The public API key that made the movement (set only then, with `userId` `null`). */
@@ -28,8 +30,10 @@ export interface NewMovement {
   readonly cardId: ObjectId;
   readonly cardCode: string;
   readonly date: Date;
-  /** `manually` for what an operator does in the backoffice, `import` for the initial values of a card created by the workbook: the movements of a sale are the legacy's. */
-  readonly type: 'manually' | 'import';
+  /** `manually` for what an operator does in the backoffice, `import` for the initial values of a card created by the workbook, `sale` for the effect of a sale (a sale, a modification or a refund of it: the values carry the sign) and `canceled_sale` for the reversal of a canceled one. */
+  readonly type: 'manually' | 'import' | 'sale' | 'canceled_sale';
+  /** The sale that made the movement (`sale` and `canceled_sale` only): what a reversal reads back to know what the sale did. */
+  readonly saleId?: ObjectId;
   /** The credit moved, with its sign; `0` for a movement of points only. */
   readonly balance: number;
   /** The collection the points were moved on; `null` for a movement of credit only. */
@@ -78,7 +82,15 @@ export interface CardsRepository {
    * @returns The card after, `null` when nothing matched (no such card, or a value would go below zero, or the type changed).
    */
   adjust(principal: ScopeHolder, access: GroupAccess, id: ObjectId, deltas: CardDeltas, cardTypeId: unknown): Promise<Document | null>;
-  /** Inserts the movements of an adjustment (in the transaction of the `$inc` they explain). */
+  /**
+   * Adds the effects of a sale to a card with one update, as {@link CardsRepository.adjust} does (the credit rounded to two decimals in the database and kept a `Double`, the points added to the collections) but without the guard of
+   * non-negativity and without the type of the card as a guard: a sale of the point of sale is never refused (step VS2, decision 13), so it may take the credit below zero; only the manual adjustments stay blocked. A value that is not a
+   * finite number, or is a list, still never matches (an `$add` on it would fail the whole transaction).
+   *
+   * @returns The card after, `null` when nothing matched (no such card, or its credit or points are not numbers).
+   */
+  applySale(principal: ScopeHolder, access: GroupAccess, id: ObjectId, deltas: CardDeltas): Promise<Document | null>;
+  /** Inserts the movements of an adjustment or of a sale (in the transaction of the `$inc` they explain). */
   insertMovements(principal: ScopeHolder, access: GroupAccess, movements: readonly NewMovement[]): Promise<void>;
   /** A page of the movements of a card (by id or by code), newest first. */
   movements(principal: ScopeHolder, access: GroupAccess, card: { readonly id: ObjectId; readonly code: string }, params: ListParams): Promise<ListPage>;
@@ -180,6 +192,29 @@ export function createCardsRepository(databases: Databases): CardsRepository {
         conditions.push(addable(path, delta));
       }
       return cards(principal, access).findOneAndUpdate({ _id: id, ...sameAs('cardTypeId', cardTypeId), $and: conditions }, [{ $set: set }], { returnDocument: 'after', projection: PROJECTION });
+    },
+
+    applySale: async (principal, access, id, deltas) => {
+      const set: Record<string, unknown> = {};
+      const conditions: Filter<Document>[] = [];
+      /** The value is missing or a finite number that is not in a list: the only kind of value a sale adds to. */
+      const addable = (path: string): Filter<Document> => ({ $or: [{ [path]: { $exists: false } }, { $and: [{ [path]: { $gte: Number.NEGATIVE_INFINITY, $lt: Number.POSITIVE_INFINITY } }, { [path]: { $not: { $type: 'array' } } }] }] });
+      if (deltas.balance !== undefined) {
+        set['balance'] = { $round: [{ $add: [{ $ifNull: ['$balance', { $literal: new Double(0) }] }, { $literal: new Double(deltas.balance) }] }, 2] };
+        conditions.push(addable('balance'));
+      }
+      if (deltas.points.length > 0) {
+        conditions.push({ $or: [{ pointsCollections: { $exists: false } }, { pointsCollections: { $type: 'object' } }] }, { pointsCollections: { $not: { $type: 'array' } } });
+      }
+      for (const { collectionId, delta } of deltas.points) {
+        if (!SAFE_ID.test(collectionId)) {
+          throw new Error('Refusing to write a collection that is not a safe id');
+        }
+        const path = `pointsCollections.${collectionId}`;
+        set[path] = { $add: [{ $ifNull: [`$${path}`, 0] }, { $literal: delta }] };
+        conditions.push(addable(path));
+      }
+      return cards(principal, access).findOneAndUpdate({ _id: id, $and: conditions }, [{ $set: set }], { returnDocument: 'after', projection: PROJECTION });
     },
 
     insertMovements: async (principal, access, movements) => {

@@ -2,6 +2,7 @@ import type { AggregateOptions, ClientSession, CountDocumentsOptions, Db, Docume
 import type { AggregationCursor } from 'mongodb';
 import type { ClusterId } from '../config.ts';
 import type { ClusterClients, ClusterRegistry } from './clusters.ts';
+import { QUEUE_DOCUMENTS_OWNED_FIELDS } from './collections.ts';
 import { commonDatabaseName, groupDatabaseName, parseGroupDatabaseName, queueDatabaseName } from './names.ts';
 import type { DatabaseNameContext } from './names.ts';
 
@@ -111,6 +112,20 @@ export class UnknownClusterError extends Error {
   }
 }
 
+/**
+ * The one write this backend makes in the legacy send queue (step VS5): it hands a record to the queue. It offers nothing else (no read, no update, no delete, no index), so no module can do more to the queue than this.
+ */
+export interface QueueInbox {
+  /**
+   * Inserts the record of an invoice in `documents` of the queue, once: the record is looked up by its `_id` (the one of the invoice document) and written only when it is not there, so asking again never duplicates it nor overwrites what the consumer added.
+   *
+   * @param record The record: its `_id` and the fields of `QUEUE_DOCUMENTS_OWNED_FIELDS`, nothing else.
+   * @returns `true` when the record was inserted now, `false` when it was already there.
+   * @throws {Error} When the record has a field this backend does not own in the queue, or when the database refuses.
+   */
+  enqueue(record: Document & { readonly _id: ObjectId }): Promise<boolean>;
+}
+
 /** The only way to obtain a `Db` handle. */
 export interface Databases {
   /** Ids of the configured clusters, in configuration order. */
@@ -130,10 +145,13 @@ export interface Databases {
   /** The common database through the analytics connection of the common cluster (reads only). */
   analyticsCommon(): ReadOnlyDb;
   /**
-   * The legacy send queue database (`<prefix><appEnv>_queue`, on the common cluster) through the analytics connection: reads only. The
-   * legacy `CronEngine` is its only writer; this backend never writes to it nor creates an index on it. Only the error documents repository may call it.
+   * The legacy send queue database (`<prefix><appEnv>_queue`, on the common cluster) through the analytics connection: reads only. Only the error documents repository may call it; the one write this backend makes there is {@link Databases.queueInbox}.
    */
   queue(): ReadOnlyDb;
+  /**
+   * The way to hand a record to the legacy send queue (`<prefix><appEnv>_queue`, on the common cluster): the single write this backend makes there. Only the sales module (the invoice of a sale) may call it; the consumer of the queue is the e-invoicing worker.
+   */
+  queueInbox(): QueueInbox;
   /**
    * The operational database of a group through the analytics connection of its cluster (reads only).
    *
@@ -269,6 +287,17 @@ export function createDatabases(registry: ClusterRegistry, context: DatabaseName
     group: (groupId, clusterId) => open(clientsOf(clusterId, groupId).main, groupDatabaseName(context, groupId)),
     analyticsCommon: () => readOnly(open(clientsOf(registry.commonCluster).analytics, commonName)),
     queue: () => readOnly(open(clientsOf(registry.commonCluster).analytics, queueDatabaseName(context))),
+    queueInbox: () => ({
+      enqueue: async (record) => {
+        const { _id, ...fields } = record;
+        const stray = Object.keys(fields).filter((name) => !QUEUE_DOCUMENTS_OWNED_FIELDS.includes(name));
+        if (stray.length > 0) {
+          throw new Error(`The send queue does not accept the field ${stray[0]!}`);
+        }
+        const result = await open(clientsOf(registry.commonCluster).main, queueDatabaseName(context)).collection('documents').updateOne({ _id }, { $setOnInsert: fields }, { upsert: true });
+        return result.upsertedCount === 1;
+      },
+    }),
     analyticsGroup: (groupId, clusterId) => readOnly(open(clientsOf(clusterId, groupId).analytics, groupDatabaseName(context, groupId))),
     resolveGroupCluster: (group) => {
       if (group.dataCluster === undefined) {

@@ -137,7 +137,7 @@ describe('createSustainedRateLimitAudit', () => {
 
 describe('the alert actions', () => {
   it('are a frozen subset of the security actions', () => {
-    assert.deepEqual([...ACTIVITY_ALERT_ACTIONS], ['rateLimit.sustainedExceeded', 'request.nonBrowser', 'settings.securityPolicyUpdated', 'store.activationCodeForActivePlace', 'store.activeKeyReplaced', 'store.activeKeyRevoked', 'store.creditAlert', 'store.advancedCardRelinked']);
+    assert.deepEqual([...ACTIVITY_ALERT_ACTIONS], ['rateLimit.sustainedExceeded', 'request.nonBrowser', 'settings.securityPolicyUpdated', 'store.activationCodeForActivePlace', 'store.activeKeyReplaced', 'store.activeKeyRevoked', 'store.creditAlert', 'store.invoiceAlert', 'store.advancedCardRelinked']);
     assert.ok(Object.isFrozen(ACTIVITY_ALERT_ACTIONS));
     for (const action of ACTIVITY_ALERT_ACTIONS) {
       assert.ok(SECURITY_ACTIONS.includes(action));

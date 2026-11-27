@@ -1,0 +1,41 @@
+<fieldset [disabled]="disabled()">
+  <legend>{{ legend() }}</legend>
+  <p class="note">{{ 'SALES.ACTION.RECEIPT_HINT' | t }}</p>
+  <div class="grid">
+    <fc-text-field
+      type="datetime-local"
+      [label]="'SALES.ACTION.RECEIPT_DATE' | t"
+      [hint]="'SALES.ACTION.RECEIPT_DATE_HINT' | t"
+      [value]="value().date"
+      [error]="error('date')"
+      (valueChange)="set('date', $event)"
+    />
+    <fc-text-field
+      inputmode="numeric"
+      autocomplete="off"
+      [label]="'SALES.ACTION.RECEIPT_REPORT' | t"
+      [hint]="'SALES.ACTION.RECEIPT_REPORT_HINT' | t"
+      [value]="value().report"
+      [error]="error('report')"
+      (valueChange)="set('report', $event)"
+    />
+    <fc-text-field
+      inputmode="numeric"
+      autocomplete="off"
+      [label]="'SALES.ACTION.RECEIPT_NUMBER' | t"
+      [hint]="'SALES.ACTION.RECEIPT_NUMBER_HINT' | t"
+      [value]="value().number"
+      [error]="error('number')"
+      (valueChange)="set('number', $event)"
+    />
+    <fc-text-field
+      inputmode="decimal"
+      autocomplete="off"
+      [label]="'SALES.ACTION.AMOUNT_LABEL' | t: { label: ('SALES.ACTION.RECEIPT_AMOUNT' | t), symbol: symbol() }"
+      [hint]="'SALES.ACTION.RECEIPT_AMOUNT_HINT' | t"
+      [value]="value().amount"
+      [error]="error('amount')"
+      (valueChange)="set('amount', $event)"
+    />
+  </div>
+</fieldset>

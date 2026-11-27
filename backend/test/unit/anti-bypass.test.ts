@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import { createDatabases } from '../../src/db/databases.ts';
 import { isPublicPermission } from '../../src/shared/security/rbac/public-permissions.ts';
 
@@ -262,10 +262,10 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.ok(!/places: new Set\(\[[^\]]*(?:appointment|roomsSettings)/.test(fields));
     });
 
-    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups, the cross-group list of the copies, the three fixed reads of the diagnostics and the fixed read of the places that use a template, the two fixed reads of the places the categories refer to (step C2) and the fixed read of the companies and places that use a country', async () => {
+    it('exposes from group-mirror.ts only the two per-group openers, the fixed count of the page groups, the cross-group list of the copies, the three fixed reads of the diagnostics and the fixed read of the places that use a template, the two fixed reads of the places the categories refer to (step C2) the fixed read of the companies and places that use a country and the fixed read of the cash storages of a place (step VS1) and the fixed read of the company of an invoice (step VS5)', async () => {
       const text = await readFile(join(SRC, MIRROR), 'utf8');
       const exported = [...text.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => match[1]);
-      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorList', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readPlaceSetups', 'readCatalogPlaces', 'findPlacesUsingCategory', 'readCountryUsage']);
+      assert.deepEqual(exported, ['groupMirror', 'trustedGroupMirror', 'countMirrorByGroups', 'readMirrorList', 'readMirrorDevices', 'countMirrorDevices', 'trashedCompanyIds', 'readMirrorActivationPlaces', 'readMirrorActivationCompanies', 'findPlacesUsingTemplate', 'readPlaceSetups', 'readPlaceCashStorages', 'readNumberingSetup', 'readInvoiceCompany', 'readCatalogPlaces', 'findPlacesUsingCategory', 'readCountryUsage']);
       // The count builds its own pipeline from the fixed builder: no caller-supplied stage, and no other multi-group read.
       assert.equal([...text.matchAll(/countByGroupPipeline\(/g)].length, 1);
       // The diagnostics (T1) add two more, each running a pipeline made by `mirror-devices.ts` (the whole of what leaves the copies: an allowlist of the fields of a device).
@@ -286,11 +286,15 @@ describe('database access cannot be bypassed outside src/db', () => {
       return found;
     };
 
-    it('lets only the services of the catalog workbook, of the advanced loyalty cards, of the workbooks of the contacts and of the cards and of the tobacco synchronization open a transaction on a group database and bind the repositories to its session', async () => {
+    it('lets only the services of the catalog workbook, of the advanced loyalty cards, of the workbooks of the contacts and of the cards, of the stock, of the loyalty effects of a sale and of the tobacco synchronization open a transaction on a group database and bind the repositories to its session', async () => {
       const SESSION = 'db/session-databases.ts';
       // The service of the advanced loyalty cards (step F1) is the third, by decision of the user of 2026-11-25: a card with its movements and its contacts, and an adjustment with its movements, are all-or-nothing.
       // The workbooks of the contacts and of the loyalty cards (step K3) are the fourth, by the same decision as the catalog's ("limiti e rapporto degli errori come l'import del catalogo", doc/Tasks.md §9-novies.2, 7): they share one engine, the one that opens the transaction.
-      const allowed = ['modules/catalog-xlsx/catalog-xlsx.service.ts', 'modules/fidelity-cards/fidelity-cards.service.ts', 'modules/records-xlsx/records-xlsx.service.ts', 'modules/tobacco-sync/tobacco-sync.service.ts'];
+      // The stock service (step VS1) is the fifth, by decision of the user of 2026-11-27 (doc/Tasks.md §9-decies): the movement of the warehouse and the change of the stock of the products are all-or-nothing, and a sale joins its transaction.
+      // The loyalty service (step VS2) is the sixth, by the same decision: the points, the credit and their movements of a sale are all-or-nothing, and a sale joins its transaction.
+      // The numbering service (step VS3) is the seventh, by the same decision: the counter of a number moves in the transaction of the document it numbers (alone, when nobody holds one open), so a number is never consumed by a document that is not written.
+      // The sales service (step VS4a) is the eighth, by decision of the user of 2026-11-27 (doc/Tasks.md §9-decies.2-bis): the sale, the movements of the warehouse and the effects on the loyalty cards are all-or-nothing, and it hands the transaction to the stock and loyalty services (`nested`).
+      const allowed = ['modules/catalog-xlsx/catalog-xlsx.service.ts', 'modules/document-numbering/numbering.service.ts', 'modules/fidelity-cards/fidelity-cards.service.ts', 'modules/loyalty/loyalty.service.ts', 'modules/records-xlsx/records-xlsx.service.ts', 'modules/sales/sales.write.service.ts', 'modules/stock/stock.service.ts', 'modules/tobacco-sync/tobacco-sync.service.ts'];
       assert.deepEqual(await importersOf('sessionDatabases', SESSION), allowed);
       assert.deepEqual(await importersOf('inGroupTransaction', SESSION), allowed);
     });
@@ -403,7 +407,7 @@ describe('database access cannot be bypassed outside src/db', () => {
           openers.push(posix(file));
         }
       }
-      assert.deepEqual(openers.sort(), ['modules/catalog-xlsx/catalog-xlsx.repository.ts', 'modules/contacts/contacts.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts', 'modules/tobacco-sync/tobacco-sync.repository.ts']);
+      assert.deepEqual(openers.sort(), ['modules/catalog-xlsx/catalog-xlsx.repository.ts', 'modules/contacts/contacts.repository.ts', 'modules/group-lookup/lookup.repository.ts', 'modules/group-services/services.repository.ts', 'modules/product-catalog/product-references.ts', 'modules/products/products.repository.ts', 'modules/products/products.tax.ts', 'modules/sales/sales.write.repository.ts', 'modules/stock/stock.repository.ts', 'modules/tobacco-sync/tobacco-sync.repository.ts']);
     });
 
     it('lets the contacts repository read the products (the services and the supplier price lists it checks) and never write them', async () => {
@@ -581,6 +585,25 @@ describe('database access cannot be bypassed outside src/db', () => {
       assert.throws(() => documents.aggregate([{ $merge: { into: 'x' } }]), /\$out or \$merge/);
     });
 
+    it('hands a record to the queue only through the inbox, which the sales service alone uses, and which can do nothing else', async () => {
+      const callers: string[] = [];
+      for (const file of await filesUnder(SRC)) {
+        const path = posix(file);
+        if (!path.startsWith('db/') && /\.queueInbox\(\)/.test(await readFile(file, 'utf8'))) {
+          callers.push(path);
+        }
+      }
+      assert.deepEqual(callers, ['modules/sales/sales.write.service.ts']);
+      const client = new MongoClient('mongodb://127.0.0.1:1/?directConnection=true');
+      const databases = createDatabases({ clusters: new Map([['cluster0', { main: client, analytics: client }]]), commonCluster: 'cluster0', defaultGroupCluster: 'cluster0' }, { prefix: '', appEnv: 'development' });
+      assert.deepEqual(Object.keys(databases.queueInbox()), ['enqueue']);
+      // A field the consumer owns (or any other) is refused before the database is reached.
+      await assert.rejects(() => databases.queueInbox().enqueue({ _id: new ObjectId(), hubId: 'x' }), /does not accept the field hubId/);
+      await assert.rejects(() => databases.queueInbox().enqueue({ _id: new ObjectId(), $set: { a: 1 } }), /does not accept the field/);
+      const service = await readFile(join(SRC, 'modules/sales/sales.write.service.ts'), 'utf8');
+      assert.equal([...service.matchAll(/\.queueInbox\(\)\s*\.enqueue\(/g)].length, 1, 'one call, after the commit');
+    });
+
     it('registers the permission on /v1 only: it is not a public permission, and the public routes do not mention the documents', async () => {
       assert.equal(isPublicPermission('errorDocuments:read'), false);
       for (const file of await filesUnder(join(SRC, 'modules', 'public-api'))) {
@@ -605,6 +628,7 @@ describe('the service of the cards joins a transaction only for the workbook of 
         found.push(relative(SRC, file).split('\\').join('/'));
       }
     }
-    assert.deepEqual(found, ['modules/fidelity-cards-xlsx/fidelity-cards-xlsx.service.ts']);
+    // The composition root also builds the stock and loyalty services joined to the transaction of the sales service (step VS4a), which opens it and hands it over.
+    assert.deepEqual(found, ['composition.ts', 'modules/fidelity-cards-xlsx/fidelity-cards-xlsx.service.ts']);
   });
 });

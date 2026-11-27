@@ -58,7 +58,7 @@ const periodShort = (value: Period): string[] => {
 };
 
 /** Adds the rules between the filters to a query schema (the first problem found stops the others). */
-function withPeriodRules<T extends Period>(schema: Schema<T, false>): Schema<T, false> {
+export function withPeriodRules<T extends Period>(schema: Schema<T, false>): Schema<T, false> {
   return refine(refine(refine(schema, periodRequired, 'required'), periodOrdered, 'incorrect'), periodShort, 'maximum');
 }
 

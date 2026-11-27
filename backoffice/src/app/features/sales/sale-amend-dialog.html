@@ -1,0 +1,111 @@
+<fc-dialog
+  [heading]="'SALES.ACTION.AMEND_TITLE' | t: { reference: text.reference() }"
+  [wide]="true"
+  [locked]="run.busy()"
+  [open]="open()"
+  (openChange)="open.set($event)"
+>
+  <form id="sale-amend-form" novalidate (submit)="submit($event)">
+    @if (run.failure(); as message) {
+      <fc-form-error [message]="message" />
+    }
+    @if (touched() && !changed() && !run.failure()) {
+      <fc-form-error [message]="'SALES.ACTION.NOTHING_CHANGED' | t" />
+    }
+    <p class="note">{{ text.summary() }}</p>
+    <p class="note">{{ 'SALES.ACTION.AMEND_NOTE' | t }}</p>
+    @if (updated()) {
+      <p class="warning" role="status">
+        <fc-icon name="alert" />
+        <span>{{ 'SALES.ACTION.UPDATED' | t }}</span>
+      </p>
+    }
+    @if (run.rereading()) {
+      <p class="note" role="status">{{ 'SALES.ACTION.REREADING' | t }}</p>
+    }
+    @if (!canWriteFidelity()) {
+      <p class="warning" role="status">
+        <fc-icon name="alert" />
+        <span>{{ 'SALES.ACTION.NEEDS_FIDELITY' | t }}</span>
+      </p>
+    }
+    <fieldset [disabled]="run.blocked()">
+      <legend>{{ 'SALES.SECTION.PAYMENTS' | t }}</legend>
+      <p class="note">{{ 'SALES.ACTION.AMOUNT_HINT' | t: { currency: currency() } }}</p>
+      <div class="grid">
+        @for (item of paymentLabels(); track item.field) {
+          <fc-text-field
+            inputmode="decimal"
+            autocomplete="off"
+            [label]="item.label"
+            [disabled]="item.field === 'fidelityCredit' && !canWriteFidelity()"
+            [value]="form()[item.field]"
+            [error]="error(item.field)"
+            (valueChange)="setPayment(item.field, $event)"
+          />
+        }
+      </div>
+    </fieldset>
+    @if (sale().invoiced) {
+      <p class="note" role="status">{{ 'SALES.ACTION.INVOICED_NOTE' | t }}</p>
+    }
+    <fieldset [disabled]="run.blocked() || sale().invoiced">
+      <legend>{{ 'SALES.FACT.CUSTOMER' | t }}</legend>
+      @if (canReadContacts()) {
+        <fc-search-combobox
+          [label]="'SALES.ACTION.CUSTOMER_SEARCH' | t"
+          [value]="form().customerId ?? ''"
+          [valueLabel]="customerName()"
+          [search]="searchCustomers"
+          [minChars]="minChars"
+          [placeholder]="'SALES.ACTION.CUSTOMER_PLACEHOLDER' | t"
+          [clearLabel]="'SALES.ACTION.CUSTOMER_CLEAR' | t"
+          [error]="error('customer')"
+          (choice)="chooseCustomer($event)"
+        />
+      } @else {
+        <p class="note">{{ 'SALES.ACTION.CUSTOMER_NO_ACCESS' | t }}</p>
+      }
+    </fieldset>
+    @if (canReadCard()) {
+      <fieldset [disabled]="run.blocked() || !canWriteFidelity() || sale().invoiced">
+        <legend>{{ 'SALES.FACT.CARD' | t }}</legend>
+        <fc-text-field
+          autocomplete="off"
+          [label]="'SALES.ACTION.CARD_CODE' | t"
+          [hint]="'SALES.ACTION.CARD_HINT' | t: { max: cardMax }"
+          [value]="form().cardCode"
+          [error]="error('cardCode')"
+          (valueChange)="setCard($event)"
+        />
+        <p class="note">{{ 'SALES.ACTION.CARD_MOVES' | t }}</p>
+      </fieldset>
+    }
+    <fc-sale-receipt-fields
+      [legend]="'SALES.FACT.RECEIPT' | t"
+      prefix="receipt"
+      [symbol]="text.symbol()"
+      [disabled]="run.blocked()"
+      [value]="form().receipt"
+      [issues]="issues()"
+      (valueChange)="setReceipt($event)"
+    />
+    <fc-text-field
+      autocomplete="off"
+      [label]="'SALES.ACTION.LOTTERY' | t"
+      [hint]="'SALES.ACTION.LOTTERY_HINT' | t: { max: lotteryMax }"
+      [disabled]="run.blocked()"
+      [value]="form().lottery"
+      [error]="error('lottery')"
+      (valueChange)="setLottery($event)"
+    />
+  </form>
+  <ng-container ngProjectAs="[fcDialogActions]">
+    <button fc-button variant="secondary" [disabled]="run.busy()" (click)="open.set(false)">
+      {{ 'SALES.ACTION.GO_BACK' | t }}
+    </button>
+    <button fc-button type="submit" form="sale-amend-form" [loading]="run.blocked()">
+      {{ 'SALES.ACTION.AMEND_SUBMIT' | t }}
+    </button>
+  </ng-container>
+</fc-dialog>

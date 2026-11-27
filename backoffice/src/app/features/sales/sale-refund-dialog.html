@@ -1,0 +1,105 @@
+<fc-dialog
+  [heading]="'SALES.ACTION.REFUND_TITLE' | t: { reference: text.reference() }"
+  [wide]="true"
+  [locked]="run.busy()"
+  [open]="open()"
+  (openChange)="open.set($event)"
+>
+  <form id="sale-refund-form" novalidate (submit)="submit($event)">
+    @if (run.failure(); as message) {
+      <fc-form-error [message]="message" />
+    }
+    @if (touched() && chosen().length === 0) {
+      <fc-form-error [message]="'SALES.ACTION.REFUND_NO_LINES' | t" />
+    }
+    <p class="note">{{ text.summary() }}</p>
+    <p class="note">{{ 'SALES.ACTION.REFUND_NOTE' | t }}</p>
+    @if (run.rereading()) {
+      <p class="note" role="status">{{ 'SALES.ACTION.REREADING' | t }}</p>
+    }
+    @if (fidelityMissing()) {
+      <p class="warning" role="status">
+        <fc-icon name="alert" />
+        <span>{{ 'SALES.ACTION.FIDELITY_NOTE' | t }}</span>
+      </p>
+    }
+    <fieldset [disabled]="run.blocked()">
+      <legend>{{ 'SALES.ACTION.REFUND_LINES' | t }}</legend>
+      @if (lines().length === 0) {
+        <p class="note">{{ 'SALES.ACTION.REFUND_NOTHING_LEFT' | t }}</p>
+      } @else {
+        <ul class="lines">
+          @for (line of lines(); track line.product.index) {
+            <li class="line">
+              <span class="line-name">
+                {{ line.product.name ?? line.product.code ?? '' }}
+                <small>{{ 'SALES.ACTION.REFUND_LEFT' | t: { left: quantity(line.left), sold: quantity(line.product.quantity) } }}</small>
+              </span>
+              <fc-text-field
+                inputmode="decimal"
+                autocomplete="off"
+                [label]="'SALES.ACTION.REFUND_QUANTITY' | t"
+                [value]="form().quantities[line.product.index] ?? ''"
+                [error]="error('quantity.' + line.product.index)"
+                (valueChange)="setQuantity(line.product.index, $event)"
+              />
+            </li>
+          }
+        </ul>
+      }
+    </fieldset>
+    <fieldset [disabled]="run.blocked()">
+      <legend>{{ 'SALES.ACTION.REFUND_VALUE' | t }}</legend>
+      <p class="note">{{ 'SALES.ACTION.REFUND_VALUE_HINT' | t: { currency: currency() } }}</p>
+      <div class="grid">
+        <fc-text-field
+          inputmode="decimal"
+          autocomplete="off"
+          [label]="valueLabels().taxable"
+          [value]="form().taxable"
+          [error]="error('taxable')"
+          (valueChange)="setValue('taxable', $event)"
+        />
+        <fc-text-field
+          inputmode="decimal"
+          autocomplete="off"
+          [label]="valueLabels().tax"
+          [value]="form().tax"
+          [error]="error('tax')"
+          (valueChange)="setValue('tax', $event)"
+        />
+        <fc-text-field
+          inputmode="decimal"
+          autocomplete="off"
+          [label]="valueLabels().total"
+          [value]="form().total"
+          [error]="error('total')"
+          (valueChange)="setValue('total', $event)"
+        />
+      </div>
+    </fieldset>
+    <fc-sale-receipt-fields
+      [legend]="'SALES.ACTION.REFUND_RECEIPT' | t"
+      prefix="receipt"
+      [symbol]="text.symbol()"
+      [disabled]="run.blocked()"
+      [value]="form().receipt"
+      [issues]="issues()"
+      (valueChange)="setReceipt($event)"
+    />
+  </form>
+  <ng-container ngProjectAs="[fcDialogActions]">
+    <button fc-button variant="secondary" [disabled]="run.busy()" (click)="open.set(false)">
+      {{ 'SALES.ACTION.GO_BACK' | t }}
+    </button>
+    <button
+      fc-button
+      type="submit"
+      form="sale-refund-form"
+      [loading]="run.blocked()"
+      [disabled]="lines().length === 0"
+    >
+      {{ 'SALES.ACTION.REFUND_SUBMIT' | t }}
+    </button>
+  </ng-container>
+</fc-dialog>

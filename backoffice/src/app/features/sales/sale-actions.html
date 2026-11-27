@@ -1,0 +1,96 @@
+@if (canWrite() || canDelete()) {
+  @if (canWrite()) {
+    <div class="group" role="group" [attr.aria-label]="'SALES.SECTION.ACTIONS' | t">
+      <button
+        fc-button
+        variant="secondary"
+        [attr.aria-disabled]="reasons().amend === null ? null : 'true'"
+        [attr.aria-describedby]="describedBy('amend')"
+        (click)="start('amend')"
+      >
+        {{ 'SALES.ACTION.AMEND' | t }}
+      </button>
+      <button
+        fc-button
+        variant="secondary"
+        [attr.aria-disabled]="reasons().refund === null ? null : 'true'"
+        [attr.aria-describedby]="describedBy('refund')"
+        (click)="start('refund')"
+      >
+        {{ 'SALES.ACTION.REFUND' | t }}
+      </button>
+    </div>
+  }
+  <div class="group destructive" role="group" [attr.aria-label]="'SALES.SECTION.ACTIONS_DESTRUCTIVE' | t">
+    @if (canWrite()) {
+      <button
+        fc-button
+        variant="danger"
+        [attr.aria-disabled]="reasons().cancel === null ? null : 'true'"
+        [attr.aria-describedby]="describedBy('cancel')"
+        (click)="start('cancel')"
+      >
+        {{ 'SALES.ACTION.CANCEL' | t }}
+      </button>
+    }
+    @if (canDelete()) {
+      <button fc-button variant="danger" [attr.aria-describedby]="describedBy('delete')" (click)="start('delete')">
+        {{ 'SALES.ACTION.DELETE' | t }}
+      </button>
+    }
+  </div>
+  @for (reason of shownNotes(); track reason) {
+    <p class="note" role="status" tabindex="-1" [id]="noteId(reason)" [attr.data-note]="reason">
+      {{ noteKey(reason) | t }}
+    </p>
+  }
+  @if (fidelityNote()) {
+    <p class="note" [id]="fidelityId">{{ 'SALES.ACTION.FIDELITY_NOTE' | t }}</p>
+  }
+  @if (canWrite()) {
+    <fc-sale-amend-dialog
+      [groupId]="groupId()"
+      [sale]="sale()"
+      [currency]="currency()"
+      [refreshing]="refreshing()"
+      [open]="dialogs.amend()"
+      (openChange)="dialogs.amend.set($event)"
+      (done)="finished('amend')"
+      (reread)="changed.emit()"
+    />
+    <fc-sale-refund-dialog
+      [groupId]="groupId()"
+      [sale]="sale()"
+      [currency]="currency()"
+      [refreshing]="refreshing()"
+      [open]="dialogs.refund()"
+      (openChange)="dialogs.refund.set($event)"
+      (done)="finished('refund')"
+      (reread)="changed.emit()"
+    />
+    <fc-sale-confirm-dialog
+      kind="cancel"
+      [groupId]="groupId()"
+      [sale]="sale()"
+      [currency]="currency()"
+      [refreshing]="refreshing()"
+      [open]="dialogs.cancel()"
+      (openChange)="dialogs.cancel.set($event)"
+      (done)="finished('cancel')"
+      (reread)="changed.emit()"
+    />
+  }
+  @if (canDelete()) {
+    <fc-sale-confirm-dialog
+      kind="delete"
+      [groupId]="groupId()"
+      [sale]="sale()"
+      [currency]="currency()"
+      [refreshing]="refreshing()"
+      [open]="dialogs.delete()"
+      (openChange)="dialogs.delete.set($event)"
+      (done)="finished('delete')"
+      (reread)="changed.emit()"
+    />
+  }
+}

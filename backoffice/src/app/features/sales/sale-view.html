@@ -3,8 +3,21 @@
   @for (badge of badges(); track badge.key) {
     <fc-status-badge [tone]="badge.tone">{{ badgeLabel(badge) }}</fc-status-badge>
   }
+  @for (badge of reviewBadges(); track badge.id) {
+    <a class="badge-link" [attr.href]="'#' + badge.id" (click)="jump($event, badge.id)">
+      <fc-status-badge [tone]="badge.tone">{{ badge.text }}</fc-status-badge>
+    </a>
+  }
   <ng-container fcPageActions>
     <button fc-button variant="secondary" type="button" (click)="back.emit()">{{ 'SALES.BACK' | t }}</button>
+    <fc-sale-actions
+      [groupId]="groupId()"
+      [sale]="current"
+      [currency]="currency()"
+      [refreshing]="refreshing()"
+      (changed)="reload.emit()"
+      (deleted)="deleted.emit()"
+    />
   </ng-container>
 </fc-page-header>
 <fc-record-group [groupId]="groupId()" />
@@ -15,52 +28,64 @@
       <dt>{{ 'SALES.FACT.TYPE' | t }}</dt>
       <dd>{{ type() }}</dd>
     </div>
-    <div>
-      <dt>{{ 'SALES.FACT.DATE' | t }}</dt>
-      <dd>{{ dateText() }}</dd>
-    </div>
-    <div>
-      <dt>{{ 'SALES.FACT.COMPANY' | t }}</dt>
-      <dd>{{ company() }}</dd>
-    </div>
-    <div>
-      <dt>{{ 'SALES.FACT.PLACE' | t }}</dt>
-      <dd>{{ place() }}</dd>
-    </div>
-    <div>
-      <dt>{{ 'SALES.FACT.CASH_DESK' | t }}</dt>
-      <dd>{{ current.cashDesk ?? '' }}</dd>
-    </div>
-    <div>
-      <dt>{{ 'SALES.FACT.OPERATOR' | t }}</dt>
-      <dd>{{ current.operator?.name ?? '' }}</dd>
-    </div>
-    @if (hasRooms()) {
+    @if (dateText() !== '') {
       <div>
-        <dt>{{ 'SALES.FACT.TABLE' | t }}</dt>
-        <dd>{{ current.table ?? '' }}</dd>
+        <dt>{{ 'SALES.FACT.DATE' | t }}</dt>
+        <dd>{{ dateText() }}</dd>
       </div>
     }
-    <div>
-      <dt>{{ 'SALES.FACT.CUSTOMER' | t }}</dt>
-      <dd>
-        @if (customerRoute(); as route) {
-          <a [routerLink]="route">{{ current.customer?.displayName }}</a>
-        } @else {
-          {{ current.customer?.displayName ?? '' }}
-        }
-      </dd>
-    </div>
+    @if (company() !== '') {
+      <div>
+        <dt>{{ 'SALES.FACT.COMPANY' | t }}</dt>
+        <dd>{{ company() }}</dd>
+      </div>
+    }
+    @if (place() !== '') {
+      <div>
+        <dt>{{ 'SALES.FACT.PLACE' | t }}</dt>
+        <dd>{{ place() }}</dd>
+      </div>
+    }
+    @if (current.cashDesk !== null) {
+      <div>
+        <dt>{{ 'SALES.FACT.CASH_DESK' | t }}</dt>
+        <dd>{{ current.cashDesk }}</dd>
+      </div>
+    }
+    @if (current.operator !== null) {
+      <div>
+        <dt>{{ 'SALES.FACT.OPERATOR' | t }}</dt>
+        <dd>{{ current.operator.name }}</dd>
+      </div>
+    }
+    @if (hasRooms() && current.table !== null) {
+      <div>
+        <dt>{{ 'SALES.FACT.TABLE' | t }}</dt>
+        <dd>{{ current.table }}</dd>
+      </div>
+    }
+    @if (current.customer !== null) {
+      <div>
+        <dt>{{ 'SALES.FACT.CUSTOMER' | t }}</dt>
+        <dd>
+          @if (customerRoute(); as route) {
+            <a [routerLink]="route">{{ current.customer.displayName }}</a>
+          } @else {
+            {{ current.customer.displayName }}
+          }
+        </dd>
+      </div>
+    }
     @if (current.fidelityCardCode !== null || current.fidelityCardUsed) {
       <div>
         <dt>{{ 'SALES.FACT.CARD' | t }}</dt>
         <dd>{{ current.fidelityCardCode ?? ('SALES.FACT.CARD_USED' | t) }}</dd>
       </div>
     }
-    @if (current.fiscalReceiptInfo !== null) {
+    @if (receiptText() !== '') {
       <div>
         <dt>{{ 'SALES.FACT.RECEIPT' | t }}</dt>
-        <dd>{{ receiptNumber() }}{{ receiptDate() === '' ? '' : ' · ' + receiptDate() }}</dd>
+        <dd>{{ receiptText() }}</dd>
       </div>
     }
   </dl>
@@ -72,7 +97,7 @@
 <section aria-labelledby="sale-products">
   <h2 id="sale-products">{{ 'SALES.SECTION.PRODUCTS' | t }}</h2>
   <fc-data-table
-    [caption]="'SALES.SECTION.PRODUCTS' | t"
+    [caption]="'SALES.PRODUCT.TABLE' | t"
     [columns]="productColumns()"
     [rows]="lines()"
     [rowKey]="rowKey"
@@ -126,10 +151,12 @@
   <section aria-labelledby="sale-refunds">
     <h2 id="sale-refunds">{{ 'SALES.SECTION.REFUNDS' | t }}</h2>
     <fc-data-table
-      [caption]="'SALES.SECTION.REFUNDS' | t"
+      [caption]="'SALES.REFUND.TABLE' | t"
       [columns]="refundColumns()"
       [rows]="refunds()"
       [rowKey]="rowKey"
     />
   </section>
 }
+
+<fc-sale-review [sale]="current" [currency]="currency()" />

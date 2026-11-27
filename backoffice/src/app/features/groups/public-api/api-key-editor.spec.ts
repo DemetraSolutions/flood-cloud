@@ -20,6 +20,8 @@ const COMPANIES_READ = 'PUBLIC_API.PERMISSION.COMPANIES_READ.LABEL';
 const CATALOG_READ = 'PUBLIC_API.PERMISSION.CATALOG_READ.LABEL';
 const CATALOG_WRITE = 'PUBLIC_API.PERMISSION.CATALOG_WRITE.LABEL';
 const WARNING = `${L}.WRITE_UNRESTRICTED_WARNING`;
+const SALES_READ = 'PUBLIC_API.PERMISSION.SALES_READ.LABEL';
+const SALES_WARNING = `${L}.SALES_WARNING`;
 const EXPIRES = `${L}.EXPIRES`;
 const PER_MINUTE = `${L}.PER_MINUTE`;
 const PER_DAY = `${L}.PER_DAY`;
@@ -133,6 +135,7 @@ describe('ApiKeyEditor: creation', () => {
       'CONTACTS_WRITE',
       'FIDELITYCARDS_READ',
       'FIDELITYCARDS_WRITE',
+      'SALES_READ',
     ]) {
       expect(root.textContent).toContain(`PUBLIC_API.PERMISSION.${key}.LABEL`);
       expect(root.textContent).toContain(`PUBLIC_API.PERMISSION.${key}.HINT`);
@@ -157,6 +160,16 @@ describe('ApiKeyEditor: creation', () => {
     expect(root.textContent).not.toContain(WARNING);
     await check(CATALOG_READ, true);
     expect(root.textContent).not.toContain(WARNING);
+  });
+
+  it('warns that the key reads the sales only while that permission is ticked', async () => {
+    const { root, check } = await render();
+    expect(root.textContent).not.toContain(SALES_WARNING);
+    await check(SALES_READ, true);
+    expect(root.textContent).toContain(SALES_WARNING);
+    expect(root.querySelector('.warning')?.getAttribute('role')).toBe('status');
+    await check(SALES_READ, false);
+    expect(root.textContent).not.toContain(SALES_WARNING);
   });
 
   it('sends the name and the permissions when nothing else is filled in', async () => {

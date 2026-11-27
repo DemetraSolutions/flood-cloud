@@ -167,6 +167,8 @@ export class ApiKeyEditor {
       model.placeIds.length === 0
     );
   });
+  /** A key allowed to read the sales: they carry the amounts and the customer of every sale, never personal data of the customer. */
+  protected readonly readsSales = computed(() => this.model().permissions['sales:read']);
   protected readonly permissionsError = computed(
     () =>
       fieldErrorMessage(this.i18n, this.keyForm.permissions()) ??

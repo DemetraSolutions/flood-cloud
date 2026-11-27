@@ -6,7 +6,7 @@ import { AppError } from '../../src/shared/http/errors.ts';
 import { validate } from '../../src/shared/validation/schema.ts';
 import { decodeSalesCursor, encodeSalesCursor } from '../../src/modules/sales/sales.cursor.ts';
 import { salesConditions, salesFilter, salesPerimeter } from '../../src/modules/sales/sales.filters.ts';
-import { DETAIL_PROJECTION, ROW_PROJECTION, SALE_MAX_LINES, operatorIdsOf, saleDetail, saleRow } from '../../src/modules/sales/sales.mapper.ts';
+import { DETAIL_PROJECTION, ROW_PROJECTION, SALE_MAX_LINES, invoiceFilterOf, operatorIdsOf, saleDetail, saleRow } from '../../src/modules/sales/sales.mapper.ts';
 import { saleParams, saleQuery, salesQuery, salesSummaryQuery } from '../../src/modules/sales/sales.schemas.ts';
 import { fixtureId } from '../helpers/legacy-fixtures.ts';
 
@@ -206,9 +206,9 @@ describe('the representation of a sale', () => {
 
   it('shows the code of the loyalty card only to who may read the fidelity, and always whether a card was used', () => {
     const document = { _id: id(1), fidelityCard: { code: ' CARD-1 ' } };
-    assert.deepEqual([saleDetail(document, names, null, true).fidelityCardCode, saleDetail(document, names, null, true).fidelityCardUsed], ['CARD-1', true]);
-    assert.deepEqual([saleDetail(document, names, null, false).fidelityCardCode, saleDetail(document, names, null, false).fidelityCardUsed], [null, true]);
-    assert.deepEqual([saleDetail({ _id: id(1), fidelityCard: {} }, names, null, true).fidelityCardUsed, saleDetail({ _id: id(1) }, names, null, false).fidelityCardCode], [false, null]);
+    assert.deepEqual([saleDetail(document, names, null, true, null).fidelityCardCode, saleDetail(document, names, null, true, null).fidelityCardUsed], ['CARD-1', true]);
+    assert.deepEqual([saleDetail(document, names, null, false, null).fidelityCardCode, saleDetail(document, names, null, false, null).fidelityCardUsed], [null, true]);
+    assert.deepEqual([saleDetail({ _id: id(1), fidelityCard: {} }, names, null, true, null).fidelityCardUsed, saleDetail({ _id: id(1) }, names, null, false, null).fidelityCardCode], [false, null]);
   });
 
   it('names the customer by the company, else the person, in clear only', () => {
@@ -260,33 +260,63 @@ describe('the representation of a sale', () => {
         'junk',
       ],
     };
-    const detail = saleDetail(document, names, 'it', true);
+    const detail = saleDetail(document, names, 'it', true, null);
     assert.deepEqual(detail.products, [
-      { productId: product.toHexString(), code: 'P1', name: 'Pizza it', quantity: 2, unitPrice: 8, discount: 10, variants: '+ Extra x2, - Cipolla, Bien cuit' },
-      { productId: null, code: null, name: null, quantity: 0, unitPrice: 0, discount: 0, variants: null },
-      { productId: null, code: null, name: null, quantity: 0, unitPrice: 0, discount: 0, variants: null },
+      { productId: product.toHexString(), code: 'P1', name: 'Pizza it', quantity: 2, unitPrice: 8, discount: 10, variants: '+ Extra x2, - Cipolla, Bien cuit', index: 0, returned: 0 },
+      { productId: null, code: null, name: null, quantity: 0, unitPrice: 0, discount: 0, variants: null, index: 1, returned: 0 },
+      { productId: null, code: null, name: null, quantity: 0, unitPrice: 0, discount: 0, variants: null, index: 2, returned: 0 },
     ]);
     assert.equal(detail.productsCount, 3);
     assert.deepEqual(detail.totals, { total: 20, taxable: 16.39, tax: 3.61, discount: { adjustment: 'surcharge', percentage: 5, value: 0 } });
     assert.deepEqual(detail.payments, { cash: 5, electronic: 10, cheque: 1, tickets: 2, fidelityCredit: 2.5, unpaid: 0.5 });
     assert.deepEqual(detail.fiscalReceiptInfo, { date: '2026-05-01T10:01:00.000Z', report: 1, number: 2, amount: 20 });
-    assert.deepEqual(detail.refunds, [{ report: 3, number: 4, date: '2026-05-03T00:00:00.000Z', amount: 4 }, { report: null, number: null, date: null, amount: 0 }]);
+    assert.deepEqual(detail.refunds, [{ report: 3, number: 4, date: '2026-05-03T00:00:00.000Z', amount: 4, canceled: false }, { report: null, number: null, date: null, amount: 0, canceled: false }]);
     assert.deepEqual([detail.fidelityCardCode, detail.note, detail.receiptType, detail.total], ['CARD-1', 'una nota', 'receipt', 20]);
     // The name of a product: the language asked, else the first one, a language that is not a key of the name is not read.
-    assert.equal(saleDetail(document, names, 'en', true).products[0]!.name, 'Pizza');
-    assert.equal(saleDetail(document, names, 'de', true).products[0]!.name, 'Pizza');
-    assert.equal(saleDetail(document, names, null, true).products[0]!.name, 'Pizza');
-    assert.equal(saleDetail({ _id: id(1), products: [{ name: { toString: 'x', it: 5 } }] }, names, 'toString', true).products[0]!.name, 'x');
-    assert.equal(saleDetail({ _id: id(1), products: [{ name: { it: 5, en: '  ' } }] }, names, 'it', true).products[0]!.name, null);
+    assert.equal(saleDetail(document, names, 'en', true, null).products[0]!.name, 'Pizza');
+    assert.equal(saleDetail(document, names, 'de', true, null).products[0]!.name, 'Pizza');
+    assert.equal(saleDetail(document, names, null, true, null).products[0]!.name, 'Pizza');
+    assert.equal(saleDetail({ _id: id(1), products: [{ name: { toString: 'x', it: 5 } }] }, names, 'toString', true, null).products[0]!.name, 'x');
+    assert.equal(saleDetail({ _id: id(1), products: [{ name: { it: 5, en: '  ' } }] }, names, 'it', true, null).products[0]!.name, null);
   });
 
   it('shows an empty detail for a broken sale and cuts the lines', () => {
-    const detail = saleDetail({ _id: id(3), fiscalReceiptInfo: 5, refund: {}, fidelityCard: 'x', adjustmentType: 'other' }, names, 'it', true);
+    const detail = saleDetail({ _id: id(3), fiscalReceiptInfo: 5, refund: {}, fidelityCard: 'x', adjustmentType: 'other' }, names, 'it', true, null);
     assert.deepEqual([detail.products, detail.productsCount, detail.refunds, detail.fiscalReceiptInfo, detail.fidelityCardCode, detail.note, detail.totals.discount], [[], 0, [], null, null, null, { adjustment: null, percentage: 0, value: 0 }]);
-    const many = saleDetail({ _id: id(3), products: Array.from({ length: SALE_MAX_LINES + 20 }, () => ({ name: { it: 'x' }, qt: 1 })) }, names, 'it', true);
+    const many = saleDetail({ _id: id(3), products: Array.from({ length: SALE_MAX_LINES + 20 }, () => ({ name: { it: 'x' }, qt: 1 })) }, names, 'it', true, null);
     assert.deepEqual([many.products.length, many.productsCount], [SALE_MAX_LINES, SALE_MAX_LINES + 20]);
     // A fiscal receipt of the sale with only a date.
-    assert.deepEqual(saleDetail({ _id: id(3), fiscalReceiptInfo: { date: new Date('2026-01-01T00:00:00Z') } }, names, null, true).fiscalReceiptInfo, { date: '2026-01-01T00:00:00.000Z', report: null, number: null, amount: null });
+    assert.deepEqual(saleDetail({ _id: id(3), fiscalReceiptInfo: { date: new Date('2026-01-01T00:00:00Z') } }, names, null, true, null).fiscalReceiptInfo, { date: '2026-01-01T00:00:00.000Z', report: null, number: null, amount: null });
+  });
+
+  it('shows no check, anomaly, invoice or operation for a sale without floodCloud, and tolerates a broken one', () => {
+    const legacy = saleDetail({ _id: id(1) }, names, null, true, null);
+    assert.deepEqual([legacy.serverCheck, legacy.anomalies, legacy.invoice, legacy.operations, legacy.canceled, legacy.returnedValue], [null, [], null, [], false, 0]);
+    const broken = saleDetail({ _id: id(1), floodCloud: { serverCheck: { status: 'x', totals: 5, lines: [{ index: 'a' }, { index: 1 }, 7], checkedAt: 'no' }, anomalies: 5, operations: [{ kind: 3, at: 'no' }], invoice: 'x' }, refund: [{ canceled: 'yes', returnedGoods: 'x' }] }, names, null, true, null);
+    assert.deepEqual(broken.serverCheck, { checkedAt: null, status: null, totals: [], lines: [{ index: 1, code: '', pos: null, server: null }], linesTruncated: false });
+    assert.deepEqual([broken.anomalies, broken.operations, broken.invoice, broken.refunds[0]!.canceled], [[], [{ kind: null, at: null }], null, false]);
+    // What a refund names that is not a line (a junk entry, a negative or a far position) returns nothing.
+    const refunded = saleDetail({ _id: id(1), products: [{ qt: 2 }], refund: [{ returnedGoods: [5, { index: -1, returnedQt: 1 }, { index: 3, returnedQt: 1 }, { index: 0, returnedQt: 1 }] }] }, names, null, true, null);
+    assert.deepEqual(refunded.products.map((line) => line.returned), [1]);
+    const sparse = saleDetail({ _id: id(1), floodCloud: { serverCheck: { totals: [{}] }, anomalies: [{}, 'junk'], operations: [7] } }, names, null, true, null);
+    assert.deepEqual([sparse.serverCheck!.totals, sparse.anomalies], [[{ field: '', pos: null, server: null }], [{ at: null, operation: null, source: null, code: null, productId: null, collectionId: null, type: null, ids: [], fields: [] }]]);
+  });
+
+  it('works out the invoice of a sale from its reference and its document', () => {
+    const doc = id(7);
+    const date = new Date('2024-12-31T23:00:00.000Z');
+    assert.deepEqual(invoiceFilterOf({ _id: id(1), floodCloud: { invoice: { documentId: doc } } }), { _id: doc });
+    assert.deepEqual(invoiceFilterOf({ _id: id(1), receiptType: 'invoice', companyId: id(2), date }), { companyId: id(2), date, saleId: id(1) });
+    for (const sale of [{ _id: id(1) }, { _id: id(1), receiptType: 'invoice', date }, { _id: id(1), receiptType: 'invoice', companyId: id(2) }, { _id: id(1), receiptType: 'receipt', companyId: id(2), date }, { _id: id(1), floodCloud: { invoice: { documentId: 'x' } } }]) {
+      assert.equal(invoiceFilterOf(sale), null);
+    }
+    // A sale of the legacy: everything comes from the document.
+    assert.deepEqual(saleDetail({ _id: id(1) }, names, null, true, { _id: doc, number: 3, prefixSuffix: '', date, sendStatus: '' }).invoice, { documentId: doc.toHexString(), number: 3, prefixSuffix: null, year: 2024, sendStatus: null, notQueued: false, documentFound: true });
+    assert.equal(saleDetail({ _id: id(1) }, names, null, true, { _id: doc }).invoice!.year, null);
+    // A reference without data: the document fills it in; no document: nothing is known.
+    const reference = { _id: id(1), floodCloud: { invoice: { documentId: doc } } };
+    assert.deepEqual(saleDetail(reference, names, null, true, null).invoice, { documentId: doc.toHexString(), number: null, prefixSuffix: null, year: null, sendStatus: null, notQueued: false, documentFound: false });
+    assert.deepEqual(saleDetail(reference, names, null, true, { _id: doc, number: 8, prefixSuffix: 'B', date, sendStatus: 'notQueued' }).invoice, { documentId: doc.toHexString(), number: 8, prefixSuffix: 'B', year: 2024, sendStatus: 'notQueued', notQueued: true, documentFound: true });
   });
 
   it('reads fixed lists of fields: no customer data beyond the name, no lottery, delivery, terminal or removed shapes', () => {

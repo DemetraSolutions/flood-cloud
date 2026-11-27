@@ -2,7 +2,8 @@ import type { ActivityLog } from '../../shared/activity-log/activity-log.ts';
 import type { ClientContext } from '../../shared/http/client-context.ts';
 import type { Logger } from '../../shared/logging/logger.ts';
 import type { RateLimiter } from '../../shared/security/rate-limit/rate-limiter.ts';
-import type { StorePrincipal } from '../../shared/security/scope/principal.ts';
+import type { ObjectId } from 'mongodb';
+import type { AuthPrincipal, StorePrincipal } from '../../shared/security/scope/principal.ts';
 import type { StoreOperator } from '../product-catalog/caller.ts';
 
 /** Seconds of the hour of the trace of the reads of the contacts and of the day of the sum of the credits. */
@@ -34,12 +35,22 @@ export interface StoreContactsAudit {
    * UTC day over the daily limit (`reason` `daily`, written once for the day: the counter is atomic and adds the cents of every positive credit). Nothing about a credit that is not positive.
    *
    * @param store The store principal: the actor.
-   * @param operator The verified operator of the write.
+   * @param client The request context.
+   * @param cardId The card (hexadecimal).
+   * @param amount The credit added, in currency units.
+   * @param operator The verified operator of the write; `null` for a sale whose operator the till did not declare (the entry then has no `operatorId`).
+   */
+  creditAdded(store: StorePrincipal, operator: Pick<StoreOperator, 'id'> | null, client: ClientContext, cardId: string, amount: number): Promise<void>;
+  /**
+   * The same alert (`store.creditAlert`, the same limits) for the credit a **backoffice user** added to a card with a sale: the actor of the entry is the user, the counter of the day is his own (`user:<id>`), and the resource is the card.
+   *
+   * @param user The user: the actor.
+   * @param groupId The group of the sale.
    * @param client The request context.
    * @param cardId The card (hexadecimal).
    * @param amount The credit added, in currency units.
    */
-  creditAdded(store: StorePrincipal, operator: StoreOperator, client: ClientContext, cardId: string, amount: number): Promise<void>;
+  creditAddedByUser(user: Pick<AuthPrincipal, 'userId'>, groupId: ObjectId, client: ClientContext, cardId: string, amount: number): Promise<void>;
   /**
    * Alert `store.advancedCardRelinked`: a store linked to a contact the code of an advanced card that other contacts already had.
    *
@@ -75,6 +86,18 @@ export function createStoreContactsAudit(deps: { readonly activityLog: ActivityL
       ...(client.ip === null ? {} : { ip: client.ip }),
       metadata,
     });
+  const recordByUser = (userId: ObjectId, groupId: ObjectId, client: ClientContext, cardId: string, metadata: Record<string, string | number>) =>
+    activityLog.record({
+      category: 'security',
+      action: 'store.creditAlert',
+      outcome: 'success',
+      actor: { kind: 'user', id: userId },
+      groupId,
+      resource: { type: 'fidelityCard', id: cardId },
+      requestId: client.requestId,
+      ...(client.ip === null ? {} : { ip: client.ip }),
+      metadata,
+    });
   /** Runs a signal so that it never rejects. */
   const guarded = async (what: string, work: () => Promise<void>): Promise<void> => {
     try {
@@ -89,13 +112,28 @@ export function createStoreContactsAudit(deps: { readonly activityLog: ActivityL
         if (!(amount > 0)) {
           return;
         }
-        const base = { amount, cardId, operatorId: operator.id.toHexString() };
+        const base = { amount, cardId, ...(operator === null ? {} : { operatorId: operator.id.toHexString() }) };
         if (amount > limits.perOperation) {
           await record(store, client, 'store.creditAlert', { reason: 'operation', threshold: limits.perOperation, ...base });
         }
         const day = await rateLimiter.consume('storeCreditDaily:key', store.keyId.toHexString(), limits.perDay * 100, DAY_SECONDS, Math.round(amount * 100));
         if (day.firstExcess) {
           await record(store, client, 'store.creditAlert', { reason: 'daily', threshold: limits.perDay, ...base });
+        }
+      }),
+
+    creditAddedByUser: (user, groupId, client, cardId, amount) =>
+      guarded('a credit', async () => {
+        if (!(amount > 0)) {
+          return;
+        }
+        const base = { amount, cardId };
+        if (amount > limits.perOperation) {
+          await recordByUser(user.userId, groupId, client, cardId, { reason: 'operation', threshold: limits.perOperation, ...base });
+        }
+        const day = await rateLimiter.consume('storeCreditDaily:key', `user:${user.userId.toHexString()}`, limits.perDay * 100, DAY_SECONDS, Math.round(amount * 100));
+        if (day.firstExcess) {
+          await recordByUser(user.userId, groupId, client, cardId, { reason: 'daily', threshold: limits.perDay, ...base });
         }
       }),
 
