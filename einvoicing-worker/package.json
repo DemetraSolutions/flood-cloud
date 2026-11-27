@@ -1,0 +1,23 @@
+{
+  "name": "flood-cloud-einvoicing-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.20.0 <25"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "shadow:report": "node --env-file-if-exists=.env src/tools/shadow-report.ts",
+    "ops:inflight": "node --env-file-if-exists=.env src/tools/inflight.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --env-file-if-exists=.env.test --test --experimental-test-coverage --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test-coverage-include=src/** \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "mongodb": "7.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

@@ -520,6 +520,25 @@ describe('visibleMenu', () => {
     });
   });
 
+  it('shows "Strumenti › Fatturazione elettronica" only to platform administrators with eInvoicingAccounts:manage', () => {
+    const children = (role: Role | undefined, permission: string) =>
+      visibleMenu(MENU, (p) => p === permission, allowAll, role)
+        .find((i) => i.id === 'tools')
+        ?.children?.map((i) => i.id);
+    expect(children('PSA', 'eInvoicingAccounts:manage')).toEqual(['e-invoicing']);
+    for (const role of ['D', 'SA', 'CA', 'PA', 'E', undefined] as const) {
+      expect(children(role, 'eInvoicingAccounts:manage')).toBeUndefined();
+    }
+    expect(
+      MENU.find((i) => i.id === 'tools')?.children?.find((i) => i.id === 'e-invoicing'),
+    ).toMatchObject({
+      route: '/tools/e-invoicing',
+      labelKey: 'MENU.E_INVOICING',
+      permission: 'eInvoicingAccounts:manage',
+      roles: ['PSA'],
+    });
+  });
+
   it('shows "Impostazioni" right after "Strumenti", with "Listino" and "Gestione stati" for platform administrators only, linking to the first visible one', () => {
     const settings = (role: Role | undefined, permission: string) =>
       visibleMenu(MENU, (p) => p === permission, allowAll, role).find((i) => i.id === 'settings');

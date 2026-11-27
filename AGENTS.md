@@ -79,12 +79,13 @@ Esperto del progetto `../cloud-commerce-platform-server` (sola lettura).
 - Mai segreti del legacy in output.
 
 ### 7. Integrations Expert (`integrations_expert`)
-Provider esterni (Aruba, Satispay, Dojo, TSH, Cerved, geocoding, storage, email). Fiskaly è escluso dal nuovo backend (decisione dell'utente del 2026-11-25).
+Provider esterni (Aruba, Satispay, Dojo, TSH, Cerved, geocoding, storage, email) e microservizio `einvoicing-worker/` di invio delle fatture elettroniche (D-34). Fiskaly è escluso dal nuovo backend (decisione dell'utente del 2026-11-25).
 - Adattatori isolati, `fetch` con timeout e retry, rate limit dei provider, code persistenti, webhook verificati.
+- Worker a istanza unica: coda con presa in carico atomica, XML FatturaPA e validatore SdI, un adattatore per provider.
 
 ### 8. DevOps Expert (`devops_expert`)
 Ambiente e rilascio del monorepo.
-- Dockerfile multi-stage non root, compose con MongoDB, pipeline separate per `backend/` e `backoffice/` con filtri sui percorsi, deploy su GKE (Deployment e Service per componente).
+- Dockerfile multi-stage non root, compose con MongoDB, pipeline separate per `backend/`, `backoffice/` e `einvoicing-worker/` con filtri sui percorsi, deploy su GKE (Deployment e Service per componente).
 - CI con test al 100%, audit e secret scanning, segreti fuori dal repository.
 
 ### 9. Angular Expert (`angular_expert`)

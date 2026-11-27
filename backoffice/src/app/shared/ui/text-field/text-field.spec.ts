@@ -37,7 +37,37 @@ async function render() {
   return { fixture, host: fixture.componentInstance, root, input: root.querySelector('input')! };
 }
 
+@Component({
+  imports: [TextField],
+  template: `<fc-text-field
+    label="Aruba"
+    inputId="aruba-username"
+    fieldName="aruba-username"
+    ignorePasswordManagers
+  />`,
+})
+class FixedHost {}
+
 describe('TextField', () => {
+  it('uses a fixed id and name and opts out of password managers', async () => {
+    const fixture = TestBed.createComponent(FixedHost);
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector('input')!;
+    expect(input.id).toBe('aruba-username');
+    expect(input.name).toBe('aruba-username');
+    expect(root.querySelector('label')!.htmlFor).toBe('aruba-username');
+    expect(input.getAttribute('data-1p-ignore')).toBe('');
+    expect(input.getAttribute('data-lpignore')).toBe('true');
+  });
+
+  it('leaves name and password-manager attributes off by default', async () => {
+    const { input } = await render();
+    expect(input.hasAttribute('name')).toBe(false);
+    expect(input.hasAttribute('data-1p-ignore')).toBe(false);
+    expect(input.hasAttribute('data-lpignore')).toBe(false);
+  });
+
   it('links a visible label to the input and passes native attributes', async () => {
     const { root, input } = await render();
     const label = root.querySelector('label')!;

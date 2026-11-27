@@ -54,6 +54,7 @@ import {
   toDealerFormModel,
   toFormErrors,
 } from './dealer.types';
+import { EInvoicingAccountCard } from '../einvoicing-accounts/einvoicing-account-card';
 import { DealerPriceOverrides } from './dealer-price-overrides';
 import { DealersApi } from './dealers-api';
 
@@ -73,6 +74,7 @@ const PASSWORD_MAX = 128;
     PageHeader,
     Button,
     DealerPriceOverrides,
+    EInvoicingAccountCard,
     ErrorState,
     FormError,
     FormField,
@@ -122,6 +124,10 @@ export class DealerForm {
   );
   /** The section of the custom prices is for who may manage them (platform administrators). */
   protected readonly canManagePrices = computed(() => this.session.can('activations:manage'));
+  /** The section of the e-invoicing account is for who may manage the accounts (platform administrators). */
+  protected readonly canManageEInvoicing = computed(() =>
+    this.session.can('eInvoicingAccounts:manage'),
+  );
   protected readonly languages = SUPPORTED_LANGUAGES.map((language) => ({
     value: language,
     label: this.i18n.t(`LANGUAGE.NAME.${language.toUpperCase()}`),

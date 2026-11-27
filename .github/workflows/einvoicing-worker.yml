@@ -1,0 +1,229 @@
+name: einvoicing-worker
+
+# When it runs (development happens on `development`, where no CI runs):
+#   - pull request to main touching einvoicing-worker/ or this file: tests only;
+#   - push to main touching einvoicing-worker/ or this file: tests, then build, push and deploy to GKE;
+#   - by hand (workflow_dispatch): tests; the deploy only when started on main.
+on:
+  pull_request:
+    branches: [main]
+    paths: ["einvoicing-worker/**", ".github/workflows/einvoicing-worker.yml"]
+  push:
+    branches: [main]
+    paths: ["einvoicing-worker/**", ".github/workflows/einvoicing-worker.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: einvoicing-worker-${{ github.ref }}
+  # A newer push to a pull request supersedes the older run; on main a deploy is never cut halfway.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Typecheck, test, audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: einvoicing-worker
+    env:
+      # Local throw-away MongoDB started below: no credentials, loopback only.
+      FLOOD_CLOUD_TEST_MONGO_URI: mongodb://127.0.0.1:27028/?directConnection=true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.22.2"
+          cache: npm
+          cache-dependency-path: einvoicing-worker/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # The default image of compose.yaml (mongo 8.2, pinned by digest). Atlas runs 8.0, but
+      # 8.0 does not start on the recent kernels of the GitHub runners (SERVER-121912, see
+      # compose.yaml): the first run on main failed with "container exited (1)".
+      - name: Start MongoDB (single-node replica set)
+        run: docker compose -f compose.yaml up -d --wait
+
+      - name: Show the MongoDB log if it did not start
+        if: failure()
+        run: docker compose -f compose.yaml logs --no-color --tail=100 mongo
+
+      # The tests validate the generated invoices against the official XSD with the system xmllint (libxml2):
+      # without it the XSD tests fail (they never skip). No npm dependency is involved.
+      - name: Install xmllint
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxml2-utils
+          xmllint --version
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test (coverage thresholds at 100%)
+        run: npm test
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Verify registry signatures
+        run: npm audit signatures
+
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks CLI (pinned, checksum verified)
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check --strict -
+          mkdir -p "${RUNNER_TEMP}/gitleaks"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/gitleaks" gitleaks
+          echo "${RUNNER_TEMP}/gitleaks" >> "${GITHUB_PATH}"
+
+      - name: Scan repository history
+        run: gitleaks git --redact --exit-code 1 --no-banner .
+
+  deploy:
+    name: Build, push and deploy to GKE
+    needs: [test, secrets]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Only this job talks to Google Cloud: the OIDC token is requested here and nowhere else.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE: europe-west8-docker.pkg.dev/flood-software/floodsoftware/flood-cloud-einvoicing-worker:${{ github.sha }}
+      NAMESPACE: flood-v2
+      DEPLOYMENT: flood-cloud-einvoicing-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Workload Identity Federation: no key in GitHub. Repository variables (not secrets):
+      # GCP_WIF_PROVIDER (pool github, provider flood-cloud) and GCP_SERVICE_ACCOUNT.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west8-docker.pkg.dev --quiet
+
+      - name: Build image
+        run: docker build --pull -t "${IMAGE}" -f einvoicing-worker/Dockerfile einvoicing-worker
+
+      - name: Push image
+        run: docker push "${IMAGE}"
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3.0.0
+        with:
+          project_id: flood-software
+          cluster_name: flood-software
+          location: europe-west8
+
+      # The Secret is built from Secret Manager, never from the repository: the secret
+      # flood-cloud-einvoicing-worker-<VARIABLE> gives the environment variable <VARIABLE>. The variables
+      # are a FIXED list (an allowlist): a secret added in Secret Manager can never inject another
+      # variable (NODE_OPTIONS, LD_PRELOAD...) or override the ConfigMap. The labels
+      # app=flood-cloud, component=einvoicing-worker only help to find the secrets in the console.
+      # Values go to files (mode 600) and from there to the cluster, never to the command line or
+      # the log. Server-side apply: no last-applied annotation holding a copy of the values.
+      - name: Sync the Secret from Secret Manager
+        env:
+          REQUIRED_SECRETS: MONGODB_URI
+          OPTIONAL_SECRETS: CREDENTIALS_PRIVATE_KEY # required by the worker only when WORKER_HUBS is not empty
+        run: |
+          set -euo pipefail
+          prefix="flood-cloud-einvoicing-worker-"
+          dir="$(mktemp -d)"
+          trap 'rm -rf "${dir}" "${dir}.err"' EXIT
+          umask 077
+          fetch() { # variable, required|optional
+            local name="${prefix}$1" err="${dir}.err"
+            if ! gcloud secrets versions access latest --project=flood-software --secret="${name}" \
+                --out-file="${dir}/$1" 2> "${err}"; then
+              rm -f "${dir}/$1"
+              if [ "$2" = optional ] && grep -q NOT_FOUND "${err}"; then
+                echo "Optional secret ${name} not found: skipped"
+                return 0
+              fi
+              echo "::error::cannot read secret ${name} from Secret Manager"
+              cat "${err}" >&2
+              exit 1
+            fi
+            # A value the server would refuse, or that an environment variable cannot hold, stops
+            # the deploy BEFORE the Secret is replaced (only the name is reported).
+            local file="${dir}/$1"
+            if [ ! -s "${file}" ]; then
+              echo "::error::secret ${name} is empty"; exit 1
+            fi
+            if [ "$(tr -d '\000' < "${file}" | wc -c)" -ne "$(wc -c < "${file}")" ]; then
+              echo "::error::secret ${name} contains a NUL byte"; exit 1
+            fi
+            case "$(tail -c1 "${file}" | od -An -c | tr -d ' ')" in
+              '\n'|'\r') echo "::error::secret ${name} ends with a line break (create it with printf '%s')"; exit 1 ;;
+            esac
+            while IFS= read -r line || [ -n "${line}" ]; do
+              [ -n "${line}" ] && echo "::add-mask::${line}"
+            done < "${file}"
+            echo "::add-mask::$(base64 -w0 < "${file}")"
+          }
+          for var in ${REQUIRED_SECRETS}; do fetch "${var}" required; done
+          for var in ${OPTIONAL_SECRETS}; do fetch "${var}" optional; done
+          echo "Secret keys: $(cd "${dir}" && printf '%s ' *)"
+          checksum="$(cd "${dir}" && for f in *; do printf '%s\0' "${f}"; cat "${f}"; printf '\0'; done | sha256sum | cut -d' ' -f1)"
+          echo "SECRETS_CHECKSUM=${checksum}" >> "${GITHUB_ENV}"
+          kubectl create secret generic flood-cloud-einvoicing-worker-secrets -n "${NAMESPACE}" \
+            --from-file="${dir}" --dry-run=client -o yaml \
+            | kubectl apply --server-side --force-conflicts --field-manager=github-deploy -f -
+
+      # Only k8s/*.yaml is applied. The namespace is managed on the cluster.
+      - name: Render and apply manifests
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/k8s"
+          mkdir -p "${out}"
+          # A changed ConfigMap changes the pod template, so the next deploy restarts the pod (env is read at start only).
+          config_checksum="$(sha256sum einvoicing-worker/k8s/configmap.yaml | cut -d' ' -f1)"
+          for f in einvoicing-worker/k8s/*.yaml; do
+            name="$(basename "${f}")"
+            sed -e "s|:TODO_TAG|:${GITHUB_SHA}|" -e "s|TODO_SECRETS_CHECKSUM|${SECRETS_CHECKSUM}|" -e "s|TODO_BUILD_SHA|${GITHUB_SHA}|" -e "s|TODO_CONFIG_CHECKSUM|${config_checksum}|" "${f}" > "${out}/${name}"
+          done
+          if grep -rnE '^[^#]*TODO_' "${out}"; then
+            echo "::error::unresolved placeholder in the manifests"
+            exit 1
+          fi
+          kubectl apply -n "${NAMESPACE}" -f "${out}"
+
+      - name: Wait for the rollout
+        run: kubectl -n "${NAMESPACE}" rollout status "deployment/${DEPLOYMENT}" --timeout=5m

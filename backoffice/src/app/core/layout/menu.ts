@@ -324,6 +324,14 @@ export const MENU: readonly MenuItem[] = [
         roles: ['PSA'],
       },
       {
+        id: 'e-invoicing',
+        labelKey: 'MENU.E_INVOICING',
+        icon: 'log',
+        route: '/tools/e-invoicing',
+        permission: 'eInvoicingAccounts:manage',
+        roles: ['PSA'],
+      },
+      {
         id: 'catalog-import-export',
         labelKey: 'MENU.CATALOG_IMPORT_EXPORT',
         icon: 'tag',

@@ -513,3 +513,30 @@ describe('DealerForm: custom prices', () => {
     expect(root.querySelector('fc-dealer-price-overrides')).toBeNull();
   });
 });
+
+describe('DealerForm: e-invoicing account', () => {
+  it('shows the section "Integrazioni" with the account of the dealer to who manages the accounts', async () => {
+    const { loadDealer, root, view } = await render(`/dealers/${ID}`, {
+      permissions: [...ALL, 'eInvoicingAccounts:manage'],
+    });
+    await loadDealer();
+    expect(root.querySelector('#integrations-heading')?.textContent).toContain(
+      'DEALERS.INTEGRATIONS',
+    );
+    expect(root.querySelector('fc-einvoicing-account-card')).not.toBeNull();
+    expect(
+      root.querySelector('fc-einvoicing-account-card [role=heading]')?.getAttribute('aria-level'),
+    ).toBe('3');
+    backend()
+      .expectOne(`${URL}/${ID}/integrations/aruba`)
+      .flush({ data: { hub: `aruba__${ID}`, configured: false } }, { headers: { ETag: '"v1"' } });
+    await view();
+  });
+
+  it('does not show it, nor read the account, without the permission', async () => {
+    const { loadDealer, root } = await render(`/dealers/${ID}`);
+    await loadDealer();
+    expect(root.querySelector('fc-einvoicing-account-card')).toBeNull();
+    expect(root.querySelector('#integrations-heading')).toBeNull();
+  });
+});

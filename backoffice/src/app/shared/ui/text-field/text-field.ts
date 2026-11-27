@@ -63,6 +63,12 @@ export class TextField {
    * keeps the result.
    */
   readonly format = input<((text: string) => string) | null>(null);
+  /** Fixed `id` of the input (and target of the label); a unique one is generated when null. */
+  readonly inputId = input<string | null>(null);
+  /** `name` attribute of the input. */
+  readonly fieldName = input<string | null>(null);
+  /** Asks password managers (1Password, LastPass) not to offer or fill this field. */
+  readonly ignorePasswordManagers = input(false, { transform: booleanAttribute });
   /** Placeholder (never a replacement for the label). */
   readonly placeholder = input('');
   /** Marks the field as required. */
@@ -77,6 +83,7 @@ export class TextField {
   private readonly control = viewChild.required<ElementRef<HTMLInputElement>>('control');
 
   protected readonly id = uniqueId('fc-text-field');
+  protected readonly controlId = computed(() => this.inputId() ?? this.id);
   protected readonly hintId = `${this.id}-hint`;
   protected readonly errorId = `${this.id}-error`;
   protected readonly describedBy = computed(() => {

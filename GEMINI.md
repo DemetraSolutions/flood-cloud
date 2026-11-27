@@ -7,7 +7,7 @@ Ogni azione, decisione architetturale o riga di codice DEVE essere consapevole d
 
 **Flood Cloud** è la riscrittura completa, con un nuovo approccio, del server della piattaforma cloud commerce di Flood (progetto legacy `../cloud-commerce-platform-server`). È un server **Node.js + Express + MongoDB** scritto in **TypeScript** (eseguito direttamente da Node con il type stripping nativo) con due superfici API: backoffice (`/v1`) e API pubbliche dei gruppi (`/public/v1`). L'app del server di punto vendita è separata, fuori scope, e usa le stesse API `/v1` del backoffice (D-22, D-23) con la chiave di negozio (D-24).
 
-Il repository è un **monorepo** (`doc/Architecture.md` §5): `backend/` (API Node.js) e `backoffice/` (SPA Angular del backoffice), con rilascio indipendente.
+Il repository è un **monorepo** (`doc/Architecture.md` §5): `backend/` (API Node.js), `backoffice/` (SPA Angular del backoffice) e `einvoicing-worker/` (invio delle fatture elettroniche, D-34), con rilascio indipendente.
 
 Documentazione di progetto da conoscere prima di agire:
 | Documento | Contenuto |

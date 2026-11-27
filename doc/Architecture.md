@@ -93,9 +93,10 @@ Decisione dell'utente del 2026-11-01: un unico repository con due componenti a r
 flood-cloud/
   backend/                 # API Node.js + Express (questa sezione, §5.2)
   backoffice/              # SPA Angular del backoffice (§5.3)
+  einvoicing-worker/       # microservizio di invio delle fatture elettroniche (§5.4, D-34)
   doc/                     # documentazione di progetto, comune
   .agents/ .claude/        # kit AI
-  .github/workflows/       # backend.yml e backoffice.yml, ciascuno filtrato sulla propria cartella
+  .github/workflows/       # backend.yml, backoffice.yml e einvoicing-worker.yml, ciascuno filtrato sulla propria cartella
 ```
 Ogni componente ha `package.json`, lockfile, `Dockerfile` e manifest propri e viene deployato su GKE come **Deployment e Service separati**, con repliche e autoscaling indipendenti. Una modifica a una sola cartella fa partire solo la pipeline di quel componente.
 
@@ -140,6 +141,14 @@ src/
 - Configurazione pubblica (URL delle API) fornita all'avvio del container, nessun segreto nella build.
 - In produzione: build statica servita da un server web non root con header di sicurezza e CSP.
 - Test con Vitest e copertura al 100%.
+
+### 5.4 Microservizio di invio delle fatture elettroniche
+Decisione dell'utente del 2026-11-27 (D-34, `doc/Tasks.md` §9-undecies). Processo Node 24 + TypeScript (stesse regole del backend: type stripping, ESM, driver MongoDB ufficiale, `node:test` al 100%) che consuma la coda delle fatture elettroniche e le invia ai provider; nessuna API HTTP, solo la probe legata al ciclo di consumo.
+- **Una sola istanza:** Deployment GKE con una replica e `strategy: Recreate`, più un lock con lease su MongoDB: un'istanza in più resta ferma.
+- **Nucleo indipendente dal provider:** presa in carico atomica dalla coda, costruzione dell'XML FatturaPA (FPR12, FPA12, FSM10), validatore secondo la specifica ufficiale (`doc/fatturazione-elettronica/`), macchina degli stati, stato dei limitatori persistente.
+- **Adattatori per provider** (`providers/<provider>/`): autenticazione, invio, stato, traduzione di stati ed errori, limiti propri; scelti dal prefisso di `company.fattura_elettronica.hub`. Limiti per IP condivisi tra gli account dello stesso provider, limiti per account configurabili.
+- **Account come dati:** letti dal database common (`dealers.integrations.<provider>` e impostazioni di piattaforma), credenziali cifrate con una chiave fornita da un Secret.
+- Non importa codice da `backend/`: i due componenti condividono solo la forma dei dati nel database.
 
 ## 6. Configurazione
 Tutta da variabili d'ambiente, lette e validate in `backend/src/config.ts` all'avvio; qualunque valore mancante o non valido blocca l'avvio con un messaggio chiaro. In locale da `.env` (caricato con `process.loadEnvFile`, nativo di Node) non versionato; in produzione da secret manager. `.env.example` elenca i nomi senza valori.

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test-only stand-in for the W3C XML Signature schema that the FatturaPA schemas import from a remote URL
+  (http://www.w3.org/TR/2002/REC-xmldsig-core-20020212/xmldsig-core-schema.xsd). The tests never download it:
+  the copies of the schemas under test point here. It declares only the global element the FatturaPA schemas
+  reference (`ds:Signature`), with any content, because the generated invoices are never signed.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+           targetNamespace="http://www.w3.org/2000/09/xmldsig#"
+           elementFormDefault="qualified">
+  <xs:element name="Signature" type="xs:anyType"/>
+</xs:schema>

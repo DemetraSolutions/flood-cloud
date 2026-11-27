@@ -225,4 +225,11 @@
   @if (current && canManagePrices()) {
     <fc-dealer-price-overrides [dealerId]="current.id" />
   }
+
+  @if (current && canManageEInvoicing()) {
+    <section class="integrations" aria-labelledby="integrations-heading">
+      <h2 id="integrations-heading">{{ 'DEALERS.INTEGRATIONS' | t }}</h2>
+      <fc-einvoicing-account-card [dealerId]="current.id" [headingLevel]="3" />
+    </section>
+  }
 }

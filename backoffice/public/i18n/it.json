@@ -68,6 +68,7 @@
     "TOBACCO_SYNC": "Sincronizza tabacchi",
     "COUNTRIES": "Gestione stati",
     "SECURITY": "Sicurezza",
+    "E_INVOICING": "Fatturazione elettronica",
     "ACTIVATIONS": "Attivazioni",
     "PRICE_LIST": "Listino",
     "PRODUCT_DEPARTMENTS": "Reparti",
@@ -1080,6 +1081,7 @@
   },
   "DEALERS": {
     "TITLE": "Dealer",
+    "INTEGRATIONS": "Integrazioni",
     "NEW": "Nuovo dealer",
     "SEARCH": "Cerca per ragione sociale o P.IVA",
     "NO_USER": "Nessun utente",
@@ -4199,6 +4201,35 @@
     "ARUBA_E_INVOICING": "Fatturazione elettronica Aruba",
     "RESERVE_WITH_GOOGLE": "Prenota con Google",
     "BIZERBA": "Bizerba"
+  },
+  "EINVOICING": {
+    "TITLE": "Fatturazione elettronica",
+    "HINT": "Account Aruba con cui la piattaforma invia le fatture elettroniche delle aziende che usano l'hub di Flood. Le credenziali sono cifrate e non si possono rileggere.",
+    "CARD_TITLE": "Aruba – Fatturazione elettronica",
+    "OWNER": {
+      "PLATFORM": "Account Flood",
+      "DEALER": "Account del dealer: invia solo le fatture delle sue aziende."
+    },
+    "LOAD_ERROR": "Impossibile caricare l'account",
+    "STALE": "L'account è stato modificato da un altro utente: ricarica prima di salvare.",
+    "RELOAD": "Ricarica",
+    "HUB": "Hub",
+    "HUB_HINT": "Identificativo dell'hub da indicare nelle aziende. Non modificabile.",
+    "ENABLED": "Attivo",
+    "USERNAME": "Username",
+    "PASSWORD": "Password",
+    "PASSWORD_HINT": "Obbligatoria: viene cifrata e non si potrà più leggere.",
+    "PASSWORD_SET_HINT": "Impostata: lascia vuoto per non cambiarla",
+    "MAX_PER_HOUR": "Invii massimi all'ora",
+    "MAX_PER_HOUR_HINT": "Da 1 a 1000.",
+    "MAX_PER_YEAR": "Invii massimi all'anno",
+    "MAX_PER_YEAR_HINT": "Lascia vuoto per nessun limite.",
+    "SAVED": "Account salvato.",
+    "REMOVE": "Rimuovi account",
+    "REMOVE_TITLE": "Rimuovere l'account?",
+    "REMOVE_CONFIRM": "L'account Aruba e la sua password cifrata saranno eliminati: le fatture di questo hub non potranno essere inviate finché non ne imposti un altro.",
+    "REMOVED": "Account rimosso.",
+    "NO_ENCRYPTION_KEY": "Cifratura delle credenziali non configurata sul server."
   },
   "SECURITY_POLICY": {
     "TITLE": "Sicurezza",

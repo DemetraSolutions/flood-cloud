@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flood-cloud-einvoicing-worker
+  namespace: flood-v2
+  labels:
+    app.kubernetes.io/name: flood-cloud-einvoicing-worker
+    app.kubernetes.io/part-of: flood-cloud
+    app.kubernetes.io/component: einvoicing-worker
+spec:
+  # Exactly one instance, by design: the worker sends invoices to providers and must not run twice.
+  # The MongoDB lease (einvoicingWorkerLeases) is the safety net; one replica plus Recreate means
+  # the lease is normally never even contended.
+  replicas: 1
+  # Recreate, not RollingUpdate: a rolling update would start the new pod while the old one is
+  # still running, so for a while two workers would be alive (the new one in standby on the lease,
+  # but still a second process). Recreate stops the old pod first (SIGTERM releases the lease), then
+  # starts the new one. The short pause in sending is harmless: the queue is persistent.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flood-cloud-einvoicing-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flood-cloud-einvoicing-worker
+        app.kubernetes.io/part-of: flood-cloud
+        app.kubernetes.io/component: einvoicing-worker
+      annotations:
+        # SHA-256 of the Secret values, written by the pipeline: a value changed in Secret Manager
+        # changes the pod template, so the next deploy restarts the pod (env is read at start only).
+        flood-cloud/secrets-checksum: TODO_SECRETS_CHECKSUM
+        # SHA-256 of k8s/configmap.yaml, computed by the pipeline: a switch-over or a rollback (a commit to the ConfigMap)
+        # restarts the pod, and the repository stays the source of truth.
+        flood-cloud/config-checksum: TODO_CONFIG_CHECKSUM
+        # The worker keeps no local state (queue, leases and outcomes are in MongoDB), so the
+        # autoscaler may move it to another node at any time; the lease covers the handover.
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      # Own service account (see serviceaccount.yaml): no Google Cloud access, no API token.
+      serviceAccountName: flood-cloud-einvoicing-worker
+      automountServiceAccountToken: false
+      # On SIGTERM the worker aborts the jobs, waits for the current tick (at most 20 s), releases
+      # the lease and closes the connections: 30 s covers it.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          # TODO_TAG is replaced by the pipeline with the tag of the built image (commit SHA).
+          image: europe-west8-docker.pkg.dev/flood-software/floodsoftware/flood-cloud-einvoicing-worker:TODO_TAG
+          # Liveness endpoint only: nothing routes traffic to the worker, so there is NO Service
+          # and NO readiness probe (a readiness probe only matters to a Service).
+          ports:
+            - name: health
+              containerPort: 8080
+          env:
+            # Identity written in the lease: the pod name is unique, so a restarted pod is a new holder.
+            - name: WORKER_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # The commit SHA of the build (replaced by the pipeline): part of the shadow code version, so every new
+            # release analyses the whole queue again.
+            - name: BUILD_SHA
+              value: "TODO_BUILD_SHA"
+          envFrom:
+            - configMapRef:
+                name: flood-cloud-einvoicing-worker-config
+            - secretRef:
+                name: flood-cloud-einvoicing-worker-secrets
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            periodSeconds: 5
+            failureThreshold: 24
+          # The server answers 503 when the run loop has not ticked for HEALTH_STALE_MS (a worker in
+          # standby on the lease counts as ticking): kubelet then restarts the container. HEALTH_STALE_MS (default
+          # 180000) already covers the longest provider call, so the restart comes after it plus periodSeconds *
+          # failureThreshold (30 s): a call in progress is never mistaken for a hang.
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

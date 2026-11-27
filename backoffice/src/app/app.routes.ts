@@ -924,6 +924,15 @@ export const routes: Routes = [
               import('./features/countries/country-page').then((m) => m.CountryPage),
           },
           {
+            path: 'tools/e-invoicing',
+            canMatch: [role('PSA'), permission('eInvoicingAccounts:manage')],
+            title: 'EINVOICING.TITLE',
+            loadComponent: () =>
+              import('./features/einvoicing-accounts/einvoicing-page').then(
+                (m) => m.EInvoicingPage,
+              ),
+          },
+          {
             path: 'settings/security',
             canMatch: [role('PSA'), permission('securityPolicy:manage')],
             title: 'SECURITY_POLICY.TITLE',

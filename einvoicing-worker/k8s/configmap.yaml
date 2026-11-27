@@ -1,0 +1,59 @@
+# Non-secret configuration. Optional variables not listed here use their defaults:
+# see einvoicing-worker/.env.example for the full list. MONGODB_URI and CREDENTIALS_PRIVATE_KEY are secrets (Secret Manager).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flood-cloud-einvoicing-worker-config
+  namespace: flood-v2
+  labels:
+    app.kubernetes.io/name: flood-cloud-einvoicing-worker
+    app.kubernetes.io/part-of: flood-cloud
+    app.kubernetes.io/component: einvoicing-worker
+data:
+  # Required. Execution environment: development | production. Part of every database
+  # name: must equal the APP_ENV of the backend, or the worker reads other databases.
+  APP_ENV: "production"
+  # Optional. Prefix of every database name (^[A-Za-z0-9_-]{0,27}$): must equal the backend's
+  # DB_NAME_PREFIX. Default: empty
+  DB_NAME_PREFIX: ""
+  # WORKER_INSTANCE_ID is intentionally absent: deployment.yaml sets it to the pod name.
+  # Optional. Lifetime of the single-instance lease in milliseconds (10000-300000). Default: 30000
+  LEASE_TTL_MS: ""
+  # Optional. Lease renewal interval in milliseconds, below LEASE_TTL_MS / 2. Default: 10000
+  LEASE_RENEW_MS: ""
+  # Optional. Pause between two ticks of the run loop in milliseconds (1000-600000). Default: 5000
+  LOOP_INTERVAL_MS: ""
+  # Optional. Port of the liveness server (1-65535). Default: 8080. Must match containerPort in
+  # deployment.yaml.
+  HEALTH_PORT: "8080"
+  # Optional. Liveness fails when the loop has not ticked for this long, in milliseconds. With a hub it must exceed
+  # the round budget + the longest provider call (90000 for Aruba) + 30000, or the worker refuses to start. Default: 180000
+  HEALTH_STALE_MS: ""
+  # Optional. debug | info | warn | error. Default: info
+  LOG_LEVEL: ""
+  # Operating mode: shadow | send. Default: shadow (nothing is sent, claimed or modified: the send pipeline only runs on the
+  # queue and the reports go to einvoicingShadowReports). Switch to send only as in the switch-over runbook (Technical-Guide 13).
+  WORKER_MODE: "shadow"
+  # Shadow mode only. Hubs to analyse (aruba, aruba__<24 hex>, comma separated, or * for every hub). Empty = nothing.
+  SHADOW_HUBS: ""
+  # Shadow mode only. Queue records analysed per round (1-1000). Default: 50
+  SHADOW_BATCH: ""
+  # Shadow mode only. Only queue records created in the last N days are analysed (1-365). Default: 30
+  SHADOW_LOOKBACK_DAYS: ""
+  # BUILD_SHA is intentionally absent: deployment.yaml sets it to the commit SHA (part of the shadow code version).
+  # Send mode only. SAFETY SWITCH. Allowlist of the hubs this worker may process (aruba, aruba__<24 hex>), comma
+  # separated. Empty = it processes nothing. Fill it only when the legacy cron no longer sends for
+  # those hubs. CREDENTIALS_PRIVATE_KEY (Secret Manager) is then required.
+  WORKER_HUBS: ""
+  # The id of the private key, equal to the backend's CREDENTIALS_PUBLIC_KEY_ID. Required with a hub.
+  CREDENTIALS_PRIVATE_KEY_ID: ""
+  # Required when WORKER_HUBS lists an aruba hub: demo | production. It only chooses the Aruba hosts
+  # (demoauth/demows or auth/ws). Keep demo until the cutover from the legacy cron.
+  ARUBA_ENVIRONMENT: ""
+  # Optional. How often the provider accounts are read again, in milliseconds. Default: 120000
+  ACCOUNTS_REFRESH_MS: ""
+  # Optional. Lifetime of the claim on a queue record, in milliseconds; must exceed the round budget + the longest provider call (90000 for Aruba). Default: 240000
+  RECORD_LEASE_MS: ""
+  # Optional. Time budget of one round of the engine jobs, in milliseconds. Default: 30000
+  TICK_BUDGET_MS: ""
+  # ALLOW_ENV_FILE_IN_PRODUCTION is intentionally absent: local machines only, never on a deployed server.

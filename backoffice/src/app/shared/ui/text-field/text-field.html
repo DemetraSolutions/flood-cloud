@@ -1,9 +1,12 @@
 <div class="field">
-  <label class="label" [class.required]="required()" [for]="id">{{ label() }}</label>
+  <label class="label" [class.required]="required()" [for]="controlId()">{{ label() }}</label>
   <input
     #control
     class="control"
-    [id]="id"
+    [id]="controlId()"
+    [attr.name]="fieldName()"
+    [attr.data-1p-ignore]="ignorePasswordManagers() ? '' : null"
+    [attr.data-lpignore]="ignorePasswordManagers() ? 'true' : null"
     [type]="type()"
     [value]="value()"
     [disabled]="disabled()"

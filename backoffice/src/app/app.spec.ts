@@ -181,6 +181,7 @@ describe('routes', () => {
       ['/tools/tobaccos', psa(['tobaccos:read']), '⟦TOBACCOS.TITLE⟧'],
       ['/settings/countries', psa(['countries:manage']), '⟦COUNTRIES.TITLE⟧'],
       ['/settings/security', psa(['securityPolicy:manage']), '⟦SECURITY_POLICY.TITLE⟧'],
+      ['/tools/e-invoicing', psa(['eInvoicingAccounts:manage']), '⟦EINVOICING.TITLE⟧'],
       ['/settings/countries/IT', psa(['countries:manage']), '⟦COUNTRIES.DETAIL_TITLE⟧'],
     ])('lazy-loads %s', async (url, profile, expected) => {
       expect(await go(url, profile)).toBe(expected);
@@ -328,6 +329,8 @@ describe('routes', () => {
       ['/tools/tobaccos', sa(['tobaccos:read'])],
       ['/settings/countries', psa([])],
       ['/settings/security', psa([])],
+      ['/tools/e-invoicing', psa([])],
+      ['/tools/e-invoicing', { ...psa(['eInvoicingAccounts:manage']), role: 'D' as const }],
       ['/settings/security', { ...psa(['securityPolicy:manage']), role: 'D' as const }],
       ['/settings/countries', { ...psa(['countries:manage']), role: 'D' as const }],
       ['/settings/countries/IT', sa(['countries:manage'])],
@@ -462,17 +465,23 @@ describe('routes', () => {
     it.each([
       ['contacts-import-export', 'contacts:export', 'CONTACTS_XLSX.TITLE'],
       ['fidelity-cards-import-export', 'fidelityCards:export', 'CARDS_XLSX.TITLE'],
-    ])('lazy-loads %s for whoever has %s, with the texts of its own workbook', async (path, permission, title) => {
-      const harness = await open(path, [permission]);
-      const root = harness.routeNativeElement as HTMLElement;
-      expect(root.querySelector('main h1')?.textContent).toBe(`⟦${title}⟧`);
-      expect(root.querySelector('fc-catalog-xlsx-page')).not.toBeNull();
-    });
+    ])(
+      'lazy-loads %s for whoever has %s, with the texts of its own workbook',
+      async (path, permission, title) => {
+        const harness = await open(path, [permission]);
+        const root = harness.routeNativeElement as HTMLElement;
+        expect(root.querySelector('main h1')?.textContent).toBe(`⟦${title}⟧`);
+        expect(root.querySelector('fc-catalog-xlsx-page')).not.toBeNull();
+      },
+    );
 
-    it.each(['contacts-import-export', 'fidelity-cards-import-export'])('protects %s', async (path) => {
-      await open(path, ['products:read']);
-      expect(location()).toBe('/forbidden');
-    });
+    it.each(['contacts-import-export', 'fidelity-cards-import-export'])(
+      'protects %s',
+      async (path) => {
+        await open(path, ['products:read']);
+        expect(location()).toBe('/forbidden');
+      },
+    );
   });
 
   describe('tobacco synchronization', () => {
